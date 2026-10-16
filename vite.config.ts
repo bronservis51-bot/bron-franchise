@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Бронь Сервис — кабинет франчайзи',
           short_name: 'Бронь Сервис',
-          description: 'База знаний и отчётность франчайзи: продажи, выручка, заработок сотрудников, роялти',
+          description: 'Кабинет франчайзи: база знаний, выручка за день и план на месяц',
           lang: 'ru',
           start_url: base,
           scope: base,

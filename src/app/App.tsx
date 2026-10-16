@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { createHashRouter, Navigate, RouterProvider, useRouteError } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isConfigured } from '../platform/config';
@@ -8,9 +8,9 @@ import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
 import { LoginPage, SetupPage } from './LoginPage';
-import { TodayPage } from '../modules/today/TodayPage';
+import { FranchiseeHome } from '../modules/revenue/FranchiseeHome';
 
-// Модули загружаются по требованию: первый экран не тянет код роялти, редактора статей и т. п. (NFR-01, LCP)
+// Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyComponent = ComponentType<any>;
 function page<M extends Record<string, unknown>>(loader: () => Promise<M>, name: keyof M & string) {
@@ -19,33 +19,14 @@ function page<M extends Record<string, unknown>>(loader: () => Promise<M>, name:
     return <Suspense fallback={<Skeleton lines={5} />}><C {...props} /></Suspense>;
   };
 }
-const tasks = () => import('../modules/tasks/TasksPages');
-const org = () => import('../modules/org/OrgPages');
-const roy = () => import('../modules/royalties/RoyaltyPages');
 const kb = () => import('../modules/knowledge/KnowledgePages');
-const TasksPage = page(tasks, 'TasksPage');
-const TaskPage = page(tasks, 'TaskPage');
-const PartnersPage = page(org, 'PartnersPage');
-const PartnerPage = page(org, 'PartnerPage');
-const RoyaltiesPage = page(roy, 'RoyaltiesPage');
-const ReportPage = page(roy, 'ReportPage');
-const AccrualPage = page(roy, 'AccrualPage');
-const PaymentPage = page(roy, 'PaymentPage');
 const KbHomePage = page(kb, 'KbHomePage');
 const ArticlePage = page(kb, 'ArticlePage');
 const ArticleEditPage = page(kb, 'ArticleEditPage');
-const ArticleReviewPage = page(kb, 'ArticleReviewPage');
-const LearningPage = page(kb, 'LearningPage');
-const SalesPage = page(() => import('../modules/sales/SalesPages'), 'SalesPage');
-const NetworkSalesPage = page(() => import('../modules/sales/NetworkSalesPage'), 'NetworkSalesPage');
-const MyRolePage = page(() => import('../modules/knowledge/MyRolePage'), 'MyRolePage');
-const posMod = () => import('../modules/pos/PosPages');
-const PosPage = page(posMod, 'PosPage');
-const ClientPage = page(posMod, 'ClientPage');
-const ControlPage = page(() => import('../modules/sales/ControlPage'), 'ControlPage');
-const OverviewPage = page(() => import('../modules/metrics/OverviewPage'), 'OverviewPage');
-const SettingsPage = page(() => import('../modules/settings/SettingsPage'), 'SettingsPage');
-const NotificationsPage = page(() => import('../modules/notifications/NotificationsPage'), 'NotificationsPage');
+const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
+const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
+const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
+const RoyaltyPartnerPage = page(() => import('../modules/manager/RoyaltyPartnerPage'), 'RoyaltyPartnerPage');
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -73,31 +54,13 @@ const router = createHashRouter([
     element: <Guard />,
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <TodayPage /> },
-      { path: 'tasks', element: <TasksPage /> },
-      { path: 'tasks/:id', element: <TaskPage /> },
-      { path: 'partners', element: <PartnersPage /> },
-      { path: 'partners/:id', element: <PartnerPage /> },
-      { path: 'sales', element: <SalesPage /> },
-      { path: 'control', element: <ControlPage /> },
-      { path: 'pos', element: <PosPage /> },
-      { path: 'my-role', element: <MyRolePage /> },
-      { path: 'pos/clients/:id', element: <ClientPage /> },
-      { path: 'network-sales', element: <NetworkSalesPage /> },
-      { path: 'royalties', element: <RoyaltiesPage /> },
-      { path: 'royalties/reports/:id', element: <ReportPage /> },
-      { path: 'royalties/accruals', element: <RoyaltiesPage initialTab="accruals" /> },
-      { path: 'royalties/accruals/:id', element: <AccrualPage /> },
-      { path: 'royalties/payments/:id', element: <PaymentPage /> },
+      { index: true, element: <Home /> },
+      { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
+      { path: 'royalty', element: <ManagerOnly><RoyaltyPage /></ManagerOnly> },
+      { path: 'royalty/:id', element: <ManagerOnly><RoyaltyPartnerPage /></ManagerOnly> },
       { path: 'kb', element: <KbHomePage /> },
       { path: 'kb/articles/:id', element: <ArticlePage /> },
       { path: 'kb/articles/:id/edit', element: <ArticleEditPage /> },
-      { path: 'kb/articles/:id/review', element: <ArticleReviewPage /> },
-      { path: 'learning', element: <LearningPage /> },
-      { path: 'overview', element: <OverviewPage /> },
-      { path: 'settings', element: <SettingsPage /> },
-      { path: 'settings/:tab', element: <SettingsPage /> },
-      { path: 'notifications', element: <NotificationsPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },
@@ -110,6 +73,16 @@ function BootScreen() {
       <div className="boot-bar"><span /></div>
     </div>
   );
+}
+
+function Home() {
+  const { isManager } = useSession();
+  return isManager ? <NetworkPage /> : <FranchiseeHome />;
+}
+
+function ManagerOnly({ children }: { children: ReactNode }) {
+  const { isManager } = useSession();
+  return isManager ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function Guard() {

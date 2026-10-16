@@ -33,18 +33,11 @@ export async function createDb({ dataDir, seed = true, users = true, onUser } = 
       for (const u of demoUsers) {
         const r = await db.query(
           `insert into auth.users(email, raw_user_meta_data, raw_app_meta_data) values ($1, $2, $3) returning id`,
-          [u.email, JSON.stringify({ full_name: u.name, locale: u.locale ?? 'ru' }), JSON.stringify({ demo_seed: true })],
+          [u.email, JSON.stringify({ full_name: u.name }), JSON.stringify({ demo_seed: true })],
         );
         if (onUser) await onUser(db, u, r.rows[0].id);
       }
       await run(db, join(root, 'supabase/seed/seed_after_users.sql'), 'Seed после пользователей');
-      await run(db, join(root, 'supabase/seed/seed_v2.sql'), 'Seed v2 (каталог, выручка)');
-      await run(db, join(root, 'supabase/seed/seed_v3.sql'), 'Seed v3 (роли, смены, прозрачность, поставки)');
-      await run(db, join(root, 'supabase/seed/seed_v4.sql'), 'Seed v4 (имена франчайзи и города)');
-      await run(db, join(root, 'supabase/seed/seed_v5.sql'), 'Seed v5 (заметки к точкам)');
-      await run(db, join(root, 'supabase/seed/seed_v6.sql'), 'Seed v6 (CRM)');
-      await run(db, join(root, 'supabase/seed/seed_v7.sql'), 'Seed v7 (должностные инструкции)');
-      await run(db, join(root, 'supabase/seed/seed_v8.sql'), 'Seed v8 (продажи на точках)');
     }
   }
   return db;

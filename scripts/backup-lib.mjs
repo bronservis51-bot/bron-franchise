@@ -41,7 +41,7 @@ export async function exportData(db) {
   for (const t of tables) {
     data[t] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from public.${JSON.stringify(t)} x`)).rows[0].rows;
   }
-  const users = (await db.query(`select u.id, u.email, u.full_name, u.locale, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
+  const users = (await db.query(`select u.id, u.email, u.full_name, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
   const migrations = await db.query(`select coalesce(jsonb_agg(name order by name), '[]'::jsonb) as m from app_private.schema_migration`).catch(() => ({ rows: [{ m: [] }] }));
   return { format: 'bron-backup', version: 1, exported_at: new Date().toISOString(), migrations: migrations.rows[0].m, users, tables: data };
 }

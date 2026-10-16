@@ -1,14 +1,9 @@
-// Компоненты дизайн-системы. Состояния экранов (UX-05): загрузка, пусто, нет результатов, ошибка, нет прав, офлайн, конфликт.
+// Компоненты дизайн-системы. Состояния экранов: загрузка, пусто, нет результатов, ошибка, нет прав, офлайн, конфликт.
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { AlertTriangle, ArrowLeft, Ban, CheckCircle2, CircleDashed, Clock, FlaskConical, Inbox, Info, Lock, RefreshCw, SearchX, WifiOff } from 'lucide-react';
 import { AppError, toAppError } from '../platform/backend';
-import { dueInfo, formatDateTime } from '../platform/dates';
 import { formatMoney, formatMoneyShort, minorToDecimal, parseMoney, type MinorInput } from '../platform/money';
-import { intlLocale, t as tr, useT } from '../platform/i18n';
-
-/** Строковые подписи компонентов переводятся автоматически (RU/TR, SUP-08); узлы React — как есть. */
-const tx = (n: ReactNode): ReactNode => (typeof n === 'string' ? tr(n) : n);
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'demo';
 
@@ -23,13 +18,13 @@ export function Button({ variant = 'secondary', size, loading, block, children, 
       aria-busy={loading || undefined}
     >
       {loading && <span className="spinner" aria-hidden />}
-      {Array.isArray(children) ? children.map((c) => tx(c)) : tx(children)}
+      {children}
     </button>
   );
 }
 
 export function LinkButton({ to, variant = 'secondary', size, children }: { to: string; variant?: 'primary' | 'secondary' | 'ghost' | 'silver'; size?: 'sm'; children: ReactNode }) {
-  return <Link to={to} className={['btn', `btn-${variant}`, size === 'sm' && 'btn-sm'].filter(Boolean).join(' ')}>{Array.isArray(children) ? children.map((c) => tx(c)) : tx(children)}</Link>;
+  return <Link to={to} className={['btn', `btn-${variant}`, size === 'sm' && 'btn-sm'].filter(Boolean).join(' ')}>{children}</Link>;
 }
 
 export function Card({ title, actions, children, className, bodyless, icon, iconTone }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyless?: boolean; icon?: ReactNode; iconTone?: 'silver' | 'dark' | 'danger' }) {
@@ -38,7 +33,7 @@ export function Card({ title, actions, children, className, bodyless, icon, icon
       {(title || actions) && (
         <div className="card-header">
           {typeof title === 'string'
-            ? <h2 className="card-title">{icon && <span className={`icon-tile${iconTone && iconTone !== 'silver' ? ` ${iconTone}` : ''}`} aria-hidden>{icon}</span>}{tr(title)}</h2>
+            ? <h2 className="card-title">{icon && <span className={`icon-tile${iconTone && iconTone !== 'silver' ? ` ${iconTone}` : ''}`} aria-hidden>{icon}</span>}{title}</h2>
             : title}
           {actions && <div className="row">{actions}</div>}
         </div>
@@ -58,21 +53,16 @@ const TONE_ICON: Record<Tone, ReactNode> = {
 };
 
 export function Badge({ tone = 'neutral', children, icon = true, title }: { tone?: Tone; children: ReactNode; icon?: boolean; title?: string }) {
-  return <span className={`badge tone-${tone}`} title={title}>{icon && TONE_ICON[tone]}{tx(children)}</span>;
-}
-
-export function DemoBadge({ label = 'Демо' }: { label?: string }) {
-  const { t } = useT();
-  return <Badge tone="demo" title="Демонстрационный режим: не является реальной операцией">{t(label)}</Badge>;
+  return <span className={`badge tone-${tone}`} title={title}>{icon && TONE_ICON[tone]}{children}</span>;
 }
 
 export function PageHeader({ title, sub, actions, back }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { to: string; label: string } }) {
   return (
     <header className="page-header">
       <div style={{ minWidth: 0 }}>
-        {back && <Link className="back-link" to={back.to}><ArrowLeft size={15} aria-hidden />{tr(back.label)}</Link>}
-        <h1>{tx(title)}</h1>
-        {sub && <div className="sub">{tx(sub)}</div>}
+        {back && <Link className="back-link" to={back.to}><ArrowLeft size={15} aria-hidden />{back.label}</Link>}
+        <h1>{title}</h1>
+        {sub && <div className="sub">{sub}</div>}
       </div>
       {actions && <div className="actions">{actions}</div>}
     </header>
@@ -83,15 +73,15 @@ export function EmptyState({ title, text, action, icon }: { title: string; text?
   return (
     <div className="state" role="status">
       <div className="icon">{icon ?? <Inbox size={22} aria-hidden />}</div>
-      <h3>{tr(title)}</h3>
-      {text && <div>{tx(text)}</div>}
+      <h3>{title}</h3>
+      {text && <div>{text}</div>}
       {action && <div style={{ marginTop: 8 }}>{action}</div>}
     </div>
   );
 }
 
 export function NoResults({ query, action }: { query?: string; action?: ReactNode }) {
-  return <EmptyState icon={<SearchX size={22} aria-hidden />} title="Ничего не найдено" text={query ? tr('По запросу «{{q}}» результатов нет. Уточните запрос.', { q: query }) : 'Измените фильтры.'} action={action} />;
+  return <EmptyState icon={<SearchX size={22} aria-hidden />} title="Ничего не найдено" text={query ? `По запросу «${query}» результатов нет. Уточните запрос.` : 'Измените фильтры.'} action={action} />;
 }
 
 const ERROR_TEXT: Record<string, string> = {
@@ -118,9 +108,9 @@ export function ErrorState({ error, onRetry, compact }: { error: unknown; onRetr
   return (
     <div className={`state${compact ? ' compact' : ''}`} role="alert">
       <div className="icon">{icon}</div>
-      <h3>{tr(err.code === 'forbidden' ? 'Нет доступа' : err.code === 'not-found' ? 'Не найдено' : 'Не удалось загрузить')}</h3>
-      <div>{tr(errorText(err))}</div>
-      {err.requestId && err.code !== 'forbidden' && err.code !== 'not-found' && <div className="faint">{tr('Код запроса')}: <span className="mono">{err.requestId.slice(0, 8)}</span></div>}
+      <h3>{err.code === 'forbidden' ? 'Нет доступа' : err.code === 'not-found' ? 'Не найдено' : 'Не удалось загрузить'}</h3>
+      <div>{errorText(err)}</div>
+      {err.requestId && err.code !== 'forbidden' && err.code !== 'not-found' && <div className="faint">{'Код запроса'}: <span className="mono">{err.requestId.slice(0, 8)}</span></div>}
       {onRetry && <Button size="sm" onClick={onRetry}><RefreshCw size={15} aria-hidden />Повторить</Button>}
     </div>
   );
@@ -134,7 +124,7 @@ export function ActionError({ error }: { error: unknown }) {
     <div className="alert tone-danger" role="alert" style={{ marginTop: 12 }}>
       <AlertTriangle size={18} aria-hidden />
       <div className="alert-body">
-        <div>{tr(errorText(err))}</div>
+        <div>{errorText(err)}</div>
         {err.hint && err.code === 'transition-not-allowed' && err.hint.length < 600 && <div className="faint" style={{ marginTop: 4 }}>{err.hint}</div>}
         {err.code === 'version-conflict' && <div className="faint">Ваши изменения не потеряны: обновите и повторите.</div>}
       </div>
@@ -147,8 +137,8 @@ export function Alert({ tone = 'info', title, children, action }: { tone?: Tone;
     <div className={`alert tone-${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
       {TONE_ICON[tone]}
       <div className="alert-body">
-        {title && <div style={{ fontWeight: 650 }}>{tr(title)}</div>}
-        {tx(children)}
+        {title && <div style={{ fontWeight: 650 }}>{title}</div>}
+        {children}
       </div>
       {action}
     </div>
@@ -187,10 +177,10 @@ export function Field({ label, hint, error, required, children, id }: { label: s
   const errId = error ? `${fid}-err` : undefined;
   return (
     <div className="field">
-      <label htmlFor={fid}>{tr(label)}{required && <span className="req" aria-hidden>*</span>}</label>
+      <label htmlFor={fid}>{label}{required && <span className="req" aria-hidden>*</span>}</label>
       {children(fid, [hintId, errId].filter(Boolean).join(' ') || undefined)}
-      {hint && <div className="hint" id={hintId}>{tx(hint)}</div>}
-      {error && <div className="error" id={errId}><AlertTriangle size={14} aria-hidden />{tr(error)}</div>}
+      {hint && <div className="hint" id={hintId}>{hint}</div>}
+      {error && <div className="error" id={errId}><AlertTriangle size={14} aria-hidden />{error}</div>}
     </div>
   );
 }
@@ -203,7 +193,7 @@ export function Checkbox({ label, checked, onChange, hint }: { label: ReactNode;
   return (
     <label className="check">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span>{tx(label)}{hint && <span className="faint" style={{ display: 'block' }}>{tx(hint)}</span>}</span>
+      <span>{label}{hint && <span className="faint" style={{ display: 'block' }}>{hint}</span>}</span>
     </label>
   );
 }
@@ -212,7 +202,7 @@ export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs:
   return (
     <div className="tabs" role="tablist" aria-label={label}>
       {tabs.map((t) => (
-        <button key={t.id} role="tab" type="button" aria-selected={t.id === value} onClick={() => onChange(t.id)}>{tx(t.label)}</button>
+        <button key={t.id} role="tab" type="button" aria-selected={t.id === value} onClick={() => onChange(t.id)}>{t.label}</button>
       ))}
     </div>
   );
@@ -222,14 +212,14 @@ export function Chips<T extends string>({ options, value, onChange, label }: { o
   return (
     <div className="chips" role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={o.id} type="button" className="chip" aria-pressed={o.id === value} onClick={() => onChange(o.id)}>{tr(o.label)}</button>
+        <button key={o.id} type="button" className="chip" aria-pressed={o.id === value} onClick={() => onChange(o.id)}>{o.label}</button>
       ))}
     </div>
   );
 }
 
 export function Money({ minor, currency, strong, short }: { minor: MinorInput; currency: string; strong?: boolean; short?: boolean }) {
-  const s = (short ? formatMoneyShort : formatMoney)(minor, currency, intlLocale());
+  const s = (short ? formatMoneyShort : formatMoney)(minor, currency, 'ru-RU');
   return strong ? <strong className="num">{s}</strong> : <span className="num">{s}</span>;
 }
 
@@ -258,40 +248,13 @@ export function MoneyInput({ id, value, onChange, currency, invalid, placeholder
   );
 }
 
-export function Due({ at, done, timeZone }: { at: string | null | undefined; done?: boolean; timeZone?: string }) {
-  if (!at) return <span className="faint">{tr('без срока')}</span>;
-  const info = dueInfo(at);
-  if (done) return <span className="faint">{formatDateTime(at, intlLocale(), timeZone)}</span>;
-  return (
-    <span title={formatDateTime(at, intlLocale(), timeZone) + (timeZone ? ` (${timeZone})` : '')}>
-      <Badge tone={info.tone === 'neutral' ? 'neutral' : info.tone} icon={info.tone !== 'neutral'}>{info.label}</Badge>
-    </span>
-  );
-}
-
 export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
   return (
     <dl className="kv">
       {items.map(([k, v], i) => (
-        <div key={i} style={{ display: 'contents' }}><dt>{tx(k)}</dt><dd>{v ?? '—'}</dd></div>
+        <div key={i} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v ?? '—'}</dd></div>
       ))}
     </dl>
-  );
-}
-
-export interface TimelineItem { at: string; who?: string | null; text: ReactNode; comment?: string | null }
-export function Timeline({ items }: { items: TimelineItem[] }) {
-  if (!items.length) return <div className="faint">{tr('История пуста')}</div>;
-  return (
-    <ol className="timeline">
-      {items.map((i, n) => (
-        <li key={n}>
-          <div>{tx(i.text)}{i.who && <span className="muted"> · {i.who}</span>}</div>
-          {i.comment && <div className="muted" style={{ fontSize: 'var(--fs-s)' }}>{i.comment}</div>}
-          <div className="when">{formatDateTime(i.at, intlLocale())}</div>
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -309,17 +272,17 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, danger, onCo
   }, [open]);
   return (
     <dialog ref={ref} className="dialog" onClose={onClose} aria-labelledby="dlg-title">
-      <div className="dialog-head"><h2 id="dlg-title">{tr(title)}</h2></div>
+      <div className="dialog-head"><h2 id="dlg-title">{title}</h2></div>
       <div className="dialog-body">
         {summary && (
-          <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{tr(k)}</dt><dd>{tx(v)}</dd></div>)}</dl></div>
+          <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>
         )}
         {children && <div style={{ marginTop: summary ? 16 : 0 }}>{children}</div>}
         <ActionError error={error} />
       </div>
       <div className="dialog-foot">
         <Button onClick={onClose} disabled={busy}>Отмена</Button>
-        <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{tr(confirmLabel)}</Button>
+        <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>
       </div>
     </dialog>
   );
@@ -330,7 +293,7 @@ export function Progress({ value, max, label }: { value: number; max: number; la
   return (
     <div>
       <div className="progress" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max} aria-label={label}><span style={{ width: `${pct}%` }} /></div>
-      <div className="faint" style={{ marginTop: 4 }}>{tr(label)}: {value} / {max}</div>
+      <div className="faint" style={{ marginTop: 4 }}>{label}: {value} / {max}</div>
     </div>
   );
 }

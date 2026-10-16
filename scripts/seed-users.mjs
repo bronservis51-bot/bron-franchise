@@ -48,7 +48,7 @@ for (const u of demoUsers) {
   const password = quick || `Demo-${randomBytes(4).toString('hex')}-${randomBytes(4).toString('hex')}`;
   const { error } = await admin.auth.admin.createUser({
     email: u.email, password, email_confirm: true,
-    user_metadata: { full_name: u.name, locale: u.locale ?? 'ru' },
+    user_metadata: { full_name: u.name },
     app_metadata: { demo_seed: true }, // только администратор может выставить app_metadata
   });
   if (error) throw new Error(`${u.email}: ${error.message}`);

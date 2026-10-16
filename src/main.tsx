@@ -1,7 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './ui/styles.css';
-import './platform/i18n';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
 

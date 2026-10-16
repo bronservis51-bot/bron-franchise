@@ -18,7 +18,8 @@
     "local:backend": "node scripts/local-backend.mjs",
     "db:apply": "node scripts/db-apply.mjs",
     "db:export": "node scripts/db-export.mjs",
-    "db:restore": "node scripts/db-restore.mjs"
+    "db:restore": "node scripts/db-restore.mjs",
+    "db:reset-demo": "node scripts/db-reset-demo.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
@@ -38,13 +39,12 @@
     "@supabase/supabase-js": "^2.117.3",
     "@tanstack/react-query": "^5.104.2",
     "dompurify": "^3.4.16",
-    "i18next": "^26.4.4",
     "idb": "^8.0.4",
     "lucide-react": "^1.55.0",
     "markdown-it": "^15.0.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-i18next": "^17.0.16",
-    "react-router": "^8.4.0"
+    "react-router": "^8.4.0",
+    "write-excel-file": "^4.1.1"
   }
 }

@@ -51,12 +51,11 @@ describe('границы модулей в SQL (ARCH-02)', () => {
     const migs = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
     for (const f of migs) for (const m of readFileSync(join(dir, f), 'utf8').matchAll(/create table public\.(\w+)/g)) owner[m[1]] = f;
     // Контракт модуля может быть объявлен в более поздней миграции: функция с префиксом модуля-владельца
+    // Контракт модуля может быть объявлен в более поздней миграции: функция с префиксом модуля-владельца
     const modulePrefixes: Record<string, string[]> = {
-      '0003_files.sql': ['file_'], '0004_tasks.sql': ['task_', 'workflow_'], '0005_franchise.sql': ['opening_', 'location_'],
-      '0006_support.sql': ['ticket_'], '0007_procurement.sql': ['order_', 'cart_', 'stock_', 'catalog_'], '0008_royalties.sql': ['report_', 'royalty_', 'payment_', 'accrual_'],
-      '0009_knowledge.sql': ['article_', 'kb_'], '0016_daily_sales.sql': ['sale_', 'sales_', 'commission_', 'shift_', 'daily_sale'], '0018_shifts_commission_roles.sql': ['sales_'],
+      '0002_knowledge.sql': ['article_', 'kb_'], '0003_revenue.sql': ['revenue_'], '0004_royalty.sql': ['royalty_'],
     };
-    const allowed = new Set(['0001_foundation.sql']);
+    const allowed = new Set(['0001_core.sql']);
     const problems: string[] = [];
     for (const f of migs) {
       const sql = readFileSync(join(dir, f), 'utf8');

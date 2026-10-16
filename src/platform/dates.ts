@@ -20,26 +20,6 @@ export function formatPeriod(v: string | null | undefined, locale = 'ru-RU'): st
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Относительный срок для бейджа: «через 2 дня», «просрочено на 3 ч» (RU/TR). */
-export function dueInfo(due: string | null | undefined, now = new Date(), lang = currentLang()): { label: string; tone: 'neutral' | 'warning' | 'danger'; span: string } {
-  const trk = lang === 'tr';
-  if (!due) return { label: trk ? 'süresiz' : 'без срока', tone: 'neutral', span: '' };
-  const ms = new Date(due).getTime() - now.getTime();
-  const abs = Math.abs(ms);
-  const hours = Math.round(abs / 3_600_000);
-  const days = Math.round(abs / 86_400_000);
-  const span = trk
-    ? hours < 1 ? '1 saatten az' : hours < 36 ? `${hours} sa` : `${days} gün`
-    : hours < 1 ? 'меньше часа' : hours < 36 ? `${hours} ч` : `${days} ${plural(days, 'день', 'дня', 'дней')}`;
-  if (ms < 0) return { label: trk ? `${span} gecikti` : `просрочено на ${span}`, tone: 'danger', span };
-  const label = trk ? `${span} içinde` : `через ${span}`;
-  return { label, tone: hours < 24 ? 'warning' : 'neutral', span };
-}
-
-function currentLang(): string {
-  return typeof document !== 'undefined' ? document.documentElement.lang : 'ru';
-}
-
 export function plural(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10;
   const m100 = n % 100;
@@ -59,4 +39,22 @@ export function addDays(iso: string, days: number): string {
 export function monthStart(offsetMonths = 0, from = new Date()): string {
   const d = new Date(Date.UTC(from.getFullYear(), from.getMonth() + offsetMonths, 1));
   return d.toISOString().slice(0, 10);
+}
+
+/** «октябрь 2026» для подписи месяца; v — 'YYYY-MM-DD' (любой день месяца). */
+export function monthLabel(v: string, withYear = true): string {
+  const d = new Date(`${v.slice(0, 7)}-15T12:00:00Z`);
+  return d.toLocaleDateString('ru-RU', { month: 'long', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' }).replace(' г.', '');
+}
+
+/** Сдвиг месяца: '2026-10-01' + 1 → '2026-11-01'. */
+export function shiftMonth(v: string, delta: number): string {
+  const [y, m] = v.slice(0, 7).split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/** День недели и число: «пт, 17 окт.». */
+export function dayLabel(v: string): string {
+  return new Date(`${v}T12:00:00Z`).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
