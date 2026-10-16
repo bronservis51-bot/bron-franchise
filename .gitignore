@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+local/
+*.local
+*.local.*
+.DS_Store
+coverage/
+.vite/
+backups/
+local-backend.log
+supabase/bundle*.sql

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f0f11" />
+    <meta name="description" content="Рабочий кабинет сотрудников и партнёров «Бронь Сервис»" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!--CSP-->
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Бронь Сервис — рабочий кабинет</title>
+    <style>
+      /* Заставка видна сразу, пока загружается код приложения; React заменяет её первым экраном */
+      html, body { margin: 0; background: #f2f2f3; }
+      @media (prefers-color-scheme: dark) { html, body { background: #0b0b0d; } }
+      .boot-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 22px; }
+      .boot-screen img { width: 72px; height: 72px; border-radius: 16px; }
+      .boot-bar { width: 160px; height: 4px; border-radius: 2px; background: rgba(127,127,135,.22); overflow: hidden; }
+      .boot-bar span { display: block; width: 40%; height: 100%; background: #7f7f87; border-radius: 2px; animation: boot 1.1s ease-in-out infinite; }
+      @keyframes boot { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+      @media (prefers-reduced-motion: reduce) { .boot-bar span { animation: none; width: 100%; opacity: .5; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div class="boot-screen" role="status" aria-label="Загрузка"><img src="./icons/icon.svg" alt="" /><div class="boot-bar"><span></span></div></div></div>
+    <noscript>Для работы нужен JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
