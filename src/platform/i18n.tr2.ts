@@ -133,9 +133,10 @@ Object.assign(tr2, {
   'Изменить': 'Değiştir', 'В корзине': 'Sepette', 'Система': 'Sistem', 'Риск даты': 'Tarih riski', 'риск даты': 'tarih riski', 'в графике': 'planlandığı gibi',
   'Демо-стенд': 'Demo ortamı', 'Выйти и очистить данные устройства': 'Çıkış yap ve cihaz verilerini temizle', 'К содержимому': 'İçeriğe geç',
   'Нет сети. Можно читать открытые экраны и писать черновики; отправка — после восстановления связи. Финансовые операции только онлайн.': 'Ağ yok. Açık ekranları okuyabilir ve taslak yazabilirsiniz; gönderim bağlantı gelince yapılır. Finansal işlemler yalnızca çevrimiçi.',
-  'Доступна новая версия. Черновики сохранятся.': 'Yeni sürüm mevcut. Taslaklar korunacak.', 'Рабочий кабинет': 'Çalışma alanı', 'Версия': 'Sürüm', 'Разделы': 'Bölümler',
+  'Доступна новая версия. Черновики сохранятся.': 'Yeni sürüm mevcut. Taslaklar korunacak.', 'Рабочий кабинет': 'Çalışma alanı', 'Кабинет франчайзи': 'Franchise paneli', 'Версия': 'Sürüm', 'Разделы': 'Bölümler',
 });
 Object.assign(tr2, { 'Работа': 'İş', 'Франшиза': 'Franchise', 'Знания': 'Bilgi', 'Управление': 'Yönetim' });
+Object.assign(tr2, { 'База знаний': 'Bilgi bankası', 'Отчётность': 'Raporlama', 'Отчёты и роялти': 'Raporlar ve royalti', 'Франчайзи и точки': 'Franchise ve noktalar' });
 Object.assign(tr2, { 'Добрый день, {{name}}': 'İyi günler, {{name}}', 'Просрочено': 'Gecikmiş', 'Внести выручку': 'Ciro gir', 'Выручка': 'Ciro', 'Моя смена': 'Vardiyam', 'Отчёт точки': 'Nokta raporu', 'Мой заработок': 'Kazancım', 'Сменить роль': 'Rolü değiştir', 'Выберите роль': 'Rol seçin' });
 // Магазин, выручка и процент сотрудника (13.10.2026)
 Object.assign(tr2, {

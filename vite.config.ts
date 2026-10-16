@@ -41,9 +41,9 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ['icons/*.svg', 'icons/*.png'],
         manifest: {
-          name: 'Бронь Сервис — рабочий кабинет',
+          name: 'Бронь Сервис — кабинет франчайзи',
           short_name: 'Бронь Сервис',
-          description: 'Корпоративная платформа: задачи, открытия, поддержка, заказы, роялти и знания',
+          description: 'База знаний и отчётность франчайзи: продажи, выручка, заработок сотрудников, роялти',
           lang: 'ru',
           start_url: base,
           scope: base,

@@ -6,9 +6,8 @@ import { useSession } from '../platform/session';
 import { from, rows } from '../platform/backend';
 import { quickLoginEnabled } from '../platform/config';
 import { useT } from '../platform/i18n';
-import { GROUP_TITLE, NAV, primaryMobile, type NavItem } from './nav';
+import { GROUP_ORDER, GROUP_TITLE, NAV, primaryMobile, type NavItem } from './nav';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
-import { flushQueue } from '../modules/support/offlineQueue';
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -102,7 +101,7 @@ function UserMenu() {
 }
 
 export function Shell() {
-  const { can, isStaff, me } = useSession();
+  const { can, isStaff } = useSession();
   const { t } = useT();
   const online = useOnline();
   const unread = useUnread();
@@ -116,12 +115,8 @@ export function Shell() {
   useEffect(() => setMore(false), [loc.pathname]);
   // Фокус на основное содержимое при смене экрана — для экранных дикторов (UX-08)
   useEffect(() => mainRef.current?.focus({ preventScroll: true }), [loc.pathname]);
-  // Очередь офлайн-операций отправляется при открытии и при появлении сети (PWA-04)
-  useEffect(() => {
-    if (online && me) void flushQueue(me.user.id);
-  }, [online, me]);
 
-  const groups = (['work', 'franchise', 'knowledge', 'control'] as const).map((g) => ({ g, items: nav.filter((n) => n.group === g) })).filter((x) => x.items.length);
+  const groups = GROUP_ORDER.map((g) => ({ g, items: nav.filter((n) => n.group === g) })).filter((x) => x.items.length);
   const link = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
       <n.icon size={18} aria-hidden />{t(n.label)}
@@ -134,7 +129,7 @@ export function Shell() {
       <aside className="sidebar" aria-label="Основная навигация">
         <div className="brand">
           <LogoFull height={40} />
-          <span className="brand-sub">{t('Рабочий кабинет')}</span>
+          <span className="brand-sub">{t('Кабинет франчайзи')}</span>
         </div>
         <nav className="nav">
           {groups.map(({ g, items }) => (

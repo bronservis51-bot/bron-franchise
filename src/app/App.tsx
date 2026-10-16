@@ -21,25 +21,12 @@ function page<M extends Record<string, unknown>>(loader: () => Promise<M>, name:
 }
 const tasks = () => import('../modules/tasks/TasksPages');
 const org = () => import('../modules/org/OrgPages');
-const opening = () => import('../modules/opening/OpeningPages');
-const support = () => import('../modules/support/SupportPages');
-const catalog = () => import('../modules/procurement/CatalogPage');
-const orders = () => import('../modules/procurement/OrderPages');
 const roy = () => import('../modules/royalties/RoyaltyPages');
 const kb = () => import('../modules/knowledge/KnowledgePages');
 const TasksPage = page(tasks, 'TasksPage');
 const TaskPage = page(tasks, 'TaskPage');
 const PartnersPage = page(org, 'PartnersPage');
 const PartnerPage = page(org, 'PartnerPage');
-const OpeningsPage = page(opening, 'OpeningsPage');
-const OpeningPage = page(opening, 'OpeningPage');
-const NewOpeningPage = page(opening, 'NewOpeningPage');
-const TicketsPage = page(support, 'TicketsPage');
-const TicketPage = page(support, 'TicketPage');
-const NewTicketPage = page(support, 'NewTicketPage');
-const CatalogPage = page(catalog, 'CatalogPage');
-const OrdersPage = page(orders, 'OrdersPage');
-const OrderPage = page(orders, 'OrderPage');
 const RoyaltiesPage = page(roy, 'RoyaltiesPage');
 const ReportPage = page(roy, 'ReportPage');
 const AccrualPage = page(roy, 'AccrualPage');
@@ -50,17 +37,12 @@ const ArticleEditPage = page(kb, 'ArticleEditPage');
 const ArticleReviewPage = page(kb, 'ArticleReviewPage');
 const LearningPage = page(kb, 'LearningPage');
 const SalesPage = page(() => import('../modules/sales/SalesPages'), 'SalesPage');
-const NetworkMapPage = page(() => import('../modules/metrics/NetworkMapPage'), 'NetworkMapPage');
 const NetworkSalesPage = page(() => import('../modules/sales/NetworkSalesPage'), 'NetworkSalesPage');
 const MyRolePage = page(() => import('../modules/knowledge/MyRolePage'), 'MyRolePage');
 const posMod = () => import('../modules/pos/PosPages');
 const PosPage = page(posMod, 'PosPage');
 const ClientPage = page(posMod, 'ClientPage');
-const crmMod = () => import('../modules/crm/CrmPages');
-const CrmPage = page(crmMod, 'CrmPage');
-const LeadPage = page(crmMod, 'LeadPage');
 const ControlPage = page(() => import('../modules/sales/ControlPage'), 'ControlPage');
-const SupplyPage = page(() => import('../modules/procurement/SupplyPage'), 'SupplyPage');
 const OverviewPage = page(() => import('../modules/metrics/OverviewPage'), 'OverviewPage');
 const SettingsPage = page(() => import('../modules/settings/SettingsPage'), 'SettingsPage');
 const NotificationsPage = page(() => import('../modules/notifications/NotificationsPage'), 'NotificationsPage');
@@ -96,25 +78,12 @@ const router = createHashRouter([
       { path: 'tasks/:id', element: <TaskPage /> },
       { path: 'partners', element: <PartnersPage /> },
       { path: 'partners/:id', element: <PartnerPage /> },
-      { path: 'openings', element: <OpeningsPage /> },
-      { path: 'openings/new', element: <NewOpeningPage /> },
-      { path: 'openings/:id', element: <OpeningPage /> },
-      { path: 'support', element: <TicketsPage /> },
-      { path: 'support/new', element: <NewTicketPage /> },
-      { path: 'support/:id', element: <TicketPage /> },
-      { path: 'catalog', element: <CatalogPage /> },
       { path: 'sales', element: <SalesPage /> },
       { path: 'control', element: <ControlPage /> },
       { path: 'pos', element: <PosPage /> },
       { path: 'my-role', element: <MyRolePage /> },
       { path: 'pos/clients/:id', element: <ClientPage /> },
-      { path: 'crm', element: <CrmPage /> },
-      { path: 'crm/:id', element: <LeadPage /> },
       { path: 'network-sales', element: <NetworkSalesPage /> },
-      { path: 'map', element: <NetworkMapPage /> },
-      { path: 'supply', element: <SupplyPage /> },
-      { path: 'orders', element: <OrdersPage /> },
-      { path: 'orders/:id', element: <OrderPage /> },
       { path: 'royalties', element: <RoyaltiesPage /> },
       { path: 'royalties/reports/:id', element: <ReportPage /> },
       { path: 'royalties/accruals', element: <RoyaltiesPage initialTab="accruals" /> },

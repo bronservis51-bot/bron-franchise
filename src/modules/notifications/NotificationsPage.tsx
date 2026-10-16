@@ -6,6 +6,8 @@ import { formatDateTime } from '../../platform/dates';
 import { intlLocale, useT } from '../../platform/i18n';
 import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 
+// Разделы, которых нет в приложении франчайзи: старые уведомления о них остаются в списке, но никуда не ведут.
+const REMOVED = /^\/(support|orders|catalog|supply|crm|openings|map)(\/|\?|$)/;
 interface Notification { id: string; kind: string; title: string; body: string | null; link: string | null; critical: boolean; created_at: string; read_at: string | null }
 
 export function NotificationsPage() {
@@ -27,7 +29,7 @@ export function NotificationsPage() {
             <ul className="list">
               {d.map((n) => (
                 <li key={n.id}>
-                  <Link className="list-item" to={n.link ?? '/'} onClick={() => !n.read_at && mark.mutate([n.id])} style={n.read_at ? { opacity: 0.75 } : undefined}>
+                  <Link className="list-item" to={n.link && !REMOVED.test(n.link) ? n.link : '/notifications'} onClick={() => !n.read_at && mark.mutate([n.id])} style={n.read_at ? { opacity: 0.75 } : undefined}>
                     <div className="main-col">
                       <div className="title">{!n.read_at && <span className="sr-only">Новое: </span>}{n.title}</div>
                       {n.body && <div className="meta">{n.body}</div>}

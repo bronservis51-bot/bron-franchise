@@ -21,7 +21,7 @@ export function TasksPage() {
   const locName = (id: string | null) => locs.data?.find((l) => l.id === id)?.name;
   return (
     <>
-      <PageHeader title={t('Моя работа')} sub="Личные задачи и очереди ваших ролей" />
+      <PageHeader title={t('Мои задачи')} sub="Напоминания по отчётам и базе знаний, очереди ваших ролей" />
       <Chips label="Фильтр задач" value={filter} onChange={setFilter} options={[
         { id: 'mine', label: 'Мои' }, { id: 'queue', label: 'Очередь' },
         ...(can('task.manage') ? [{ id: 'review' as const, label: 'На проверке' }] : []),
@@ -56,8 +56,6 @@ export function TasksPage() {
 function subjectLink(type: string | null, id: string | null): [string, string] | null {
   if (!type || !id) return null;
   const map: Record<string, [string, string]> = {
-    opening_project: [`/openings/${id}`, 'Проект открытия'],
-    sales_order: [`/orders/${id}`, 'Заказ'],
     article: [`/kb/articles/${id}`, 'Статья'],
     revenue_report: [`/royalties/reports/${id}`, 'Отчёт'],
     contract: ['/royalties', 'Договор и отчётность'],
@@ -107,7 +105,7 @@ export function TaskPage() {
         return (
           <>
             <PageHeader
-              back={{ to: '/tasks', label: 'Моя работа' }}
+              back={{ to: '/tasks', label: 'Мои задачи' }}
               title={x.title}
               sub={<span className="row"><span className="mono">{x.number}</span><Badge tone={tone}>{t(label)}</Badge>{x.is_critical && <Badge tone="danger">критическая</Badge>}</span>}
             />

@@ -90,7 +90,7 @@ export function KbHomePage() {
       {debounced.length >= 2 ? (
         <Card title={`Результаты: «${debounced}»`} bodyless>
           <DataState query={results} empty={(d) => (d.length ? null : (
-            <NoResults query={debounced} action={can('ticket.create') && <LinkButton to={`/support/new?q=${encodeURIComponent(debounced)}`}>Задать вопрос в поддержку</LinkButton>} />
+            <NoResults query={debounced} />
           ))}>
             {(d) => (
               <ul className="list">

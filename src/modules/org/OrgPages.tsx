@@ -8,7 +8,7 @@ import { useSession } from '../../platform/session';
 import { formatDate, formatPeriod } from '../../platform/dates';
 import { intlLocale, useT } from '../../platform/i18n';
 import { Badge, Card, DataState, EmptyState, Input, KV, Money, NoResults, PageHeader } from '../../ui';
-import { OPENING_STATUS, ORDER_STATUS, REPORT_STATUS, st, TICKET_STATUS } from '../../ui/status';
+import { REPORT_STATUS, st } from '../../ui/status';
 import { useLocations, usePartners, type Location } from '../shared/lookups';
 
 const LOC_STATUS: Record<string, [string, 'neutral' | 'info' | 'success' | 'warning']> = {
@@ -113,12 +113,6 @@ export function PartnerPage() {
     queryFn: () => rows<{ id: string; number: string; currency: string; valid_from: string; valid_to: string | null; status: string; is_test: boolean;
       contract_policy_version: { version: number; effective_from: string; rate_bp: number; rounding: string; report_due_day: number; payment_due_day: number }[] }>(
       from('contract').select('id, number, currency, valid_from, valid_to, status, is_test, contract_policy_version(version, effective_from, rate_bp, rounding, report_due_day, payment_due_day)').eq('partner_id', id)) });
-  const openings = useQuery({ queryKey: ['partner', id, 'openings'], enabled: can('opening.read'),
-    queryFn: () => rows<{ id: string; number: string; status: string; planned_open_on: string }>(from('opening_project').select('id, number, status, planned_open_on').eq('partner_id', id).order('created_at', { ascending: false })) });
-  const tickets = useQuery({ queryKey: ['partner', id, 'tickets'], enabled: can('ticket.read'),
-    queryFn: () => rows<{ id: string; number: string; subject: string; status: string }>(from('ticket').select('id, number, subject, status').eq('partner_id', id).not('status', 'eq', 'closed').order('created_at', { ascending: false }).limit(10)) });
-  const orders = useQuery({ queryKey: ['partner', id, 'orders'], enabled: can('order.read'),
-    queryFn: () => rows<{ id: string; number: string; status: string; total_minor: string; currency: string; submitted_at: string }>(from('sales_order').select('id, number, status, total_minor, currency, submitted_at').eq('partner_id', id).neq('status', 'draft').order('submitted_at', { ascending: false }).limit(10)) });
   const reports = useQuery({ queryKey: ['partner', id, 'reports'], enabled: can('royalty.read'),
     queryFn: () => rows<{ id: string; number: string; period: string; status: string }>(from('revenue_report').select('id, number, period, status').eq('partner_id', id).order('period', { ascending: false }).limit(6)) });
   const balance = useQuery({ queryKey: ['partner', id, 'balance'], enabled: can('royalty.read'),
@@ -136,31 +130,6 @@ export function PartnerPage() {
                 <ul className="list">{(locs.data ?? []).map((l) => <LocationRow key={l.id} l={l} />)}</ul>
               </Section>
               {(locs.data ?? []).length > 0 && <PartnerNotes locations={locs.data!} />}
-              {can('opening.read') && Boolean(openings.data?.length) && (
-                <Section title="Открытия" link="/openings">
-                  <ul className="list">
-                    {openings.data!.map((o) => (
-                      <li key={o.id}><Link className="list-item" to={`/openings/${o.id}`}><div className="main-col"><div className="title mono">{o.number}</div><div className="meta">План: {formatDate(o.planned_open_on, intlLocale())}</div></div><div className="side"><Badge tone={st(OPENING_STATUS, o.status)[1]}>{st(OPENING_STATUS, o.status)[0]}</Badge></div></Link></li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-              {can('ticket.read') && (
-                <Section title="Открытые обращения" link="/support">
-                  {tickets.data?.length ? (
-                    <ul className="list">{tickets.data.map((k) => (
-                      <li key={k.id}><Link className="list-item" to={`/support/${k.id}`}><div className="main-col"><div className="title">{k.subject}</div><div className="meta mono">{k.number}</div></div><div className="side"><Badge tone={st(TICKET_STATUS, k.status)[1]}>{t(st(TICKET_STATUS, k.status)[0])}</Badge></div></Link></li>
-                    ))}</ul>
-                  ) : <EmptyState title="Открытых обращений нет" />}
-                </Section>
-              )}
-              {can('order.read') && Boolean(orders.data?.length) && (
-                <Section title="Последние заказы" link="/orders">
-                  <ul className="list">{orders.data!.map((o) => (
-                    <li key={o.id}><Link className="list-item" to={`/orders/${o.id}`}><div className="main-col"><div className="title mono">{o.number}</div><div className="meta">{formatDate(o.submitted_at, intlLocale())}</div></div><div className="side"><Money minor={o.total_minor} currency={o.currency} /><Badge tone={st(ORDER_STATUS, o.status)[1]}>{st(ORDER_STATUS, o.status)[0]}</Badge></div></Link></li>
-                  ))}</ul>
-                </Section>
-              )}
             </div>
             <div className="stack">
               {can('org.read') && (

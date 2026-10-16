@@ -1,4 +1,4 @@
-// Настройки и интеграции (INT-04/05, CORE-07, AUTH-02, SEC-04): состояние обмена, восстановление, очереди, доступ, аудит.
+// Настройки и интеграции (INT-04/05, CORE-07, AUTH-02, SEC-04): состояние обмена, восстановление, доступ, аудит.
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,13 +13,13 @@ import { OUTBOX_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
 import { useLocations, usePartners, useRoles, useUserNames } from '../shared/lookups';
 
-type Tab = 'integrations' | 'queues' | 'access' | 'audit' | 'about';
+type Tab = 'integrations' | 'access' | 'audit' | 'about';
 
 interface Connection { id: string; provider: string; title: string; mode: string; status: string; demo_behavior: string; last_success_at: string | null; last_error: string | null }
 interface OutboxRow { id: string; topic: string; aggregate_type: string; aggregate_id: string; status: string; attempts: number; max_attempts: number; next_attempt_at: string; last_error: string | null; created_at: string; updated_at: string }
 
 const TOPIC: Record<string, string> = { 'warehouse.create_order': 'Передача заказа на склад', 'warehouse.cancel_order': 'Отмена заказа на складе', 'drive.export_article': 'Копия статьи в Drive' };
-const objLink = (type: string, id: string) => (type === 'sales_order' ? `/orders/${id}` : type === 'article' ? `/kb/articles/${id}` : '#');
+const objLink = (type: string, id: string) => (type === 'article' ? `/kb/articles/${id}` : '#');
 
 function Integrations() {
   const { can } = useSession();
@@ -102,26 +102,6 @@ function Integrations() {
         <Field label="Что сделано" required>{(fid) => <Textarea id={fid} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
       </ConfirmDialog>
     </div>
-  );
-}
-
-function Queues() {
-  const q = useQuery({ queryKey: ['queue-health'], queryFn: () => command<{ queue_role: string; queue_name: string; partner_name: string | null; location_name: string | null; open_items: number; members: number; backup_members: number }[]>('queue_health') });
-  return (
-    <Card title="Очереди и исполнители" bodyless>
-      <div className="card-body faint">Процесс без доступного исполнителя и резерва — назначьте исполнителя в разделе «Доступ».</div>
-      <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Открытой работы нет" />)}>
-        {(d) => (
-          <div className="table-wrap"><table className="table">
-            <thead><tr><th>Очередь</th><th>Область</th><th className="r">Открыто</th><th className="r">Исполнителей</th><th className="r">Резерв</th><th>Состояние</th></tr></thead>
-            <tbody>{d.map((r, i) => (
-              <tr key={i}><td>{r.queue_name}</td><td>{r.location_name ?? r.partner_name ?? 'компания'}</td><td className="r">{r.open_items}</td><td className="r">{r.members}</td><td className="r">{r.backup_members}</td>
-                <td>{r.members > 0 ? <Badge tone="success">есть исполнители</Badge> : r.backup_members > 0 ? <Badge tone="warning">только резерв</Badge> : <Badge tone="danger">нет исполнителей</Badge>}</td></tr>
-            ))}</tbody>
-          </table></div>
-        )}
-      </DataState>
-    </Card>
   );
 }
 
@@ -234,7 +214,6 @@ export function SettingsPage() {
   const { can } = useSession();
   const tabs = [
     ...(can('integration.operate') ? [{ id: 'integrations' as Tab, label: 'Интеграции' }] : []),
-    ...(can('metrics.read') || can('access.manage') ? [{ id: 'queues' as Tab, label: 'Очереди' }] : []),
     ...(can('access.manage') ? [{ id: 'access' as Tab, label: 'Доступ' }] : []),
     ...(can('audit.read') ? [{ id: 'audit' as Tab, label: 'Аудит' }] : []),
     { id: 'about' as Tab, label: 'О системе' },
@@ -245,7 +224,6 @@ export function SettingsPage() {
       <PageHeader title="Настройки" />
       <Tabs label="Разделы настроек" value={tab} onChange={(v) => navigate(`/settings/${v}`)} tabs={tabs} />
       {tab === 'integrations' && <Integrations />}
-      {tab === 'queues' && <Queues />}
       {tab === 'access' && <Access />}
       {tab === 'audit' && <Audit />}
       {tab === 'about' && <About />}

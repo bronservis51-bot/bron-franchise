@@ -114,8 +114,8 @@ export function LoginPage() {
         <span className="big-mark"><LogoMark height={340} /></span>
         <div style={{ position: 'relative' }}>
           <LogoFull height={52} />
-          <h1>Рабочий кабинет сотрудников и партнёров</h1>
-          <p>Задачи на сегодня, открытие точек, заказ плёнки, выручка и роялти, база знаний — в одном месте.</p>
+          <h1>Кабинет франчайзи</h1>
+          <p>База знаний и отчётность: инструкции и обучение, продажи и выручка точки, заработок сотрудников, отчёты и роялти.</p>
         </div>
         <div className="faint" style={{ position: 'relative', color: '#6f7076' }}>© Бронь Сервис</div>
       </aside>
