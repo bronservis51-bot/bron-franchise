@@ -6,6 +6,7 @@ import { useSession } from '../platform/session';
 import { config, quickLoginEnabled } from '../platform/config';
 import { Button, Checkbox, Field, Input } from '../ui';
 import demoUsers from '../../supabase/seed/demo-users.json';
+import { loginErrorText, useServerCheck } from './loginDiagnostics';
 
 interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee'; title: string; hint: string }
 
@@ -15,7 +16,7 @@ const GROUPS: { id: DemoUser['group']; title: string; icon: typeof Store }[] = [
 ];
 
 /** Быстрый вход по ролям для демонстрации: выбор карточки вместо логина и пароля. */
-function QuickLogin({ onError }: { onError: (msg: string) => void }) {
+function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
   const { signIn } = useSession();
   const navigate = useNavigate();
   const [busy, setBusy] = useState<string | null>(null);
@@ -32,10 +33,7 @@ function QuickLogin({ onError }: { onError: (msg: string) => void }) {
       ]);
       navigate('/', { replace: true });
     } catch (e) {
-      onError(!navigator.onLine ? 'Нет сети. Вход возможен только онлайн.'
-        : (e as Error).message === 'timeout' || (e as Error).message?.includes('fetch')
-          ? 'Сервер не отвечает. Проверьте интернет и попробуйте ещё раз.'
-          : 'Не удалось войти. Попробуйте ещё раз.');
+      onError(e);
     } finally {
       clearTimeout(hint);
       setBusy(null);
@@ -77,7 +75,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; detail: string } | null>(null);
+  const [server, recheck] = useServerCheck();
+  const fail = (e: unknown) => { setError(loginErrorText(e)); recheck(); };
 
   if (status === 'signed-in') return <Navigate to="/" replace />;
 
@@ -89,8 +89,7 @@ export function LoginPage() {
       await signIn(email, password, remember);
       navigate('/', { replace: true });
     } catch (err) {
-      const msg = (err as Error).message ?? '';
-      setError(/invalid/i.test(msg) ? 'Неверный email или пароль' : !navigator.onLine ? 'Нет сети. Вход возможен только онлайн.' : 'Не удалось войти. Попробуйте ещё раз.');
+      fail(err);
     } finally {
       setBusy(false);
     }
@@ -111,12 +110,14 @@ export function LoginPage() {
       </aside>
       <main className="login-panel">
         <div className="inner">
-          {quickLoginEnabled && <QuickLogin onError={setError} />}
-          {quickLoginEnabled && error && <div className="alert tone-danger" role="alert" style={{ marginBottom: 12 }}><div className="alert-body">{error}</div></div>}
+          <ServerStatus s={server} onRetry={recheck} />
+          {quickLoginEnabled && <QuickLogin onError={fail} />}
+          {quickLoginEnabled && error && <ErrorBox e={error} />}
           {quickLoginEnabled
             ? <details className="card" style={{ padding: '4px 16px' }}><summary className="muted" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Войти по email и паролю</summary>{form()}</details>
             : <div className="card"><div className="card-body">{form()}</div></div>}
           <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>
+          <p className="faint">Версия от {new Date(import.meta.env.VITE_BUILD_TIME ?? Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
         </div>
       </main>
     </div>
@@ -133,13 +134,35 @@ export function LoginPage() {
             </Field>
             <Checkbox label="Запомнить это устройство" hint="Только на личном устройстве: на общем компьютере сессия закончится при закрытии вкладки."
               checked={remember} onChange={setRemember} />
-            {error && <div className="alert tone-danger" role="alert" style={{ marginTop: 12 }}><div className="alert-body">{error}</div></div>}
+            {error && !quickLoginEnabled && <ErrorBox e={error} />}
             <div style={{ marginTop: 16 }}>
               <Button type="submit" variant="primary" block loading={busy} disabled={!email || !password}>Войти</Button>
             </div>
           </form>
     );
   }
+}
+
+function ErrorBox({ e }: { e: { text: string; detail: string } }) {
+  return (
+    <div className="alert tone-danger" role="alert" style={{ margin: '12px 0' }}>
+      <div className="alert-body">{e.text}{e.detail && <div className="faint" style={{ marginTop: 4, wordBreak: 'break-word' }}>Техническая причина: {e.detail}</div>}</div>
+    </div>
+  );
+}
+
+function ServerStatus({ s, onRetry }: { s: ReturnType<typeof useServerCheck>[0]; onRetry: () => void }) {
+  if (s.state === 'ok') return s.ms > 4000 ? <p className="faint" style={{ marginBottom: 12 }}>Сервер отвечает медленно ({(s.ms / 1000).toFixed(1)} с) — вход может занять время.</p> : null;
+  if (s.state === 'checking') return null;
+  return (
+    <div className="alert tone-warning" role="status" style={{ marginBottom: 16 }}>
+      <div className="alert-body">
+        <strong>Нет связи с сервером базы данных с этого устройства.</strong> Сайт открылся, но данные хранятся на другом сервере, и до него запрос не доходит. Попробуйте другую сеть (Wi‑Fi или мобильный интернет).
+        <div className="faint" style={{ marginTop: 4 }}>Причина: {s.reason}</div>
+      </div>
+      <button type="button" className="btn btn-sm" onClick={onRetry}>Проверить снова</button>
+    </div>
+  );
 }
 
 export function SetupPage() {

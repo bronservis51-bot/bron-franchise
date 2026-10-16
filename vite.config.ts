@@ -67,6 +67,8 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    // Время сборки — на странице входа, чтобы видеть, открыта ли свежая версия
+    define: { 'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()) },
     build: { target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 900 },
   };
 });
