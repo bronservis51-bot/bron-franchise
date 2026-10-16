@@ -25,9 +25,10 @@ try {
     union all select 'drop function if exists ' || p.oid::regprocedure || ' cascade' from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')`);
   for (const r of objs.rows) await client.query(r.sql);
-  await client.query(`delete from storage.objects where bucket_id = 'private-files'`).catch(() => undefined);
-  await client.query(`delete from storage.buckets where id = 'private-files'`).catch(() => undefined);
   await client.query('commit');
+  // COMMIT после ошибки внутри транзакции молча откатывает её — проверяем, что схема действительно удалена
+  const left = (await client.query(`select count(*)::int n from pg_namespace where nspname = 'app_private'`)).rows[0].n;
+  if (left) throw new Error('Сброс не применился: схема app_private на месте');
   console.log(`Удалено объектов: ${objs.rows.length} (+ схема app_private).`);
 } catch (e) {
   await client.query('rollback').catch(() => undefined);
