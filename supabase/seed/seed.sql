@@ -36,7 +36,7 @@ insert into public.fx_rate(currency, day, rub_per_unit) values
   ('KZT', (current_date - 30), 0.162), ('TRY', (current_date - 30), 2.28);
 
 ------------------------------------------------------------------------------
--- Выручка: три полных месяца и текущий месяц до вчера. Суммы детерминированы (hashtext), выходные — выше.
+-- Выручка: три полных месяца и текущий месяц до вчера (по местному времени точки). Суммы детерминированы (hashtext), выходные — выше.
 ------------------------------------------------------------------------------
 insert into public.daily_revenue(location_id, partner_id, day, currency, cash_minor, card_minor)
 select l.id, l.partner_id, d::date, l.currency,
@@ -45,12 +45,12 @@ from public.location l
 cross join lateral (select case l.code when 'ALPHA-1' then 17000 when 'ALPHA-2' then 12500 when 'ALPHA-3' then 8000
                                        when 'BETA-1' then 95000 else 2600 end as base) b
 cross join lateral generate_series(greatest((date_trunc('month', current_date) - interval '3 months')::date, l.opened_on),
-                                   current_date - 1, interval '1 day') d
+                                   (now() at time zone l.timezone)::date - 1, interval '1 day') d
 cross join lateral (select (0.75 + (abs(hashtext(l.code || d::date::text)) % 500) / 1000.0)
                            * case when extract(isodow from d) in (6, 7) then 1.3 else 1 end as f,
                            0.25 + (abs(hashtext(d::date::text || l.code || 'c')) % 20) / 100.0 as share_cash) x
 -- Волгоград Европа не внесла выручку за последние 2 дня — так франчайзи и менеджер видят пропуски
-where not (l.code = 'ALPHA-1' and d::date >= current_date - 2);
+where not (l.code = 'ALPHA-1' and d::date >= (now() at time zone l.timezone)::date - 2);
 
 -- План на каждый месяц: средняя выручка точки × дни месяца, чуть выше факта прошлых месяцев
 insert into public.revenue_plan(location_id, month, amount_minor)
