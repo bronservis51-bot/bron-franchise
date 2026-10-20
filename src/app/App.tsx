@@ -20,8 +20,11 @@ function page<M extends Record<string, unknown>>(loader: () => Promise<M>, name:
   };
 }
 const kb = () => import('../modules/knowledge/KnowledgePages');
-const KbHomePage = page(kb, 'KbHomePage');
-const ArticlePage = page(kb, 'ArticlePage');
+const kbView = () => import('../modules/knowledge/KbBrowse');
+const KbHomePage = page(kbView, 'KbHomePage');
+const ArticlePage = page(kbView, 'ArticlePage');
+const SectionPage = page(kbView, 'SectionPage');
+const KbManagePage = page(kbView, 'KbManagePage');
 const ArticleEditPage = page(kb, 'ArticleEditPage');
 const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
@@ -30,7 +33,7 @@ const RoyaltyPartnerPage = page(() => import('../modules/manager/RoyaltyPartnerP
 const StaffHome = page(() => import('../modules/staff/StaffHome'), 'StaffHome');
 const StaffPage = page(() => import('../modules/staff/StaffPage'), 'StaffPage');
 const RatingPage = page(() => import('../modules/rating/RatingPage'), 'RatingPage');
-const MyRoyaltyPage = page(() => import('../modules/royalty/MyRoyaltyPage'), 'MyRoyaltyPage');
+const FinancePage = page(() => import('../modules/finance/FinancePage'), 'FinancePage');
 const QuestionsPage = page(kb, 'QuestionsPage');
 
 const qc = new QueryClient({
@@ -61,10 +64,13 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
-      { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<MyRoyaltyPage />} /> },
+      { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
+      { path: 'finance', element: <ByRole franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },
       { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingPage />} /> },
       { path: 'kb/questions', element: <QuestionsPage /> },
+      { path: 'kb/s/:id', element: <SectionPage /> },
+      { path: 'kb/manage', element: <KbManagePage /> },
       { path: 'royalty/:id', element: <ManagerOnly><RoyaltyPartnerPage /></ManagerOnly> },
       { path: 'kb', element: <KbHomePage /> },
       { path: 'kb/articles/:id', element: <ArticlePage /> },

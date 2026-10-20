@@ -1,6 +1,6 @@
 import { command, from, rows, single } from '../../platform/backend';
 
-export interface Section { id: string; slug: string; title: string; description: string | null; sort: number }
+export interface Section { id: string; slug: string; title: string; description: string | null; sort: number; parent_id: string | null; icon: string }
 export interface ArticleRow {
   id: string; slug: string; section_id: string; type: string; status: string; published_revision_id: string | null;
   required_ack: boolean; ack_rev_no: number | null; tags: string[]; revision: number; updated_at: string;
@@ -26,7 +26,8 @@ export const toRead = () => command<ToRead[]>('kb_to_read');
 export const ackStatus = (article: string) => command<{ user_id: string; full_name: string; partner: string | null; acknowledged_at: string | null }[]>('kb_ack_status', { article });
 
 export const kbCommands = {
-  sectionSave: (id: string | null, title: string, description: string | null, sort: number | null) => command<string>('kb_section_save', { id, title, description, sort }),
+  sectionSave: (s: { id: string | null; parent: string | null; title: string; description: string | null; sort: number | null; icon: string }) => command<string>('kb_section_save', s),
+  sectionDelete: (id: string) => command('kb_section_delete', { id }),
   create: (section: string, type: string, title: string) => command<{ article_id: string }>('article_create', { section, type, title }),
   saveDraft: (article: string, title: string, summary: string, body: string, expectedRevision: number | null) =>
     command<Revision>('article_save_draft', { article, title, summary, body, expected_revision: expectedRevision }),
@@ -45,3 +46,25 @@ export const kbAsk = (question: string, article: string | null) => command<strin
 export const kbQuestions = () => command<Question[]>('kb_questions');
 export const kbAnswer = (question: string, answer: string, article: string | null) => command('kb_answer', { question, answer, article });
 export const kbMisses = () => command<{ query: string; times: number; last_at: string }[]>('kb_search_misses');
+
+/** Карточка статьи в списках. */
+export interface Card { id: string; type: string; status: string; section_id: string; required_ack: boolean; title: string; summary: string | null;
+  published_at: string | null; updated_at: string; has_video: boolean; minutes: number; views_30: number; has_draft: boolean; read: boolean }
+export interface SectionNode { id: string; parent_id: string | null; title: string; description: string | null; icon: string; sort: number; count: number }
+export interface KbHome { sections: SectionNode[]; recent: Card[]; popular: Card[]; continue: Card[]; drafts: number | null; total: number }
+export interface SectionPage { section: Section; parent: { id: string; title: string } | null; children: SectionNode[]; articles: Card[] }
+export interface ArticleOpen { section: { id: string; title: string }; parent: { id: string; title: string } | null; related: Card[]; my_rating: boolean | null;
+  stats: { views_30: number; helpful: number; not_helpful: number; comments: { comment: string; at: string; user: string }[] } | null }
+export interface ManageRow extends Card { section_title: string; parent_title: string | null; helpful: number; not_helpful: number; ack_done: number | null; ack_total: number | null }
+
+export const kbHome = () => command<KbHome>('kb_home');
+export const kbSectionPage = (section: string) => command<SectionPage>('kb_section_page', { section });
+export const kbArticleOpen = (article: string) => command<ArticleOpen>('kb_article_open', { article });
+export const kbRate = (article: string, helpful: boolean, comment: string | null) => command('kb_rate', { article, helpful, comment });
+export const kbManage = () => command<ManageRow[]>('kb_manage');
+
+/** Плоский список разделов → верхний уровень с подразделами (для меню, выбора раздела, хлебных крошек). */
+export function sectionTree<T extends { id: string; parent_id: string | null; sort: number; title: string }>(list: T[]): (T & { children: T[] })[] {
+  const by = (a: T, b: T) => a.sort - b.sort || a.title.localeCompare(b.title, 'ru');
+  return list.filter((s) => !s.parent_id).sort(by).map((s) => ({ ...s, children: list.filter((c) => c.parent_id === s.id).sort(by) }));
+}

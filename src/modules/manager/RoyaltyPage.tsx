@@ -2,19 +2,20 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Download, Plus, Wallet } from 'lucide-react';
+import { Download, PencilLine, Plus, Wallet } from 'lucide-react';
 import { formatDate, monthLabel } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, DataState, Money, PageHeader, Select } from '../../ui';
 import { ActionError } from '../../ui';
 import { pct, royaltySummary, type RoyaltyRow } from './api';
 import { downloadRoyaltyExcel } from './royaltyExcel';
-import { ManualDebtDialog, monthOptions, PaymentDialog } from './RoyaltyDialogs';
+import { CorrectionDialog, ManualDebtDialog, monthOptions, PaymentDialog, RoyaltyOps } from './RoyaltyDialogs';
 
 export function RoyaltyPage() {
   const [month, setMonth] = useState<string>('');
   const [pay, setPay] = useState<RoyaltyRow | null>(null);
   const [manual, setManual] = useState<RoyaltyRow | null>(null);
+  const [fix, setFix] = useState<RoyaltyRow | null>(null);
   const q = useQuery({ queryKey: ['royalty', 'summary', month], queryFn: () => royaltySummary(month || null) });
   const exp = useMutation({ mutationFn: () => downloadRoyaltyExcel(q.data!) });
   const all = !month;
@@ -51,7 +52,7 @@ export function RoyaltyPage() {
                 <thead>
                   <tr>
                     <th>Франчайзи</th><th className="r">Ставка</th><th className="r">Выручка</th><th className="r">Начислено</th>
-                    <th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">Долг</th>
+                    <th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">Долг</th>
                     {all && <th className="r">Текущий месяц</th>}<th />
                   </tr>
                 </thead>
@@ -72,6 +73,7 @@ export function RoyaltyPage() {
                       <td className="r">
                         <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                           <Button size="sm" onClick={() => setPay(r)}><Wallet size={14} aria-hidden />Оплата</Button>
+                          <Button size="sm" variant="ghost" title="Исправить начисление месяца" onClick={() => setFix(r)}><PencilLine size={14} aria-hidden />Исправить</Button>
                           <Button size="sm" variant="ghost" title="Добавить прошлый долг" onClick={() => setManual(r)}><Plus size={14} aria-hidden />Долг</Button>
                         </div>
                       </td>
@@ -80,11 +82,13 @@ export function RoyaltyPage() {
                 </tbody>
               </table>
             </div>
+            <RoyaltyOps />
           </>
         )}
       </DataState>
       {pay && <PaymentDialog partner={{ id: pay.partner_id, name: pay.partner_name }} currency={pay.currency}
         month={month || pay.debt_months[0]?.month} suggested={month ? pay.debt_minor : pay.debt_months[0]?.debt_minor} onClose={() => setPay(null)} />}
+      {fix && <CorrectionDialog partner={{ id: fix.partner_id, name: fix.partner_name }} currency={fix.currency} month={month || undefined} onClose={() => setFix(null)} />}
       {manual && <ManualDebtDialog partner={{ id: manual.partner_id, name: manual.partner_name }} currency={manual.currency} onClose={() => setManual(null)} />}
     </>
   );

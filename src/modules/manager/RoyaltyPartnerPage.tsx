@@ -2,13 +2,13 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Percent, Plus, Trash2, Wallet } from 'lucide-react';
-import { formatDate, monthLabel, monthStart } from '../../platform/dates';
+import { PencilLine, Percent, Plus, Wallet } from 'lucide-react';
+import { monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
-import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, Money, PageHeader, Select } from '../../ui';
+import { Button, Card, ConfirmDialog, DataState, Field, Input, Money, PageHeader, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { manualDelete, paymentDelete, pct, rateSet, royaltyPartner } from './api';
-import { ManualDebtDialog, monthOptions, PaymentDialog } from './RoyaltyDialogs';
+import { pct, rateSet, royaltyPartner } from './api';
+import { CorrectionDialog, ManualDebtDialog, monthOptions, PaymentDialog, RoyaltyOps } from './RoyaltyDialogs';
 
 function RateDialog({ partner, current, onClose }: { partner: string; current: number; onClose: () => void }) {
   const qc = useQueryClient();
@@ -38,14 +38,11 @@ function RateDialog({ partner, current, onClose }: { partner: string; current: n
 
 export function RoyaltyPartnerPage() {
   const { id = '' } = useParams();
-  const qc = useQueryClient();
-  const toast = useToast();
   const [pay, setPay] = useState<{ month?: string; amount?: number } | null>(null);
+  const [fix, setFix] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [rate, setRate] = useState(false);
   const q = useQuery({ queryKey: ['royalty', 'partner', id], queryFn: () => royaltyPartner(id) });
-  const delPay = useMutation({ mutationFn: paymentDelete, onSuccess: () => { toast('Оплата удалена'); void qc.invalidateQueries({ queryKey: ['royalty'] }); } });
-  const delManual = useMutation({ mutationFn: manualDelete, onSuccess: () => { toast('Запись удалена'); void qc.invalidateQueries({ queryKey: ['royalty'] }); } });
 
   return (
     <DataState query={q}>
@@ -58,6 +55,7 @@ export function RoyaltyPartnerPage() {
               sub={<span className="row"><span>ставка {pct(r.rate_bp)}</span><Link to={`/partners/${r.partner_id}`}>карточка франчайзи</Link></span>}
               actions={<>
                 <Button variant="primary" onClick={() => setPay({})}><Wallet size={16} aria-hidden />Отметить оплату</Button>
+                <Button onClick={() => setFix(monthStart())}><PencilLine size={16} aria-hidden />Исправить начисление</Button>
                 <Button onClick={() => setManual(true)}><Plus size={16} aria-hidden />Прошлый долг</Button>
                 <Button variant="ghost" onClick={() => setRate(true)}><Percent size={16} aria-hidden />Ставка</Button>
               </>} />
@@ -65,12 +63,11 @@ export function RoyaltyPartnerPage() {
               <div className={`kpi${debt > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(debt, r.currency)}</span><span className="l">долг за закрытые месяцы</span></div>
               {open && <div className="kpi"><span className="v">{formatMoneyShort(open.accrued_minor, r.currency)}</span><span className="l">начисляется за {monthLabel(open.month, false)}</span></div>}
             </div>
-            <ActionError error={delPay.error ?? delManual.error} />
             <div className="grid grid-main">
               <Card title="По месяцам" bodyless>
                 <div className="table-wrap">
                   <table className="table">
-                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
+                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
                     <tbody>
                       {r.months.map((m) => (
                         <tr key={m.month}>
@@ -81,7 +78,9 @@ export function RoyaltyPartnerPage() {
                           <td className="r num">{m.manual_minor ? formatMoneyShort(m.manual_minor, r.currency) : '—'}</td>
                           <td className="r num">{formatMoneyShort(m.paid_minor, r.currency)}</td>
                           <td className={`r num${m.debt_minor > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={r.currency} short strong />}</td>
-                          <td className="r">{!m.is_open && m.debt_minor > 0 && <Button size="sm" onClick={() => setPay({ month: m.month, amount: m.debt_minor })}>Оплата</Button>}</td>
+                          <td className="r"><span className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                            {!m.is_open && m.debt_minor > 0 && <Button size="sm" onClick={() => setPay({ month: m.month, amount: m.debt_minor })}>Оплата</Button>}
+                            <Button size="sm" variant="ghost" onClick={() => setFix(m.month)}>Исправить</Button></span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -89,29 +88,11 @@ export function RoyaltyPartnerPage() {
                 </div>
               </Card>
               <div className="stack">
-                <Card title="Оплаты">
-                  {!r.payments.length && <p className="faint">Оплат пока нет.</p>}
-                  {r.payments.map((p) => (
-                    <div key={p.id} className="row between access-row">
-                      <span><Money minor={p.amount_minor} currency={r.currency} strong /> <span className="faint">за {monthLabel(p.month)}</span>
-                        <span className="faint" style={{ display: 'block' }}>{formatDate(p.paid_on)}{p.note ? ` · ${p.note}` : ''}</span></span>
-                      <button type="button" className="icon-btn" aria-label="Удалить оплату" onClick={() => delPay.mutate(p.id)}><Trash2 size={16} /></button>
-                    </div>
-                  ))}
-                </Card>
-                <Card title="Прошлые долги">
-                  {!r.manual.length && <p className="faint">Нет.</p>}
-                  {r.manual.map((p) => (
-                    <div key={p.id} className="row between access-row">
-                      <span><Money minor={p.amount_minor} currency={r.currency} strong /> <span className="faint">за {monthLabel(p.month)}</span>
-                        {p.note && <span className="faint" style={{ display: 'block' }}>{p.note}</span>}</span>
-                      <button type="button" className="icon-btn" aria-label="Удалить запись" onClick={() => delManual.mutate(p.id)}><Trash2 size={16} /></button>
-                    </div>
-                  ))}
-                </Card>
+                <RoyaltyOps partner={r.partner_id} limit={30} />
               </div>
             </div>
             {pay && <PaymentDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} month={pay.month} suggested={pay.amount} onClose={() => setPay(null)} />}
+            {fix && <CorrectionDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} month={fix} onClose={() => setFix(null)} />}
             {manual && <ManualDebtDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} onClose={() => setManual(false)} />}
             {rate && <RateDialog partner={r.partner_id} current={r.rate_bp} onClose={() => setRate(false)} />}
           </>

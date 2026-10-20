@@ -133,7 +133,7 @@ function RoyaltyCard() {
   if (!q.data) return null;
   const r = q.data;
   return (
-    <Link to="/royalty" className="read-card royalty-live">
+    <Link to="/finance" className="read-card royalty-live">
       <span className="todo-icon"><Landmark size={18} aria-hidden /></span>
       <span className="todo-main">
         <span className="todo-title">Роялти за {monthLabel(r.live.month, false)}: {formatMoneyShort(r.live.accrued_minor, r.currency)} сейчас</span>

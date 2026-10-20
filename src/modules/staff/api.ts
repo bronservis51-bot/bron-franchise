@@ -1,13 +1,12 @@
 import { command } from '../../platform/backend';
 import { sendOrQueue } from '../../platform/outbox';
-import type { LocationMonth } from '../revenue/api';
 
 export interface Shift { id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
   cash_minor: number; card_minor: number; total_minor: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
 export interface StaffHomeData {
   month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
   open_shift: (Shift & { location_name: string; currency: string }) | null;
-  locations: (LocationMonth & { my_today: Shift | null })[];
+  locations: { location_id: string; location_name: string; currency: string; today: string; my_today: Shift | null }[];
   month_earned_minor: number; month_revenue_minor: number; month_shifts: number;
   shifts: Shift[];
 }

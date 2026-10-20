@@ -1,4 +1,4 @@
-// Экран сотрудника: открыть смену → закрыть с выручкой → сразу видно, сколько заработал. Ниже — план точки и смены месяца.
+// Экран сотрудника: открыть смену → закрыть с выручкой → сразу видно, сколько заработал. Выручку и план точки сотрудник не видит.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -116,14 +116,6 @@ export function StaffHome() {
               <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
               <div className="plan-foot"><span>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</span></div>
             </section>
-
-            {d.locations.filter((l) => l.plan_minor).map((l) => (
-              <div key={l.location_id} className="mini-plan">
-                <div className="row between"><strong>План точки · {l.location_name}</strong><span>{(l.pct ?? 0).toLocaleString('ru-RU')} %</span></div>
-                <div className="progress" aria-hidden><span style={{ width: `${Math.min(100, l.pct ?? 0)}%` }} /></div>
-                {l.need_per_day_minor ? <div className="faint">До плана — около {formatMoneyShort(l.need_per_day_minor, l.currency)} в день</div> : <div className="faint">План выполнен</div>}
-              </div>
-            ))}
 
             {Boolean(toRead.data?.length) && (
               <Link to="/kb" className="read-card">
