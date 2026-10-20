@@ -35,7 +35,8 @@ const db = fresh
   : await (async () => {
       const { PGlite } = await import('@electric-sql/pglite');
       const { pg_trgm } = await import('@electric-sql/pglite/contrib/pg_trgm');
-      return new PGlite(DATA, { extensions: { pg_trgm } });
+      const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
+      return new PGlite(DATA, { extensions: { pg_trgm, pgcrypto } });
     })();
 if (fresh) {
   const md = ['# Локальные демо-пользователи (не коммитить)', '', '| Роль | Email | Пароль |', '| --- | --- | --- |',
@@ -262,15 +263,28 @@ const server = http.createServer(async (req, res) => {
     if (p === '/auth/v1/token' && req.method === 'POST') {
       const body = json();
       if (url.searchParams.get('grant_type') === 'password') {
-        const r = await db.query('select user_id, password from local_dev.password where lower(email) = lower($1)', [body.email ?? '']);
-        if (!r.rows[0] || r.rows[0].password !== body.password) return send(res, 400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
-        return send(res, 200, await session(r.rows[0].user_id, body.email));
+        // Как в Supabase: пароль — bcrypt в auth.users (учётные записи сотрудников создаёт само приложение); заблокированные не входят
+        const r = await db.query(`select id from auth.users where lower(email) = lower($1)
+            and (banned_until is null or banned_until < now())
+            and (encrypted_password = extensions.crypt($2, encrypted_password)
+                 or exists (select 1 from local_dev.password p where p.user_id = auth.users.id and p.password = $2))`, [body.email ?? '', body.password ?? '']);
+        if (!r.rows[0]) return send(res, 400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
+        return send(res, 200, await session(r.rows[0].id, body.email));
       }
       if (url.searchParams.get('grant_type') === 'refresh_token') {
         const c = verify(body.refresh_token);
         if (!c || c.typ !== 'refresh') return send(res, 400, { code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
         return send(res, 200, await session(c.sub, c.email));
       }
+    }
+    if (p === '/auth/v1/user' && req.method === 'PUT') {
+      if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });
+      const body = json();
+      if (body.password) {
+        await db.query(`update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')) where id = $1`, [claims.sub, body.password]);
+        await db.query('delete from local_dev.password where user_id = $1', [claims.sub]).catch(() => undefined);
+      }
+      return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
     if (p === '/auth/v1/user' && req.method === 'GET') {
       if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });

@@ -18,10 +18,11 @@ beforeAll(async () => {
 }, 180_000);
 
 describe('доступ', () => {
-  it('у демо-пользователей ровно по одной роли: менеджер на всю сеть, франчайзи — на себя', async () => {
+  it('у демо-пользователей ровно по одной роли: менеджер на всю сеть, франчайзи и сотрудник — на франчайзи', async () => {
     const rows = await t.admin<{ email: string; role: string; scope_type: string }>(
       `select u.email, a.role, a.scope_type from public.role_assignment a join public.app_user u on u.id = a.user_id order by u.email`);
     expect(rows).toEqual([
+      { email: '79000000011@staff.bron.local', role: 'franchisee_staff', scope_type: 'partner' },
       { email: VIKTOR, role: 'franchisee', scope_type: 'partner' },
       { email: MARSEL, role: 'franchisee', scope_type: 'partner' },
       { email: FM, role: 'franchise_manager', scope_type: 'company' },

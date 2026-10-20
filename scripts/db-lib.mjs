@@ -2,6 +2,7 @@
 // Используется тестами, генератором контракта и локальным бэкендом разработки.
 import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,8 @@ async function run(db, file, label) {
 
 /** Новая БД. dataDir — каталог для сохранения между запусками (локальный бэкенд); без него — в памяти. */
 export async function createDb({ dataDir, seed = true, users = true, onUser } = {}) {
-  const db = dataDir ? new PGlite(dataDir, { extensions: { pg_trgm } }) : new PGlite({ extensions: { pg_trgm } });
+  const extensions = { pg_trgm, pgcrypto };
+  const db = dataDir ? new PGlite(dataDir, { extensions }) : new PGlite({ extensions });
   await run(db, join(root, 'supabase/tests-shim/00_supabase_shim.sql'), 'Эмуляция Supabase');
   for (const f of migrationFiles()) await run(db, f, `Миграция ${f.split('/').pop()}`);
   if (seed) {
@@ -38,6 +40,7 @@ export async function createDb({ dataDir, seed = true, users = true, onUser } = 
         if (onUser) await onUser(db, u, r.rows[0].id);
       }
       await run(db, join(root, 'supabase/seed/seed_after_users.sql'), 'Seed после пользователей');
+      await run(db, join(root, 'supabase/seed/seed_staff.sql'), 'Seed: сотрудники, смены, вопросы');
     }
   }
   return db;

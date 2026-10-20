@@ -53,7 +53,7 @@ describe('границы модулей в SQL (ARCH-02)', () => {
     // Контракт модуля может быть объявлен в более поздней миграции: функция с префиксом модуля-владельца
     // Контракт модуля может быть объявлен в более поздней миграции: функция с префиксом модуля-владельца
     const modulePrefixes: Record<string, string[]> = {
-      '0002_knowledge.sql': ['article_', 'kb_'], '0003_revenue.sql': ['revenue_'], '0004_royalty.sql': ['royalty_'],
+      '0002_knowledge.sql': ['article_', 'kb_'], '0003_revenue.sql': ['revenue_', 'shift_'], '0004_royalty.sql': ['royalty_'],
     };
     const allowed = new Set(['0001_core.sql']);
     const problems: string[] = [];
