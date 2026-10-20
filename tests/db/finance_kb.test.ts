@@ -151,3 +151,18 @@ describe('расходы франчайзи', () => {
     expect(f.expense_categories).toContain('Аренда');
   });
 });
+
+describe('начало учёта роялти', () => {
+  it('выручка до начала учёта не попадает в начисление и долг', async () => {
+    const p = await id('partner', 'code', 'GAMMA');
+    const debt = async () => (await one<{ rows: { partner_id: string; debt_minor: number; accrued_minor: number }[] }>(FM,
+      `select public.royalty_summary(null) j`)).rows.find((r) => r.partner_id === p)!;
+    const before = await debt();
+    expect(Number(before.accrued_minor)).toBeGreaterThan(0);
+    await t.admin(`update public.partner set royalty_from = date_trunc('month', current_date)::date where id = $1`, [p]);
+    const after = await debt();
+    expect(Number(after.accrued_minor)).toBe(0);
+    expect(Number(after.debt_minor)).toBeLessThan(Number(before.debt_minor));
+    await t.admin(`update public.partner set royalty_from = null where id = $1`, [p]);
+  });
+});
