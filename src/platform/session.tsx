@@ -8,7 +8,7 @@ import { setRememberDevice, snapshot, supabase } from './supabase';
 
 export interface Assignment {
   id: string;
-  role: 'franchise_manager' | 'franchisee';
+  role: 'franchise_manager' | 'franchisee' | 'franchisee_staff';
   role_name: string;
   scope_type: 'company' | 'partner';
   scope_id: string | null;
@@ -25,8 +25,11 @@ interface SessionState {
   status: 'loading' | 'signed-out' | 'signed-in';
   me: Me | null;
   can: (perm: string) => boolean;
-  /** Менеджер по франшизе: вся сеть. Иначе — франчайзи. */
+  /** Менеджер по франшизе: вся сеть. */
   isManager: boolean;
+  /** Сотрудник франчайзи: смены и свой заработок. */
+  isStaff: boolean;
+  changePassword: (password: string) => Promise<void>;
   signIn: (email: string, password: string, remember: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   reload: () => Promise<void>;
@@ -125,6 +128,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus('signed-out');
   }, [me, qc]);
 
+  const changePassword = useCallback(async (password: string) => {
+    if (!supabase) throw new Error('Supabase не настроен');
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  }, []);
+
   const value = useMemo<SessionState>(() => {
     const perms = new Set(me?.assignments.flatMap((a) => a.permissions) ?? []);
     return {
@@ -132,11 +141,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       me,
       can: (perm) => perms.has(perm),
       isManager: me?.assignments.some((a) => a.scope_type === 'company') ?? false,
+      isStaff: (me?.assignments.length ?? 0) > 0 && (me?.assignments.every((a) => a.role === 'franchisee_staff') ?? false),
+      changePassword,
       signIn,
       signOut,
       reload: loadMe,
     };
-  }, [status, me, signIn, signOut, loadMe]);
+  }, [status, me, signIn, signOut, loadMe, changePassword]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

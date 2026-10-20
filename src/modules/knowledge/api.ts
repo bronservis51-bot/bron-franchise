@@ -38,3 +38,10 @@ export const kbCommands = {
 };
 
 export const TYPE_LABEL: Record<string, string> = { article: 'Статья', instruction: 'Инструкция', faq: 'Вопросы и ответы', regulation: 'Регламент', checklist: 'Чек-лист' };
+
+export interface Question { id: string; question: string; answer: string | null; answered_at: string | null; created_at: string; article_id: string | null;
+  user_name: string; partner_name: string | null; mine: boolean; unseen: boolean }
+export const kbAsk = (question: string, article: string | null) => command<string>('kb_ask', { question, article });
+export const kbQuestions = () => command<Question[]>('kb_questions');
+export const kbAnswer = (question: string, answer: string, article: string | null) => command('kb_answer', { question, answer, article });
+export const kbMisses = () => command<{ query: string; times: number; last_at: string }[]>('kb_search_misses');

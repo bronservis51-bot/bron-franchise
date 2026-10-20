@@ -27,6 +27,11 @@ const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'Networ
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
 const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
 const RoyaltyPartnerPage = page(() => import('../modules/manager/RoyaltyPartnerPage'), 'RoyaltyPartnerPage');
+const StaffHome = page(() => import('../modules/staff/StaffHome'), 'StaffHome');
+const StaffPage = page(() => import('../modules/staff/StaffPage'), 'StaffPage');
+const RatingPage = page(() => import('../modules/rating/RatingPage'), 'RatingPage');
+const MyRoyaltyPage = page(() => import('../modules/royalty/MyRoyaltyPage'), 'MyRoyaltyPage');
+const QuestionsPage = page(kb, 'QuestionsPage');
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -56,7 +61,10 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
-      { path: 'royalty', element: <ManagerOnly><RoyaltyPage /></ManagerOnly> },
+      { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<MyRoyaltyPage />} /> },
+      { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },
+      { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingPage />} /> },
+      { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'royalty/:id', element: <ManagerOnly><RoyaltyPartnerPage /></ManagerOnly> },
       { path: 'kb', element: <KbHomePage /> },
       { path: 'kb/articles/:id', element: <ArticlePage /> },
@@ -76,8 +84,15 @@ function BootScreen() {
 }
 
 function Home() {
-  const { isManager } = useSession();
-  return isManager ? <NetworkPage /> : <FranchiseeHome />;
+  const { isManager, isStaff } = useSession();
+  return isManager ? <NetworkPage /> : isStaff ? <StaffHome /> : <FranchiseeHome />;
+}
+
+/** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
+function ByRole({ manager, franchisee }: { manager?: ReactNode; franchisee?: ReactNode }) {
+  const { isManager, isStaff } = useSession();
+  const el = isManager ? manager : isStaff ? null : franchisee;
+  return el ? <>{el}</> : <Navigate to="/" replace />;
 }
 
 function ManagerOnly({ children }: { children: ReactNode }) {

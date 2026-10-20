@@ -46,6 +46,7 @@ try {
   if (withSeed) await apply('seed.sql', readFileSync(join(root, 'supabase/seed/seed.sql'), 'utf8'));
   if (process.argv.includes('--after-users')) await apply('seed_after_users.sql', readFileSync(join(root, 'supabase/seed/seed_after_users.sql'), 'utf8'));
   if (process.argv.includes('--after-users')) await apply('seed_staff.sql', readFileSync(join(root, 'supabase/seed/seed_staff.sql'), 'utf8'));
+  if (process.argv.includes('--after-users')) await apply('seed_kb_videos.sql', readFileSync(join(root, 'supabase/seed/seed_kb_videos.sql'), 'utf8'));
   console.log('Готово.');
 } finally {
   await client.end();

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit3, Landmark, Plus, Target, UserPlus, X } from 'lucide-react';
+import { Edit3, KeyRound, Landmark, Plus, Target, UserPlus, X } from 'lucide-react';
 import { formatDate, monthStart } from '../../platform/dates';
 import { Badge, Button, Card, DataState, EmptyState, KV, PageHeader } from '../../ui';
 import { PARTNER_STATUS, st } from '../../ui/status';
@@ -11,12 +11,14 @@ import { DayList, MonthNav, PlanCard } from '../revenue/FranchiseeHome';
 import { RevenueDialog } from '../revenue/RevenueDialog';
 import { revenueMonth, type DayRow } from '../revenue/api';
 import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type Location } from './api';
-import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog } from './PartnerDialog';
+import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog, SetPasswordDialog } from './PartnerDialog';
+import { StaffPanel } from '../staff/StaffPage';
 
 function AccessCard({ partnerId }: { partnerId: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const [pw, setPw] = useState<{ user: string; name: string } | null>(null);
   const q = useQuery({ queryKey: ['access', partnerId], queryFn: () => partnerAccess(partnerId) });
   const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); void qc.invalidateQueries({ queryKey: ['access', partnerId] }); } });
   const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: () => void qc.invalidateQueries({ queryKey: ['access', partnerId] }) });
@@ -29,7 +31,10 @@ function AccessCard({ partnerId }: { partnerId: string }) {
             {a.users.map((u) => (
               <div key={u.assignment_id} className="row between access-row">
                 <span><strong>{u.full_name}</strong><span className="faint" style={{ display: 'block' }}>{u.email}</span></span>
-                <Button size="sm" variant="ghost" loading={revoke.isPending} onClick={() => revoke.mutate(u.assignment_id)}>Отозвать</Button>
+                <span className="row" style={{ flexWrap: 'nowrap' }}>
+                  <button type="button" className="icon-btn" aria-label="Новый пароль" onClick={() => setPw({ user: u.user_id, name: u.full_name })}><KeyRound size={16} /></button>
+                  <Button size="sm" variant="ghost" loading={revoke.isPending} onClick={() => revoke.mutate(u.assignment_id)}>Отозвать</Button>
+                </span>
               </div>
             ))}
             {a.invites.map((i) => (
@@ -42,6 +47,7 @@ function AccessCard({ partnerId }: { partnerId: string }) {
         )}
       </DataState>
       {adding && <AccessDialog partnerId={partnerId} onClose={() => setAdding(false)} />}
+      {pw && <SetPasswordDialog user={pw.user} name={pw.name} onClose={() => setPw(null)} />}
     </Card>
   );
 }
@@ -109,6 +115,10 @@ export function PartnerPage() {
               </div>
               <MonthNav month={month} onChange={(m) => { setMonth(m); if (sel) setParams({ location: sel.id, month: m }, { replace: true }); }} max={monthStart()} />
               {sel ? <LocationMonthBlock key={sel.id} l={sel} month={month} /> : <EmptyState title="Точек пока нет" action={<Button onClick={() => setAdding(true)}>Добавить точку</Button>} />}
+              <section>
+                <h2 className="section-title">Сотрудники франчайзи</h2>
+                <StaffPanel partnerId={partner.id} />
+              </section>
             </div>
             <div className="stack">
               <Card title="Контакты">

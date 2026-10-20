@@ -18,6 +18,7 @@ export const locationSave = (l: { id: string | null; partner: string; name: stri
 export interface Access { users: { assignment_id: string; user_id: string; full_name: string; email: string; since: string }[]; invites: { id: number; email: string; created_at: string }[] }
 export const partnerAccess = (partner: string) => command<Access>('partner_access', { partner });
 export const accessGrant = (partner: string, email: string) => command<{ status: 'pending' | 'granted' | 'exists' }>('access_grant', { partner, email });
+export const accountCreate = (partner: string, full_name: string, email: string, password: string) => command<string>('account_create', { partner, full_name, email, password });
 export const accessRevoke = (assignment: string) => command('access_revoke', { assignment });
 export const inviteCancel = (invite: number) => command('access_cancel_invite', { invite });
 

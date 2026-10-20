@@ -290,13 +290,15 @@ const server = http.createServer(async (req, res) => {
       if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
+    if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: 'GoTrue (локальная эмуляция)' });
     if (p === '/auth/v1/logout') return send(res, 204);
     if (p.startsWith('/auth/v1/signup')) return send(res, 422, { code: 422, error_code: 'signup_disabled', msg: 'Signups not allowed for this instance' });
 
     // PostgREST
     if (p.startsWith('/rest/v1/rpc/') && req.method === 'POST') {
       const [status, body] = await rpc(p.slice('/rest/v1/rpc/'.length), json(), claims, headers);
-      return send(res, status, body);
+      // Как PostgREST: скалярный результат (текст, uuid) — тоже JSON, то есть строка в кавычках
+      return send(res, status, typeof body === 'string' ? JSON.stringify(body) : body);
     }
     if (p.startsWith('/rest/v1/') && req.method === 'GET') {
       const [status, body] = await readTable(p.slice('/rest/v1/'.length), url.searchParams, claims, headers);

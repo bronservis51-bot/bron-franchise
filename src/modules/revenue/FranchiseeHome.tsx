@@ -1,15 +1,16 @@
-// Главная франчайзи: план месяца по точке, сколько выполнено, ввод выручки за сегодня, дни месяца.
+// Главная франчайзи: план месяца по точке, ввод выручки за сегодня, сравнение с прошлым месяцем, роялти сейчас, дни месяца.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { BookOpen, CalendarX, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { BookOpen, CalendarX, Check, ChevronLeft, ChevronRight, Download, Landmark, Plus, TrendingDown, TrendingUp } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { dayLabel, formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { Button, DataState, EmptyState, Money } from '../../ui';
+import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
 import { BrandPattern } from '../../ui/brand';
-import { revenueMonth, revenueOverview, type DayRow, type MonthDetail } from './api';
+import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type MonthDetail } from './api';
+import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
@@ -80,7 +81,9 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
               {r ? (
                 <span className="day-sum2">
                   <Money minor={r.total_minor} currency={m.currency} short />
-                  <span className="day-split">нал. {formatMoneyShort(r.cash_minor, m.currency)} · карта {formatMoneyShort(r.card_minor, m.currency)}</span>
+                  <span className="day-split">{r.entries.some((e) => e.employee_id)
+                    ? r.entries.map((e) => `${e.employee_name ?? 'вы'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
+                    : `нал. ${formatMoneyShort(r.cash_minor, m.currency)} · карта ${formatMoneyShort(r.card_minor, m.currency)}`}</span>
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
               ) : <span className="day-sum2 day-empty">{miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
@@ -99,6 +102,48 @@ function shiftDay(iso: string, n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Как идёт месяц: к тому же периоду прошлого месяца и сильные дни недели. */
+function Insights({ m }: { m: MonthDetail }) {
+  const prev = Number(m.prev_same_period_minor);
+  const cur = Number(m.same_period_minor);
+  const delta = prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null;
+  const wd = [...m.weekday_avg].sort((a, b) => Number(b.avg_minor) - Number(a.avg_minor));
+  if (delta === null && wd.length < 7) return null;
+  return (
+    <div className="insights">
+      {delta !== null && (
+        <div className={`insight ${delta >= 0 ? 'up' : 'down'}`}>
+          {delta >= 0 ? <TrendingUp size={18} aria-hidden /> : <TrendingDown size={18} aria-hidden />}
+          <span><strong>{delta > 0 ? '+' : ''}{delta.toLocaleString('ru-RU')} %</strong> к тому же периоду прошлого месяца</span>
+        </div>
+      )}
+      {wd.length === 7 && (
+        <div className="insight">
+          <span>Сильный день — <strong>{WEEKDAY[wd[0].dow]}</strong> (в среднем {formatMoneyShort(Math.round(Number(wd[0].avg_minor) / 100) * 100, m.currency)}), слабый — {WEEKDAY[wd[6].dow]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface RoyaltyLive { currency: string; rate_bp: number; debt_minor: number; live: { month: string; accrued_minor: number; projected_accrual_minor: number } }
+
+function RoyaltyCard() {
+  const q = useQuery({ queryKey: ['royalty', 'my'], queryFn: () => command<RoyaltyLive>('royalty_my'), refetchInterval: 120_000 });
+  if (!q.data) return null;
+  const r = q.data;
+  return (
+    <Link to="/royalty" className="read-card royalty-live">
+      <span className="todo-icon"><Landmark size={18} aria-hidden /></span>
+      <span className="todo-main">
+        <span className="todo-title">Роялти за {monthLabel(r.live.month, false)}: {formatMoneyShort(r.live.accrued_minor, r.currency)} сейчас</span>
+        <span className="todo-meta">{(r.rate_bp / 100).toLocaleString('ru-RU')} % от выручки · к концу месяца ≈ {formatMoneyShort(Math.round(Number(r.live.projected_accrual_minor) / 100) * 100, r.currency)}{Number(r.debt_minor) > 0 ? ` · долг ${formatMoneyShort(r.debt_minor, r.currency)}` : ' · долга нет'}</span>
+      </span>
+      <ChevronRight size={16} className="todo-chevron" aria-hidden />
+    </Link>
+  );
+}
+
 export function FranchiseeHome() {
   const { me } = useSession();
   const [month, setMonth] = useState(monthStart());
@@ -114,6 +159,7 @@ export function FranchiseeHome() {
   const m = detail.data;
   const todayRow = m?.days.find((d) => d.day === m.today);
   const isCurrent = month === monthStart();
+  const report = useMutation({ mutationFn: (d: MonthDetail) => downloadMonthReport(d) });
 
   return (
     <div className="home">
@@ -154,8 +200,14 @@ export function FranchiseeHome() {
                       <div className="alert-body">Не внесена выручка: {d.missing_days.slice(-5).map((x) => formatDate(x).slice(0, 5)).join(', ')}{d.missing_days.length > 5 ? ` и ещё ${d.missing_days.length - 5}` : ''}. Нажмите на день ниже, чтобы внести.</div>
                     </div>
                   )}
+                  <Insights m={d} />
+                  <RoyaltyCard />
                   <section>
-                    <h2 className="section-title">Дни месяца</h2>
+                    <div className="row between" style={{ marginBottom: 8 }}>
+                      <h2 className="section-title" style={{ margin: 0 }}>Дни месяца</h2>
+                      <Button size="sm" variant="ghost" loading={report.isPending} onClick={() => report.mutate(d)}><Download size={15} aria-hidden />Отчёт за месяц</Button>
+                    </div>
+                    <ActionError error={report.error} />
                     <DayList m={d} onPick={(day, row) => setEdit({ day, row })} />
                   </section>
                 </>
@@ -174,7 +226,7 @@ export function FranchiseeHome() {
           </div>
         )}
       </DataState>
-      {edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
+      {edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} staff={m?.staff} onClose={() => setEdit(null)} />}
     </div>
   );
 }

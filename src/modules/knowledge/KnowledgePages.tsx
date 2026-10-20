@@ -2,21 +2,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Check, Edit3, FilePlus, FolderPlus, Search } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Edit3, FilePlus, FolderPlus, HelpCircle, MessageCircleQuestion, Search, SearchX } from 'lucide-react';
 import { useSession } from '../../platform/session';
-import { toAppError } from '../../platform/backend';
+import { command, toAppError } from '../../platform/backend';
 import { formatDate, formatDateTime } from '../../platform/dates';
 import { ActionError, Alert, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, LinkButton, NoResults,
   PageHeader, Select, Tabs, Textarea } from '../../ui';
 import { ARTICLE_STATUS, st } from '../../ui/status';
 import { headings, Markdown } from '../../ui/markdown';
 import { useToast } from '../../ui/toast';
-import { ackStatus, articles, getArticle, getRevision, kbCommands, myAcks, revisionsOf, search, sections, toRead, TYPE_LABEL } from './api';
+import { ackStatus, articles, getArticle, getRevision, kbAnswer, kbAsk, kbCommands, kbMisses, kbQuestions, myAcks, revisionsOf, search, sections, toRead, TYPE_LABEL } from './api';
 
 function Snippet({ html }: { html: string }) {
   // Подсветка от сервера приходит как «…»; превращаем в <mark> без вставки HTML
   const parts = html.split(/(«[^»]*»)/g);
   return <>{parts.map((p, i) => (p.startsWith('«') && p.endsWith('»') ? <mark key={i}>{p.slice(1, -1)}</mark> : <span key={i}>{p}</span>))}</>;
+}
+
+/** «Не нашли ответ? Спросите» — вопрос уходит менеджеру по франшизе, ответ придёт в «Мои вопросы». */
+export function AskDialog({ initial = '', article = null, onClose }: { initial?: string; article?: string | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [q, setQ] = useState(initial);
+  const m = useMutation({ mutationFn: () => kbAsk(q, article), onSuccess: () => { toast('Вопрос отправлен. Ответ появится в «Мои вопросы»'); void qc.invalidateQueries({ queryKey: ['kb'] }); onClose(); } });
+  return (
+    <ConfirmDialog open title="Задать вопрос" confirmLabel="Отправить" busy={m.isPending} error={m.error} disabled={q.trim().length < 3} onClose={onClose} onConfirm={() => m.mutate()}>
+      <p className="muted">Вопрос получит менеджер по франшизе. Частые вопросы становятся статьями — так база знаний пополняется ответами на то, что действительно нужно.</p>
+      <Field label="Ваш вопрос" required>{(id) => <Textarea id={id} rows={4} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />}</Field>
+    </ConfirmDialog>
+  );
 }
 
 export function KbHomePage() {
@@ -29,6 +43,9 @@ export function KbHomePage() {
   const [filter, setFilter] = useState<'published' | 'draft' | 'archived'>('published');
   const [creating, setCreating] = useState(false);
   const [newSection, setNewSection] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
+  const inbox = useQuery({ queryKey: ['kb', 'inbox'], queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
+  const misses = useQuery({ queryKey: ['kb', 'misses'], enabled: editor, queryFn: kbMisses });
   useEffect(() => { const h = setTimeout(() => setDebounced(q.trim()), 300); return () => clearTimeout(h); }, [q]);
   useEffect(() => { setParams(debounced ? { q: debounced } : {}, { replace: true }); }, [debounced, setParams]);
   const secs = useQuery({ queryKey: ['kb', 'sections'], queryFn: sections, staleTime: 5 * 60_000 });
@@ -41,10 +58,16 @@ export function KbHomePage() {
   return (
     <>
       <PageHeader title="База знаний" sub="Инструкции, регламенты и ответы на частые вопросы"
-        actions={editor && (
+        actions={editor ? (
           <>
+            <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Вопросы{inbox.data?.unanswered ? ` (${inbox.data.unanswered})` : ''}</LinkButton>
             <Button variant="primary" onClick={() => setCreating(true)}><FilePlus size={16} aria-hidden />Новая статья</Button>
             <Button onClick={() => setNewSection(true)}><FolderPlus size={16} aria-hidden />Раздел</Button>
+          </>
+        ) : (
+          <>
+            <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
+            <Button onClick={() => setAsking('')}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
           </>
         )} />
       <div className="field kb-search">
@@ -56,7 +79,8 @@ export function KbHomePage() {
       </div>
       {debounced.length >= 2 ? (
         <Card title={`Результаты: «${debounced}»`} bodyless>
-          <DataState query={results} empty={(d) => (d.length ? null : <NoResults query={debounced} />)}>
+          <DataState query={results} empty={(d) => (d.length ? null : <NoResults query={debounced}
+            action={!editor && <Button variant="primary" onClick={() => setAsking(debounced)}><HelpCircle size={16} aria-hidden />Спросить менеджера</Button>} />)}>
             {(d) => (
               <ul className="list">
                 {d.map((h) => (
@@ -74,6 +98,9 @@ export function KbHomePage() {
               </ul>
             )}
           </DataState>
+          {!editor && Boolean(results.data?.length) && (
+            <div className="card-body faint">Не то? <button type="button" className="link-btn" onClick={() => setAsking(debounced)}>Задайте вопрос менеджеру</button></div>
+          )}
         </Card>
       ) : (
         <>
@@ -89,6 +116,12 @@ export function KbHomePage() {
                   </li>
                 ))}
               </ul>
+            </Card>
+          )}
+          {editor && Boolean(misses.data?.length) && (
+            <Card title="Искали и не нашли" icon={<SearchX size={18} />}>
+              <p className="faint">Запросы франчайзи и сотрудников без результатов за 60 дней — кандидаты на новые статьи или синонимы.</p>
+              <div className="chips" style={{ marginBottom: 0 }}>{misses.data!.map((m) => <span key={m.query} className="chip" style={{ cursor: 'default' }}>{m.query}{m.times > 1 ? ` ×${m.times}` : ''}</span>)}</div>
             </Card>
           )}
           {editor && <Chips label="Статьи" value={filter} onChange={setFilter}
@@ -123,6 +156,7 @@ export function KbHomePage() {
       )}
       {creating && <NewArticleDialog onClose={() => setCreating(false)} onCreated={(id) => navigate(`/kb/articles/${id}/edit`)} />}
       {newSection && <SectionDialog onClose={() => setNewSection(false)} />}
+      {asking !== null && <AskDialog initial={asking} onClose={() => setAsking(null)} />}
     </>
   );
 }
@@ -193,6 +227,7 @@ export function ArticlePage() {
   const acknowledge = useMutation({ mutationFn: () => kbCommands.acknowledge(id), onSuccess: () => { toast('Отмечено: вы ознакомились'); void refresh(); } });
   const archive = useMutation({ mutationFn: (v: boolean) => kbCommands.archive(id, v), onSuccess: (_, v) => { toast(v ? 'Статья в архиве' : 'Статья возвращена'); void refresh(); } });
   const toc = useMemo(() => headings(rev.data?.body ?? ''), [rev.data?.body]);
+  const [ask, setAsk] = useState(false);
 
   return (
     <DataState query={art} empty={(a) => (a ? null : <EmptyState title="Статья не найдена" text="Материал снят с публикации или недоступен." />)}>
@@ -225,7 +260,13 @@ export function ArticlePage() {
               </div>
             )}
             <div className={editor || toc.length > 2 ? 'grid grid-main' : ''}>
-              <Card>{r ? <Markdown source={r.body} /> : <EmptyState title="Статья ещё не опубликована" text="Откройте редактор, допишите и опубликуйте." />}</Card>
+              <Card>
+                {r ? <Markdown source={r.body} /> : <EmptyState title="Статья ещё не опубликована" text="Откройте редактор, допишите и опубликуйте." />}
+                {r && !editor && (
+                  <div className="ask-footer"><span className="muted">Остался вопрос по статье?</span>
+                    <Button size="sm" onClick={() => setAsk(true)}><HelpCircle size={15} aria-hidden />Спросить менеджера</Button></div>
+                )}
+              </Card>
               {(editor || toc.length > 2) && (
                 <div className="stack">
                   {toc.length > 2 && (
@@ -249,6 +290,7 @@ export function ArticlePage() {
                 </div>
               )}
             </div>
+            {ask && <AskDialog article={id} initial={`По статье «${r?.title ?? ''}»: `} onClose={() => setAsk(false)} />}
           </>
         );
       }}
@@ -368,5 +410,52 @@ export function ArticleEditPage() {
         </>
       )}
     </DataState>
+  );
+}
+
+export function QuestionsPage() {
+  const { can } = useSession();
+  const editor = can('kb.edit');
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [asking, setAsking] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const q = useQuery({ queryKey: ['kb', 'questions'], queryFn: kbQuestions });
+  useEffect(() => { if (q.isSuccess) void qc.invalidateQueries({ queryKey: ['kb', 'inbox'] }); }, [q.isSuccess, qc]);
+  const answer = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => kbAnswer(id, text, null),
+    onSuccess: (_, v) => { toast('Ответ отправлен'); setDrafts({ ...drafts, [v.id]: '' }); void qc.invalidateQueries({ queryKey: ['kb'] }); },
+  });
+  return (
+    <div className="home" style={{ maxWidth: 820 }}>
+      <PageHeader back={{ to: '/kb', label: 'База знаний' }} title={editor ? 'Вопросы франчайзи' : 'Мои вопросы'}
+        sub={editor ? 'Ответьте здесь. Если вопрос повторяется — сделайте из ответа статью.' : 'Ответы менеджера по франшизе'}
+        actions={!editor && <Button variant="primary" onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />
+      <ActionError error={answer.error} />
+      <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Вопросов пока нет" text={editor ? 'Когда франчайзи спросят, вопросы появятся здесь.' : 'Не нашли ответ в базе знаний — спросите, менеджер ответит.'} />)}>
+        {(list) => (
+          <div className="stack">
+            {list.map((x) => (
+              <Card key={x.id} className={x.unseen ? 'new-answer' : ''}>
+                <div className="faint">{editor ? `${x.user_name}${x.partner_name ? ` · ${x.partner_name}` : ''} · ` : ''}{formatDateTime(x.created_at)}{x.article_id && <> · <Link to={`/kb/articles/${x.article_id}`}>к статье</Link></>}</div>
+                <p style={{ margin: '6px 0', fontWeight: 600 }}>{x.question}</p>
+                {x.answer ? (
+                  <div className="answer"><div className="faint">Ответ{x.answered_at ? ` · ${formatDateTime(x.answered_at)}` : ''}{x.unseen ? ' · новый' : ''}</div><div style={{ whiteSpace: 'pre-wrap' }}>{x.answer}</div></div>
+                ) : editor ? (
+                  <div>
+                    <Textarea rows={3} aria-label="Ответ" value={drafts[x.id] ?? ''} onChange={(e) => setDrafts({ ...drafts, [x.id]: e.target.value })} placeholder="Ответ франчайзи" />
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <Button variant="primary" size="sm" loading={answer.isPending && answer.variables?.id === x.id} disabled={(drafts[x.id] ?? '').trim().length < 2}
+                        onClick={() => answer.mutate({ id: x.id, text: drafts[x.id] })}>Ответить</Button>
+                    </div>
+                  </div>
+                ) : <Badge tone="warning">ждёт ответа</Badge>}
+              </Card>
+            ))}
+          </div>
+        )}
+      </DataState>
+      {asking && <AskDialog onClose={() => setAsking(false)} />}
+    </div>
   );
 }

@@ -2,13 +2,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarX, ChevronRight, Plus } from 'lucide-react';
+import { CalendarX, ChevronRight, Plus, Sparkles } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, DataState, EmptyState, PageHeader } from '../../ui';
 import { MonthNav } from '../revenue/FranchiseeHome';
 import { revenueOverview, type LocationMonth } from '../revenue/api';
 import { PartnerDialog } from './PartnerDialog';
+import { PlanSuggestDialog } from './PlanSuggestDialog';
 
 function PctBadge({ r }: { r: LocationMonth }) {
   if (r.pct === null) return <span className="faint">нет плана</span>;
@@ -20,12 +21,16 @@ export function NetworkPage() {
   const navigate = useNavigate();
   const [month, setMonth] = useState(monthStart());
   const [adding, setAdding] = useState(false);
+  const [suggest, setSuggest] = useState(false);
   const q = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
 
   return (
     <>
       <PageHeader title="Франчайзи" sub="Выручка и план по каждой точке сети"
-        actions={<Button variant="primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить франчайзи</Button>} />
+        actions={<>
+          <Button onClick={() => setSuggest(true)}><Sparkles size={16} aria-hidden />Предложить план</Button>
+          <Button variant="primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить франчайзи</Button>
+        </>} />
       <MonthNav month={month} onChange={setMonth} max={monthStart()} />
       <DataState query={q} skeleton={6} empty={(o) => (o.rows.length ? null : <EmptyState title="Пока нет ни одной точки" text="Добавьте франчайзи и его точки." />)}>
         {(o) => {
@@ -70,6 +75,7 @@ export function NetworkPage() {
         }}
       </DataState>
       {adding && <PartnerDialog onClose={() => setAdding(false)} onSaved={(id) => navigate(`/partners/${id}`)} />}
+      {suggest && <PlanSuggestDialog onClose={() => setSuggest(false)} />}
     </>
   );
 }

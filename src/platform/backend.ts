@@ -15,11 +15,12 @@ export type ErrorCode =
   | 'external-unavailable'
   | 'unauthenticated'
   | 'offline'
+  | 'period-locked'
   | 'unknown';
 
 const KNOWN: ErrorCode[] = [
   'validation', 'forbidden', 'not-found', 'version-conflict', 'transition-not-allowed', 'idempotency-conflict',
-  'policy-split-required', 'integration-pending', 'external-unavailable', 'unauthenticated',
+  'policy-split-required', 'integration-pending', 'external-unavailable', 'unauthenticated', 'period-locked',
 ];
 
 export class AppError extends Error {
@@ -59,7 +60,7 @@ export function toAppError(e: unknown): AppError {
     if (pg.code === 'PGRST301' || /JWT/i.test(pg.message)) {
       return new AppError('unauthenticated', 'Сессия истекла. Войдите снова.', '', requestId);
     }
-    if (/fetch|network|Failed to fetch/i.test(pg.message)) {
+    if (/fetch|network|load failed/i.test(pg.message)) {
       return new AppError('external-unavailable', 'Сервер недоступен. Попробуйте ещё раз.', '', requestId);
     }
     return new AppError('unknown', 'Не удалось выполнить действие', pg.message, requestId);

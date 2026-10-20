@@ -1,6 +1,8 @@
 import { command } from '../../platform/backend';
+import { sendOrQueue } from '../../platform/outbox';
 
-export interface DayRow { day: string; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; updated_at: string }
+export interface DayEntry { employee_id: string | null; employee_name: string | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null }
+export interface DayRow { day: string; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; updated_at: string; entries: DayEntry[] }
 
 export interface LocationMonth {
   location_id: string; location_name: string; city: string; currency: string; status: string;
@@ -11,13 +13,22 @@ export interface LocationMonth {
   missing_days: string[]; last_day: string | null; fx_rub: number | null;
 }
 
-export interface MonthDetail extends LocationMonth { editable_from: string | null; days: DayRow[] }
+export interface MonthDetail extends LocationMonth {
+  editable_from: string | null; days: DayRow[];
+  prev_month_total_minor: number; prev_same_period_minor: number; same_period_minor: number;
+  weekday_avg: { dow: number; avg_minor: number }[];
+  staff: { user_id: string; full_name: string }[];
+}
 
 export interface Overview { month: string; rows: LocationMonth[]; fact_rub_minor: number | null; plan_rub_minor: number | null; missing_fx: string[] }
 
 export const revenueOverview = (month: string) => command<Overview>('revenue_overview', { month });
 export const revenueMonth = (location: string, month: string) => command<MonthDetail>('revenue_month', { location, month });
-export const revenueSave = (location: string, day: string, cash: string, card: string, comment: string | null) =>
-  command('revenue_save', { location, day, cash, card, comment });
-export const revenueDelete = (location: string, day: string) => command('revenue_delete', { location, day });
+/** Сохранить выручку дня (без сети — в очередь на устройстве). employee = null — запись самого франчайзи. */
+export const revenueSave = (userId: string, location: string, day: string, cash: string, card: string, comment: string | null, employee: string | null) =>
+  sendOrQueue(userId, 'revenue_save', { location, day, cash, card, comment, employee });
+export const revenueDelete = (location: string, day: string, employee: string | null) => command('revenue_delete', { location, day, employee });
 export const planSet = (location: string, month: string, amount: string) => command('revenue_plan_set', { location, month, amount });
+
+export const WEEKDAY = ['', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+export const WEEKDAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];

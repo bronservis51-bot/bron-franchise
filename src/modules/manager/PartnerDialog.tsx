@@ -5,7 +5,8 @@ import { monthLabel } from '../../platform/dates';
 import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 import { planSet } from '../revenue/api';
-import { accessGrant, countries, locationSave, partnerSave, type Location, type Partner } from './api';
+import { accessGrant, accountCreate, countries, locationSave, partnerSave, type Location, type Partner } from './api';
+import { randomPassword, userSetPassword } from '../staff/api';
 
 export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
@@ -86,20 +87,58 @@ export function PlanDialog({ location, month, currency, current, onClose }: { lo
 export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const [mode, setMode] = useState<'create' | 'grant'>('create');
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState(randomPassword);
+  const [made, setMade] = useState<{ email: string; password: string } | null>(null);
   const m = useMutation({
-    mutationFn: () => accessGrant(partnerId, email),
+    mutationFn: async () => {
+      if (mode === 'create') { await accountCreate(partnerId, name, email, password); return 'created' as const; }
+      return (await accessGrant(partnerId, email)).status;
+    },
     onSuccess: (r) => {
-      toast(r.status === 'granted' ? 'Доступ выдан' : r.status === 'exists' ? 'У этого пользователя уже есть доступ' : 'Приглашение сохранено');
       void qc.invalidateQueries({ queryKey: ['access', partnerId] });
+      if (r === 'created') { setMade({ email, password }); return; }
+      toast(r === 'granted' ? 'Доступ выдан' : r === 'exists' ? 'У этого пользователя уже есть доступ' : 'Приглашение сохранено');
       onClose();
     },
   });
+  if (made) {
+    return (
+      <ConfirmDialog open title="Учётная запись создана" confirmLabel="Готово" onClose={onClose} onConfirm={onClose}>
+        <p>Передайте франчайзи данные для входа. Пароль он сможет сменить сам в профиле.</p>
+        <div className="login-card-data">
+          <div><span className="faint">Сайт</span><strong>{location.origin}{location.pathname}</strong></div>
+          <div><span className="faint">Email</span><strong>{made.email}</strong></div>
+          <div><span className="faint">Пароль</span><strong className="mono">{made.password}</strong></div>
+        </div>
+      </ConfirmDialog>
+    );
+  }
   return (
-    <ConfirmDialog open title="Доступ для франчайзи" confirmLabel="Выдать доступ" busy={m.isPending} error={m.error} disabled={!email.includes('@')}
-      onClose={onClose} onConfirm={() => m.mutate()}>
+    <ConfirmDialog open title="Доступ для франчайзи" confirmLabel={mode === 'create' ? 'Создать учётную запись' : 'Выдать доступ'} busy={m.isPending} error={m.error}
+      disabled={!email.includes('@') || (mode === 'create' && (!name.trim() || password.length < 6))} onClose={onClose} onConfirm={() => m.mutate()}>
+      <div className="chips" role="group" aria-label="Способ">
+        <button type="button" className="chip" aria-pressed={mode === 'create'} onClick={() => setMode('create')}>Новая учётная запись</button>
+        <button type="button" className="chip" aria-pressed={mode === 'grant'} onClick={() => setMode('grant')}>Уже есть в системе</button>
+      </div>
+      {mode === 'create' && <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>}
       <Field label="Email франчайзи" required>{(id) => <Input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
-      <p className="faint">Если у человека ещё нет учётной записи, создайте её в Supabase: Authentication → Users → Add user → Send invitation, тот же email. При первом входе доступ к этому франчайзи назначится сам.</p>
+      {mode === 'create'
+        ? <Field label="Пароль" hint="Можно оставить предложенный; франчайзи сменит его в профиле">{(id) => <Input id={id} value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
+        : <p className="faint">Если пользователя с таким email ещё нет, доступ назначится сам при его первом входе.</p>}
+    </ConfirmDialog>
+  );
+}
+
+export function SetPasswordDialog({ user, name, onClose }: { user: string; name: string; onClose: () => void }) {
+  const toast = useToast();
+  const [pw, setPw] = useState(randomPassword);
+  const m = useMutation({ mutationFn: () => userSetPassword(user, pw), onSuccess: () => { toast(`Новый пароль для ${name}: ${pw}`); onClose(); } });
+  return (
+    <ConfirmDialog open title={`Новый пароль — ${name}`} confirmLabel="Задать пароль" busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
+      <Field label="Пароль" hint="Минимум 6 символов. Сообщите его пользователю">{(id) => <Input id={id} value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>
     </ConfirmDialog>
   );
 }

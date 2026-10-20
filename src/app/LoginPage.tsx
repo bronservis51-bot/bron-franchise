@@ -7,12 +7,14 @@ import { config, quickLoginEnabled } from '../platform/config';
 import { Button, Checkbox, Field, Input } from '../ui';
 import demoUsers from '../../supabase/seed/demo-users.json';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
+import { staffEmail } from '../modules/staff/api';
 
-interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee'; title: string; hint: string }
+interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee' | 'staff'; title: string; hint: string }
 
 const GROUPS: { id: DemoUser['group']; title: string; icon: typeof Store }[] = [
   { id: 'manager', title: 'Компания', icon: Briefcase },
   { id: 'franchisee', title: 'Франчайзи', icon: Users },
+  { id: 'staff', title: 'Сотрудник франчайзи', icon: Store },
 ];
 
 /** Быстрый вход по ролям для демонстрации: выбор карточки вместо логина и пароля. */
@@ -52,7 +54,7 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
             {(demoUsers as DemoUser[]).filter((u) => u.group === g.id).map((u) => {
               return (
               <button key={u.email} type="button" className={`role-card ${u.group === 'franchisee' ? 'partner' : ''}`} onClick={() => void enter(u)} disabled={busy !== null} aria-busy={busy === u.email}>
-                <span className="role-avatar" aria-hidden>{u.group === 'franchisee' ? <LogoMark height={22} /> : <Briefcase size={20} />}</span>
+                <span className="role-avatar" aria-hidden>{u.group === 'franchisee' ? <LogoMark height={22} /> : u.group === 'staff' ? <Store size={20} /> : <Briefcase size={20} />}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span className="role-title">{u.title}</span>
                   <span className="role-hint">{u.hint}</span>
@@ -86,7 +88,8 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(email, password, remember);
+      // Сотрудник входит по телефону: без «@» — это номер
+      await signIn(email.includes('@') ? email : staffEmail(email), password, remember);
       navigate('/', { replace: true });
     } catch (err) {
       fail(err);
@@ -126,8 +129,8 @@ export function LoginPage() {
   function form() {
     return (
           <form onSubmit={submit} noValidate>
-            <Field label="Email" required>
-              {(id) => <Input id={id} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
+            <Field label="Email или телефон" required hint="Сотрудники входят по номеру телефона">
+              {(id) => <Input id={id} type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
             </Field>
             <Field label="Пароль" required>
               {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
@@ -138,6 +141,9 @@ export function LoginPage() {
             <div style={{ marginTop: 16 }}>
               <Button type="submit" variant="primary" block loading={busy} disabled={!email || !password}>Войти</Button>
             </div>
+            <details className="forgot"><summary>Забыли пароль?</summary>
+              <p className="faint">Сотрудник — попросите франчайзи: он задаст новый пароль в разделе «Сотрудники». Франчайзи — напишите менеджеру по франшизе: он задаст новый пароль в вашей карточке. Сменить пароль на свой можно в профиле после входа.</p>
+            </details>
           </form>
     );
   }
