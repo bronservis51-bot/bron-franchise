@@ -736,3 +736,9 @@ tr.clickable:hover td { background: var(--surface-2); }
 .point-today { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px; border-radius: 999px; font: inherit; font-weight: 600; font-size: var(--fs-s); cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--success) 30%, transparent); background: var(--success-weak); color: var(--text); white-space: nowrap; }
 .rating-money { font-size: var(--fs-s); }
+
+/* Карточка франчайзи: документы */
+.doc-link { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.doc-link > svg { flex: none; margin-top: 2px; color: var(--text-2); }
+.doc-link:hover strong { text-decoration: underline; }
+.fin-editor .day-list2 { margin-top: 8px; }

@@ -1,10 +1,11 @@
-// Карточка франчайзи для менеджера: точки, план и выручка по дням, правка любого дня, доступ.
+// Карточка франчайзи для менеджера: данные, договор и документы; точки, план и выручка по дням, правка любого дня, доступ.
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Edit3, KeyRound, Landmark, Plus, Target, UserPlus, X } from 'lucide-react';
-import { formatDate, monthStart } from '../../platform/dates';
-import { Badge, Button, Card, DataState, EmptyState, KV, PageHeader } from '../../ui';
+import { monthStart } from '../../platform/dates';
+import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
+import { PartnerCardPanel } from './PartnerCard';
 import { PARTNER_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
 import { DayList, MonthNav, PlanCard } from '../revenue/FranchiseeHome';
@@ -121,10 +122,7 @@ export function PartnerPage() {
               </section>
             </div>
             <div className="stack">
-              <Card title="Контакты">
-                <KV items={[['Контакт', partner.contact_name], ['Телефон', partner.contact_phone], ['Email', partner.contact_email],
-                  ['Точек', String(locs.data?.length ?? '—')], ...(sel?.opened_on ? [['Открытие точки', formatDate(sel.opened_on)] as [string, string]] : [])]} />
-              </Card>
+              <PartnerCardPanel partner={partner} />
               <AccessCard partnerId={partner.id} />
             </div>
           </div>

@@ -1,13 +1,14 @@
 // Финансы франчайзи: выручка, зарплата сотрудников, роялти, расходы и что остаётся — по всем точкам или по одной; помесячно, с долгом и оплатами.
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { Check, Download, Pencil } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
 import { MonthNav } from '../revenue/FranchiseeHome';
 import { ExpensesCard, type Expense } from './Expenses';
+import { FinanceEditor } from './FinanceEditor';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
   payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; net_minor: number; is_open: boolean }
@@ -91,11 +92,17 @@ export function FinancePage() {
   const [loc, setLoc] = useState<string | null>(null);
   const q = useQuery({ queryKey: ['finance', month, loc], queryFn: () => command<Finance>('finance_my', { month, location: loc }), refetchInterval: 120_000 });
   const exp = useMutation({ mutationFn: () => downloadFinance(q.data!) });
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className="home" style={{ maxWidth: 980 }}>
       <PageHeader title="Финансы" sub="Выручка, зарплата сотрудников, роялти, ваши расходы и что остаётся. Выручка, зарплата и роялти считаются сами."
-        actions={<Button disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Excel</Button>} />
+        actions={<>
+          <Button variant={editing ? 'primary' : 'secondary'} aria-pressed={editing} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
+            {editing ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
+          </Button>
+          <Button disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Excel</Button>
+        </>} />
       <ActionError error={exp.error} />
       {q.data && q.data.locations.length > 1 && (
         <div className="chips point-chips" role="group" aria-label="Точки">
@@ -107,8 +114,13 @@ export function FinancePage() {
       <DataState query={q} skeleton={6}>
         {(f) => {
           const c = f.current;
+          const active = f.locations.filter((l) => l.status === 'active');
           return (
             <div className="stack">
+              {editing && (
+                <FinanceEditor month={f.month} currency={f.currency} location={f.location_id} locations={active}
+                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
+              )}
               <div className="kpis fin-kpis">
                 <div className="kpi"><span className="v">{formatMoneyShort(c.revenue_minor, f.currency)}</span>
                   <span className="l">выручка · нал. {formatMoneyShort(c.cash_minor, f.currency)} · карта {formatMoneyShort(c.card_minor, f.currency)}</span></div>
@@ -120,8 +132,10 @@ export function FinancePage() {
                 <div className={`kpi kpi-accent${n(c.net_minor) < 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(c.net_minor, f.currency)}</span><span className="l">остаётся после зарплаты, роялти и расходов</span></div>
               </div>
 
-              <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={f.locations.filter((l) => l.status === 'active')}
-                expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
+              {!editing && (
+                <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={active}
+                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
+              )}
 
               <Card title="За полгода">
                 <MonthsChart months={f.months} currency={f.currency} />

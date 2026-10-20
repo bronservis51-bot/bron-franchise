@@ -1,7 +1,7 @@
 // Расходы франчайзи за месяц: быстрые кнопки категорий, своя категория, расход по точке или общий, повтор прошлого месяца.
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Copy, Plus } from 'lucide-react';
+import { Copy, Pencil, Plus } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { monthLabel } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
@@ -59,9 +59,11 @@ function ExpenseDialog({ month, currency, locations, draft, onClose }: {
   );
 }
 
-export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, total }: {
+export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, total, bare }: {
   month: string; currency: string; location: string | null; locations: { id: string; name: string }[];
   expenses: Expense[]; own: string[]; prevCount: number; total: number;
+  /** Без своей карточки — внутри панели редактирования. */
+  bare?: boolean;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -72,8 +74,8 @@ export function ExpensesCard({ month, currency, location, locations, expenses, o
     mutationFn: () => command<number>('expense_repeat', { month }),
     onSuccess: (n) => { toast(n ? `Перенесено расходов: ${n}` : 'Все расходы прошлого месяца уже внесены'); void qc.invalidateQueries({ queryKey: ['finance'] }); },
   });
-  return (
-    <Card title={`Расходы — ${monthLabel(month)}`} actions={expenses.length > 0 ? <strong className="num">{formatMoneyShort(total, currency)}</strong> : undefined}>
+  const body = (
+    <>
       <div className="chips expense-chips" role="group" aria-label="Добавить расход">
         {[...EXPENSE_CATEGORIES, ...extra].map((c) => (
           <button key={c} type="button" className="chip" onClick={() => open(c)}><Plus size={13} aria-hidden />{c}</button>
@@ -93,12 +95,20 @@ export function ExpensesCard({ month, currency, location, locations, expenses, o
                 <span className="expense-main"><strong>{e.category}</strong>
                   <span className="faint">{locations.length > 1 ? (e.location_name ?? 'все точки') : ''}{e.note ? `${locations.length > 1 ? ' · ' : ''}${e.note}` : ''}</span></span>
                 <Money minor={e.amount_minor} currency={currency} short strong />
+                <Pencil size={15} className="faint" aria-label="Изменить" />
               </button>
             </li>
           ))}
         </ul>
       ) : <p className="faint" style={{ marginTop: 8 }}>Нажмите на категорию, чтобы внести расход. Аренду и интернет удобно вносить раз в месяц — потом переносить кнопкой «Повторить».</p>}
+      {expenses.length > 0 && <p className="faint" style={{ marginTop: 6 }}>Нажмите на расход, чтобы изменить сумму или удалить его.</p>}
       {draft && <ExpenseDialog month={month} currency={currency} locations={locations} draft={draft} onClose={() => setDraft(null)} />}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card title={`Расходы — ${monthLabel(month)}`} actions={expenses.length > 0 ? <strong className="num">{formatMoneyShort(total, currency)}</strong> : undefined}>
+      {body}
     </Card>
   );
 }

@@ -139,4 +139,8 @@ export const storage = {
     if (error) throw toAppError(error);
     return data.signedUrl;
   },
+  async remove(path: string) {
+    const { error } = await requireClient().storage.from('private-files').remove([path]);
+    if (error) throw toAppError(error);
+  },
 };

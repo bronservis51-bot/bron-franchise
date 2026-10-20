@@ -4,7 +4,7 @@
 // Запуск: npm run local:backend, затем VITE_SUPABASE_URL=http://localhost:54321 npm run dev
 import http from 'node:http';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createDb, readContract, root } from './db-lib.mjs';
 
@@ -319,6 +319,13 @@ const server = http.createServer(async (req, res) => {
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, parseMultipart(raw, req.headers['content-type']));
       return send(res, 200, { Key: `private-files/${name}`, Id: randomUUID() });
+    }
+    // Удаление файлов (как Storage API: DELETE /object/<bucket> с { prefixes: [...] })
+    if (p === '/storage/v1/object/private-files' && req.method === 'DELETE') {
+      const names = (json().prefixes ?? []).map(String);
+      const r = await asUser(claims, headers, (tx) => tx.query(`delete from storage.objects where bucket_id = 'private-files' and name = any($1) returning name`, [names]));
+      for (const row of r.rows) { const f = join(FILES, row.name); if (existsSync(f)) unlinkSync(f); }
+      return send(res, 200, r.rows.map((x) => ({ name: x.name, bucket_id: 'private-files' })));
     }
     const sg = /^\/storage\/v1\/object\/sign\/private-files\/(.+)$/.exec(p);
     if (sg && req.method === 'POST') {

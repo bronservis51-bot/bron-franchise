@@ -33,6 +33,7 @@ export function RevenueDialog({ location, currency, day, existing, staff = [], o
     toast(msg);
     void qc.invalidateQueries({ queryKey: ['revenue'] });
     void qc.invalidateQueries({ queryKey: ['staff-list'] });
+    void qc.invalidateQueries({ queryKey: ['finance'] });
     onClose();
   };
   const save = useMutation({

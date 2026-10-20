@@ -122,10 +122,11 @@ function InstallHint() {
 }
 
 export function Shell() {
-  const { isManager, isStaff, me } = useSession();
+  const { isManager, isStaff, me, can } = useSession();
   const online = useOnline();
   const role = isManager ? 'manager' : isStaff ? 'staff' : 'franchisee';
-  const nav = navFor(role);
+  // Рейтинг — только франчайзи в России: иностранным пункт не показывается
+  const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const loc = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   const ops = useOutbox(me?.user.id, online);
