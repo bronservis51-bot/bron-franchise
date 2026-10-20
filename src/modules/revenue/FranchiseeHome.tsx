@@ -1,7 +1,7 @@
-// Главная франчайзи: план месяца по точке, ввод выручки за сегодня, сравнение с прошлым месяцем, роялти сейчас, дни месяца.
+// Главная франчайзи: план месяца по точке или по всем точкам сразу, ввод выручки за сегодня, сравнение с прошлым месяцем, роялти сейчас, дни месяца.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { BookOpen, CalendarX, Check, ChevronLeft, ChevronRight, Download, Landmark, Plus, TrendingDown, TrendingUp } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { dayLabel, formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
@@ -9,11 +9,12 @@ import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
 import { BrandPattern } from '../../ui/brand';
-import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type MonthDetail } from './api';
+import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
+const ALL = 'all';
 
 function greeting() {
   const h = new Date().getHours();
@@ -144,6 +145,84 @@ function RoyaltyCard() {
   );
 }
 
+/** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
+function AllPoints({ points, month, onPick, onEnter }: {
+  points: LocationMonth[]; month: string; onPick: (id: string) => void; onEnter: (p: LocationMonth, d: MonthDetail, row?: DayRow) => void;
+}) {
+  const details = useQueries({ queries: points.map((p) => ({ queryKey: ['revenue', 'month', p.location_id, month], queryFn: () => revenueMonth(p.location_id, month) })) });
+  const sameCurrency = points.every((p) => p.currency === points[0].currency);
+  const currency = points[0].currency;
+  const sum = (f: (p: LocationMonth) => number | null) => points.reduce((a, p) => a + Number(f(p) ?? 0), 0);
+  const plan = points.some((p) => p.plan_minor) ? sum((p) => p.plan_minor) : null;
+  const fact = sum((p) => p.fact_minor);
+  const total = {
+    ...points[0], month, fact_minor: fact, plan_minor: plan, pct: plan ? Math.round((fact * 1000) / plan) / 10 : null,
+    need_per_day_minor: plan ? sum((p) => p.need_per_day_minor) : null,
+  } as unknown as MonthDetail;
+  const ready = details.every((q) => q.data);
+  const isCurrent = month === monthStart();
+  // Дни месяца: сумма по точкам и кто сколько; день с пропуском хоть одной точки подсвечен
+  const days = new Map<string, { total: number; parts: string[]; missing: string[] }>();
+  if (ready) details.forEach((q, i) => {
+    const d = q.data!; const short = points[i].location_name;
+    for (const r of d.days) {
+      const x = days.get(r.day) ?? { total: 0, parts: [], missing: [] };
+      x.total += Number(r.total_minor); x.parts.push(`${short} ${formatMoneyShort(r.total_minor, d.currency)}`); days.set(r.day, x);
+    }
+    for (const m of d.missing_days) { const x = days.get(m) ?? { total: 0, parts: [], missing: [] }; x.missing.push(short); days.set(m, x); }
+  });
+  const list = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  return (
+    <>
+      {sameCurrency && <PlanCard m={total} />}
+      <section aria-label="Точки">
+        <ul className="point-list">
+          {points.map((p, i) => {
+            const d = details[i].data;
+            const today = d?.days.find((x) => x.day === d.today);
+            const pct = Number(p.pct ?? 0);
+            return (
+              <li key={p.location_id} className="point-row">
+                <button type="button" className="point-main" onClick={() => onPick(p.location_id)}>
+                  <span className="point-name">{p.location_name}{p.missing_days.length > 0 && <span className="chip-dot" aria-label="есть пропущенные дни" />}</span>
+                  <span className="point-nums"><strong className="num">{formatMoneyShort(p.fact_minor, p.currency)}</strong>
+                    <span className="faint">{p.plan_minor ? ` из ${formatMoneyShort(p.plan_minor, p.currency)} · ${pct.toLocaleString('ru-RU')} %` : ' · без плана'}</span></span>
+                  {p.plan_minor ? <span className="point-bar" aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span> : null}
+                  {p.missing_days.length > 0 && <span className="point-miss"><CalendarX size={13} aria-hidden /> не внесено дней: {p.missing_days.length}</span>}
+                </button>
+                {isCurrent && d && (today
+                  ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
+                  : <Button size="sm" variant="primary" onClick={() => onEnter(p, d)}><Plus size={15} aria-hidden />Внести</Button>)}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+      <RoyaltyCard />
+      <section>
+        <h2 className="section-title">Дни месяца — все точки</h2>
+        {!ready ? <p className="faint">Загружаем…</p> : !list.length ? <EmptyState title="В этом месяце записей нет" /> : (
+          <ul className="day-list2">
+            {list.map(([day, x]) => (
+              <li key={day}>
+                <div className={`day-row2${x.missing.length ? ' missing' : ''}`}>
+                  <span className="day-date2">{dayLabel(day)}</span>
+                  <span className="day-sum2">
+                    {x.total > 0 && sameCurrency && <Money minor={x.total} currency={currency} short />}
+                    {x.parts.length > 0 && <span className="day-split">{x.parts.join(' · ')}</span>}
+                    {x.missing.length > 0 && <span className="day-split"><CalendarX size={13} aria-hidden /> не внесено: {x.missing.join(', ')}</span>}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="faint" style={{ marginTop: 8 }}>Чтобы поправить день, откройте нужную точку.</p>
+      </section>
+    </>
+  );
+}
+
 export function FranchiseeHome() {
   const { me } = useSession();
   const [month, setMonth] = useState(monthStart());
@@ -151,9 +230,11 @@ export function FranchiseeHome() {
   const [edit, setEdit] = useState<{ day: string; row?: DayRow } | null>(null);
   const overview = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
   const points = overview.data?.rows ?? [];
-  const current = points.find((p) => p.location_id === loc) ?? points[0];
-  useEffect(() => { if (current && current.location_id !== loc) setLoc(current.location_id); }, [current, loc]);
+  const all = points.length > 1 && (loc === ALL || loc === null);
+  const current = all ? undefined : points.find((p) => p.location_id === loc) ?? points[0];
+  useEffect(() => { if (!all && current && current.location_id !== loc) setLoc(current.location_id); }, [all, current, loc]);
   const detail = useQuery({ queryKey: ['revenue', 'month', current?.location_id, month], enabled: Boolean(current), queryFn: () => revenueMonth(current!.location_id, month) });
+  const [enter, setEnter] = useState<{ p: LocationMonth; d: MonthDetail; row?: DayRow } | null>(null);
   const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string; due_on: string }[]>('kb_to_read') });
   const pick = (id: string) => { setLoc(id); try { localStorage.setItem(LOC_KEY, id); } catch { /* удобство */ } };
   const m = detail.data;
@@ -173,14 +254,16 @@ export function FranchiseeHome() {
           <div className="home-body">
             {points.length > 1 && (
               <div className="chips point-chips" role="group" aria-label="Точка">
+                <button type="button" className="chip" aria-pressed={all} onClick={() => pick(ALL)}>Все точки</button>
                 {points.map((p) => (
-                  <button key={p.location_id} type="button" className="chip" aria-pressed={p.location_id === current?.location_id} onClick={() => pick(p.location_id)}>
+                  <button key={p.location_id} type="button" className="chip" aria-pressed={!all && p.location_id === current?.location_id} onClick={() => pick(p.location_id)}>
                     {p.location_name}{p.missing_days.length > 0 && <span className="chip-dot" aria-label="есть пропущенные дни" />}
                   </button>
                 ))}
               </div>
             )}
             <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+            {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} /> : (
             <DataState query={detail} skeleton={3}>
               {(d) => (
                 <>
@@ -213,6 +296,7 @@ export function FranchiseeHome() {
                 </>
               )}
             </DataState>
+            )}
             {Boolean(toRead.data?.length) && (
               <Link to="/kb" className="read-card">
                 <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
@@ -226,6 +310,7 @@ export function FranchiseeHome() {
           </div>
         )}
       </DataState>
+      {enter && <RevenueDialog location={enter.p.location_id} currency={enter.p.currency} day={enter.d.today} existing={enter.row} staff={enter.d.staff} onClose={() => setEnter(null)} />}
       {edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} staff={m?.staff} onClose={() => setEdit(null)} />}
     </div>
   );

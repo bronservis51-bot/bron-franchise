@@ -1,15 +1,16 @@
-// Финансы франчайзи: выручка, зарплата сотрудников, роялти и что остаётся — по всем точкам или по одной; помесячно, с долгом и оплатами.
+// Финансы франчайзи: выручка, зарплата сотрудников, роялти, расходы и что остаётся — по всем точкам или по одной; помесячно, с долгом и оплатами.
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Download, Info } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
 import { MonthNav } from '../revenue/FranchiseeHome';
+import { ExpensesCard, type Expense } from './Expenses';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
-  payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; net_minor: number; is_open: boolean }
+  payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; net_minor: number; is_open: boolean }
 interface Ledger { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean }
 interface Royalty { rate_bp: number; debt_minor: number; live: { month: string; revenue_minor: number; accrued_minor: number; projected_accrual_minor: number };
   months: Ledger[]; payments: { month: string; amount_minor: number; paid_on: string; note: string | null }[] }
@@ -19,13 +20,14 @@ interface Finance {
   current: Fin; months: Fin[];
   by_location: (Fin & { location_id: string; location_name: string })[] | null;
   by_staff: { user_id: string; full_name: string; shifts: number; revenue_minor: number; earned_minor: number }[];
+  expenses: Expense[]; expense_categories: string[]; prev_expenses_count: number;
   royalty: Royalty | null;
 }
 
 const pct = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 const n = (v: number | string) => Number(v);
 
-/** Помесячно: на что разошлась выручка — остаток, зарплата, роялти (столбцы с разбивкой, подсказка при наведении). */
+/** Помесячно: на что разошлась выручка — остаток, зарплата, роялти, расходы (столбцы с разбивкой, подсказка при наведении). */
 function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...months.map((m) => n(m.revenue_minor)));
@@ -33,11 +35,12 @@ function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) 
     { key: 'net', label: 'Остаётся', v: Math.max(0, n(m.net_minor)) },
     { key: 'payroll', label: 'Зарплата', v: n(m.payroll_minor) },
     { key: 'royalty', label: 'Роялти', v: n(m.royalty_minor) },
+    { key: 'expenses', label: 'Расходы', v: n(m.expenses_minor) },
   ];
   return (
-    <figure className="fin-chart viz-root" aria-label="Выручка по месяцам: остаётся, зарплата, роялти">
+    <figure className="fin-chart viz-root" aria-label="Выручка по месяцам: остаётся, зарплата, роялти, расходы">
       <div className="fin-legend" aria-hidden>
-        <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw royalty" />Роялти</span>
+        <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw royalty" />Роялти</span><span><i className="sw expenses" />Расходы</span>
       </div>
       <div className="fin-bars" onMouseLeave={() => setHover(null)}>
         {months.map((m, i) => (
@@ -67,16 +70,18 @@ async function downloadFinance(f: Finance) {
   const money = (v: number) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
   const scope = f.location_id ? f.locations.find((l) => l.id === f.location_id)?.name ?? '' : 'все точки';
-  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Остаётся'].map(head);
+  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Расходы', 'Остаётся'].map(head);
   const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), m.plan_minor ? money(m.plan_minor) : null,
-    m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(m.royalty_minor), money(m.net_minor)];
+    m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(m.royalty_minor), money(m.expenses_minor), money(m.net_minor)];
   const sheets = [
-    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(8).fill({ width: 14 })],
+    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(9).fill({ width: 14 })],
       data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
-    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(8).fill({ width: 14 })],
+    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(9).fill({ width: 14 })],
       data: [[head('Точка'), ...cols.slice(1)], ...f.by_location.map((l) => row(l.location_name, l))] }] : []),
     ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 16 }],
       data: [['Сотрудник', 'Смен', 'Выручка смен', 'Заработок'].map(head), ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor)])] }] : []),
+    ...(f.expenses.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
+      data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? ''])] }] : []),
   ];
   await writeXlsxFile(sheets).toFile(`finansy-${f.month.slice(0, 7)}.xlsx`);
 }
@@ -89,7 +94,7 @@ export function FinancePage() {
 
   return (
     <div className="home" style={{ maxWidth: 980 }}>
-      <PageHeader title="Финансы" sub="Выручка, зарплата сотрудников, роялти и что остаётся вам. Всё считается само из выручки и смен."
+      <PageHeader title="Финансы" sub="Выручка, зарплата сотрудников, роялти, ваши расходы и что остаётся. Выручка, зарплата и роялти считаются сами."
         actions={<Button disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Excel</Button>} />
       <ActionError error={exp.error} />
       {q.data && q.data.locations.length > 1 && (
@@ -111,21 +116,25 @@ export function FinancePage() {
                   <span className="l">{c.plan_minor ? `плана ${formatMoneyShort(c.plan_minor, f.currency)}` : 'план не поставлен'}</span></div>
                 <div className="kpi"><span className="v">{formatMoneyShort(c.payroll_minor, f.currency)}</span><span className="l">зарплата сотрудников · {c.shifts} смен</span></div>
                 <div className="kpi"><span className="v">{formatMoneyShort(c.royalty_minor, f.currency)}</span><span className="l">роялти {pct(c.rate_bp)}{c.is_open ? ' · начисляется' : ''}</span></div>
-                <div className="kpi kpi-accent"><span className="v">{formatMoneyShort(c.net_minor, f.currency)}</span><span className="l">остаётся после зарплаты и роялти</span></div>
+                <div className="kpi"><span className="v">{formatMoneyShort(c.expenses_minor, f.currency)}</span><span className="l">расходы{f.expenses.length ? ` · ${f.expenses.length} шт.` : ' · не внесены'}</span></div>
+                <div className={`kpi kpi-accent${n(c.net_minor) < 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(c.net_minor, f.currency)}</span><span className="l">остаётся после зарплаты, роялти и расходов</span></div>
               </div>
-              <p className="faint row" style={{ gap: 6 }}><Info size={14} aria-hidden />«Остаётся» — до аренды, материалов и прочих расходов: их приложение не учитывает.</p>
+
+              <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={f.locations.filter((l) => l.status === 'active')}
+                expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
 
               <Card title="За полгода">
                 <MonthsChart months={f.months} currency={f.currency} />
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table className="table">
-                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Остаётся</th></tr></thead>
+                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                     <tbody>{[...f.months].reverse().map((m) => (
                       <tr key={m.month}><td>{monthLabel(m.month)}{m.is_open && <span className="faint"> · идёт</span>}</td>
                         <td className="r num">{formatMoneyShort(m.revenue_minor, f.currency)}</td>
                         <td className="r">{m.pct !== null ? `${n(m.pct).toLocaleString('ru-RU')} %` : '—'}</td>
                         <td className="r num">{formatMoneyShort(m.payroll_minor, f.currency)}</td>
                         <td className="r num">{formatMoneyShort(m.royalty_minor, f.currency)}</td>
+                        <td className="r num">{formatMoneyShort(m.expenses_minor, f.currency)}</td>
                         <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
                     ))}</tbody>
                   </table>
@@ -136,7 +145,7 @@ export function FinancePage() {
                 <Card title={`По точкам — ${monthLabel(f.month)}`} bodyless>
                   <div className="table-wrap">
                     <table className="table">
-                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Остаётся</th></tr></thead>
+                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                       <tbody>{f.by_location.map((l) => (
                         <tr key={l.location_id} className="clickable" onClick={() => setLoc(l.location_id)}>
                           <td><strong>{l.location_name}</strong></td>
@@ -144,6 +153,7 @@ export function FinancePage() {
                           <td className="r">{l.pct !== null ? `${n(l.pct).toLocaleString('ru-RU')} %` : '—'}</td>
                           <td className="r num">{formatMoneyShort(l.payroll_minor, f.currency)}</td>
                           <td className="r num">{formatMoneyShort(l.royalty_minor, f.currency)}</td>
+                          <td className="r num">{formatMoneyShort(l.expenses_minor, f.currency)}</td>
                           <td className="r num"><strong>{formatMoneyShort(l.net_minor, f.currency)}</strong></td>
                         </tr>
                       ))}</tbody>

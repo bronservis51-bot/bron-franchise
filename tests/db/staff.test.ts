@@ -90,13 +90,21 @@ describe('сотрудники: франчайзи управляет сам', (
 });
 
 describe('рейтинг', () => {
-  it('все франчайзи с планом, отсортированы по прогнозу выполнения; суммы выручки не раскрываются', async () => {
+  it('все франчайзи с планом, отсортированы по прогнозу выполнения; выручка открыта всем, в своей валюте и в рублях', async () => {
     const r = await one<{ rows: Record<string, unknown>[] }>(MARSEL, `select public.rating() j`);
     expect(r.rows.length).toBeGreaterThanOrEqual(3);
     const pcts = r.rows.map((x) => x.forecast_pct as number | null).filter((x) => x !== null) as number[];
     expect([...pcts].sort((a, b) => b - a)).toEqual(pcts);
     expect(r.rows.filter((x) => x.is_me).map((x) => x.partner_name)).toEqual(['Марсель (Караганда)']);
-    expect(JSON.stringify(r)).not.toMatch(/_minor/);
+    for (const x of r.rows) {
+      expect(Number(x.fact_minor)).toBeGreaterThan(0);
+      expect(x.currency).toBeTruthy();
+      if (x.currency === 'RUB') expect(Number(x.fact_rub_minor)).toBe(Number(x.fact_minor));
+      else expect(Number(x.fact_rub_minor)).toBeGreaterThan(0);
+    }
+    // выручку других франчайзи видно и чужому франчайзи
+    const other = (await one<{ rows: Record<string, unknown>[] }>(VIKTOR, `select public.rating() j`)).rows.find((x) => x.partner_name === 'Марсель (Караганда)')!;
+    expect(Number(other.fact_minor)).toBe(Number(r.rows.find((x) => x.is_me)!.fact_minor));
   });
 });
 

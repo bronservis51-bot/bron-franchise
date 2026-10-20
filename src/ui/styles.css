@@ -628,9 +628,9 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .btn-lg { white-space: normal; text-align: center; line-height: 1.25; padding-top: 10px; padding-bottom: 10px; }
 
 /* ============ Финансы ============ */
-.viz-root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; }
-@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .viz-root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; } }
-:root[data-theme="dark"] .viz-root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; }
+.viz-root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .viz-root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; } }
+:root[data-theme="dark"] .viz-root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; }
 .fin-kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 4px; }
 .kpi-accent { background: var(--metal-dark); color: #fff; border-color: transparent; }
 .kpi-accent .l { color: #b9babf; }
@@ -641,6 +641,7 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .sw.net, .seg.net { background: var(--series-1); }
 .sw.payroll, .seg.payroll { background: var(--series-2); }
 .sw.royalty, .seg.royalty { background: var(--series-3); }
+.sw.expenses, .seg.expenses { background: var(--series-4); }
 .fin-bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; height: 200px; align-items: end; border-bottom: 1px solid var(--border); position: relative; }
 .fin-col { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; outline: none; cursor: default; }
 .fin-stack { width: min(44px, 70%); display: flex; flex-direction: column-reverse; gap: 2px; min-height: 2px; }
@@ -712,3 +713,26 @@ tr.clickable:hover td { background: var(--surface-2); }
 .kb-tree-row.sub { padding-left: 52px; border-top: 1px dashed var(--border); }
 .kb-tree-row .kb-icon { width: 32px; height: 32px; border-radius: 10px; }
 @media (max-width: 560px) { .kb-tiles { grid-template-columns: 1fr; } .kb-search-input { font-size: var(--fs); } }
+
+/* Расходы */
+.expense-chips { flex-wrap: wrap; margin-bottom: 8px; }
+.expense-chips .chip { display: inline-flex; align-items: center; gap: 4px; }
+.chip-outline { border-style: dashed; }
+.expense-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.expense-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; background: none; border: 0;
+  border-top: 1px solid var(--border); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.expense-list li:first-child .expense-row { border-top: 0; }
+.expense-main { display: flex; flex-direction: column; min-width: 0; }
+
+/* Главная франчайзи: «Все точки» */
+.point-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.point-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); }
+.point-main { flex: 1; min-width: 0; display: grid; gap: 4px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.point-name { font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.point-nums { font-size: var(--fs-s); }
+.point-bar { height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.point-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--text-2); }
+.point-miss { font-size: var(--fs-xs, 12px); color: var(--danger); display: inline-flex; align-items: center; gap: 4px; }
+.point-today { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px; border-radius: 999px; font: inherit; font-weight: 600; font-size: var(--fs-s); cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent); background: var(--success-weak); color: var(--text); white-space: nowrap; }
+.rating-money { font-size: var(--fs-s); }

@@ -116,3 +116,38 @@ describe('база знаний под рост', () => {
     await t.expectError(VIKTOR, `select public.kb_manage()`, 'forbidden');
   });
 });
+
+describe('расходы франчайзи', () => {
+  interface Fin { revenue_minor: number; payroll_minor: number; royalty_minor: number; expenses_minor: number; net_minor: number }
+  const cur = `date_trunc('month', current_date)::date`;
+  it('расход точки и общий расход; общий виден только в «все точки»; остаток учитывает расходы', async () => {
+    const l1 = await id('location', 'code', 'ALPHA-1');
+    await one(VIKTOR, `select public.expense_save(null, ${cur}, $1, 'Аренда', 3000000, 'ТЦ Европа') j`, [l1]);
+    await one(VIKTOR, `select public.expense_save(null, ${cur}, null, 'Интернет', 150000) j`);
+    const all = await one<{ current: Fin; expenses: { category: string }[] }>(VIKTOR, `select public.finance_my(current_date, null) j`);
+    expect(all.current.expenses_minor).toBe(3150000);
+    expect(all.current.net_minor).toBe(all.current.revenue_minor - all.current.payroll_minor - all.current.royalty_minor - 3150000);
+    expect(all.expenses.map((x) => x.category).sort()).toEqual(['Аренда', 'Интернет']);
+    const one1 = await one<{ current: Fin; expenses: unknown[] }>(VIKTOR, `select public.finance_my(current_date, $1) j`, [l1]);
+    expect(one1.current.expenses_minor).toBe(3000000);
+    const l2 = await id('location', 'code', 'ALPHA-2');
+    expect((await one<{ current: Fin }>(VIKTOR, `select public.finance_my(current_date, $1) j`, [l2])).current.expenses_minor).toBe(0);
+  });
+
+  it('повтор прошлого месяца без дублей; чужие расходы и будущий месяц — нельзя; сотрудник не ведёт расходы', async () => {
+    const prev = `(date_trunc('month', current_date) - interval '1 month')::date`;
+    await one(VIKTOR, `select public.expense_save(null, ${prev}, null, 'Интернет', 150000) j`);
+    await one(VIKTOR, `select public.expense_save(null, ${prev}, null, 'Реклама', 500000) j`);
+    expect(await one<number>(VIKTOR, `select public.expense_repeat(current_date) j`)).toBe(1); // интернет уже есть
+    expect(await one<number>(VIKTOR, `select public.expense_repeat(current_date) j`)).toBe(0);
+    const eid = (await t.admin<{ id: string }>(`select id from public.expense where category = 'Реклама' and month = ${cur}`))[0].id;
+    await t.expectError(MARSEL, `select public.expense_delete($1)`, 'not-found', [eid]);
+    await t.expectError(VIKTOR, `select public.expense_save(null, (${cur} + interval '1 month')::date, null, 'Аренда', 100)`, 'validation');
+    await t.expectError(VIKTOR, `select public.expense_save(null, ${cur}, $1, 'Аренда', 100)`, 'not-found', [await id('location', 'code', 'BETA-1')]);
+    await t.expectError(DINA, `select public.expense_save(null, ${cur}, null, 'Аренда', 100)`, 'forbidden');
+    await t.as(VIKTOR, `select public.expense_delete($1)`, [eid]);
+    const f = await one<{ expense_categories: string[]; expenses: { category: string }[] }>(VIKTOR, `select public.finance_my(current_date, null) j`);
+    expect(f.expenses.map((x) => x.category)).not.toContain('Реклама');
+    expect(f.expense_categories).toContain('Аренда');
+  });
+});
