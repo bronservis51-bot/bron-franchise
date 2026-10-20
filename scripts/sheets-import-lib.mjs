@@ -77,7 +77,11 @@ export async function importPartner(q, cfg, csvText, year, log = console.log) {
   const [p] = await q(`insert into public.partner(code, name, country, currency, royalty_from, is_demo)
       values ($1, $2, $3, $4, date_trunc('month', now() at time zone 'Europe/Moscow')::date, false)
     on conflict (code) do update set name = excluded.name, country = excluded.country, currency = excluded.currency,
-      royalty_from = coalesce(public.partner.royalty_from, excluded.royalty_from), is_demo = false, updated_at = now()
+      royalty_from = coalesce(public.partner.royalty_from, excluded.royalty_from), is_demo = false, updated_at = now(),
+      -- выдуманные контакты демо-стенда не переносятся на реального франчайзи
+      contact_name = case when public.partner.is_demo then null else public.partner.contact_name end,
+      contact_phone = case when public.partner.is_demo then null else public.partner.contact_phone end,
+      contact_email = case when public.partner.is_demo then null else public.partner.contact_email end
     returning id`, [cfg.code, cfg.name, cfg.country, cfg.currency]);
   const pid = p.id;
   // выдуманные данные демо-стенда по этому франчайзи
