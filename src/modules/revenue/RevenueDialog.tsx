@@ -56,6 +56,9 @@ export function RevenueDialog({ location, currency, day, existing, staff = [], o
           </Select>
         )}</Field>
       )}
+      {entry?.comment && (/Google-таблиц/i.test(entry.comment) || /Google Sheets/i.test(entry.comment)) && (
+        <p className="faint">Историческая выручка перенесена одной суммой. Разбивка на наличные и оплату картой неизвестна: в базе временно вся сумма записана в поле «Наличные». При исправлении укажите реальные суммы по каждому способу оплаты.</p>
+      )}
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Наличные">{(id) => <MoneyInput id={id} value={cash} onChange={setCash} currency={currency} placeholder="0" />}</Field>
         <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} currency={currency} placeholder="0" onEnter={() => !empty && save.mutate()} />}</Field>
