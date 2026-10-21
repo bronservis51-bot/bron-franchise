@@ -58,7 +58,7 @@ export function PlanCard({ m }: { m: MonthDetail }) {
   );
 }
 
-export function DayList({ m, onPick, readOnly = false }: { m: MonthDetail; onPick: (day: string, row?: DayRow) => void; readOnly?: boolean }) {
+export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, row?: DayRow) => void }) {
   const byDay = new Map(m.days.map((d) => [d.day, d]));
   const missing = new Set(m.missing_days);
   const monthEnd = shiftDay(m.month, m.days_in_month - 1);
@@ -77,7 +77,7 @@ export function DayList({ m, onPick, readOnly = false }: { m: MonthDetail; onPic
         const can = editable(d);
         return (
           <li key={d}>
-            <button type="button" className={`day-row2${miss ? ' missing' : ''}`} disabled={!can || readOnly} onClick={() => onPick(d, r)}>
+            <button type="button" className={`day-row2${miss ? ' missing' : ''}`} disabled={!can} onClick={() => onPick(d, r)}>
               <span className="day-date2">{dayLabel(d)}</span>
               {r ? (
                 <span className="day-sum2">
@@ -90,7 +90,7 @@ export function DayList({ m, onPick, readOnly = false }: { m: MonthDetail; onPic
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
               ) : <span className="day-sum2 day-empty">{miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
-              {can && !readOnly && <ChevronRight size={16} className="day-chev" aria-hidden />}
+              {can && <ChevronRight size={16} className="day-chev" aria-hidden />}
             </button>
           </li>
         );
@@ -148,8 +148,8 @@ function RoyaltyCard() {
 }
 
 /** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
-function AllPoints({ points, month, onPick, onEnter, readOnly = false }: {
-  points: LocationMonth[]; month: string; onPick: (id: string) => void; onEnter: (p: LocationMonth, d: MonthDetail, row?: DayRow) => void; readOnly?: boolean;
+function AllPoints({ points, month, onPick, onEnter }: {
+  points: LocationMonth[]; month: string; onPick: (id: string) => void; onEnter: (p: LocationMonth, d: MonthDetail, row?: DayRow) => void;
 }) {
   const details = useQueries({ queries: points.map((p) => ({ queryKey: ['revenue', 'month', p.location_id, month], queryFn: () => revenueMonth(p.location_id, month) })) });
   const sameCurrency = points.every((p) => p.currency === points[0].currency);
@@ -192,7 +192,7 @@ function AllPoints({ points, month, onPick, onEnter, readOnly = false }: {
                   {p.plan_minor ? <span className="point-bar" aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span> : null}
                   {p.missing_days.length > 0 && <span className="point-miss"><CalendarX size={13} aria-hidden /> не внесено дней: {p.missing_days.length}</span>}
                 </button>
-                {isCurrent && !readOnly && d && (today
+                {isCurrent && d && (today
                   ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
                   : <Button size="sm" variant="primary" onClick={() => onEnter(p, d)}><Plus size={15} aria-hidden />Внести</Button>)}
               </li>
@@ -200,7 +200,7 @@ function AllPoints({ points, month, onPick, onEnter, readOnly = false }: {
           })}
         </ul>
       </section>
-      {!readOnly && <RoyaltyCard />}
+      <RoyaltyCard />
       <section>
         <h2 className="section-title">Дни месяца — все точки</h2>
         {!ready ? <p className="faint">Загружаем…</p> : !list.length ? <EmptyState title="В этом месяце записей нет" /> : (
@@ -225,15 +225,13 @@ function AllPoints({ points, month, onPick, onEnter, readOnly = false }: {
   );
 }
 
-export function FranchiseeHome({ previewPartnerId }: { previewPartnerId?: string } = {}) {
+export function FranchiseeHome() {
   const { me } = useSession();
-  const readOnly = Boolean(previewPartnerId);
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(() => { try { return localStorage.getItem(LOC_KEY); } catch { return null; } });
   const [edit, setEdit] = useState<{ day: string; row?: DayRow } | null>(null);
   const overview = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
-  // Менеджерский предпросмотр: показываем только выбранного франчайзи, даже если API вернул всю сеть.
-  const points = (overview.data?.rows ?? []).filter((p) => !previewPartnerId || p.partner_id === previewPartnerId);
+  const points = overview.data?.rows ?? [];
   const all = points.length > 1 && (loc === ALL || loc === null);
   const current = all ? undefined : points.find((p) => p.location_id === loc) ?? points[0];
   useEffect(() => { if (!all && current && current.location_id !== loc) setLoc(current.location_id); }, [all, current, loc]);
@@ -250,10 +248,9 @@ export function FranchiseeHome({ previewPartnerId }: { previewPartnerId?: string
     <div className="home">
       <header className="home-head">
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <h1>{readOnly ? `Кабинет: ${points[0]?.partner_name ?? 'Франчайзи'}` : `${greeting()}${me ? `, ${me.user.full_name.split(' ')[0]}` : ''}`}</h1>
+        <h1>{greeting()}{me ? `, ${me.user.full_name.split(' ')[0]}` : ''}</h1>
       </header>
 
-      {readOnly && <div className="alert tone-info" role="status"><div className="alert-body">Тестовый просмотр глазами франчайзи. История выручки и планы доступны только для чтения. Настоящий логин создадим перед запуском.</div></div>}
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title="Точек пока нет" text="Менеджер по франшизе ещё не добавил ваши точки." />)}>
         {() => (
           <div className="home-body">
@@ -268,12 +265,12 @@ export function FranchiseeHome({ previewPartnerId }: { previewPartnerId?: string
               </div>
             )}
             <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-            {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} readOnly={readOnly} /> : (
+            {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} /> : (
             <DataState query={detail} skeleton={3}>
               {(d) => (
                 <>
                   <PlanCard m={d} />
-                  {isCurrent && !readOnly && (
+                  {isCurrent && (
                     todayRow
                       ? <button type="button" className="today-entered" onClick={() => setEdit({ day: d.today, row: todayRow })}>
                           <span className="ok-icon"><Check size={18} aria-hidden /></span>
@@ -289,20 +286,20 @@ export function FranchiseeHome({ previewPartnerId }: { previewPartnerId?: string
                     </div>
                   )}
                   <Insights m={d} />
-                  {!readOnly && <RoyaltyCard />}
+                  <RoyaltyCard />
                   <section>
                     <div className="row between" style={{ marginBottom: 8 }}>
                       <h2 className="section-title" style={{ margin: 0 }}>Дни месяца</h2>
                       <Button size="sm" variant="ghost" loading={report.isPending} onClick={() => report.mutate(d)}><Download size={15} aria-hidden />Отчёт за месяц</Button>
                     </div>
                     <ActionError error={report.error} />
-                    <DayList m={d} onPick={(day, row) => setEdit({ day, row })} readOnly={readOnly} />
+                    <DayList m={d} onPick={(day, row) => setEdit({ day, row })} />
                   </section>
                 </>
               )}
             </DataState>
             )}
-            {!readOnly && Boolean(toRead.data?.length) && (
+            {Boolean(toRead.data?.length) && (
               <Link to="/kb" className="read-card">
                 <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
                 <span className="todo-main">
@@ -315,8 +312,8 @@ export function FranchiseeHome({ previewPartnerId }: { previewPartnerId?: string
           </div>
         )}
       </DataState>
-      {!readOnly && enter && <RevenueDialog location={enter.p.location_id} currency={enter.p.currency} day={enter.d.today} existing={enter.row} staff={enter.d.staff} onClose={() => setEnter(null)} />}
-      {!readOnly && edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} staff={m?.staff} onClose={() => setEdit(null)} />}
+      {enter && <RevenueDialog location={enter.p.location_id} currency={enter.p.currency} day={enter.d.today} existing={enter.row} staff={enter.d.staff} onClose={() => setEnter(null)} />}
+      {edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} staff={m?.staff} onClose={() => setEdit(null)} />}
     </div>
   );
 }
