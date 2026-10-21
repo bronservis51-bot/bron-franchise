@@ -24,6 +24,6 @@ export const ANSWERS = {
   timing: { month: 'В ближайший месяц', quarter: 'Через 1–3 месяца', half: 'Через 3–6 месяцев', research: 'Пока изучаю' },
   manage: { self: 'Сам(а), буду на точке', manager: 'Найму управляющего', undecided: 'Пока не решил(а)' },
   experience: { business: 'Есть свой бизнес', some: 'Был опыт в продажах или управлении', none: 'Это первый бизнес' },
-  place: { has: 'Есть место в ТЦ', options: 'Есть варианты, нужно выбрать', help: 'Нужна помощь с поиском' },
+  place: { has: 'Есть место с потоком людей', options: 'Есть варианты, нужно выбрать', help: 'Нужна помощь с поиском' },
   contact_via: { whatsapp: 'WhatsApp', telegram: 'Telegram', call: 'Звонок' },
 } as const;
