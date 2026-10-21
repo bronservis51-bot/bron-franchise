@@ -40,7 +40,7 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
         // Обзор существующей карточки партнёра менеджером. Не является входом под этим франчайзи:
         // настоящие персональные аккаунты создадим только перед запуском.
         const match = await rows<{ id: string }>(from('partner').select('id').eq('code', u.partnerCode).limit(1));
-        navigate(match.length ? `/partners/${match[0].id}` : '/', { replace: true });
+        navigate(match.length ? `/demo/${match[0].id}` : '/', { replace: true });
       } else {
         navigate('/', { replace: true });
       }
