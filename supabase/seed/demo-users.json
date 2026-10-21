@@ -7,22 +7,20 @@
     "hint": "Вся сеть: выручка, роялти, партнёры и база знаний"
   },
   {
-    "email": "adam-shali.preview@demo.example.com",
+    "email": "adam-shali.owner@demo.example.com",
     "name": "Адам",
     "group": "franchisee",
     "title": "Адам (Шали)",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "ADAM-SHALI",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "ADAM-SHALI"
   },
   {
-    "email": "bays-ibr.preview@demo.example.com",
+    "email": "bays-ibr.owner@demo.example.com",
     "name": "Байсангур и Ибрагим",
     "group": "franchisee",
     "title": "Байсангур и Ибрагим",
-    "hint": "4 точки · тестовый просмотр",
-    "partnerCode": "BAYS-IBR",
-    "loginAs": "fm@demo.example.com"
+    "hint": "4 точки · полный кабинет",
+    "partnerCode": "BAYS-IBR"
   },
   {
     "email": "alpha.owner@demo.example.com",
@@ -32,40 +30,36 @@
     "hint": "1 точка · кабинет франчайзи"
   },
   {
-    "email": "ibr-mukh.preview@demo.example.com",
+    "email": "ibr-mukh.owner@demo.example.com",
     "name": "Ибрагим и Мухтар",
     "group": "franchisee",
     "title": "Ибрагим и Мухтар",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "IBR-MUKH",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "IBR-MUKH"
   },
   {
-    "email": "uruzbiev.preview@demo.example.com",
+    "email": "uruzbiev.owner@demo.example.com",
     "name": "Ибрагим Урузбиев",
     "group": "franchisee",
     "title": "Ибрагим Урузбиев",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "URUZBIEV",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "URUZBIEV"
   },
   {
-    "email": "saaev.preview@demo.example.com",
+    "email": "saaev.owner@demo.example.com",
     "name": "Ильяс Сааев",
     "group": "franchisee",
     "title": "Ильяс Сааев",
-    "hint": "3 точки · тестовый просмотр",
-    "partnerCode": "SAAEV",
-    "loginAs": "fm@demo.example.com"
+    "hint": "3 точки · полный кабинет",
+    "partnerCode": "SAAEV"
   },
   {
-    "email": "nazran-mag.preview@demo.example.com",
+    "email": "nazran-mag.owner@demo.example.com",
     "name": "Магомед",
     "group": "franchisee",
     "title": "Магомед (Назрань)",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "NAZRAN-MAG",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "NAZRAN-MAG"
   },
   {
     "email": "gamma.owner@demo.example.com",
@@ -82,22 +76,20 @@
     "hint": "1 точка · кабинет франчайзи"
   },
   {
-    "email": "visaev.preview@demo.example.com",
+    "email": "visaev.owner@demo.example.com",
     "name": "Мухаммед Висаев",
     "group": "franchisee",
     "title": "Мухаммед Висаев",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "VISAEV",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "VISAEV"
   },
   {
-    "email": "chugun.preview@demo.example.com",
+    "email": "chugun.owner@demo.example.com",
     "name": "Мухаммед Чугун",
     "group": "franchisee",
     "title": "Мухаммед Чугун",
-    "hint": "1 точка · тестовый просмотр",
-    "partnerCode": "CHUGUN",
-    "loginAs": "fm@demo.example.com"
+    "hint": "1 точка · полный кабинет",
+    "partnerCode": "CHUGUN"
   },
   {
     "email": "79000000011@staff.bron.local",
