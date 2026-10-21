@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { BookOpen, CloudOff, Home, KeyRound, LogOut, Smartphone, Store, User, Users, WifiOff, X } from 'lucide-react';
 import { command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { quickLoginEnabled } from '../platform/config';
@@ -124,10 +124,15 @@ function InstallHint() {
 export function Shell() {
   const { isManager, isStaff, me, can } = useSession();
   const online = useOnline();
-  const role = isManager ? 'manager' : isStaff ? 'staff' : 'franchisee';
-  // Рейтинг — только франчайзи в России: иностранным пункт не показывается
-  const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const loc = useLocation();
+  const isPreview = isManager && /^\/demo\/[0-9a-f-]{36}$/.test(loc.pathname);
+  const role = isManager ? 'manager' : isStaff ? 'staff' : 'franchisee';
+  // В прототипе показываем навигацию кабинета выбранного франчайзи, не полную панель менеджера.
+  const nav: NavItem[] = isPreview ? [
+    { to: loc.pathname, label: 'Главная', icon: Home },
+    { to: '/kb', label: 'База знаний', icon: BookOpen },
+    { to: '/', label: 'Вся сеть', icon: Store },
+  ] : navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const mainRef = useRef<HTMLElement>(null);
   const ops = useOutbox(me?.user.id, online);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000,
@@ -149,7 +154,7 @@ export function Shell() {
       <aside className="sidebar" aria-label="Основная навигация">
         <div className="brand">
           <LogoFull height={40} />
-          <span className="brand-sub">{isManager ? 'Менеджер по франшизе' : isStaff ? 'Кабинет сотрудника' : 'Кабинет франчайзи'}</span>
+          <span className="brand-sub">{isPreview ? 'Кабинет франчайзи · тест' : isManager ? 'Менеджер по франшизе' : isStaff ? 'Кабинет сотрудника' : 'Кабинет франчайзи'}</span>
         </div>
         <nav className="nav">{nav.map((n) => link(n))}</nav>
         <div className="sidebar-foot">
@@ -159,7 +164,7 @@ export function Shell() {
       <div className="main">
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
-          <div className="grow topbar-title">{me?.assignments[0]?.scope_type === 'partner' ? me.assignments[0].scope_name : ''}</div>
+          <div className="grow topbar-title">{isPreview ? 'Просмотр партнёра' : me?.assignments[0]?.scope_type === 'partner' ? me.assignments[0].scope_name : ''}</div>
           <UserMenu pending={ops.length} />
         </header>
         {!online && (
