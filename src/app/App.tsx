@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
-import { createHashRouter, Navigate, RouterProvider, useRouteError } from 'react-router';
+import { createHashRouter, Navigate, RouterProvider, useParams, useRouteError } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isConfigured } from '../platform/config';
 import { SessionProvider, useSession } from '../platform/session';
@@ -64,6 +64,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
+      { path: 'demo/:id', element: <ManagerOnly><DemoPartnerHome /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
       { path: 'finance', element: <ByRole franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },
@@ -92,6 +93,12 @@ function BootScreen() {
 function Home() {
   const { isManager, isStaff } = useSession();
   return isManager ? <NetworkPage /> : isStaff ? <StaffHome /> : <FranchiseeHome />;
+}
+
+/** Только предпросмотр: менеджер видит интерфейс и выручку одного франчайзи без выдачи учётной записи. */
+function DemoPartnerHome() {
+  const { id = '' } = useParams();
+  return <FranchiseeHome previewPartnerId={id} />;
 }
 
 /** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
