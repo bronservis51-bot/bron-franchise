@@ -3,13 +3,16 @@ import { Navigate, useNavigate } from 'react-router';
 import { ChevronRight, Store, Users, Briefcase } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
+import { from, rows } from '../platform/backend';
 import { config, quickLoginEnabled } from '../platform/config';
 import { Button, Checkbox, Field, Input } from '../ui';
 import demoUsers from '../../supabase/seed/demo-users.json';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
 import { staffEmail } from '../modules/staff/api';
 
-interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee' | 'staff'; title: string; hint: string }
+interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee' | 'staff'; title: string; hint: string;
+  /** До запуска: новые партнёры открываются в менеджерском режиме просмотра, без выдуманных учётных записей. */
+  loginAs?: string; partnerCode?: string }
 
 const GROUPS: { id: DemoUser['group']; title: string; icon: typeof Store }[] = [
   { id: 'manager', title: 'Компания', icon: Briefcase },
@@ -30,10 +33,17 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
     try {
       // Сервер не ответил за 40 с — показать понятную причину вместо вечной загрузки
       await Promise.race([
-        signIn(u.email, config.demoQuickPassword, false),
+        signIn(u.loginAs ?? u.email, config.demoQuickPassword, false),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 40000)),
       ]);
-      navigate('/', { replace: true });
+      if (u.partnerCode) {
+        // Обзор существующей карточки партнёра менеджером. Не является входом под этим франчайзи:
+        // настоящие персональные аккаунты создадим только перед запуском.
+        const match = await rows<{ id: string }>(from('partner').select('id').eq('code', u.partnerCode).limit(1));
+        navigate(match.length ? `/partners/${match[0].id}` : '/', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (e) {
       onError(e);
     } finally {
@@ -45,7 +55,7 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
   return (
     <div>
       <h2 style={{ fontSize: 'var(--fs-l)', marginBottom: 4 }}>Выберите роль</h2>
-      <p className="muted" style={{ marginBottom: 16 }}>Демо: нажмите на карточку, чтобы войти. Сменить роль — в меню профиля.</p>
+      <p className="muted" style={{ marginBottom: 16 }}>Режим разработки: выберите кабинет для проверки. Новые партнёры открываются в режиме просмотра менеджера. Сменить кабинет — в меню профиля.</p>
       {busy && slow && <div className="slow-hint" role="status">Входим… Ещё несколько секунд.</div>}
       {GROUPS.map((g) => (
         <section key={g.id} style={{ marginBottom: 20 }}>
