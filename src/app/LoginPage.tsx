@@ -3,7 +3,8 @@ import { Navigate, useNavigate } from 'react-router';
 import { ChevronRight, Store, Users, Briefcase } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
-import { from, rows } from '../platform/backend';
+import { command, from, rows } from '../platform/backend';
+import { supabase } from '../platform/supabase';
 import { config, quickLoginEnabled } from '../platform/config';
 import { Button, Checkbox, Field, Input } from '../ui';
 import demoUsers from '../../supabase/seed/demo-users.json';
@@ -11,8 +12,7 @@ import { loginErrorText, useServerCheck } from './loginDiagnostics';
 import { staffEmail } from '../modules/staff/api';
 
 interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee' | 'staff'; title: string; hint: string;
-  /** До запуска: новые партнёры открываются в менеджерском режиме просмотра, без выдуманных учётных записей. */
-  loginAs?: string; partnerCode?: string }
+  partnerCode?: string }
 
 const GROUPS: { id: DemoUser['group']; title: string; icon: typeof Store }[] = [
   { id: 'manager', title: 'Компания', icon: Briefcase },
@@ -31,19 +31,27 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
     setSlow(false);
     const hint = setTimeout(() => setSlow(true), 5000);
     try {
-      // Сервер не ответил за 40 с — показать понятную причину вместо вечной загрузки
-      await Promise.race([
-        signIn(u.loginAs ?? u.email, config.demoQuickPassword, false),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 40000)),
-      ]);
       if (u.partnerCode) {
-        // Обзор существующей карточки партнёра менеджером. Не является входом под этим франчайзи:
-        // настоящие персональные аккаунты создадим только перед запуском.
-        const match = await rows<{ id: string }>(from('partner').select('id').eq('code', u.partnerCode).limit(1));
-        navigate(match.length ? `/demo/${match[0].id}` : '/', { replace: true });
-      } else {
-        navigate('/', { replace: true });
+        if (!supabase) throw new Error('Supabase не настроен');
+        const owner = await supabase.auth.signInWithPassword({ email: u.email, password: config.demoQuickPassword });
+        if (owner.error) {
+          if (owner.error.code !== 'invalid_credentials' && !/invalid login credentials/i.test(owner.error.message)) throw owner.error;
+          const manager = await supabase.auth.signInWithPassword({
+            email: 'fm@demo.example.com', password: config.demoQuickPassword,
+          });
+          if (manager.error) throw manager.error;
+          try {
+            const found = await rows<{ id: string }>(from('partner').select('id').eq('code', u.partnerCode).limit(1));
+            if (!found.length) throw new Error('Не найден франчайзи: ' + u.title);
+            await command<string>('account_create', { partner: found[0].id, full_name: u.name,
+              email: u.email, password: config.demoQuickPassword });
+          } finally {
+            await supabase.auth.signOut();
+          }
+        }
       }
+      await signIn(u.email, config.demoQuickPassword, false);
+      navigate('/', { replace: true });
     } catch (e) {
       onError(e);
     } finally {
@@ -55,7 +63,7 @@ function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
   return (
     <div>
       <h2 style={{ fontSize: 'var(--fs-l)', marginBottom: 4 }}>Выберите роль</h2>
-      <p className="muted" style={{ marginBottom: 16 }}>Режим разработки: выберите кабинет для проверки. Новые партнёры открываются в режиме просмотра менеджера. Сменить кабинет — в меню профиля.</p>
+      <p className="muted" style={{ marginBottom: 16 }}>Выберите профиль — откроется его полноценный кабинет. Сменить профиль можно в меню.</p>
       {busy && slow && <div className="slow-hint" role="status">Входим… Ещё несколько секунд.</div>}
       {GROUPS.map((g) => (
         <section key={g.id} style={{ marginBottom: 20 }}>
