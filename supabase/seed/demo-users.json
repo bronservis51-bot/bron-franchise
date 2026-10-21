@@ -4,34 +4,106 @@
     "name": "Менеджер Демо",
     "group": "manager",
     "title": "Менеджер по франшизе",
-    "hint": "Вся сеть: выручка и планы точек, роялти и долги, база знаний, доступ"
+    "hint": "Вся сеть: выручка, роялти, партнёры и база знаний"
+  },
+  {
+    "email": "adam-shali.preview@demo.example.com",
+    "name": "Адам",
+    "group": "franchisee",
+    "title": "Адам (Шали)",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "ADAM-SHALI",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "bays-ibr.preview@demo.example.com",
+    "name": "Байсангур и Ибрагим",
+    "group": "franchisee",
+    "title": "Байсангур и Ибрагим",
+    "hint": "4 точки · тестовый просмотр",
+    "partnerCode": "BAYS-IBR",
+    "loginAs": "fm@demo.example.com"
   },
   {
     "email": "alpha.owner@demo.example.com",
-    "name": "Виктор Демо",
+    "name": "Виктор Пургин",
     "group": "franchisee",
-    "title": "Франчайзи Виктор (Волгоград)",
-    "hint": "1 точка, рубли. Выручка с марта перенесена из его таблицы"
+    "title": "Виктор Пургин (Волгоград)",
+    "hint": "1 точка · кабинет франчайзи"
+  },
+  {
+    "email": "ibr-mukh.preview@demo.example.com",
+    "name": "Ибрагим и Мухтар",
+    "group": "franchisee",
+    "title": "Ибрагим и Мухтар",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "IBR-MUKH",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "uruzbiev.preview@demo.example.com",
+    "name": "Ибрагим Урузбиев",
+    "group": "franchisee",
+    "title": "Ибрагим Урузбиев",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "URUZBIEV",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "saaev.preview@demo.example.com",
+    "name": "Ильяс Сааев",
+    "group": "franchisee",
+    "title": "Ильяс Сааев",
+    "hint": "3 точки · тестовый просмотр",
+    "partnerCode": "SAAEV",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "nazran-mag.preview@demo.example.com",
+    "name": "Магомед",
+    "group": "franchisee",
+    "title": "Магомед (Назрань)",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "NAZRAN-MAG",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "gamma.owner@demo.example.com",
+    "name": "Mahmud Bulat",
+    "group": "franchisee",
+    "title": "Mahmud Bulat (Стамбул)",
+    "hint": "1 точка · кабинет франчайзи"
+  },
+  {
+    "email": "beta.owner@demo.example.com",
+    "name": "Марсель и Шамиль",
+    "group": "franchisee",
+    "title": "Марсель и Шамиль (Караганда)",
+    "hint": "1 точка · кабинет франчайзи"
+  },
+  {
+    "email": "visaev.preview@demo.example.com",
+    "name": "Мухаммед Висаев",
+    "group": "franchisee",
+    "title": "Мухаммед Висаев",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "VISAEV",
+    "loginAs": "fm@demo.example.com"
+  },
+  {
+    "email": "chugun.preview@demo.example.com",
+    "name": "Мухаммед Чугун",
+    "group": "franchisee",
+    "title": "Мухаммед Чугун",
+    "hint": "1 точка · тестовый просмотр",
+    "partnerCode": "CHUGUN",
+    "loginAs": "fm@demo.example.com"
   },
   {
     "email": "79000000011@staff.bron.local",
     "name": "Дина Демо",
     "group": "staff",
-    "title": "Сотрудник Дина (у Виктора)",
-    "hint": "Демо-сотрудник: открыть смену, внести выручку, увидеть заработок"
-  },
-  {
-    "email": "beta.owner@demo.example.com",
-    "name": "Марсель Демо",
-    "group": "franchisee",
-    "title": "Франчайзи Марсель и Шамиль (Караганда)",
-    "hint": "1 точка, тенге. Выручка с февраля перенесена из таблицы"
-  },
-  {
-    "email": "gamma.owner@demo.example.com",
-    "name": "Махмут Демо",
-    "group": "franchisee",
-    "title": "Франчайзи Махмут (Стамбул)",
-    "hint": "1 точка, лиры. Выручка с февраля перенесена из таблицы"
+    "title": "Дина (сотрудник Виктора)",
+    "hint": "Тестовый кабинет сотрудника"
   }
 ]
