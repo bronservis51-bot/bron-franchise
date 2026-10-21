@@ -35,6 +35,7 @@ const StaffPage = page(() => import('../modules/staff/StaffPage'), 'StaffPage');
 const RatingPage = page(() => import('../modules/rating/RatingPage'), 'RatingPage');
 const FinancePage = page(() => import('../modules/finance/FinancePage'), 'FinancePage');
 const QuestionsPage = page(kb, 'QuestionsPage');
+const LeadsPage = page(() => import('../modules/leads/LeadsPage'), 'LeadsPage');
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -65,6 +66,7 @@ const router = createHashRouter([
       { index: true, element: <Home /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'demo/:id', element: <ManagerOnly><DemoPartnerHome /></ManagerOnly> },
+      { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
       { path: 'finance', element: <ByRole franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },

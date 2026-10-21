@@ -138,6 +138,8 @@ export function Shell() {
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = isManager ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
+  const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
+  const leadCount = leads.data ?? 0;
   // Фокус на основное содержимое при смене экрана — для экранных дикторов
   useEffect(() => mainRef.current?.focus({ preventScroll: true }), [loc.pathname]);
 
@@ -145,6 +147,7 @@ export function Shell() {
     <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
       <n.icon size={mobile ? 22 : 18} aria-hidden />{mobile ? <span className="nav-label">{n.label}</span> : n.label}
       {n.badge === 'kb' && kbCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={`новых: ${kbCount}`}>{mobile ? '' : kbCount}</span>}
+      {n.badge === 'leads' && leadCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={`новых заявок: ${leadCount}`}>{mobile ? '' : leadCount}</span>}
     </NavLink>
   );
 

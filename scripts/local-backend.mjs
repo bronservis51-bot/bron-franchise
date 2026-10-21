@@ -46,6 +46,11 @@ if (fresh) {
 }
 
 const contract = Object.fromEntries((await readContract(db)).map((c) => [c.name, c]));
+// Команды без входа (анкета сайта франшизы lead_submit, ping) — их нет в контракте кабинета, но сайт их вызывает
+for (const r of (await db.query(`
+  select p.proname as name, coalesce(p.proargnames[1:p.pronargs], '{}') as args,
+    array(select format_type(x, null) from unnest(p.proargtypes) x) as types, p.pronargdefaults as defaults, 'scalar' as returns
+  from app_private.anon_command c join pg_proc p on p.oid = c.fn`)).rows) contract[r.name] ??= r;
 
 // ---------- JWT (HS256, локальный секрет) ----------
 const b64u = (s) => Buffer.from(s).toString('base64url');
