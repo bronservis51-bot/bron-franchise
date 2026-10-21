@@ -1,7 +1,7 @@
 [
   {
     "email": "fm@demo.example.com",
-    "name": "Менеджер Демо",
+    "name": "Менеджер по франшизе",
     "group": "manager",
     "title": "Менеджер по франшизе",
     "hint": "Вся сеть: выручка, роялти, партнёры и база знаний"
@@ -11,7 +11,7 @@
     "name": "Адам",
     "group": "franchisee",
     "title": "Адам (Шали)",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "ADAM-SHALI"
   },
   {
@@ -19,7 +19,7 @@
     "name": "Байсангур и Ибрагим",
     "group": "franchisee",
     "title": "Байсангур и Ибрагим",
-    "hint": "4 точки · полный кабинет",
+    "hint": "4 точки",
     "partnerCode": "BAYS-IBR"
   },
   {
@@ -27,14 +27,14 @@
     "name": "Виктор Пургин",
     "group": "franchisee",
     "title": "Виктор Пургин (Волгоград)",
-    "hint": "1 точка · кабинет франчайзи"
+    "hint": "1 точка"
   },
   {
     "email": "ibr-mukh.owner@demo.example.com",
     "name": "Ибрагим и Мухтар",
     "group": "franchisee",
     "title": "Ибрагим и Мухтар",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "IBR-MUKH"
   },
   {
@@ -42,7 +42,7 @@
     "name": "Ибрагим Урузбиев",
     "group": "franchisee",
     "title": "Ибрагим Урузбиев",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "URUZBIEV"
   },
   {
@@ -50,7 +50,7 @@
     "name": "Ильяс Сааев",
     "group": "franchisee",
     "title": "Ильяс Сааев",
-    "hint": "3 точки · полный кабинет",
+    "hint": "3 точки",
     "partnerCode": "SAAEV"
   },
   {
@@ -58,7 +58,7 @@
     "name": "Магомед",
     "group": "franchisee",
     "title": "Магомед (Назрань)",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "NAZRAN-MAG"
   },
   {
@@ -66,21 +66,21 @@
     "name": "Mahmud Bulat",
     "group": "franchisee",
     "title": "Mahmud Bulat (Стамбул)",
-    "hint": "1 точка · кабинет франчайзи"
+    "hint": "1 точка"
   },
   {
     "email": "beta.owner@demo.example.com",
     "name": "Марсель и Шамиль",
     "group": "franchisee",
     "title": "Марсель и Шамиль (Караганда)",
-    "hint": "1 точка · кабинет франчайзи"
+    "hint": "1 точка"
   },
   {
     "email": "visaev.owner@demo.example.com",
     "name": "Мухаммед Висаев",
     "group": "franchisee",
     "title": "Мухаммед Висаев",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "VISAEV"
   },
   {
@@ -88,14 +88,14 @@
     "name": "Мухаммед Чугун",
     "group": "franchisee",
     "title": "Мухаммед Чугун",
-    "hint": "1 точка · полный кабинет",
+    "hint": "1 точка",
     "partnerCode": "CHUGUN"
   },
   {
     "email": "79000000011@staff.bron.local",
-    "name": "Дина Демо",
+    "name": "Дина",
     "group": "staff",
     "title": "Дина (сотрудник Виктора)",
-    "hint": "Тестовый кабинет сотрудника"
+    "hint": "Смены, выручка и заработок"
   }
 ]
