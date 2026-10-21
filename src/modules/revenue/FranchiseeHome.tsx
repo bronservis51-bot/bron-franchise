@@ -82,9 +82,11 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
               {r ? (
                 <span className="day-sum2">
                   <Money minor={r.total_minor} currency={m.currency} short />
-                  <span className="day-split">{r.entries.some((e) => e.employee_id)
-                    ? r.entries.map((e) => `${e.employee_name ?? 'вы'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
-                    : `нал. ${formatMoneyShort(r.cash_minor, m.currency)} · карта ${formatMoneyShort(r.card_minor, m.currency)}`}</span>
+                  <span className="day-split">{r.comment && (/Google-таблиц/i.test(r.comment) || /Google Sheets/i.test(r.comment))
+                    ? 'Из Google-таблицы: способ оплаты не указан'
+                    : r.entries.some((e) => e.employee_id)
+                      ? r.entries.map((e) => `${e.employee_name ?? 'вы'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
+                      : `нал. ${formatMoneyShort(r.cash_minor, m.currency)} · карта ${formatMoneyShort(r.card_minor, m.currency)}`}</span>
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
               ) : <span className="day-sum2 day-empty">{miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
