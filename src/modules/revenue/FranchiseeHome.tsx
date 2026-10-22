@@ -12,6 +12,7 @@ import { BrandPattern } from '../../ui/brand';
 import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
+import { OrderCard } from '../orders/OrderLink';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
@@ -264,6 +265,7 @@ export function FranchiseeHome() {
                 ))}
               </div>
             )}
+            <OrderCard />
             <MonthNav month={month} onChange={setMonth} max={monthStart()} />
             {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} /> : (
             <DataState query={detail} skeleton={3}>

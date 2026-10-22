@@ -2,7 +2,7 @@
 // Данные карточки и документы видит только менеджер.
 import { useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Download, Edit3, FileText, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, Download, Edit3, ExternalLink, FileText, Link2, ShoppingCart, Trash2, Upload } from 'lucide-react';
 import { command, storage } from '../../platform/backend';
 import { formatDate } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
@@ -177,6 +177,46 @@ function DocumentsCard({ partnerId, docs }: { partnerId: string; docs: Doc[] }) 
   );
 }
 
+/** Ссылка контрагента в МойСклад: по ней франчайзи открывает заказ материалов из своего кабинета. */
+function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | null }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [edit, setEdit] = useState(false);
+  const [value, setValue] = useState(url ?? '');
+  const bad = value.trim() !== '' && !/^https:\/\/\S+$/.test(value.trim());
+  const m = useMutation({
+    mutationFn: (v: string) => command('partner_order_url_set', { partner: partnerId, url: v }),
+    onSuccess: (_, v) => {
+      toast(v.trim() ? 'Ссылка для заказа сохранена — у франчайзи появилась кнопка «Заказать материалы»' : 'Ссылка для заказа убрана');
+      void qc.invalidateQueries({ queryKey: ['partner-card', partnerId] });
+      void qc.invalidateQueries({ queryKey: ['partners'] });
+      setEdit(false);
+    },
+  });
+  return (
+    <Card title="Заказ материалов" icon={<ShoppingCart size={16} aria-hidden />}
+      actions={<Button size="sm" onClick={() => { setValue(url ?? ''); setEdit(true); }}><Link2 size={15} aria-hidden />{url ? 'Изменить' : 'Добавить ссылку'}</Button>}>
+      {url ? (
+        <>
+          <a className="order-url" href={url} target="_blank" rel="noopener noreferrer">{url}<ExternalLink size={13} aria-hidden /></a>
+          <p className="faint" style={{ marginTop: 6 }}>Франчайзи видит кнопку «Заказать материалы» — она открывает эту ссылку в МойСклад.</p>
+        </>
+      ) : <p className="faint">Ссылки нет — кнопка заказа у франчайзи неактивна. Вставьте ссылку контрагента из МойСклад.</p>}
+      {edit && (
+        <ConfirmDialog open title="Ссылка для заказа в МойСклад" confirmLabel="Сохранить ссылку" cancelLabel="Закрыть" busy={m.isPending} error={m.error}
+          disabled={bad || value.trim() === (url ?? '')} onClose={() => setEdit(false)} onConfirm={() => m.mutate(value)}>
+          <p className="muted">Скопируйте из МойСклад ссылку, по которой этот франчайзи (контрагент) оформляет заказ, и вставьте сюда.
+            По ней откроется МойСклад, когда франчайзи нажмёт «Заказать материалы».</p>
+          <Field label="Ссылка" hint="Полная ссылка, начинается с https://. Пусто — убрать кнопку заказа" error={bad ? 'Ссылка должна начинаться с https://' : null}>
+            {(id) => <Input id={id} type="url" inputMode="url" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" autoFocus />}
+          </Field>
+          {value.trim() && !bad && <a className="order-url" href={value.trim()} target="_blank" rel="noopener noreferrer">Проверить ссылку<ExternalLink size={13} aria-hidden /></a>}
+        </ConfirmDialog>
+      )}
+    </Card>
+  );
+}
+
 /** Правая колонка карточки франчайзи: данные, договор, точки, документы. */
 export function PartnerCardPanel({ partner }: { partner: Partner }) {
   const [edit, setEdit] = useState(false);
@@ -238,6 +278,7 @@ export function PartnerCardPanel({ partner }: { partner: Partner }) {
                 </div>
               ))}
             </Card>
+            <OrderLinkCard partnerId={partner.id} url={c.partner.order_url} />
             <DocumentsCard partnerId={partner.id} docs={c.documents} />
             {edit && <ProfileDialog partnerId={partner.id} currency={cur} profile={p} onClose={() => setEdit(false)} />}
           </div>

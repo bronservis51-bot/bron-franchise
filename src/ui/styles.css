@@ -742,3 +742,11 @@ tr.clickable:hover td { background: var(--surface-2); }
 .doc-link > svg { flex: none; margin-top: 2px; color: var(--text-2); }
 .doc-link:hover strong { text-decoration: underline; }
 .fin-editor .day-list2 { margin-top: 8px; }
+
+/* Заказ материалов (МойСклад) */
+.order-card { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+.order-card.disabled { opacity: .7; cursor: default; }
+.order-top { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
+.order-top-chev { display: none; }
+@media (max-width: 420px) { .order-top-label { display: none; } .order-top { padding: 0 10px; } }
+.order-url { display: inline-flex; align-items: center; gap: 6px; word-break: break-all; }

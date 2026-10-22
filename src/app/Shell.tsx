@@ -7,6 +7,7 @@ import { useSession } from '../platform/session';
 import { quickLoginEnabled } from '../platform/config';
 import { flushOutbox, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
+import { OrderTopButton } from '../modules/orders/OrderLink';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
@@ -162,6 +163,7 @@ export function Shell() {
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.assignments[0]?.scope_type === 'partner' ? me.assignments[0].scope_name : ''}</div>
+          {role === 'franchisee' && <OrderTopButton />}
           <UserMenu pending={ops.length} />
         </header>
         {!online && (

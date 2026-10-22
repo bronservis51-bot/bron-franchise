@@ -1,7 +1,9 @@
 import { command, from, rows } from '../../platform/backend';
 
 export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string;
-  contact_name: string | null; contact_phone: string | null; contact_email: string | null }
+  contact_name: string | null; contact_phone: string | null; contact_email: string | null;
+  /** Ссылка контрагента в МойСклад для заказа материалов. */
+  order_url: string | null }
 export interface Location { id: string; code: string; name: string; partner_id: string; city: string; address: string | null;
   timezone: string; currency: string; status: string; opened_on: string | null }
 export interface Country { code: string; name: string; default_currency: string }
