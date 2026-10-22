@@ -199,7 +199,8 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
       {url ? (
         <>
           <a className="order-url" href={url} target="_blank" rel="noopener noreferrer">{url}<ExternalLink size={13} aria-hidden /></a>
-          <p className="faint" style={{ marginTop: 6 }}>Франчайзи видит кнопку «Заказать материалы» — она открывает эту ссылку в МойСклад.</p>
+          <p className="faint" style={{ marginTop: 6 }}>Франчайзи видит кнопку «Заказать материалы» — она открывает эту ссылку в МойСклад.
+            При первом переходе он подтверждает, что ссылка персональная и делиться ею нельзя. Если ссылка попала к посторонним — смените её в МойСклад и вставьте новую.</p>
         </>
       ) : <p className="faint">Ссылки нет — кнопка заказа у франчайзи неактивна. Вставьте ссылку контрагента из МойСклад.</p>}
       {edit && (

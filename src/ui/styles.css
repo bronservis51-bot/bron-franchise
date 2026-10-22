@@ -750,3 +750,7 @@ tr.clickable:hover td { background: var(--surface-2); }
 .order-top-chev { display: none; }
 @media (max-width: 420px) { .order-top-label { display: none; } .order-top { padding: 0 10px; } }
 .order-url { display: inline-flex; align-items: center; gap: 6px; word-break: break-all; }
+.order-private { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.order-warn { display: flex; gap: 12px; align-items: flex-start; }
+.order-warn > svg { flex: none; margin-top: 2px; color: var(--warning, #c98500); }
+.order-warn p { margin: 0 0 8px; }
