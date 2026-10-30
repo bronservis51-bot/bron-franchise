@@ -29,9 +29,7 @@ jobs:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          # Режим прототипа до запуска: вход через демо-карточки.
-          VITE_APP_ENV: demo
-          VITE_DEMO_QUICK_PASSWORD: ${{ vars.VITE_DEMO_QUICK_PASSWORD }}
+          VITE_APP_ENV: production
       - run: cp dist/index.html dist/404.html && touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

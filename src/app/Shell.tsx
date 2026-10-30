@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { CloudOff, KeyRound, LogOut, Smartphone, User, WifiOff, X } from 'lucide-react';
 import { command } from '../platform/backend';
 import { useSession } from '../platform/session';
-import { quickLoginEnabled } from '../platform/config';
 import { flushOutbox, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
@@ -96,7 +95,6 @@ function UserMenu({ pending }: { pending: number }) {
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
-          {quickLoginEnabled && <button role="menuitem" onClick={out}><Users size={16} aria-hidden />Сменить роль</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
       )}
