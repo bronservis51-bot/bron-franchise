@@ -37,12 +37,12 @@ export function RevenueDialog({ location, currency, day, existing, staff = [], o
     onClose();
   };
   const save = useMutation({
-    mutationFn: () => revenueSave(me!.user.id, location, day, cash || '0', card || '0', comment.trim() || null, who || null),
+    mutationFn: () => revenueSave(me!.user.id, location, day, cash || '0', card || '0', comment.trim() || null, who || null, entry?.revision ?? -1),
     onSuccess: (r) => done(r && typeof r === 'object' && 'queued' in r ? 'Нет сети: сохранено на устройстве, отправится само' : entry ? 'Выручка исправлена' : 'Выручка внесена'),
   });
   const del = useMutation({ mutationFn: () => revenueDelete(location, day, who || null), onSuccess: () => done('Запись удалена') });
   const total = sumMinor([cash || '0', card || '0']);
-  const empty = total === 0n && !comment.trim();
+  const empty = !cash && !card && !comment.trim();
   const others = entries.filter((e) => (e.employee_id ?? '') !== who);
 
   return (
@@ -64,6 +64,7 @@ export function RevenueDialog({ location, currency, day, existing, staff = [], o
         <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} currency={currency} placeholder="0" onEnter={() => !empty && save.mutate()} />}</Field>
       </div>
       <div className="day-total-line"><span>{people.length ? 'Итого по этой записи' : 'Итого за день'}</span><Money minor={total} currency={currency} strong /></div>
+      {others.length > 0 && !who && <p className="alert tone-info">Выручка сотрудников уже входит в итог дня. Здесь укажите только ваши собственные продажи, чтобы не посчитать их дважды.</p>}
       {others.length > 0 && (
         <p className="faint">Ещё за день: {others.map((e) => `${e.employee_name ?? 'вы'} — `).map((s, i) => <span key={i}>{s}<Money minor={others[i].total_minor} currency={currency} short />{i < others.length - 1 ? '; ' : ''}</span>)}</p>
       )}

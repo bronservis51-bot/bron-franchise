@@ -26,6 +26,7 @@ const ArticlePage = page(kbView, 'ArticlePage');
 const SectionPage = page(kbView, 'SectionPage');
 const KbManagePage = page(kbView, 'KbManagePage');
 const ArticleEditPage = page(kb, 'ArticleEditPage');
+const SupplyFinancePage = page(() => import('../modules/manager/SupplyFinancePage'), 'SupplyFinancePage');
 const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
 const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
@@ -67,7 +68,7 @@ const router = createHashRouter([
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
-      { path: 'finance', element: <ByRole franchisee={<FinancePage />} /> },
+      { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },
       { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingOnly><RatingPage /></RatingOnly>} /> },
       { path: 'kb/questions', element: <QuestionsPage /> },

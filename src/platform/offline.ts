@@ -5,7 +5,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 export interface QueuedOperation {
   userId: string;
   clientOpId: string;
-  kind: 'revenue_save' | 'shift_close';
+  kind: 'revenue_save' | 'shift_close' | 'revenue_save_checked' | 'shift_close_checked';
   payload: Record<string, unknown>;
   createdAt: string;
   attempts: number;
@@ -61,14 +61,14 @@ export const drafts = {
 };
 
 export const opQueue = {
-  add: (op: QueuedOperation) => guarded(async () => void (await (await db()).put('queue', op)), undefined),
+  add: async (op: QueuedOperation) => { await (await db()).put('queue', op); },
   list: (userId: string) => guarded(async () => (await db()).getAllFromIndex('queue', 'byUser', userId), [] as QueuedOperation[]),
   remove: (userId: string, clientOpId: string) => guarded(async () => void (await (await db()).delete('queue', [userId, clientOpId])), undefined),
 };
 
-/** Выход или смена пользователя: черновики и очередь этого пользователя удаляются (PWA-05). */
+/** Clear only after the caller has verified that the outgoing queue is empty. */
 export async function clearUserData(userId: string) {
-  await guarded(async () => {
+  {
     const d = await db();
     const tx = d.transaction(['drafts', 'queue'], 'readwrite');
     for (const store of ['drafts', 'queue'] as const) {
@@ -79,5 +79,5 @@ export async function clearUserData(userId: string) {
       }
     }
     await tx.done;
-  }, undefined);
+  }
 }

@@ -28,6 +28,7 @@ export function NetworkPage() {
     <>
       <PageHeader title="Франчайзи" sub="Выручка и план по каждой точке сети"
         actions={<>
+          <Link to="/finance" className="btn btn-secondary">Экономика франшизы</Link>
           <Button onClick={() => setSuggest(true)}><Sparkles size={16} aria-hidden />Предложить план</Button>
           <Button variant="primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить франчайзи</Button>
         </>} />

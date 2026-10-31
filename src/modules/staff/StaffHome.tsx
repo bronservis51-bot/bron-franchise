@@ -32,7 +32,7 @@ function CloseDialog({ shift, currency, rate, fee, onClose, onDone }: {
   const total = sumMinor([cash || '0', card || '0']);
   const earned = BigInt(fee) + (total * BigInt(rate) + 5000n) / 10000n;
   const m = useMutation({
-    mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null),
+    mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null, shift.closed_at),
     onSuccess: (r) => onDone(Number(earned), 'queued' in r ? null : Number(r.month_earned_minor)),
   });
   return (

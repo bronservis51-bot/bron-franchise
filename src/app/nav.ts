@@ -16,6 +16,7 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff'): NavItem[] {
     { to: '/', label: 'Франчайзи', icon: Store },
     { to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' },
     { to: '/royalty', label: 'Роялти', icon: Landmark },
+    { to: '/finance', label: 'Экономика', icon: Wallet },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];

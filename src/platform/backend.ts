@@ -1,5 +1,6 @@
 // Адаптер backend (ADR-0004): команды — RPC, чтение — таблицы и представления под RLS.
 // Ошибки приводятся к словарю API-04. Счётчик активных команд не даёт обновить PWA посреди отправки (PWA-06).
+import { operationKey } from './operation';
 import { getLastRequestId, requireClient } from './supabase';
 import { CONTRACT, type CommandName } from './contract.generated';
 
@@ -94,7 +95,13 @@ export async function command<T>(name: CommandName, args: Record<string, unknown
   const params = Object.fromEntries(Object.entries(args).map(([k, v]) => [`p_${k}`, v === undefined ? null : v]));
   setInFlight(1);
   try {
-    const { data, error } = await requireClient().rpc(name, params);
+    const client = requireClient();
+    const financial = ['royalty_payment_add', 'royalty_manual_add', 'royalty_set_accrual', 'expense_save'].includes(name);
+    const uid = financial ? (await client.auth.getSession()).data.session?.user.id ?? '' : '';
+    const receipt = financial ? await operationKey(uid, name, params) : null;
+    const { data, error } = await client.rpc(receipt ? 'financial_operation' : name,
+      receipt ? { p_command: name, p_args: params, p_operation: receipt.id } : params);
+    if (!error) receipt?.complete();
     if (error) throw toAppError(error);
     if (spec.returns === 'single' && Array.isArray(data)) return (data[0] ?? null) as T;
     return data as T;

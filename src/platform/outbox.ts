@@ -1,6 +1,6 @@
 // Сохранение без сети: выручка дня и закрытие смены ставятся в очередь на устройстве и отправляются, когда связь вернётся.
-// Повторная отправка безопасна: обе команды перезаписывают одну и ту же запись (точка + день + сотрудник).
-import { command, toAppError } from './backend';
+// Повторы используют серверные ключи операций; устаревшее исправление останавливается как конфликт.
+import { AppError, command, toAppError } from './backend';
 import { opQueue, type QueuedOperation } from './offline';
 
 type Kind = QueuedOperation['kind'];
@@ -16,7 +16,7 @@ export async function sendOrQueue<T>(userId: string, kind: Kind, args: Record<st
     return await command<T>(kind, args);
   } catch (e) {
     if (!isNetwork(e)) throw e;
-    await opQueue.add({ userId, clientOpId: `${kind}:${JSON.stringify([args.location ?? args.shift, args.day ?? '', args.employee ?? ''])}`,
+    await opQueue.add({ userId, clientOpId: String(args.operation ?? crypto.randomUUID()),
       kind, payload: args, createdAt: new Date().toISOString(), attempts: 0 });
     changed();
     return { queued: true };
@@ -34,7 +34,9 @@ export async function flushOutbox(userId: string): Promise<{ sent: number; faile
   let failed = 0;
   try {
     for (const op of await opQueue.list(userId)) {
+      if (op.lastError) { failed++; continue; }
       try {
+        if (op.kind === 'revenue_save' || op.kind === 'shift_close') throw new AppError('version-conflict', 'Запись создана старой версией приложения. Сверьте суммы с актуальным днём перед повторным вводом.', '', '');
         await command(op.kind, op.payload);
         await opQueue.remove(userId, op.clientOpId);
         sent++;

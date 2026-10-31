@@ -754,3 +754,17 @@ tr.clickable:hover td { background: var(--surface-2); }
 .order-warn { display: flex; gap: 12px; align-items: flex-start; }
 .order-warn > svg { flex: none; margin-top: 2px; color: var(--warning, #c98500); }
 .order-warn p { margin: 0 0 8px; }
+
+/* Financial table keeps each currency and the supply source visible. */
+.economics-table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:16px; background:var(--surface); }
+.economics-table { border-collapse:collapse; width:100%; font-size:13px; }
+.economics-table th,.economics-table td { padding:16px 12px; border-bottom:1px solid var(--border); text-align:right; vertical-align:top; min-width:120px; }
+.economics-table th { font-size:11px; color:var(--text-3); font-weight:600; }
+.economics-table th:first-child,.economics-table td:first-child { text-align:left; min-width:185px; }
+.economics-table small,.supply-mapping small { display:block; color:var(--text-3); font-size:11px; margin-top:6px; }
+.economics-table tbody tr:last-child td { border-bottom:0; }
+.supply-mapping { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--border); }
+.supply-mapping > div { flex:1; }
+.supply-mapping select { max-width:240px; }
+@media(max-width:960px) { .bottom-nav.cols-6 { grid-template-columns:repeat(6,1fr); } }
+@media(max-width:600px) { .supply-mapping { flex-wrap:wrap; } .supply-mapping > div { flex-basis:100%; } .supply-mapping select { flex:1; min-width:0; } .economics-table th,.economics-table td { padding:12px 10px; } }

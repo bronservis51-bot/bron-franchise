@@ -20,7 +20,9 @@
     "db:export": "node scripts/db-export.mjs",
     "db:restore": "node scripts/db-restore.mjs",
     "db:reset-demo": "node scripts/db-reset-demo.mjs",
-    "import:sheets": "node scripts/import-sheets.mjs"
+    "import:sheets": "node scripts/import-sheets.mjs",
+    "sync:moysklad": "node scripts/sync-moysklad.mjs",
+    "migration:check": "node scripts/migration-check.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.9",
