@@ -252,6 +252,7 @@ export function FranchiseeHome() {
         <h1>{greeting()}{me ? `, ${me.user.full_name.split(' ')[0]}` : ''}</h1>
       </header>
 
+      <OrderCard />
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title="Точек пока нет" text="Менеджер по франшизе ещё не добавил ваши точки." />)}>
         {() => (
           <div className="home-body">
@@ -265,7 +266,6 @@ export function FranchiseeHome() {
                 ))}
               </div>
             )}
-            <OrderCard />
             <MonthNav month={month} onChange={setMonth} max={monthStart()} />
             {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} /> : (
             <DataState query={detail} skeleton={3}>

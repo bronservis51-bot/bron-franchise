@@ -12,3 +12,5 @@ coverage/
 backups/
 local-backend.log
 supabase/bundle*.sql
+
+supabase/.temp/

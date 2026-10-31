@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
-import { command } from '../platform/backend';
+import { CloudOff, KeyRound, LogOut, Smartphone, User, WifiOff, X } from 'lucide-react';
+import { onAvailableUpdate } from '../platform/update';
+import { command, commandsInFlight } from '../platform/backend';
 import { useSession } from '../platform/session';
-import { quickLoginEnabled } from '../platform/config';
-import { flushOutbox, onOutboxChange, queuedOps } from '../platform/outbox';
+import { dropOp, flushOutbox, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
-import { ConfirmDialog, Field, Input } from '../ui';
+import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
 
 function useOnline() {
@@ -40,9 +40,13 @@ function useOutbox(userId: string | undefined, online: boolean) {
   }, [userId]);
   useEffect(() => {
     if (!userId || !online) return;
-    void flushOutbox(userId).then((r) => {
+    const send = () => void flushOutbox(userId).then((r) => {
       if (r.sent) { toast(`Отправлено записей, сохранённых без сети: ${r.sent}`); void qc.invalidateQueries(); }
-    });
+    }).catch(() => undefined);
+    send();
+    const timer = window.setInterval(send, 30000);
+    window.addEventListener('focus', send);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', send); };
   }, [userId, online, qc, toast]);
   return ops;
 }
@@ -77,10 +81,11 @@ function UserMenu({ pending }: { pending: number }) {
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, []);
+  const toast = useToast();
   const role = me?.assignments[0];
   const out = () => {
-    if (pending && !window.confirm(`На устройстве есть неотправленные записи (${pending}). При выходе они пропадут. Выйти?`)) return;
-    void signOut();
+    if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
+    void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
   };
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -96,7 +101,6 @@ function UserMenu({ pending }: { pending: number }) {
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
-          {quickLoginEnabled && <button role="menuitem" onClick={out}><Users size={16} aria-hidden />Сменить роль</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
       )}
@@ -130,6 +134,10 @@ export function Shell() {
   const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const mainRef = useRef<HTMLElement>(null);
   const ops = useOutbox(me?.user.id, online);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [updateApp,setUpdateApp]=useState<(() => Promise<void>) | null>(null);
+  const toast=useToast();
+  useEffect(()=>onAvailableUpdate(fn=>setUpdateApp(()=>fn)),[]);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = isManager ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
@@ -166,6 +174,10 @@ export function Shell() {
           {role === 'franchisee' && <OrderTopButton />}
           <UserMenu pending={ops.length} />
         </header>
+        {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
+          if (ops.length || commandsInFlight() || document.querySelector('[role="dialog"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
+          void updateApp();
+        }}>Обновить</Button></div>}
         {!online && (
           <div className="alert tone-warning" role="status" style={{ margin: '12px 24px 0' }}>
             <WifiOff size={18} aria-hidden />
@@ -176,8 +188,10 @@ export function Shell() {
           <div className="alert tone-info" role="status" style={{ margin: '12px 24px 0' }}>
             <CloudOff size={18} aria-hidden />
             <div className="alert-body">Сохранено на устройстве и ждёт отправки: {ops.length}.{ops.some((o) => o.error) && <span className="faint" style={{ display: 'block' }}>Сервер не принял запись: {ops.find((o) => o.error)?.error}</span>}</div>
+            <Button size="sm" onClick={() => setQueueOpen(true)}>Посмотреть записи</Button>
           </div>
         )}
+        {queueOpen && me && <QueueDialog userId={me.user.id} onClose={() => setQueueOpen(false)} />}
         <main id="main" className="content" ref={mainRef} tabIndex={-1} style={{ outline: 'none' }}>
           <InstallHint />
           {me && !me.assignments.length ? (
@@ -190,4 +204,27 @@ export function Shell() {
       </nav>
     </div>
   );
+}
+
+function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
+  const qc=useQueryClient();
+  const q=useQuery({queryKey:['local-queue',userId],queryFn:()=>queuedOps(userId)});
+  const [copied,setCopied]=useState(false);
+  const [error,setError]=useState<unknown>(null);
+  const download=()=>{
+    const blob=new Blob([JSON.stringify({format:'bron-pending',exported_at:new Date().toISOString(),operations:q.data??[]},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='bron-pending-records.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); setCopied(true);
+  };
+  return <ConfirmDialog open title="Неотправленные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} error={error}>
+    <p className="faint">При конфликте откройте день заново и сверьте суммы. Сначала сохраните копию, затем удалите обработанную запись из очереди.</p>
+    <Button disabled={!q.data?.length} onClick={download}>Скачать копию записей</Button>
+    {q.data?.map(o=><div key={o.clientOpId} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+      <strong>{o.kind.startsWith('revenue') ? `Выручка за ${String(o.payload.day)}` : 'Закрытие смены'}</strong>
+      <div className="faint">Наличные: {(Number(o.payload.cash)/100).toLocaleString('ru-RU')} · карта: {(Number(o.payload.card)/100).toLocaleString('ru-RU')}</div>
+      <div className="faint">{o.lastError ?? 'Ожидает отправки'}</div>
+      {o.lastError && <Button variant="ghost" size="sm" disabled={!copied} onClick={()=>{
+        void dropOp(userId,o.clientOpId).then(()=>qc.invalidateQueries({queryKey:['local-queue',userId]})).catch(setError);
+      }}>Копия сохранена — удалить из очереди</Button>}
+    </div>)}
+  </ConfirmDialog>;
 }

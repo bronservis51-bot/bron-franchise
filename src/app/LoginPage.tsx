@@ -1,92 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
-import { ChevronRight, Store, Users, Briefcase } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
-import { command, from, rows } from '../platform/backend';
-import { supabase } from '../platform/supabase';
-import { config, quickLoginEnabled } from '../platform/config';
 import { Button, Checkbox, Field, Input } from '../ui';
-import demoUsers from '../../supabase/seed/demo-users.json';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
-import { staffEmail } from '../modules/staff/api';
-
-interface DemoUser { email: string; name: string; group: 'manager' | 'franchisee' | 'staff'; title: string; hint: string;
-  partnerCode?: string }
-
-const GROUPS: { id: DemoUser['group']; title: string; icon: typeof Store }[] = [
-  { id: 'manager', title: 'Компания', icon: Briefcase },
-  { id: 'franchisee', title: 'Франчайзи', icon: Users },
-  { id: 'staff', title: 'Сотрудник франчайзи', icon: Store },
-];
-
-/** Быстрый вход по ролям для демонстрации: выбор карточки вместо логина и пароля. */
-function QuickLogin({ onError }: { onError: (e: unknown) => void }) {
-  const { signIn } = useSession();
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [slow, setSlow] = useState(false);
-  async function enter(u: DemoUser) {
-    setBusy(u.email);
-    setSlow(false);
-    const hint = setTimeout(() => setSlow(true), 5000);
-    try {
-      if (u.partnerCode) {
-        if (!supabase) throw new Error('Supabase не настроен');
-        const owner = await supabase.auth.signInWithPassword({ email: u.email, password: config.demoQuickPassword });
-        if (owner.error) {
-          if (owner.error.code !== 'invalid_credentials' && !/invalid login credentials/i.test(owner.error.message)) throw owner.error;
-          const manager = await supabase.auth.signInWithPassword({
-            email: 'fm@demo.example.com', password: config.demoQuickPassword,
-          });
-          if (manager.error) throw manager.error;
-          try {
-            const found = await rows<{ id: string }>(from('partner').select('id').eq('code', u.partnerCode).limit(1));
-            if (!found.length) throw new Error('Не найден франчайзи: ' + u.title);
-            await command<string>('account_create', { partner: found[0].id, full_name: u.name,
-              email: u.email, password: config.demoQuickPassword });
-          } finally {
-            await supabase.auth.signOut();
-          }
-        }
-      }
-      await signIn(u.email, config.demoQuickPassword, false);
-      navigate('/', { replace: true });
-    } catch (e) {
-      onError(e);
-    } finally {
-      clearTimeout(hint);
-      setBusy(null);
-      setSlow(false);
-    }
-  }
-  return (
-    <div>
-      <h2 style={{ fontSize: 'var(--fs-l)', marginBottom: 4 }}>Выберите роль</h2>
-      <p className="muted" style={{ marginBottom: 16 }}>Выберите профиль — откроется его полноценный кабинет. Сменить профиль можно в меню.</p>
-      {busy && slow && <div className="slow-hint" role="status">Входим… Ещё несколько секунд.</div>}
-      {GROUPS.map((g) => (
-        <section key={g.id} style={{ marginBottom: 20 }}>
-          <div className="row" style={{ marginBottom: 8, color: 'var(--text-2)', fontWeight: 600 }}><g.icon size={16} aria-hidden />{g.title}</div>
-          <div className="grid grid-2" style={{ gap: 8 }}>
-            {(demoUsers as DemoUser[]).filter((u) => u.group === g.id).map((u) => {
-              return (
-              <button key={u.email} type="button" className={`role-card ${u.group === 'franchisee' ? 'partner' : ''}`} onClick={() => void enter(u)} disabled={busy !== null} aria-busy={busy === u.email}>
-                <span className="role-avatar" aria-hidden>{u.group === 'franchisee' ? <LogoMark height={22} /> : u.group === 'staff' ? <Store size={20} /> : <Briefcase size={20} />}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span className="role-title">{u.title}</span>
-                  <span className="role-hint">{u.hint}</span>
-                </span>
-                {busy === u.email ? <span className="spinner" aria-hidden /> : <ChevronRight size={18} aria-hidden />}
-              </button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
-}
+import { loginEmail } from '../platform/login';
 
 export function LoginPage() {
   const { status, signIn } = useSession();
@@ -106,8 +24,7 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      // Сотрудник входит по телефону: без «@» — это номер
-      await signIn(email.includes('@') ? email : staffEmail(email), password, remember);
+      await signIn(loginEmail(email), password, remember);
       navigate('/', { replace: true });
     } catch (err) {
       fail(err);
@@ -132,11 +49,7 @@ export function LoginPage() {
       <main className="login-panel">
         <div className="inner">
           <ServerStatus s={server} onRetry={recheck} />
-          {quickLoginEnabled && <QuickLogin onError={fail} />}
-          {quickLoginEnabled && error && <ErrorBox e={error} />}
-          {quickLoginEnabled
-            ? <details className="card" style={{ padding: '4px 16px' }}><summary className="muted" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Войти по email и паролю</summary>{form()}</details>
-            : <div className="card"><div className="card-body">{form()}</div></div>}
+          <div className="card"><div className="card-body">{form()}</div></div>
           <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>
           <p className="faint">Версия от {new Date(import.meta.env.VITE_BUILD_TIME ?? Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
         </div>
@@ -147,15 +60,15 @@ export function LoginPage() {
   function form() {
     return (
           <form onSubmit={submit} noValidate>
-            <Field label="Email или телефон" required hint="Сотрудники входят по номеру телефона">
-              {(id) => <Input id={id} type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
+            <Field label="Логин" required hint="Ваш личный логин. Сотрудники могут входить по номеру телефона">
+              {(id) => <Input id={id} type="text" autoCapitalize="none" spellCheck={false} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
             </Field>
             <Field label="Пароль" required>
               {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
             </Field>
             <Checkbox label="Запомнить это устройство" hint="Только на личном устройстве: на общем компьютере сессия закончится при закрытии вкладки."
               checked={remember} onChange={setRemember} />
-            {error && !quickLoginEnabled && <ErrorBox e={error} />}
+            {error && <ErrorBox e={error} />}
             <div style={{ marginTop: 16 }}>
               <Button type="submit" variant="primary" block loading={busy} disabled={!email || !password}>Войти</Button>
             </div>

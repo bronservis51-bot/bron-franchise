@@ -1,4 +1,5 @@
 import { command } from '../../platform/backend';
+import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
 export interface Shift { id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
@@ -20,8 +21,13 @@ export interface CloseResult { shift: Shift; month_earned_minor: number; month_s
 
 export const staffHome = (month: string | null) => command<StaffHomeData>('staff_home', { month });
 export const shiftOpen = (location: string) => command<Shift>('shift_open', { location });
-export const shiftClose = (userId: string, shift: string, cash: string, card: string, comment: string | null) =>
-  sendOrQueue<CloseResult>(userId, 'shift_close', { shift, cash, card, comment });
+export const shiftClose = async (userId: string, shift: string, cash: string, card: string, comment: string | null, expected_closed_at: string | null) => {
+  const args = { shift, cash, card, comment, expected_closed_at };
+  const receipt = await operationKey(userId, 'shift_close_checked', args);
+  const result = await sendOrQueue<CloseResult>(userId, 'shift_close_checked', { ...args, operation: receipt.id });
+  receipt.complete();
+  return result;
+};
 export const shiftCancel = (shift: string) => command('shift_cancel', { shift });
 
 export const staffList = (partner: string, month: string) => command<StaffRow[]>('staff_list', { partner, month });

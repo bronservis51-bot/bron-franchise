@@ -14,7 +14,7 @@ if (!src || !existsSync(join(src, 'data.json'))) { console.error('Укажите
 const url = need('DATABASE_URL');
 console.log(`Цель: ${new URL(url).host}`);
 if (!process.argv.includes('--confirm-wipe')) { console.error('Добавьте --confirm-wipe: бизнес-данные целевого проекта будут заменены.'); process.exit(1); }
-const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+const client = new pg.Client({ connectionString: url });
 await client.connect();
 try {
   await client.query('begin');
@@ -33,7 +33,8 @@ if (existsSync(filesDir) && process.env.SUPABASE_SECRET_KEY) {
   for (const f of walk(filesDir)) {
     const path = relative(filesDir, f);
     const { error } = await admin.storage.from('private-files').upload(path, readFileSync(f), { upsert: true });
-    console.log(error ? `  ! ${path}: ${error.message}` : `  + ${path}`);
+    if (error) throw new Error(`Не удалось восстановить ${path}: ${error.message}`);
+    console.log(`  + ${path}`);
   }
 }
 console.log('Восстановление завершено. Проверьте: вход демо-пользователей, «Сегодня», сальдо роялти, открытие файла.');

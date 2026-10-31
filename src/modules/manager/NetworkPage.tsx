@@ -10,6 +10,7 @@ import { MonthNav } from '../revenue/FranchiseeHome';
 import { revenueOverview, type LocationMonth } from '../revenue/api';
 import { PartnerDialog } from './PartnerDialog';
 import { PlanSuggestDialog } from './PlanSuggestDialog';
+import { partners } from './api';
 
 function PctBadge({ r }: { r: LocationMonth }) {
   if (r.pct === null) return <span className="faint">нет плана</span>;
@@ -23,11 +24,14 @@ export function NetworkPage() {
   const [adding, setAdding] = useState(false);
   const [suggest, setSuggest] = useState(false);
   const q = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
+  const partnerList = useQuery({ queryKey: ['partners'], queryFn: partners });
+  const withoutPoints = partnerList.data?.filter(p => p.status === 'active' && q.data && !q.data.rows.some(r => r.partner_id === p.id)) ?? [];
 
   return (
     <>
       <PageHeader title="Франчайзи" sub="Выручка и план по каждой точке сети"
         actions={<>
+          <Link to="/finance" className="btn btn-secondary">Экономика франшизы</Link>
           <Button onClick={() => setSuggest(true)}><Sparkles size={16} aria-hidden />Предложить план</Button>
           <Button variant="primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить франчайзи</Button>
         </>} />
@@ -74,6 +78,12 @@ export function NetworkPage() {
           );
         }}
       </DataState>
+      {withoutPoints.length > 0 && <section className="stack" style={{marginTop:24}}>
+        <h2 className="section-title">Партнёры без добавленных точек</h2>
+        {withoutPoints.map(p => <Link key={p.id} to={`/partners/${p.id}`} className="read-card">
+          <span className="todo-main"><span className="todo-title">{p.name}</span><span className="todo-meta">Кабинет создан. Добавьте точку, чтобы начать учёт выручки.</span></span><ChevronRight size={18} aria-hidden />
+        </Link>)}
+      </section>}
       {adding && <PartnerDialog onClose={() => setAdding(false)} onSaved={(id) => navigate(`/partners/${id}`)} />}
       {suggest && <PlanSuggestDialog onClose={() => setSuggest(false)} />}
     </>

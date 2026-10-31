@@ -32,7 +32,7 @@ async function tablesInOrder(db) {
 async function columns(db, table) {
   return (await db.query(`select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, a.attgenerated <> '' as generated,
       a.attidentity <> '' as identity
-    from pg_attribute a where a.attrelid = $1::regclass and a.attnum > 0 and not a.attisdropped order by a.attnum`, [`public.${table}`])).rows;
+    from pg_attribute a where a.attrelid = $1::regclass and a.attnum > 0 and not a.attisdropped order by a.attnum`, [table.includes('.') ? table : `public.${table}`])).rows;
 }
 
 export async function exportData(db) {
@@ -43,7 +43,12 @@ export async function exportData(db) {
   }
   const users = (await db.query(`select u.id, u.email, u.full_name, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
   const migrations = await db.query(`select coalesce(jsonb_agg(name order by name), '[]'::jsonb) as m from app_private.schema_migration`).catch(() => ({ rows: [{ m: [] }] }));
-  return { format: 'bron-backup', version: 1, exported_at: new Date().toISOString(), migrations: migrations.rows[0].m, users, tables: data };
+  const private_tables = {};
+  for (const name of ['supply_snapshot', 'supply_counterparty', 'operation_receipt']) {
+    private_tables[name] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from app_private.${name} x`)).rows[0].rows;
+  }
+  const auth_users = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from auth.users x`)).rows[0].rows;
+  return { format: 'bron-backup', version: 1, private_tables, auth_users, exported_at: new Date().toISOString(), migrations: migrations.rows[0].m, users, tables: data };
 }
 
 /**
@@ -75,7 +80,7 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   const order = await tablesInOrder(db);
   // Целевая установка очищается (кроме профилей пользователей, созданных заново): справочники тоже берутся из копии
   const wipeList = order.filter((t) => t !== 'app_user').map((t) => `public.${JSON.stringify(t)}`).join(', ');
-  await db.query(`truncate table ${wipeList} restart identity`);
+  await db.query(`truncate table app_private.supply_counterparty, app_private.supply_snapshot, app_private.operation_receipt, ${wipeList} restart identity`);
   // Ссылка откладывается, если указывает на эту же или ещё не восстановленную таблицу (цикл)
   const later = (t, col) => fkCols.some((f) => f.child === t && f.col === col && (f.parent === t || order.indexOf(f.parent) > order.indexOf(t)));
   const deferred = [];
@@ -122,6 +127,17 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   for (const t of order) {
     for (const c of (await columns(db, t)).filter((x) => x.identity)) {
       await db.query(`select setval(pg_get_serial_sequence('public.${t}', '${c.name}'), greatest((select max(${JSON.stringify(c.name)}) from public.${JSON.stringify(t)}), 1))`);
+    }
+  }
+  for (const name of ['supply_snapshot', 'supply_counterparty', 'operation_receipt']) {
+    const cols = (await columns(db, `app_private.${name}`)).filter(c => !c.generated);
+    for (const row of dump.private_tables?.[name] ?? []) {
+      const values = cols.map(c => {
+        let v = row[c.name] ?? null;
+        if (name === 'operation_receipt' && c.name === 'user_id') v = userMap.get(v) ?? v;
+        return v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
+      });
+      await db.query(`insert into app_private.${name} (${cols.map(c => JSON.stringify(c.name)).join(',')}) values (${cols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);
     }
   }
   return inserted;
