@@ -30,7 +30,8 @@ describe('финансы франчайзи', () => {
   interface Fin { revenue_minor: number; payroll_minor: number; royalty_minor: number; net_minor: number; rate_bp: number }
   it('«все точки» = сумма по точкам; роялти — по ставке; остаток = выручка − зарплата − роялти', async () => {
     const f = await one<{ current: Fin; by_location: (Fin & { location_name: string })[]; months: Fin[]; royalty: unknown }>(VIKTOR,
-      `select public.finance_my(current_date, null) j`);
+      // Выбираем месяц фактической закрытой смены: 1-го числа ещё нет зарплаты за новый месяц.
+      `select public.finance_my((select max(day) from public.work_shift where status = 'closed'), null) j`);
     expect(f.months).toHaveLength(6);
     expect(f.by_location).toHaveLength(3);
     expect(f.current.revenue_minor).toBe(f.by_location.reduce((a, x) => a + Number(x.revenue_minor), 0));

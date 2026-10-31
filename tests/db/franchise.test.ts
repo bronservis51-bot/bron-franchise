@@ -99,7 +99,11 @@ describe('выручка за день', () => {
     const m = await one<{ missing_days: string[]; plan_minor: number; fact_minor: number; need_per_day_minor: number | null; days: unknown[] }>(
       VIKTOR, `select public.revenue_month($1, current_date) j`, [await loc('ALPHA-1')]);
     expect(m.plan_minor).toBeGreaterThan(0);
-    expect(m.missing_days.length).toBeGreaterThanOrEqual(1);
+    // В первые два дня месяца пропуски seed находятся в прошлом месяце.
+    const l = await loc('ALPHA-1');
+    const withGaps = await one<{ missing_days: string[] }>(VIKTOR,
+      `select public.revenue_month($1, $2::date) j`, [l, await today(l, -2)]);
+    expect(withGaps.missing_days.length).toBeGreaterThanOrEqual(1);
     expect(m.days.length).toBeGreaterThan(0);
     if (m.fact_minor < m.plan_minor) expect(m.need_per_day_minor).toBeGreaterThan(0);
   });
