@@ -93,3 +93,5 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 grant usage on schema public to anon, authenticated, service_role;
+-- Keep JavaScript and SQL fixture dates aligned with the business reporting clock.
+set time zone 'Europe/Moscow';
