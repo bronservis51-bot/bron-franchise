@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>Проверка адаптивности</title>
+<style>body{margin:12px;font:14px system-ui;background:#ddd}header{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}iframe{border:1px solid #888;height:850px;display:block}select{padding:8px}</style>
+<header>
+<label>Ширина <select id="width"><option>320</option><option>360</option><option selected>390</option><option>430</option><option>768</option><option>1280</option></select></label>
+<label>Текст <select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
+<label>Экран <select id="route"><option value="/partners/qa-partner">Карточка франчайзи</option><option value="/kb/s/qa-section">Раздел знаний</option><option value="/kb">База знаний</option><option value="/kb/articles/qa-article">Статья</option><option value="/kb/manage">Управление знаниями</option><option value="/leads">Заявки</option><option value="/royalty">Роялти</option><option value="/finance">Экономика</option><option value="/rating">Рейтинг</option><option value="/">Сеть</option></select></label>
+</header>
+<iframe title="Тест приложения с вымышленными данными" id="preview"></iframe>
+<script>
+const frame=document.getElementById('preview');
+function show(){frame.style.width=document.getElementById('width').value+'px';frame.src='/tests/ui/responsive-app.html?text='+document.getElementById('text').value+'#'+document.getElementById('route').value;}
+document.querySelectorAll('select').forEach(el=>el.addEventListener('change',show));show();
+</script>
+</html>

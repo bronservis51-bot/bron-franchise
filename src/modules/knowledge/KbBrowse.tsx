@@ -287,8 +287,8 @@ export function SectionPage() {
               <Crumbs items={[{ to: '/kb', label: 'База знаний' }, ...(p.parent ? [{ to: `/kb/s/${p.parent.id}`, label: p.parent.title }] : []), { label: p.section.title }]} />
               <header className="kb-section-head">
                 <SectionIcon icon={p.section.icon} size={26} />
-                <div style={{ flex: 1, minWidth: 0 }}><h1>{p.section.title}</h1>{p.section.description && <div className="muted">{p.section.description}</div>}</div>
-                {editor && <div className="row">
+                <div className="kb-section-title"><h1>{p.section.title}</h1>{p.section.description && <div className="muted">{p.section.description}</div>}</div>
+                {editor && <div className="row kb-section-actions">
                   <Button onClick={() => setEditing(true)}><Edit3 size={16} aria-hidden />Раздел</Button>
                   <Button variant="primary" onClick={() => setCreating(true)}><FilePlus size={16} aria-hidden />Статья</Button>
                 </div>}

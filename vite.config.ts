@@ -36,6 +36,7 @@ export default defineConfig(({ mode }) => {
   const buildTime = new Date().toISOString();
   return {
     base,
+    server: { allowedHosts: ['terminal.local'] }, // exact internal browser QA host; production build is unaffected
     plugins: [
       react(),
       { name: 'bron-release-version', generateBundle() { this.emitFile({ type: 'asset', fileName: 'app-version.json', source: JSON.stringify({ build: buildTime }) }); } },

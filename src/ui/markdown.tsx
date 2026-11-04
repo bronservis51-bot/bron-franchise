@@ -31,12 +31,12 @@ export function videoEmbed(url: string): { src: string; title: string } | null {
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-/** Абзац из одной ссылки на видео → встроенный плеер (iframe строим сами после очистки, адрес — только из videoEmbed). */
+/** Не обращаемся к видеоплощадке, пока читатель сам не запустит урок. */
 export function embedVideos(html: string): string {
   return html.replace(/<p><a href="([^"]+)"[^>]*>[^<]*<\/a><\/p>/g, (all, href: string) => {
     const v = videoEmbed(href.replace(/&amp;/g, '&'));
     if (!v) return all;
-    return `<div class="video"><iframe src="${esc(v.src)}" title="${v.title}" loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+    return `<div class="video"><button type="button" class="video-load" data-video-src="${esc(v.src)}" data-video-title="${v.title}"><span aria-hidden="true">▶</span>Смотреть видео</button></div>`
       + `<p class="video-link"><a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Не открывается? Смотреть на сайте</a></p>`;
   });
 }
@@ -66,5 +66,16 @@ export function Markdown({ source }: { source: string }) {
     const order = ids.filter(Boolean) as string[];
     return rendered.replace(/<h([23])>/g, (_m, lvl) => `<h${lvl} id="${order[i++] ?? ''}" tabindex="-1">`);
   }, [source]);
-  return <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className="prose" dangerouslySetInnerHTML={{ __html: html }} onClick={(e) => {
+    const button = (e.target as Element).closest<HTMLButtonElement>('button.video-load');
+    if (!button || !e.currentTarget.contains(button) || !button.dataset.videoSrc) return;
+    const frame = document.createElement('iframe');
+    frame.src = button.dataset.videoSrc;
+    frame.title = button.dataset.videoTitle ?? 'Видео';
+    frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    frame.allowFullscreen = true;
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    button.replaceWith(frame);
+    frame.focus();
+  }} />;
 }

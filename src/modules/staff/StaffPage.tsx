@@ -142,14 +142,14 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
             <div className="stack">
               {list.map((s) => (
                 <Card key={s.user_id} className={s.active ? '' : 'muted-card'}>
-                  <div className="row between" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+                  <div className="row between staff-summary" style={{ alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="row"><strong>{s.full_name}</strong>
                         {!s.active ? <Badge tone="neutral">удалён</Badge> : s.open_shift ? <Badge tone="success">на смене · {s.open_shift.location_name}</Badge> : null}</div>
                       <div className="faint">{formatPhone(s.phone)} · {s.location_names.join(', ')}</div>
                       <div className="faint">{s.shift_fee_minor ? `${formatMoneyShort(s.shift_fee_minor, currency)} за выход` : ''}{s.shift_fee_minor && s.rate_bp ? ' + ' : ''}{s.rate_bp ? `${pctBp(s.rate_bp)} от выручки` : ''}{!s.shift_fee_minor && !s.rate_bp ? 'оплата не задана' : ''}</div>
                     </div>
-                    <div style={{ textAlign: 'right', flex: 'none' }}>
+                    <div className="staff-totals">
                       <div className="num"><strong>{formatMoneyShort(s.month_earned_minor, currency)}</strong></div>
                       <div className="faint">{s.month_shifts} смен · выручка {formatMoneyShort(s.month_revenue_minor, currency)}</div>
                     </div>

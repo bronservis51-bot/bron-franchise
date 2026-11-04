@@ -153,7 +153,7 @@ export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: 
         {(list) => (
           <>
             {list.map((o) => (
-              <div key={o.id} className="row between access-row" style={{ flexWrap: 'nowrap' }}>
+              <div key={o.id} className="row between access-row">
                 <span style={{ minWidth: 0 }}>
                   <span className="row" style={{ gap: 6 }}><Badge tone={OP_LABEL[o.op][1]} icon={false}>{OP_LABEL[o.op][0]}</Badge>
                     <strong className="num">{o.amount_minor > 0 && o.op === 'correction' ? '+' : ''}{formatMoneyShort(o.amount_minor, o.currency)}</strong>

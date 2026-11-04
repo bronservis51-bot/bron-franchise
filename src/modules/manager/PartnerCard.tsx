@@ -153,7 +153,7 @@ function DocumentsCard({ partnerId, docs }: { partnerId: string; docs: Doc[] }) 
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 20 * 1024 * 1024) { setTooBig(true); return; } setTooBig(false); setFile(f); }} />
       {tooBig && <p className="danger-text">Файл больше 20 МБ — сожмите его или загрузите по частям.</p>}
       {docs.length ? docs.map((d) => (
-        <div key={d.id} className="row between access-row" style={{ flexWrap: 'nowrap' }}>
+        <div key={d.id} className="row between access-row">
           <button type="button" className="doc-link" onClick={() => open.mutate(d)}>
             <FileText size={18} aria-hidden />
             <span><strong>{d.title}</strong>

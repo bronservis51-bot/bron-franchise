@@ -14,9 +14,16 @@ describe('видео в статьях', () => {
   it('встраивает только ссылку отдельным абзацем, остальные ссылки не трогает', () => {
     const html = embedVideos('<p><a href="https://youtu.be/dQw4w9WgXcQ" target="_blank">https://youtu.be/dQw4w9WgXcQ</a></p>'
       + '<p>текст <a href="https://youtu.be/dQw4w9WgXcQ">ссылка</a></p><p><a href="https://evil.example.com/v">x</a></p>');
-    expect((html.match(/<iframe/g) ?? []).length).toBe(1);
-    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
+    expect(html).not.toContain('<iframe');
+    expect((html.match(/class="video-load"/g) ?? []).length).toBe(1);
+    expect(html).toContain('data-video-src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
     expect(html).toContain('href="https://evil.example.com/v"');
     expect(html).not.toContain('evil.example.com/v"></iframe');
+  });
+  it('не создаёт сетевые iframe для нескольких уроков и сохраняет внешние ссылки', () => {
+    const html = embedVideos('<p><a href="https://youtu.be/dQw4w9WgXcQ">Урок</a></p>'.repeat(17));
+    expect(html).not.toContain('<iframe');
+    expect((html.match(/Смотреть видео/g) ?? []).length).toBe(17);
+    expect((html.match(/Не открывается\?/g) ?? []).length).toBe(17);
   });
 });
