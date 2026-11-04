@@ -1,14 +1,17 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
 import { Button, Checkbox, Field, Input } from '../ui';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
+import { onAvailableUpdate } from '../platform/update';
 import { loginEmail } from '../platform/login';
 
 export function LoginPage() {
   const { status, signIn } = useSession();
   const navigate = useNavigate();
+  const [updateApp, setUpdateApp] = useState<(() => Promise<void>) | null>(null);
+  useEffect(() => onAvailableUpdate(fn => setUpdateApp(() => fn)), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -48,6 +51,7 @@ export function LoginPage() {
       </aside>
       <main className="login-panel">
         <div className="inner">
+          {updateApp && <Button size="sm" onClick={() => void updateApp().catch(e => setError({ text: e.message, detail: '' }))}>Обновить приложение</Button>}
           <ServerStatus s={server} onRetry={recheck} />
           <div className="card"><div className="card-body">{form()}</div></div>
           <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>

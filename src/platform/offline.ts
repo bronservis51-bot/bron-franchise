@@ -81,3 +81,9 @@ export async function clearUserData(userId: string) {
     await tx.done;
   }
 }
+
+/** Update guards inspect every user's durable work and fail closed if storage cannot be read. */
+export async function hasPendingLocalWork(): Promise<boolean> {
+  try { const d = await db(); return (await d.count('queue')) > 0 || (await d.count('drafts')) > 0; }
+  catch { return true; }
+}

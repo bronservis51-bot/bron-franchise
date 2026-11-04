@@ -25,8 +25,8 @@ export const COLUMNS: PipelineColumn[] = [...PIPELINE,
   { id: 'won', title: 'Договор', hint: 'Договорённость с партнёром', status: 'won' },
   { id: 'lost', title: 'Отказ', hint: 'Закрытые обращения', status: 'lost' },
 ];
-export function columnFor(lead: Pick<Lead, 'budget' | 'place' | 'timing' | 'status'>): string {
-  if (lead.status === 'new') return readinessKey(readiness(lead));
+export function columnFor(lead: Pick<Lead, 'budget' | 'place' | 'timing' | 'status' | 'pipeline_column'>): string {
+  if (lead.status === 'new') return PIPELINE.some(c => c.id === lead.pipeline_column) ? lead.pipeline_column! : readinessKey(readiness(lead));
   if (lead.status === 'won' || lead.status === 'lost') return lead.status;
   return 'in_work';
 }
@@ -35,7 +35,7 @@ export function groupLeads(leads: Lead[], search: string, onlyNew: boolean) {
   const groups = new Map(COLUMNS.map(c => [c.id, [] as Lead[]]));
   for (const lead of leads) {
     if (onlyNew && lead.status !== 'new') continue;
-    const text = `${lead.name} ${lead.city} ${lead.phone}`.toLocaleLowerCase('ru');
+    const text = `${lead.name} ${lead.instagram ?? ''} ${lead.city} ${lead.phone}`.toLocaleLowerCase('ru');
     const digits = query.replace(/\D/g, '');
     if (query && !text.includes(query) && !(digits.length >= 3 && /^[\d\s+()-]+$/.test(query) && lead.phone.replace(/\D/g, '').includes(digits))) continue;
     groups.get(columnFor(lead))!.push(lead);

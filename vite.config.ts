@@ -33,13 +33,15 @@ function cspPlugin(supabaseUrl: string): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   const base = env.VITE_BASE_PATH || '/';
+  const buildTime = new Date().toISOString();
   return {
     base,
     plugins: [
       react(),
+      { name: 'bron-release-version', generateBundle() { this.emitFile({ type: 'asset', fileName: 'app-version.json', source: JSON.stringify({ build: buildTime }) }); } },
       cspPlugin(env.VITE_SUPABASE_URL ?? ''),
       VitePWA({
-        registerType: 'prompt', // новая версия ставится сама: черновики хранятся в IndexedDB и переживают перезагрузку (PWA-06)
+        registerType: 'prompt', // activation and safe page reload are separate (platform/update.ts)
         injectRegister: false,
         includeAssets: ['icons/*.svg', 'icons/*.png'],
         manifest: {
@@ -61,16 +63,21 @@ export default defineConfig(({ mode }) => {
         workbox: {
           // Кешируется только оболочка приложения; данные API и файлы не кешируются (PWA-05)
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-          navigateFallback: `${base}index.html`,
-          runtimeCaching: [],
+          navigateFallback: null,
+          // Navigation must prefer the network so a phone does not keep an old cached login.
+          runtimeCaching: [{
+            urlPattern: ({ request }) => request.mode === 'navigate', handler: 'NetworkFirst',
+            options: { cacheName: 'bron-navigation-v2', networkTimeoutSeconds: 3, fetchOptions: { cache: 'no-store' },
+              cacheableResponse: { statuses: [200] }, precacheFallback: { fallbackURL: `${base}index.html` } },
+          }],
           cleanupOutdatedCaches: true,
-          skipWaiting: false,
+          skipWaiting: true, // unblocks old workers; page reload still requires the client safety guard
           clientsClaim: false,
         },
       }),
     ],
     // Время сборки — на странице входа, чтобы видеть, открыта ли свежая версия
-    define: { 'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()) },
+    define: { 'import.meta.env.VITE_BUILD_TIME': JSON.stringify(buildTime) },
     build: {
       target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 900,
       // Стабильные библиотеки не скачиваются заново при каждой правке интерфейса.

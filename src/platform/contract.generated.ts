@@ -34,6 +34,8 @@ export const CONTRACT = {
   kb_to_read: { args: [], returns: 'set' },
   lead_inbox: { args: [], returns: 'scalar' },
   lead_list: { args: [], returns: 'scalar' },
+  lead_move: { args: ['id', 'column', 'expected_updated_at'], returns: 'scalar' },
+  lead_save: { args: ['lead', 'expected_updated_at', 'operation'], returns: 'scalar' },
   lead_update: { args: ['id', 'status', 'note'], returns: 'void' },
   location_save: { args: ['id', 'partner', 'name', 'city', 'address', 'status', 'opened_on'], returns: 'scalar' },
   manager_supply_map: { args: ['counterparty', 'partner'], returns: 'void' },

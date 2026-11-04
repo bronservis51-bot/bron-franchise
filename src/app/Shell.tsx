@@ -176,7 +176,7 @@ export function Shell() {
         </header>
         {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
           if (ops.length || commandsInFlight() || document.querySelector('dialog[open], [role="dialog"], [data-unsaved="true"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
-          void updateApp();
+          void updateApp().catch(e => toast(e instanceof Error ? e.message : 'Не удалось обновить приложение'));
         }}>Обновить</Button></div>}
         {!online && (
           <div className="alert tone-warning" role="status" style={{ margin: '12px 24px 0' }}>
