@@ -6,7 +6,7 @@ import { CalendarX, ChevronRight, Plus, Sparkles } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, DataState, EmptyState, PageHeader } from '../../ui';
-import { MonthNav } from '../revenue/FranchiseeHome';
+import { MonthNav } from '../revenue/components';
 import { revenueOverview, type LocationMonth } from '../revenue/api';
 import { PartnerDialog } from './PartnerDialog';
 import { PlanSuggestDialog } from './PlanSuggestDialog';

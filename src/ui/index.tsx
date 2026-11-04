@@ -163,11 +163,11 @@ export function DataState<T>({ query, empty, children, skeleton = 3 }: {
   skeleton?: number;
 }) {
   if (query.isLoading) return <Skeleton lines={skeleton} />;
-  if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.error && (query.data === undefined || ['unauthenticated', 'forbidden'].includes(toAppError(query.error).code))) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (query.data === undefined) return null;
   const e = empty?.(query.data);
   if (e) return <>{e}</>;
-  return <>{children(query.data)}</>;
+  return <>{query.error && <Alert tone="warning" title="Не удалось обновить данные" action={<Button size="sm" onClick={() => void query.refetch()}>Повторить</Button>}>Показаны последние загруженные данные. {errorText(query.error)}</Alert>}{children(query.data)}</>;
 }
 
 export function Field({ label, hint, error, required, children, id }: { label: string; hint?: ReactNode; error?: string | null; required?: boolean; children: (id: string, describedBy?: string) => ReactNode; id?: string }) {
@@ -271,7 +271,7 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel 
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="dialog" onClose={onClose} aria-labelledby="dlg-title">
+    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby="dlg-title">
       <div className="dialog-head"><h2 id="dlg-title">{title}</h2></div>
       <div className="dialog-body">
         {summary && (

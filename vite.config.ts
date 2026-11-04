@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
           scope: base,
           display: 'standalone',
           background_color: '#0f0f11',
-          theme_color: '#0f0f11',
+          theme_color: '#2f5cff',
           icons: [
             { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
             { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -71,6 +71,13 @@ export default defineConfig(({ mode }) => {
     ],
     // Время сборки — на странице входа, чтобы видеть, открыта ли свежая версия
     define: { 'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()) },
-    build: { target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 900 },
+    build: {
+      target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 900,
+      // Стабильные библиотеки не скачиваются заново при каждой правке интерфейса.
+      rolldownOptions: { output: { codeSplitting: { groups: [
+        { name: 'vendor-react', test: /node_modules\/(react|react-dom|scheduler|react-router|@tanstack)\// },
+        { name: 'vendor-backend', test: /node_modules\/@supabase\// },
+      ] } } },
+    },
   };
 });

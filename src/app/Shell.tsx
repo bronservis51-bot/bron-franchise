@@ -138,10 +138,10 @@ export function Shell() {
   const [updateApp,setUpdateApp]=useState<(() => Promise<void>) | null>(null);
   const toast=useToast();
   useEffect(()=>onAvailableUpdate(fn=>setUpdateApp(()=>fn)),[]);
-  const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000,
+  const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = isManager ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
-  const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
+  const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager && loc.pathname !== '/leads', staleTime: 120_000, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
   const leadCount = leads.data ?? 0;
   // Фокус на основное содержимое при смене экрана — для экранных дикторов
   useEffect(() => mainRef.current?.focus({ preventScroll: true }), [loc.pathname]);
@@ -175,7 +175,7 @@ export function Shell() {
           <UserMenu pending={ops.length} />
         </header>
         {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
-          if (ops.length || commandsInFlight() || document.querySelector('[role="dialog"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
+          if (ops.length || commandsInFlight() || document.querySelector('dialog[open], [role="dialog"], [data-unsaved="true"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
           void updateApp();
         }}>Обновить</Button></div>}
         {!online && (

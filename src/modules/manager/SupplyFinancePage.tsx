@@ -6,7 +6,7 @@ import { command } from '../../platform/backend';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, Card, DataState, PageHeader, Select } from '../../ui';
-import { MonthNav } from '../revenue/FranchiseeHome';
+import { MonthNav } from '../revenue/components';
 import { revenueOverview } from '../revenue/api';
 import { royaltySummary } from './api';
 

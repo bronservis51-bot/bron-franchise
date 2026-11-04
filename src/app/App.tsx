@@ -8,7 +8,6 @@ import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
 import { LoginPage, SetupPage } from './LoginPage';
-import { FranchiseeHome } from '../modules/revenue/FranchiseeHome';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,6 +18,7 @@ function page<M extends Record<string, unknown>>(loader: () => Promise<M>, name:
     return <Suspense fallback={<Skeleton lines={5} />}><C {...props} /></Suspense>;
   };
 }
+const FranchiseeHome = page(() => import('../modules/revenue/FranchiseeHome'), 'FranchiseeHome');
 const kb = () => import('../modules/knowledge/KnowledgePages');
 const kbView = () => import('../modules/knowledge/KbBrowse');
 const KbHomePage = page(kbView, 'KbHomePage');
@@ -41,7 +41,8 @@ const LeadsPage = page(() => import('../modules/leads/LeadsPage'), 'LeadsPage');
 const qc = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 20_000,
+      staleTime: 60_000,
+      gcTime: 30 * 60_000,
       retry: (count, e) => count < 2 && !['forbidden', 'not-found', 'unauthenticated', 'validation'].includes(toAppError(e).code),
       refetchOnWindowFocus: true,
     },

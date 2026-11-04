@@ -6,7 +6,7 @@ import { command } from '../../platform/backend';
 import { monthStart } from '../../platform/dates';
 import { Chips, DataState, EmptyState, PageHeader } from '../../ui';
 import { formatMoneyShort } from '../../platform/money';
-import { MonthNav } from '../revenue/FranchiseeHome';
+import { MonthNav } from '../revenue/components';
 
 interface Row { rank: number; partner_id: string; partner_name: string; cities: string | null; is_me: boolean; forecast_pct: number | null;
   pct_to_date: number | null; fill_pct: number | null; growth_pct: number | null; badges: string[];

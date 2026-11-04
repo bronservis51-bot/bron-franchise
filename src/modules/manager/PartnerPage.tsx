@@ -8,7 +8,7 @@ import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui
 import { PartnerCardPanel } from './PartnerCard';
 import { PARTNER_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
-import { DayList, MonthNav, PlanCard } from '../revenue/FranchiseeHome';
+import { DayList, MonthNav, PlanCard } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
 import { revenueMonth, type DayRow } from '../revenue/api';
 import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type Location } from './api';

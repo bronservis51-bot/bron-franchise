@@ -6,7 +6,7 @@ import { command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
-import { MonthNav } from '../revenue/FranchiseeHome';
+import { MonthNav } from '../revenue/components';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceEditor } from './FinanceEditor';
 

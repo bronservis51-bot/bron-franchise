@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 import { monthLabel } from '../../platform/dates';
 import { Card, Chips, DataState } from '../../ui';
-import { DayList } from '../revenue/FranchiseeHome';
+import { DayList } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
 import { revenueMonth, type DayRow } from '../revenue/api';
 import { ExpensesCard, type Expense } from './Expenses';

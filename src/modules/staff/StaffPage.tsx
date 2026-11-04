@@ -8,7 +8,7 @@ import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { MonthNav } from '../revenue/FranchiseeHome';
+import { MonthNav } from '../revenue/components';
 import { formatPhone, pctBp, phoneDigits, randomPassword, staffCreate, staffList, staffSetActive, staffUpdate, userSetPassword, type StaffRow } from './api';
 
 interface Loc { id: string; name: string; currency: string; status: string }
