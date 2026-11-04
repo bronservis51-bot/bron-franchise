@@ -71,7 +71,7 @@ export function RoyaltyPage() {
                       <td className={`r num${r.debt_minor > 0 ? ' danger-text' : ''}`}><Money minor={r.debt_minor} currency={r.currency} short strong /></td>
                       {all && <td className="r num faint" title="Начисляется, в долг войдёт после окончания месяца">{formatMoneyShort(r.current_accrual_minor, r.currency)}</td>}
                       <td className="r">
-                        <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                        <div className="table-actions">
                           <Button size="sm" onClick={() => setPay(r)}><Wallet size={14} aria-hidden />Оплата</Button>
                           <Button size="sm" variant="ghost" title="Исправить начисление месяца" onClick={() => setFix(r)}><PencilLine size={14} aria-hidden />Исправить</Button>
                           <Button size="sm" variant="ghost" title="Добавить прошлый долг" onClick={() => setManual(r)}><Plus size={14} aria-hidden />Долг</Button>

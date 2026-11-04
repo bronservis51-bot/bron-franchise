@@ -16,6 +16,16 @@ const location = { id: 'qa-location', name: 'Торговый центр с оч
 const section = { id: 'qa-section', slug: 'qa-section', title: 'Гарантии и жалобы', description: 'Что делать, если клиент недоволен', icon: 'shield', sort: 10, parent_id: null, count: 3 };
 const articles = ['Гарантия: как принимать обращение', 'Очень длинное название статьи без сокращения текста на маленьком телефоне', 'Что объяснить клиенту после оклейки'].map((title, i) => ({ id: i ? `qa-article-${i}` : 'qa-article', section_id: section.id, title, summary: 'Синтетическое описание для проверки переноса строк и кнопок.', type: i === 2 ? 'checklist' : 'regulation', status: 'published', minutes: 1, views_30: 0, required_ack: false, has_video: false, has_draft: false, read: false }));
 const month = '2026-11-01';
+const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
+  partner_id: i ? `qa-partner-${i}` : partner.id,
+  partner_name: i ? `Вымышленный партнёр ${i} с длинным названием` : partner.name,
+  status: 'active', country: ['TR', 'RU', 'KZ'][i], currency, rate_bp: 700,
+  revenue_minor: 123456789, accrued_minor: 8641975, manual_minor: 125000,
+  paid_minor: 100000, debt_minor: 8666975, is_open: false,
+  current_revenue_minor: 950000, current_accrual_minor: 66500,
+  debt_months: [{ month: '2026-10-01', debt_minor: 8666975 }],
+  last_payment_on: '2026-11-02', fx_rub: 1,
+}));
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'rating.read', 'finance.read'] }] };
@@ -35,7 +45,9 @@ window.fetch = async (input, init) => {
       kb_home: { sections: [section, { ...section, id: 'qa-empty', title: 'Раздел для будущего наполнения', count: 0 }], recent: articles, popular: [], continue: [], drafts: 0, total: articles.length },
       kb_section_page: { section, parent: null, children: [], articles }, kb_article_open: { section, parent: null, related: articles.slice(1), my_rating: null, stats: { views_30: 0, helpful: 0, not_helpful: 0, comments: [] } },
       kb_manage: articles.map(a => ({ ...a, section_title: section.title, parent_title: null, helpful: 0, not_helpful: 0, ack_done: null, ack_total: null })),
-      royalty_summary: { month: null, current_month: month, rows: [], totals: [], debt_rub_minor: 0 }, royalty_ops: [],
+      royalty_summary: { month: null, current_month: month, rows: royaltyRows, totals: royaltyRows.map(r => ({ currency: r.currency, accrued_minor: r.accrued_minor, paid_minor: r.paid_minor, debt_minor: r.debt_minor })), debt_rub_minor: 26000925 }, royalty_ops: [],
+      royalty_partner: { partner_id: partner.id, partner_name: partner.name, currency: 'RUB', rate_bp: 700,
+        months: [{ month: '2026-10-01', revenue_minor: 123456789, rate_bp: 700, accrued_minor: 8641975, manual_minor: 125000, paid_minor: 100000, debt_minor: 8666975, is_open: false }, { month, revenue_minor: 950000, rate_bp: 700, accrued_minor: 66500, manual_minor: 0, paid_minor: 0, debt_minor: 66500, is_open: true }], payments: [], manual: [], rates: [] },
       manager_supply_snapshot: {month, fetched_at:null, period_to:null, currency:'RUB', rows:[{partner_id:partner.id,partner_name:partner.name,mapped_count:0,counterparties:[],sales_minor:0,cost_minor:0,profit_minor:0}], unmapped:[]},
       rating: { rows: [{rank:1,partner_id:partner.id,partner_name:partner.name,cities:location.city,is_me:false,forecast_pct:123.4,pct_to_date:90,fill_pct:100,growth_pct:20,badges:['leader','no_gaps'],points:1,currency:'RUB',fact_minor:1234567890,plan_minor:1500000000,forecast_minor:1900000000,fact_rub_minor:1234567890,forecast_rub_minor:1900000000}], month },
     };

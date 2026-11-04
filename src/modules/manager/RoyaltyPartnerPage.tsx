@@ -78,7 +78,7 @@ export function RoyaltyPartnerPage() {
                           <td className="r num">{m.manual_minor ? formatMoneyShort(m.manual_minor, r.currency) : '—'}</td>
                           <td className="r num">{formatMoneyShort(m.paid_minor, r.currency)}</td>
                           <td className={`r num${m.debt_minor > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={r.currency} short strong />}</td>
-                          <td className="r"><span className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                          <td className="r"><span className="table-actions">
                             {!m.is_open && m.debt_minor > 0 && <Button size="sm" onClick={() => setPay({ month: m.month, amount: m.debt_minor })}>Оплата</Button>}
                             <Button size="sm" variant="ghost" onClick={() => setFix(m.month)}>Исправить</Button></span></td>
                         </tr>
