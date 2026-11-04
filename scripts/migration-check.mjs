@@ -1,28 +1,23 @@
-// Read-only reconciliation before switching the cabinet and the lead receiver.
+// Read-only reconciliation. Full transfer/restore must happen separately.
 import pg from 'pg';
 import { loadEnv, need } from './env.mjs';
+import { snapshotDatabase, compareSnapshots } from './migration-audit.mjs';
 loadEnv();
+const sourceUrl = need('SOURCE_DATABASE_URL'), targetUrl = need('TARGET_DATABASE_URL');
+const endpoint = value => { const u = new URL(value); return `${u.hostname}:${u.port || '5432'}${u.pathname}`; };
 async function state(url) {
-  const db = new pg.Client({ connectionString:url });
-  await db.connect();
-  try {
-    const sql = `select jsonb_build_object(
-      'users',(select md5(coalesce(string_agg(id::text||coalesce(email,'')||coalesce(encrypted_password,''),'|' order by id),'')) from auth.users),
-      'partners',(select count(*) from public.partner),
-      'locations',(select count(*) from public.location),
-      'assignments',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.role_assignment x),
-      'revenue',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.daily_revenue x),
-      'leads',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.franchise_lead x),
-      'royalty_payment',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.royalty_payment x),
-      'royalty_manual',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.royalty_manual x),
-      'supply',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by month),'')) from app_private.supply_snapshot x),
-      'documents',(select md5(coalesce(string_agg(to_jsonb(x)::text,'|' order by id),'')) from public.partner_document x)
-    ) as state`;
-    return (await db.query(sql)).rows[0].state;
-  } finally { await db.end(); }
+  const db = new pg.Client({ connectionString: url });
+  try { await db.connect(); return await snapshotDatabase(db); }
+  finally { await db.end(); }
 }
-const source = await state(need('SOURCE_DATABASE_URL'));
-const target = await state(need('TARGET_DATABASE_URL'));
-const mismatch = Object.keys(source).filter(k => source[k]!==target[k]);
-if (mismatch.length) { console.error('Mismatch:',mismatch.join(', ')); process.exitCode=1; }
-else console.log('Matched: user IDs/password hashes, access, revenue, leads, royalties, supplies, document metadata. Verify storage bytes separately before switching.');
+try {
+  if (endpoint(sourceUrl) === endpoint(targetUrl)) throw new Error('Source and target must be different databases.');
+  const source = await state(sourceUrl), target = await state(targetUrl);
+  const mismatch = compareSnapshots(source, target);
+  if (mismatch.length) { console.error('Mismatch:', mismatch.join(', ')); process.exitCode = 1; }
+  else console.log(`Matched ${Object.keys(source).length} data/schema/sequence checks, including Auth identities, password hashes and all application tables. Verify storage bytes, new login, permissions, revoked sessions, late leads and backups separately. This is not migration completion.`);
+} catch (error) {
+  // Do not log connection objects or dump rows on errors.
+  console.error('Migration comparison failed:', error.code || error.message);
+  process.exitCode = 1;
+}

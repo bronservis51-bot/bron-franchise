@@ -1,0 +1,31 @@
+# Copy this directory to <pinned supabase checkout>/docker/bron.
+# Run from docker/: docker compose -f docker-compose.yml -f bron/compose.override.yml ...
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+  supavisor:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6543:6543"
+  auth:
+    environment:
+      GOTRUE_DISABLE_SIGNUP: "true"
+  web:
+    image: caddy:2.11.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./bron/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./bron/site:/srv:ro
+      - bron-caddy-data:/data
+      - bron-caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  bron-caddy-data:
+  bron-caddy-config:
