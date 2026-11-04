@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
+import { Eye, EyeOff } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
 import { Button, Checkbox, Field, Input } from '../ui';
@@ -14,6 +15,7 @@ export function LoginPage() {
   useEffect(() => onAvailableUpdate(fn => setUpdateApp(() => fn)), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ text: string; detail: string } | null>(null);
@@ -68,7 +70,13 @@ export function LoginPage() {
               {(id) => <Input id={id} type="text" autoCapitalize="none" spellCheck={false} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
             </Field>
             <Field label="Пароль" required>
-              {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
+              {(id) => <div className="password-field">
+                <Input id={id} type={showPassword ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <button type="button" className="icon-btn password-toggle" aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} aria-controls={id} aria-pressed={showPassword}
+                  onPointerDown={(e) => e.preventDefault()} onClick={() => setShowPassword((visible) => !visible)}>
+                  {showPassword ? <EyeOff size={20} aria-hidden /> : <Eye size={20} aria-hidden />}
+                </button>
+              </div>}
             </Field>
             <Checkbox label="Запомнить это устройство" hint="Только на личном устройстве: на общем компьютере сессия закончится при закрытии вкладки."
               checked={remember} onChange={setRemember} />

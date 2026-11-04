@@ -258,6 +258,9 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 .textarea { min-height: 110px; resize: vertical; line-height: 1.5; }
 .input[aria-invalid="true"], .select[aria-invalid="true"], .textarea[aria-invalid="true"] { border-color: var(--danger); }
 .input:focus, .select:focus, .textarea:focus { outline: 3px solid color-mix(in srgb, var(--focus) 40%, transparent); outline-offset: 0; border-color: var(--focus); }
+.password-field { position: relative; }
+.password-field .input { padding-right: calc(var(--touch) + 12px); }
+.password-field .password-toggle { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); }
 .check { display: flex; gap: 10px; align-items: flex-start; min-height: var(--touch); padding-top: 10px; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); }
 .form-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; margin-top: var(--space-4); }
