@@ -29,12 +29,18 @@ commit `5583c2bd6f7e0ba368dcaeb0db20ce190b94317d` от 04.11.2026. Он соде
 PostgreSQL 17 и gateway **Envoy**, сервис `api-gw`. Не применять старые override
 для сервиса `kong`. Не подменять образы на `latest`. Перед фактическим развёртыванием
 проверить advisories, доступность образов и совместимость Auth/Storage с источником.
+Отдельно проверить patch-версию PostgreSQL: исходная база уже на 17.11, а образ
+в зафиксированном upstream может отставать. Такой образ не допущен в production
+без обновления до поддерживаемого исправленного релиза и репетиции восстановления.
 
 1. Получить именно этот commit, скопировать каталог `deploy/timeweb` в `docker/bron`.
 2. По официальной инструкции создать закрытый `docker/.env` с новыми секретами.
    Заполнить все поля upstream; не оставлять примеры паролей. Никаких секретов в git.
-   `SITE_URL=https://bsfranchise.site`, `API_EXTERNAL_URL` и `SUPABASE_PUBLIC_URL` —
-   `https://api.bsfranchise.site`. Регистрация закрыта; доступы создаёт менеджер.
+   `SITE_URL=https://bsfranchise.site`,
+   `SUPABASE_PUBLIC_URL=https://api.bsfranchise.site`,
+   `API_EXTERNAL_URL=https://api.bsfranchise.site/auth/v1`. В текущем upstream
+   Auth URL включает `/auth/v1`; URL клиентского SDK остаётся без этого суффикса.
+   Регистрация закрыта; доступы создаёт менеджер.
    Публичный клиентский ключ и JWT должны соответствовать новой установке.
 3. Проверить объединённый `docker compose ... config`, образы через `pull`,
    затем поднять изолированную цель. Не применять seed и `reset.sh`.
@@ -88,9 +94,12 @@ REST и Storage. Содержимое Studio извне недоступно.
 - Не ставить безусловный redirect перед обработкой очереди. Новая установка PWA
   создаётся с нового адреса; прежняя иконка не меняет origin автоматически.
 - Открытые старые анкеты продолжают обращаться к прежнему API. До переключения
-  должен быть отдельно реализован и проверен приём/пересылка или ограниченный
-  перенос поздних лидов по исходным UUID без перезаписи работы менеджера.
-  **Этот мост ещё не развёрнут; без него финальное переключение запрещено.**
+  должен работать проверенный перенос поздних лидов по исходным UUID без
+  перезаписи работы менеджера. Подготовлен `npm run migration:leads`: сначала
+  проверка без записи, запись только с `-- --apply`.
+  [Порядок и ограничения](../../docs/runbooks/late-leads.md).
+  **Мост проверен локально, но ещё не развёрнут; до его запуска и проверки
+  на новой площадке финальное переключение запрещено.**
 - Проверить оба лендинга, анкету и правильное распределение заявки. В production
   не создавать фиктивные финансовые записи и лиды; запись проверять с SQL-откатом,
   HTTP — отклоняемым без записи payload, поступление реальных лидов — по UUID.
@@ -113,4 +122,5 @@ HTTP/Auth/API, диском, памятью, ошибками копирован
 Источники: [Supabase Docker](https://supabase.com/docs/guides/self-hosting/docker),
 [перенос БД/Auth](https://supabase.com/docs/guides/self-hosting/restore-from-platform),
 [Storage](https://supabase.com/docs/guides/self-hosting/copy-from-platform-s3),
+[изменение Auth URL](https://supabase.com/changelog/47093-self-hosted-supabase-api-external-url-to-include-auth-v1),
 [Timeweb VPS](https://timeweb.cloud/services/vds-vps).
