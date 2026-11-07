@@ -787,9 +787,15 @@ tr.clickable:hover td { background: var(--surface-2); }
 .doc-link:hover strong { text-decoration: underline; }
 .fin-editor .day-list2 { margin-top: 8px; }
 
-/* Заказ материалов (МойСклад) */
+/* Заказ из наличия и предзаказ */
 .order-card { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
-.order-card.disabled { opacity: .7; cursor: default; }
+.order-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.order-option { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; padding: 24px; }
+.order-option h2, .order-option p { margin: 0; }
+.order-option > svg { flex: none; color: var(--text-2); }
+.order-option .btn { max-width: 100%; white-space: normal; text-align: center; }
+.order-option .btn > svg, .order-private > svg { flex: none; }
+@media (max-width: 767px) { .order-options { grid-template-columns: minmax(0, 1fr); } .order-option { padding: 20px; } }
 .order-top { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
 .order-top-chev { display: none; }
 @media (max-width: 420px) { .order-top-label { display: none; } .order-top { padding: 0 10px; } }

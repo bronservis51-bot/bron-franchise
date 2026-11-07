@@ -7,6 +7,7 @@ import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
+import { OrderPage } from '../modules/orders/OrderLink';
 import { LoginPage, SetupPage } from './LoginPage';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
@@ -66,6 +67,7 @@ const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
+      { path: 'order', element: <ByRole franchisee={<OrderPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },

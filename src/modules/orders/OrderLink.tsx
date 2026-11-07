@@ -1,15 +1,16 @@
-// Заказ материалов у франчайзи: плёнки и расходники заказываются в МойСклад по ссылке, которую задаёт менеджер по франшизе.
+// Два канала закупки: персональный МойСклад и заявки на предзаказ в bronserviceshop.
 // Ссылка персональная (ссылка контрагента): при первом переходе франчайзи подтверждает, что не будет ею делиться.
 import { useState, type MouseEvent } from 'react';
+import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, ExternalLink, Lock, ShoppingCart } from 'lucide-react';
+import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { useSession } from '../../platform/session';
-import { ConfirmDialog } from '../../ui';
+import { ConfirmDialog, ErrorState } from '../../ui';
 
 export function useOrderLink(enabled = true) {
   const q = useQuery({ queryKey: ['order-link'], enabled, staleTime: 5 * 60_000, queryFn: () => command<{ url: string | null }>('order_link') });
-  return { url: q.data?.url ?? null, loaded: q.isSuccess };
+  return { url: q.isError ? null : q.data?.url ?? null, loaded: q.isSuccess, pending: q.isPending, error: q.error, retry: () => { void q.refetch(); } };
 }
 
 const ackKey = (userId: string | undefined, url: string) => `bron.order-ack:${userId ?? ''}:${url}`;
@@ -46,50 +47,61 @@ function useOrderOpen(url: string | null) {
   return { onClick, dialog };
 }
 
-/** Крупная карточка на главной франчайзи. Без ссылки — подсказка, что её добавит менеджер. */
+/** Выбор закупки доступен и до назначения персональной ссылки. */
 export function OrderCard() {
-  const { url, loaded } = useOrderLink();
-  const open = useOrderOpen(url);
-  if (!loaded) return null;
-  if (!url) {
-    return (
-      <div className="read-card order-card disabled" aria-disabled="true">
-        <span className="todo-icon"><ShoppingCart size={18} aria-hidden /></span>
-        <span className="todo-main">
-          <span className="todo-title">Заказать материалы</span>
-          <span className="todo-meta">Скоро здесь можно будет заказать плёнки и расходники — менеджер по франшизе добавит ссылку на МойСклад.</span>
-        </span>
-      </div>
-    );
-  }
   return (
-    <>
-      <a className="read-card order-card" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}>
+      <Link className="read-card order-card" to="/order">
         <span className="todo-icon"><ShoppingCart size={18} aria-hidden /></span>
         <span className="todo-main">
           <span className="todo-title">Заказать материалы</span>
-          <span className="todo-meta">Плёнки, расходники и всё для продажи — откроется МойСклад</span>
-          <span className="order-private"><Lock size={12} aria-hidden />Ссылка персональная — не пересылайте её никому</span>
+          <span className="todo-meta">Заказ из наличия или предзаказ плёнок</span>
         </span>
-        <ExternalLink size={16} className="todo-chevron" aria-hidden />
-      </a>
-      {open.dialog}
-    </>
+        <ChevronRight size={16} className="todo-chevron" aria-hidden />
+      </Link>
   );
 }
 
-/** Кнопка в шапке — заказ с любого экрана. Появляется, когда менеджер добавил ссылку. */
+/** Кнопка в шапке — оба способа закупки с любого экрана франчайзи. */
 export function OrderTopButton() {
-  const { url } = useOrderLink();
-  const open = useOrderOpen(url);
-  if (!url) return null;
   return (
-    <>
-      <a className="btn btn-secondary btn-sm order-top" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}
-        title="Заказать плёнки и расходники в МойСклад. Ссылка персональная — не пересылайте её">
+      <Link className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов">
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
-      </a>
+      </Link>
+  );
+}
+
+export function OrderPage() {
+  const { url, pending, error, retry } = useOrderLink();
+  const open = useOrderOpen(url);
+  return (
+    <div>
+      <div className="page-head"><h1>Заказать</h1></div>
+      <div className="order-options">
+        <section className="card order-option" aria-labelledby="order-stock-title">
+          <ShoppingCart size={24} aria-hidden />
+          <h2 id="order-stock-title">Заказ</h2>
+          <p>Покупка из наличия на складе — через ваш персональный магазин МойСклад.</p>
+          <p className="faint">Выберите доступные товары и количество. Заказ оформится на вашу компанию.</p>
+          {error ? <ErrorState error={error} onRetry={retry} compact /> : pending ? <p role="status">Загружаем вашу ссылку…</p> : url ? (
+            <>
+              <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}>
+                Открыть заказ<ExternalLink size={16} aria-hidden />
+              </a>
+              <span className="order-private"><Lock size={12} aria-hidden />Персональная ссылка — не пересылайте её</span>
+            </>
+          ) : <p className="faint">Персональная ссылка ещё не добавлена. Обратитесь к менеджеру по франшизе.</p>}
+        </section>
+        <section className="card order-option" aria-labelledby="order-preorder-title">
+          <Package size={24} aria-hidden />
+          <h2 id="order-preorder-title">Предзаказ</h2>
+          <p>Заявка на плёнки, которых нет в наличии, — через bronserviceshop.</p>
+          <p className="faint">Каталог сайта не синхронизирован со складом. Возможность поставки, срок и итоговую стоимость нужно подтвердить у менеджера.</p>
+          <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
+            Открыть предзаказ<ExternalLink size={16} aria-hidden />
+          </a>
+        </section>
+      </div>
       {open.dialog}
-    </>
+    </div>
   );
 }

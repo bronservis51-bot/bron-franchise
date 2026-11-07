@@ -28,7 +28,11 @@ const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
 }));
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
-const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'rating.read', 'finance.read'] }] };
+const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'rating.read', 'finance.read'] }] };
+const qaParams = new URLSearchParams(window.location.search);
+if (qaParams.get('role') === 'franchisee') {
+  me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'rating.read', 'finance.read'] }];
+}
 const originalFetch = window.fetch;
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, locationOrigin());
@@ -37,6 +41,7 @@ window.fetch = async (input, init) => {
   const name = url.pathname.split('/').pop();
   if (url.pathname.includes('/rpc/')) {
     const answers: Record<string, unknown> = {
+      order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
       partner_access: { users: [{ assignment_id: 'qa-access', user_id: uid, full_name: 'Вымышленный пользователь с длинным именем', email: 'very-long-synthetic-login@example.invalid' }], invites: [] },
@@ -51,6 +56,7 @@ window.fetch = async (input, init) => {
       manager_supply_snapshot: {month, fetched_at:null, period_to:null, currency:'RUB', rows:[{partner_id:partner.id,partner_name:partner.name,mapped_count:0,counterparties:[],sales_minor:0,cost_minor:0,profit_minor:0}], unmapped:[]},
       rating: { rows: [{rank:1,partner_id:partner.id,partner_name:partner.name,cities:location.city,is_me:false,forecast_pct:123.4,pct_to_date:90,fill_pct:100,growth_pct:20,badges:['leader','no_gaps'],points:1,currency:'RUB',fact_minor:1234567890,plan_minor:1500000000,forecast_minor:1900000000,fact_rub_minor:1234567890,forecast_rub_minor:1900000000}], month },
     };
+    if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
     if (name && name in answers) return Response.json(answers[name]);
     console.warn('Missing QA response', name);
     return Response.json({ message: 'not-found', details: `Нет тестовых данных для ${name}` }, { status: 400 });
