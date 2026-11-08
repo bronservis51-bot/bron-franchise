@@ -5,11 +5,12 @@ const at = new Date().toISOString();
 const next = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 const catalog: ProcurementCatalog = {
   fetched_at: at, store_id: id(9), stale: false, incoming: [],
+  shop: {enabled:true,reason:null,price_version:id(60),price_fetched_at:at,currency:'RUB',currency_minor_unit:2,worker_status:'ok',last_heartbeat_at:at,last_success_at:at,error_code:null},
   items: [
-    { product_id: id(1), name: 'Принтовая плёнка с очень длинным названием коллекции и текстуры', code: 'QA-001', uom: 'Лист', category: 'Принты', image_url: null, stock: 11, reserve: 3, in_transit: 12, free_now: 8, confirmed_incoming_qty: 12, confirmed_eta: next, purchase_order_id: id(20) },
-    { product_id: id(2), name: 'Матовая полиуретановая плёнка', code: 'QA-002', uom: 'Лист', category: 'Плёнки', image_url: null, stock: 0, reserve: 0, in_transit: 0, free_now: 0, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
-    { product_id: id(3), name: 'Текстура для корпуса', code: 'QA-003', uom: 'Лист', category: 'Текстуры', image_url: null, stock: null, reserve: null, in_transit: null, free_now: null, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
-    { product_id: id(4), name: 'Защитное стекло', code: 'QA-004', uom: 'шт', category: 'Стёкла', image_url: null, stock: 10, reserve: 0, in_transit: 0, free_now: 10, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
+    { product_id: id(1), name: 'Принтовая плёнка с очень длинным названием коллекции и текстуры', code: 'QA-001', price_minor: 25000, uom: 'Лист', category: 'Принты', image_url: null, stock: 11, reserve: 3, in_transit: 12, free_now: 8, confirmed_incoming_qty: 12, confirmed_eta: next, purchase_order_id: id(20) },
+    { product_id: id(2), name: 'Матовая полиуретановая плёнка', code: 'QA-002', price_minor: 23000, uom: 'Лист', category: 'Плёнки', image_url: null, stock: 0, reserve: 0, in_transit: 0, free_now: 0, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
+    { product_id: id(3), name: 'Текстура для корпуса', code: 'QA-003', price_minor: null, uom: 'Лист', category: 'Текстуры', image_url: null, stock: null, reserve: null, in_transit: null, free_now: null, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
+    { product_id: id(4), name: 'Защитное стекло', code: 'QA-004', price_minor: 10000, uom: 'шт', category: 'Стёкла', image_url: null, stock: 10, reserve: 0, in_transit: 0, free_now: 10, confirmed_incoming_qty: 0, confirmed_eta: null, purchase_order_id: null },
   ],
 };
 const line: ProcurementLine = { ...catalog.items[0], quantity: 20, requested_now: 8, requested_later: 12, now_qty: 8, later_qty: 12, refused_qty: 0, now_price_minor: 25000, later_price_minor: 27000, eta: next, refusal_reason: '', purchased_qty: 0, reserved_qty: 0, shipped_qty: 0, received_qty: 0 };
@@ -18,13 +19,31 @@ const operations = new Map<string, ProcurementRequest>();
 export function procurementFixture(name: string | undefined, body: Record<string, unknown>, params: URLSearchParams): Response | null {
   if (!name?.startsWith('procurement_')) return null;
   if (params.get('procurement') === 'error') return Response.json({ message: 'external-unavailable', details: 'Тестовый сбой соединения' }, { status: 503 });
-  if (name === 'procurement_catalog') return Response.json(params.get('procurement') === 'empty' ? { ...catalog, items: [], fetched_at: null } : { ...catalog, stale: params.get('procurement') === 'stale', incoming: [] });
-  if (name === 'procurement_list') return Response.json({ is_manager: params.get('role') !== 'franchisee', partner_id: 'qa-partner', requests: params.get('procurement') === 'empty' ? [] : requests, total: requests.length, demand: requests.some(r => r.status === 'accepted') ? [{ product_id: id(1), name: line.name, uom: 'Лист', quantity: 12, request_count: 1 }] : [] });
+  if (name === 'procurement_catalog') {
+    const state = params.get('procurement');
+    const manager = params.get('role') !== 'franchisee';
+    const shop = { ...catalog.shop!, enabled: !manager && !['workererror','disabled','stale','pricestale'].includes(state ?? ''), reason: manager ? 'manager' : state === 'workererror' ? 'worker-unavailable' : state === 'disabled' ? 'disabled' : null, worker_status: state === 'workererror' ? 'error' : 'ok', price_fetched_at: state === 'pricestale' ? new Date(Date.now() - 3600000).toISOString() : at };
+    return Response.json({ ...catalog, items: state === 'empty' ? [] : catalog.items.map(p => ({ ...p, price_minor: manager || state === 'disabled' ? null : p.price_minor })), fetched_at: state === 'empty' ? null : at, stale: state === 'stale', incoming: [], shop });
+  }
+  if (name === 'procurement_list') {
+    const state = params.get('procurement');
+    if (['queued','processing','retry','reconciling','created','blocked'].includes(state ?? '')) {
+      const r = requests[0]; r.status = 'accepted'; r.source = 'checkout';
+      r.integration = { status: state as NonNullable<ProcurementRequest['integration']>['status'], order_id: state === 'created' ? id(70) : null, updated_at: at, error_code: state === 'blocked' ? 'price-changed' : null };
+    }
+    return Response.json({ is_manager: params.get('role') !== 'franchisee', partner_id: 'qa-partner', requests: params.get('procurement') === 'empty' ? [] : requests, total: requests.length, demand: requests.some(r => r.status === 'accepted') ? [{ product_id: id(1), name: line.name, uom: 'Лист', quantity: 12, request_count: 1 }] : [] });
+  }
   const operation = String(body.p_operation ?? '');
   if (operations.has(operation)) return Response.json(operations.get(operation));
-  if (name === 'procurement_submit') {
+  if (name === 'procurement_submit' || name === 'procurement_checkout') {
     const items = (body.p_items as { product_id: string; quantity: number }[]).map(i => { const p = catalog.items.find(p => p.product_id === i.product_id)!; return { ...p, quantity: i.quantity, requested_now: Math.min(i.quantity, p.free_now ?? 0), requested_later: Math.max(0, i.quantity - (p.free_now ?? 0)), now_qty: 0, later_qty: 0, refused_qty: 0, now_price_minor: null, later_price_minor: null, eta: null, refusal_reason: '', purchased_qty: 0, reserved_qty: 0, shipped_qty: 0, received_qty: 0 }; });
     const r: ProcurementRequest = { ...requests[0], id: id(100 + requests.length), number: 43 + requests.length, version: 1, items, status: 'submitted', currency: null, offered_at: null, accepted_at: null, valid_until: null, note: String(body.p_note), offer_note: '', shipment_mode: body.p_shipment_mode === 'together' ? 'together' : 'partial', history: [] };
+    if (name === 'procurement_checkout') {
+      r.source = 'checkout'; r.status = 'accepted'; r.currency = 'RUB'; r.accepted_at = at;
+      r.integration = { status: 'queued', order_id: null, updated_at: at, error_code: null };
+      r.items = r.items.map(i => ({...i, now_qty: i.quantity, now_price_minor: (body.p_items as { product_id: string; price_minor: number }[]).find(x => x.product_id === i.product_id)!.price_minor}));
+      r.history = [{ at, actor_name: 'Вымышленный партнёр', action: 'checkout', note: 'Состав и цена подтверждены; резерв ожидает проверки', data: {}, version: 1 }];
+    }
     requests.unshift(r); operations.set(operation, r); return Response.json(r);
   }
   if (name === 'procurement_action') {

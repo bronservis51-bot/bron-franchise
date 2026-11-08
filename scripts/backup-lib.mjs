@@ -29,7 +29,10 @@ async function tablesInOrder(db) {
   return order;
 }
 
-/** Private business tables only; command/permission registries are rebuilt by migrations. */
+/** Private business tables only; command/permission registries are rebuilt by migrations.
+ * procurement_* includes shop settings, verified partner configuration, personal price
+ * snapshots, immutable order outbox and worker key HASH (never the plaintext key).
+ */
 async function privateTablesInOrder(db) {
   const tables = (await db.query(`select c.relname as name from pg_class c
     join pg_namespace n on n.oid=c.relnamespace
@@ -126,6 +129,7 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
           deferred.push({ t, keys, row, col: c.name, value: v });
           return null;
         }
+        if (c.type === 'bytea' && typeof v === 'string' && /^\\x[0-9a-f]*$/i.test(v)) return Buffer.from(v.slice(2), 'hex');
         if (Array.isArray(v) && c.type.endsWith('[]')) return `{${v.map((x) => (x === null ? 'NULL' : `"${String(x).replace(/["\\]/g, '\\$&')}"`)).join(',')}}`;
         if (v !== null && typeof v === 'object') return JSON.stringify(v);
         return v ?? null;
@@ -159,6 +163,8 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
       const values = cols.map(c => {
         let v = row[c.name] ?? null;
         if (v !== null && isUserCol(`app_private.${name}`, c.name)) v = userMap.get(v) ?? v;
+        if (c.type === 'bytea' && typeof v === 'string' && /^\\x[0-9a-f]*$/i.test(v)) return Buffer.from(v.slice(2), 'hex');
+        if (Array.isArray(v) && c.type.endsWith('[]')) return `{${v.map((x) => (x === null ? 'NULL' : `"${String(x).replace(/["\\]/g, '\\$&')}"`)).join(',')}}`;
         return v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
       });
       await db.query(`insert into app_private.${name} (${cols.map(c => JSON.stringify(c.name)).join(',')}) ${cols.some(c => c.identity) ? 'overriding system value' : ''} values (${cols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);

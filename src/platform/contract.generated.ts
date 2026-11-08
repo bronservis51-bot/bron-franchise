@@ -52,6 +52,7 @@ export const CONTRACT = {
   plan_suggest: { args: ['month', 'stretch_bp'], returns: 'scalar' },
   procurement_action: { args: ['id', 'expected_version', 'action', 'data', 'operation'], returns: 'scalar' },
   procurement_catalog: { args: [], returns: 'scalar' },
+  procurement_checkout: { args: ['operation', 'items', 'price_version', 'shipment_mode', 'note'], returns: 'scalar' },
   procurement_incoming_set: { args: ['data', 'operation'], returns: 'scalar' },
   procurement_list: { args: [], returns: 'scalar' },
   procurement_submit: { args: ['operation', 'items', 'shipment_mode', 'note'], returns: 'scalar' },

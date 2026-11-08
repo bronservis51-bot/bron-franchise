@@ -4,13 +4,14 @@ import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
-import { command } from '../../platform/backend';
+import { command, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { ConfirmDialog, ErrorState } from '../../ui';
 
 export function useOrderLink(enabled = true) {
   const q = useQuery({ queryKey: ['order-link'], enabled, staleTime: 5 * 60_000, queryFn: () => command<{ url: string | null }>('order_link') });
-  return { url: q.isError ? null : q.data?.url ?? null, loaded: q.isSuccess, pending: q.isPending, error: q.error, retry: () => { void q.refetch(); } };
+  const denied = q.error && ['forbidden', 'unauthenticated'].includes(toAppError(q.error).code);
+  return { url: denied ? null : q.data?.url ?? null, loaded: q.isSuccess, pending: q.isPending, error: q.error, retry: () => { void q.refetch(); } };
 }
 
 const ackKey = (userId: string | undefined, url: string) => `bron.order-ack:${userId ?? ''}:${url}`;
@@ -68,6 +69,16 @@ export function OrderTopButton() {
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
       </Link>
   );
+}
+
+/** Existing personal links remain visible and usable throughout the in-app store rollout. */
+export function PersonalStoreLink() {
+  const { url, pending, error, retry } = useOrderLink();
+  const open = useOrderOpen(url);
+  return <div className="procurement-native-store">
+    {url ? <a className="procurement-native-link" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}><ShoppingCart size={17} aria-hidden />Ваш магазин МойСклад<ExternalLink size={15} aria-hidden /></a> : pending ? <span role="status">Загружаем ваш магазин…</span> : error ? <ErrorState error={error} onRetry={retry} compact /> : <span className="procurement-muted">Персональная ссылка ещё не добавлена менеджером.</span>}
+    {open.dialog}
+  </div>;
 }
 
 export function OrderFallback() {

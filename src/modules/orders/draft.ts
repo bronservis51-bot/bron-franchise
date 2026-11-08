@@ -1,11 +1,22 @@
 import type { ShipmentMode } from './types';
 
+export interface CartSubmission {
+  mode: 'request' | 'checkout';
+  items: { product_id: string; quantity: number; price_minor?: number }[];
+  price_version?: string;
+  currency?: string;
+  currency_minor_unit?: number;
+  shipment_mode: ShipmentMode;
+  note: string;
+}
 export interface CartDraft {
   operation: string;
   items: { product_id: string; quantity: string; name: string; uom: string }[];
   shipment_mode: ShipmentMode;
   note: string;
   attempted: boolean;
+  /** Immutable outgoing payload retained until the server outcome is known. */
+  submission?: CartSubmission;
 }
 export const emptyCart = (): CartDraft => ({ operation: crypto.randomUUID(), items: [], shipment_mode: 'partial', note: '', attempted: false });
 const key = (user: string) => `bron.procurement-draft:${user}`;
