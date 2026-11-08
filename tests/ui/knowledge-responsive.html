@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>Проверка базы знаний</title>
+<style>body{margin:12px;font:14px system-ui;background:#ddd;color:#111}header{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}iframe{border:1px solid #888;height:950px;display:block;background:#fff}select{padding:8px}label{display:grid;gap:4px}</style>
+<header>
+<label>Ширина <select id="width"><option>320</option><option>360</option><option selected>390</option><option>430</option><option>768</option><option>1280</option><option>1366</option><option>1440</option><option>1920</option></select></label>
+<label>Текст <select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
+<label>Роль <select id="role"><option value="franchisee">Франчайзи</option><option value="manager">Менеджер</option></select></label>
+<label>Тема <select id="theme"><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+<label>Экран <select id="route"><option value="/kb">Главная</option><option value="/kb?q=найм">Поиск</option><option value="/kb?q=нет">Нет результатов</option><option value="/kb?q=error">Ошибка поиска</option><option value="/kb/articles/qa-form">Статья с оглавлением</option><option value="/kb/s/qa-naym">Найм</option><option value="/kb/s/qa-dogovor-territoriya">Пустой раздел</option><option value="/kb/manage">Управление</option></select></label>
+</header>
+<iframe title="База знаний с вымышленными данными" id="preview"></iframe>
+<script>
+const frame=document.getElementById('preview');
+function show(){frame.style.width=document.getElementById('width').value+'px';frame.src='/tests/ui/responsive-app.html?knowledge=1&role='+document.getElementById('role').value+'&theme='+document.getElementById('theme').value+'&text='+document.getElementById('text').value+'#'+document.getElementById('route').value;}
+document.querySelectorAll('select').forEach(el=>el.addEventListener('change',show));show();
+</script>
+</html>

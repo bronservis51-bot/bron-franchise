@@ -19,3 +19,12 @@ it('экранирует литерал и отделяет тело SQL от т
   expect(sql).toContain("''цитата''");
   expect(sql).toContain('do $knowledge_curation_$');
 });
+it('разрешает замену пустой заготовки только с точной версией статьи и черновика', () => {
+  const checked = { ...article, expected_revision: 2, expected_draft: { id: article.id, revision: 1 } };
+  expect(knowledgeCurationSql({ ...plan, articles: [checked] })).toContain("x ? 'expected_draft'");
+  for (const change of [
+    { expected_revision: null }, { expected_revision: 0 }, { expected_draft: null },
+    { expected_draft: { id: 'anything', revision: 1 } }, { expected_draft: { id: article.id } },
+    { expected_draft: { id: article.id, revision: 0 } }, { status: 'archived' },
+  ]) expect(() => knowledgeCurationSql({ ...plan, articles: [{ ...checked, ...change }] })).toThrow('точная версия');
+});

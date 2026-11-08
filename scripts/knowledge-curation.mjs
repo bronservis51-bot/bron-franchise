@@ -10,6 +10,12 @@ export function knowledgeCurationSql(plan) {
     if (a.status === 'published' && (!(a.sources?.length) || !a.body?.trim() || !a.reason)) throw new Error(`Нет подтверждённого источника: ${a.slug}`);
     if (a.status === 'draft' && a.body?.trim()) throw new Error('Пустой блок не должен содержать выдуманный текст');
     if (!a.title?.trim() || !a.reason) throw new Error('Нужны заголовок и причина изменения');
+    if (a.expected_draft !== undefined) {
+      const d = a.expected_draft;
+      if (a.status !== 'published' || !Number.isInteger(a.expected_revision) || a.expected_revision < 1
+        || !d || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.id ?? '')
+        || !Number.isInteger(d.revision) || d.revision < 1) throw new Error('Нужна точная версия проверенного пустого черновика');
+    }
   }
   const payload = JSON.stringify(plan);
   let tag = '$knowledge_curation$';
@@ -48,7 +54,17 @@ begin
     if x->>'status'='archived' then
       update public.article set status='archived', updated_at=now(),revision=revision+1 where id=a.id;
     else
-      if exists(select 1 from public.article_revision where article_id=a.id and status='draft') and x->>'expected_revision' is not null then
+      if x ? 'expected_draft' then
+        if (select count(*) from public.article_revision where article_id=a.id and status='draft') <> 1 then
+          raise exception 'Пустой черновик исчез или найдено несколько: %',x->>'slug';
+        end if;
+        select * into strict r from public.article_revision where article_id=a.id and status='draft';
+        if r.id<>(x->'expected_draft'->>'id')::uuid or r.revision<>(x->'expected_draft'->>'revision')::int
+          or r.body !~ '^\\s*$' then
+          raise exception 'Проверенный пустой черновик изменился: %',x->>'slug';
+        end if;
+        update public.article_revision set status='superseded',updated_at=now(),revision=revision+1 where id=r.id;
+      elsif exists(select 1 from public.article_revision where article_id=a.id and status='draft') and x->>'expected_revision' is not null then
         raise exception 'Есть авторский черновик, нужна отдельная проверка: %',x->>'slug';
       end if;
       select coalesce(max(rev_no),0)+1 into v_no from public.article_revision where article_id=a.id;
