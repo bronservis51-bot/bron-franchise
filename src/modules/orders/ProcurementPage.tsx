@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Clock, Package, RefreshCw, Search, ShoppingCart, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Clock, ExternalLink, Package, RefreshCw, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { toAppError } from '../../platform/backend';
 import { formatMoney, minorToDecimal, parseMoney } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, EmptyState, ErrorState, Field, Input, PageHeader, Select, Skeleton, Tabs, Textarea, type Tone } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { OrderFallback } from './OrderLink';
-import { procurementAction, procurementCatalog, procurementIncomingSet, procurementList, procurementSubmit } from './api';
+import { PersonalStoreLink } from './OrderLink';
+import { procurementAction, procurementCatalog, procurementCheckout, procurementIncomingSet, procurementList, procurementSubmit } from './api';
 import { emptyCart, quantityNumber, readCart, saveCart, type CartDraft } from './draft';
 import type { ProcurementAction, ProcurementCatalog, ProcurementDemand, ProcurementIncoming, ProcurementLine, ProcurementOffer, ProcurementProduct, ProcurementRequest, ProcurementStatus, ShipmentMode } from './types';
+import { cartPricing, lineTotal, moyskladOrderUrl, submissionFor, verifiedPrice } from './storefront';
 import './orders.css';
 
 const STATUS: Record<ProcurementStatus, [string, Tone]> = {
   submitted: ['На проверке', 'neutral'], offered: ['Нужно согласовать', 'warning'], accepted: ['Согласовано', 'info'],
   declined: ['Отказ', 'neutral'], cancelled: ['Отменена', 'neutral'], completed: ['Получено', 'success'],
 };
-const ACTION: Record<string, string> = { submit: 'Запрос отправлен', submitted: 'Запрос отправлен', offer: 'Предложены условия', accept: 'Условия приняты', decline: 'Условия отклонены', cancel: 'Запрос отменён', purchase: 'Закупка подтверждена', reserve: 'Резерв подтверждён', ship: 'Передано в доставку', receive: 'Получение подтверждено' };
+const ACTION: Record<string, string> = { checkout: 'Заказ оформлен', submit: 'Запрос отправлен', submitted: 'Запрос отправлен', offer: 'Предложены условия', accept: 'Условия приняты', decline: 'Условия отклонены', cancel: 'Запрос отменён', purchase: 'Закупка подтверждена', reserve: 'Резерв подтверждён', ship: 'Передано в доставку', receive: 'Получение подтверждено' };
 const date = (s: string | null, time = false) => s ? new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', ...(time ? { hour: '2-digit', minute: '2-digit' } : {}) }) : 'Не подтверждён';
 const qty = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 const fulfillment = (r: ProcurementRequest) => {
@@ -24,14 +25,14 @@ const fulfillment = (r: ProcurementRequest) => {
   if (r.items.some(i => i.shipped_qty > i.received_qty)) return 'В доставке';
   if (r.items.some(i => i.reserved_qty > i.shipped_qty)) return 'В резерве';
   if (r.items.some(i => i.purchased_qty > 0)) return 'Ожидаем поступление';
+  if (r.integration) return ({ queued: 'В очереди', processing: 'Передаём заказ', retry: 'Повторная отправка', reconciling: 'Проверяем результат', created: 'Заказ создан', blocked: 'Нужна проверка' })[r.integration.status];
   return 'Согласовано';
 };
 
 export function Availability({ product, stale }: { product: ProcurementProduct; stale: boolean }) {
   return <div className="procurement-availability">
-    {!stale && product.free_now !== null ? <span className={product.free_now > 0 ? 'now' : ''}><Package size={15} aria-hidden />Свободно: {qty(product.free_now)} {product.uom}</span> : <span className="unknown"><Clock size={15} aria-hidden />Наличие нужно проверить</span>}
-    {product.confirmed_incoming_qty > 0 && product.confirmed_eta ? <span className="later"><Clock size={15} aria-hidden />Ожидается всего: {qty(product.confirmed_incoming_qty)} {product.uom} к {date(product.confirmed_eta)}</span> : <span><Clock size={15} aria-hidden />Подтверждённого поступления нет</span>}
-    {product.confirmed_updated_at && product.confirmed_incoming_qty > 0 && <span className="procurement-muted">Поставка подтверждена {date(product.confirmed_updated_at, true)}</span>}
+    {!stale && product.free_now !== null ? <span className={product.free_now > 0 ? 'now' : ''}><Package size={15} aria-hidden />{product.free_now > 0 ? `В наличии: ${qty(product.free_now)} ${product.uom}` : 'Под заказ'}</span> : <span className="unknown"><Clock size={15} aria-hidden />Уточним наличие</span>}
+    {product.confirmed_incoming_qty > 0 && product.confirmed_eta && <span className="later"><Clock size={15} aria-hidden />Поставка: {qty(product.confirmed_incoming_qty)} {product.uom} к {date(product.confirmed_eta)}</span>}
   </div>;
 }
 
@@ -43,26 +44,21 @@ export function CatalogView({ catalog, onAdd, cartIds, manager = false, locked =
   const categories = useMemo(() => [...new Set(catalog.items.map(i => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru')), [catalog]);
   const filtered = useMemo(() => catalog.items.filter(p => (!category || p.category === category) && (!search || `${p.name} ${p.code}`.toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru'))) && (availability === 'all' || (availability === 'now' && !catalog.stale && (p.free_now ?? 0) > 0) || (availability === 'incoming' && p.confirmed_incoming_qty > 0 && p.confirmed_eta) || (availability === 'request' && (catalog.stale || !(p.free_now && p.free_now > 0))))), [catalog, category, search, availability]);
   useEffect(() => setLimit(48), [search, category, availability]);
-  if (!catalog.items.length) return <EmptyState title="Каталог ещё не подключён" text="Заказ из наличия доступен по вашей персональной ссылке ниже. После подключения МойСклад здесь появятся товары и время проверки остатков." />;
+  if (!catalog.items.length) return <EmptyState title="Каталог пока недоступен" text="Для заказа откройте ваш магазин МойСклад по кнопке выше." />;
   return <>
-    <div className={`procurement-note${catalog.stale ? ' warning' : ''}`} role="status">
-      {catalog.stale ? 'Остатки устарели. Можно отправить запрос; наличие, цену и срок проверит менеджер.' : 'Свободное количество — по последней проверке склада. Резерв появится после подтверждения в МойСклад.'}
-      <div className="procurement-muted">Проверено: {date(catalog.fetched_at, true)}. Цена — в предложении для вашей компании.</div>
-    </div>
+    <div className="procurement-store-status" role="status"><span className="procurement-muted">Остатки: {date(catalog.fetched_at, true)}</span>{catalog.stale ? <span className="store-warning">Наличие уточняется.</span> : !manager && !catalog.shop?.enabled ? <span>Пока принимаем запросы на заказ.</span> : null}</div>
     <div className="procurement-tools">
-      <Field label="Найти товар">{id => <div className="procurement-search"><Search size={18} aria-hidden /><Input id={id} type="search" value={search} placeholder="Название или код" onChange={e => setSearch(e.target.value)} /></div>}</Field>
-      <Field label="Категория">{id => <Select id={id} value={category} onChange={e => setCategory(e.target.value)}><option value="">Все категории</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+      <div className="procurement-search"><Search size={18} aria-hidden /><Input aria-label="Найти товар" type="search" value={search} placeholder="Название или код" onChange={e => setSearch(e.target.value)} /></div>
+      <Select aria-label="Категория" value={category} onChange={e => setCategory(e.target.value)}><option value="">Все категории</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</Select>
+      <Select aria-label="Наличие" value={availability} onChange={e => setAvailability(e.target.value)}><option value="all">Любое наличие</option><option value="now">Есть на складе</option><option value="incoming">В поставке</option><option value="request">Под заказ</option></Select>
     </div>
-    <div className="chips" role="group" aria-label="Наличие">
-      {[['all', 'Все'], ['now', 'Есть на складе'], ['incoming', 'В поставке'], ['request', 'Под заказ']].map(([id, label]) => <button key={id} type="button" className="chip" aria-pressed={availability === id} onClick={() => setAvailability(id)}>{label}</button>)}
-    </div>
-    <div className="procurement-muted">Найдено товаров: {filtered.length}. «Под заказ» — запрос возможности поставки.</div>
-    {!filtered.length ? <EmptyState title="Товары не найдены" text="Измените поиск или выбранные фильтры." /> : <div className="procurement-grid">
+    <div className="procurement-muted">Товаров: {filtered.length}{availability === 'request' ? ' · Возможность поставки сначала подтвердит менеджер.' : ''}</div>
+    {!filtered.length ? <EmptyState title="Товары не найдены" text="Измените поиск или выбранные фильтры." /> : <div className="procurement-grid" data-testid="procurement-catalog">
       {filtered.slice(0, limit).map(p => <article key={p.product_id} className="card procurement-product">
         {p.image_url && /^https:\/\//.test(p.image_url) ? <img className="product-image" src={p.image_url} loading="lazy" alt="" /> : <div className="product-icon"><Package size={24} aria-hidden /></div>}
         <div><div className="product-meta">{p.category}{p.code ? ` · ${p.code}` : ''}</div><h3>{p.name}</h3></div>
         <Availability product={p} stale={catalog.stale} />
-        <footer><span className="faint">Единица: {p.uom}</span>{!manager && <Button size="sm" variant={cartIds.has(p.product_id) ? 'secondary' : 'primary'} disabled={locked || cartIds.has(p.product_id)} onClick={() => onAdd(p)}>{cartIds.has(p.product_id) ? <><Check size={15} aria-hidden />В корзине</> : 'Добавить'}</Button>}</footer>
+        <footer><span className="procurement-price">{!manager && verifiedPrice(p, catalog) ? <><strong>{formatMoney(p.price_minor!, catalog.shop!.currency!)}</strong><span> / {p.uom}</span></> : <span>{manager ? `Единица: ${p.uom}` : 'Цена по запросу'}</span>}</span>{!manager && <Button size="sm" variant={cartIds.has(p.product_id) ? 'secondary' : 'primary'} disabled={locked || cartIds.has(p.product_id)} onClick={() => onAdd(p)}>{cartIds.has(p.product_id) ? <><Check size={15} aria-hidden />В корзине</> : 'Добавить'}</Button>}</footer>
       </article>)}
     </div>}
     {filtered.length > limit && <Button className="procurement-load-more" onClick={() => setLimit(n => n + 48)}>Показать ещё</Button>}
@@ -78,7 +74,13 @@ function ShipmentChoice({ value, onChange, disabled }: { value: ShipmentMode; on
 
 function CartView({ draft, catalog, partnerName, onChange, onSubmit, busy, error, saved, onNew, onRequests }: { draft: CartDraft; catalog?: ProcurementCatalog; partnerName: string; onChange: (d: CartDraft) => void; onSubmit: () => void; busy: boolean; error: unknown; saved: boolean; onNew: () => void; onRequests: () => void }) {
   const locked = busy || draft.attempted;
-  const valid = draft.items.length > 0 && draft.items.every(i => quantityNumber(i.quantity) !== null);
+  const pricing = cartPricing(draft, catalog);
+  const frozen = draft.attempted ? draft.submission : undefined;
+  const direct = frozen ? frozen.mode === 'checkout' : !draft.attempted && pricing.direct;
+  const currency = frozen?.currency ?? pricing.currency;
+  const frozenTotal = frozen?.mode === 'checkout' && frozen.items.every(i => Number.isSafeInteger(i.price_minor)) ? frozen.items.reduce((sum, i) => sum + lineTotal(i.price_minor!, i.quantity), 0n) : null;
+  const total = frozenTotal ?? pricing.total;
+  const missing = draft.items.some(i => !catalog?.items.some(p => p.product_id === i.product_id));
   if (!draft.items.length) return <EmptyState title="Корзина пуста" text="Добавьте материалы из каталога и укажите нужное количество." />;
   return <div className="procurement-cart" data-unsaved="true">
     <div className="procurement-lines">{draft.items.map(i => {
@@ -86,23 +88,28 @@ function CartView({ draft, catalog, partnerName, onChange, onSubmit, busy, error
       const n = quantityNumber(i.quantity);
       const available = !catalog?.stale && p?.free_now !== null && p?.free_now !== undefined ? p.free_now : null;
       const now = n !== null && available !== null ? Math.min(n, available) : null;
+      const captured = frozen?.items.find(x => x.product_id === i.product_id);
+      const price = captured?.price_minor ?? (p && catalog && verifiedPrice(p, catalog) ? p.price_minor : null);
       return <article key={i.product_id} className="card procurement-line">
         <div className="procurement-line-head"><div><h3>{p?.name ?? i.name}</h3><span className="faint">{p?.code ?? ''} · {i.uom}</span></div><button type="button" className="icon-btn" aria-label={`Удалить ${i.name}`} disabled={locked} onClick={() => onChange({ ...draft, items: draft.items.filter(x => x.product_id !== i.product_id) })}><Trash2 size={18} /></button></div>
-        <label className="procurement-quantity">Нужно <Input aria-label={`Количество: ${i.name}`} inputMode="decimal" value={i.quantity} disabled={locked} onChange={e => onChange({ ...draft, items: draft.items.map(x => x.product_id === i.product_id ? { ...x, quantity: e.target.value } : x) })} aria-invalid={n === null} />{i.uom}</label>
-        {n === null ? <p className="error">Введите количество больше нуля, до трёх знаков после запятой.</p> : now !== null ? <div className="procurement-muted">По снимку: <strong>{qty(now)} из наличия</strong>{n > now && <> + <strong>{qty(n - now)} под заказ</strong></>}. Менеджер подтвердит распределение.</div> : <div className="procurement-muted">Все {qty(n)} {i.uom} — запрос на проверку наличия и поставки.</div>}
-        {!p && <p className="error">Товар не найден в текущем каталоге. Удалите его и выберите актуальную позицию.</p>}
+        <div className="procurement-cart-line-price">{price !== null && price !== undefined && currency ? <><strong>{formatMoney(price, currency)}</strong><span> / {i.uom}</span>{n !== null && <strong className="line-total">{formatMoney(lineTotal(price, n), currency)}</strong>}</> : <span className="procurement-muted">Цену уточнит менеджер</span>}</div>
+        <label className="procurement-quantity">Количество <Input aria-label={`Количество: ${i.name}`} inputMode="decimal" value={i.quantity} disabled={locked} onChange={e => onChange({ ...draft, items: draft.items.map(x => x.product_id === i.product_id ? { ...x, quantity: e.target.value } : x) })} aria-invalid={n === null} />{i.uom}</label>
+        {n === null ? <p className="error">Введите количество больше нуля, до трёх знаков после запятой.</p> : now !== null ? <div className="procurement-muted"><strong>{qty(now)} из наличия</strong>{n > now && <> + <strong>{qty(n - now)} под заказ</strong></>}{n > now ? '. Срок и цену недостающего количества согласуем в заявке.' : ''}</div> : <div className="procurement-muted">Наличие {qty(n)} {i.uom} нужно проверить.</div>}
+        {!p && !draft.attempted && <p className="error">Товар недоступен. Удалите его и выберите актуальную позицию.</p>}
       </article>;
     })}</div>
     <section className="card procurement-summary">
-      <h2>Ваш запрос</h2><div className="procurement-muted">{partnerName}. Контакты будут взяты из профиля.</div>
+      <h2>{direct ? 'Ваш заказ' : 'Ваш запрос'}</h2><div className="procurement-muted">{partnerName}</div>
+      {total !== null && currency ? <div className="procurement-total"><span>{direct ? 'Товары' : 'Предварительно'}</span><strong>{formatMoney(total, currency)}</strong></div> : <div className="procurement-muted">Стоимость подтвердит менеджер.</div>}
+      <div className="procurement-muted">Доставка — отдельно по согласованным условиям.</div>
       <ShipmentChoice value={draft.shipment_mode} disabled={locked} onChange={shipment_mode => onChange({ ...draft, shipment_mode })} />
-      <Field label="Комментарий" hint="Например, нужная дата или адрес доставки. Необязательно.">{id => <Textarea id={id} maxLength={2000} rows={3} value={draft.note} disabled={locked} onChange={e => onChange({ ...draft, note: e.target.value })} />}</Field>
-      <p className="procurement-muted">Отправка запроса ещё не резервирует товар и не подтверждает цену. Условия и стоимость доставки согласуем в этой заявке.</p>
+      <Field label="Комментарий" hint="Адрес, нужная дата или пожелания. Необязательно.">{id => <Textarea id={id} maxLength={2000} rows={2} value={draft.note} disabled={locked} onChange={e => onChange({ ...draft, note: e.target.value })} />}</Field>
+      <p className="procurement-muted">{direct ? 'Создадим заказ в МойСклад. Резерв и отправку подтвердит менеджер.' : 'Менеджер проверит наличие, цену и срок. Вы примете готовые условия в этой заявке.'}</p>
       {!saved && <p className="error">Черновик не удалось сохранить на этом устройстве. Не закрывайте страницу до отправки.</p>}
       <ActionError error={error} />
-      {draft.attempted && !busy && <div className="procurement-note warning">Ответ не подтверждён. Повторная отправка использует тот же номер операции и не создаёт второй запрос. <button type="button" className="link" onClick={onRequests}>Проверить мои заявки</button></div>}
-      <Button variant="primary" loading={busy} disabled={!valid || !navigator.onLine || draft.items.some(i => !catalog?.items.some(p => p.product_id === i.product_id))} onClick={onSubmit}>{draft.attempted ? 'Повторить отправку' : 'Отправить запрос'}</Button>
-      {draft.attempted && !busy && <Button variant="ghost" onClick={onNew}>Заявки проверены — начать заново</Button>}
+      {draft.attempted && !busy && <div className="procurement-note warning">Результат ещё не подтверждён. Повтор использует ту же операцию. <button type="button" className="link" onClick={onRequests}>Проверить мои заказы</button></div>}
+      <Button variant="primary" loading={busy} disabled={(!pricing.valid && !draft.attempted) || !navigator.onLine || (!draft.attempted && missing)} onClick={onSubmit}>{draft.attempted ? 'Проверить и повторить' : direct ? 'Оформить заказ' : 'Запросить условия'}</Button>
+      {draft.attempted && !busy && <Button variant="ghost" onClick={onNew}>Заказы проверены — начать заново</Button>}
     </section>
   </div>;
 }
@@ -123,7 +130,8 @@ function offerTotal(r: ProcurementRequest) {
   return r.items.reduce((sum, i) => sum + (BigInt(i.now_price_minor ?? 0) * BigInt(Math.round(i.now_qty * 1000)) + 500n) / 1000n + (BigInt(i.later_price_minor ?? 0) * BigInt(Math.round(i.later_qty * 1000)) + 500n) / 1000n, 0n);
 }
 
-function LineSummary({ line: i, currency, offered }: { line: ProcurementLine; currency: string | null; offered: boolean }) {
+function LineSummary({ line: i, currency, offered, direct = false }: { line: ProcurementLine; currency: string | null; offered: boolean; direct?: boolean }) {
+  if (direct) return <article className="procurement-line"><h3>{i.name}</h3><div className="procurement-cart-line-price"><span>{qty(i.quantity)} {i.uom}</span>{currency && i.now_price_minor !== null && <><span> × {formatMoney(i.now_price_minor, currency)}</span><strong className="line-total">{formatMoney(lineTotal(i.now_price_minor, i.quantity), currency)}</strong></>}</div>{(i.reserved_qty > 0 || i.shipped_qty > 0 || i.received_qty > 0) && <div className="procurement-muted">В резерве: {qty(i.reserved_qty)} · Отправлено: {qty(i.shipped_qty)} · Получено: {qty(i.received_qty)} {i.uom}</div>}</article>;
   return <article className="procurement-line"><div className="procurement-line-head"><div><h3>{i.name}</h3><div className="procurement-muted">Запрошено: {qty(i.quantity)} {i.uom}{i.code ? ` · ${i.code}` : ''}</div></div></div>
     {offered ? <>
       <div className="procurement-facts">
@@ -134,6 +142,31 @@ function LineSummary({ line: i, currency, offered }: { line: ProcurementLine; cu
       <div className="procurement-muted" style={{ marginTop: 12 }}>Закуплено: {qty(i.purchased_qty)} · Зарезервировано: {qty(i.reserved_qty)} · Отправлено: {qty(i.shipped_qty)} · Получено: {qty(i.received_qty)} {i.uom}</div>
     </> : <div className="procurement-muted">{i.requested_now !== null ? <>При отправке: {qty(i.requested_now)} из наличия + {qty(i.requested_later ?? 0)} под заказ.</> : 'Наличие и срок ещё не проверены.'} Цена ожидает подтверждения.</div>}
   </article>;
+}
+
+function IntegrationStatus({ request, manager }: { request: ProcurementRequest; manager: boolean }) {
+  const integration = request.integration;
+  if (!integration) return null;
+  const states = {
+    queued: ['Заказ в очереди', 'Он появится в МойСклад после отправки. Повторно оформлять его не нужно.'],
+    processing: ['Передаём заказ в МойСклад', 'Ждём подтверждение создания.'],
+    retry: ['Отправку повторим автоматически', 'Временная ошибка связи. Ваша заявка сохранена.'],
+    reconciling: ['Проверяем результат отправки', 'Сначала проверим, был ли заказ создан. Не оформляйте его повторно.'],
+    created: ['Заказ создан в МойСклад', 'Наличие и резерв подтверждаются отдельно.'],
+    blocked: ['Нужна проверка менеджера', manager ? 'Проверьте причину остановки и исходный заказ перед дальнейшими действиями.' : 'Менеджер проверит наличие, цену или условия и свяжется с вами.'],
+  } as const;
+  const text = states[integration.status] ?? states.blocked;
+  const reasons: Record<string, string> = {
+    'missing-token': 'Доступ к МойСклад ещё не подключён.', disabled: 'Автоматическая отправка отключена.', unauthorized: 'МойСклад не подтвердил доступ.',
+    'rate-limit': 'МойСклад временно ограничил частоту запросов.', network: 'Нет связи с МойСклад.', upstream: 'Ошибка ответа МойСклад.',
+    validation: 'Документ требует проверки данных.', 'mapping-mismatch': 'Нужно проверить привязку контрагента.', 'price-policy': 'Нужно проверить индивидуальные цены.',
+    'price-changed': 'Цена изменилась. Нужна повторная проверка условий.', 'stock-stale': 'Нужна новая проверка остатков.',
+    'lease-expired': 'Проверяем результат прерванной отправки.', ambiguous: 'Ответ МойСклад не подтвердил результат.', 'multiple-matches': 'Найдено несколько подходящих документов.',
+    'payload-mismatch': 'Состав документа отличается от согласованного.', 'attempts-exhausted': 'Автоматические повторы завершены; нужна ручная проверка.',
+    'actor-revoked': 'Доступ автора заказа изменён.', unknown: 'Нужно проверить отправку заказа.',
+  };
+  const url = manager ? moyskladOrderUrl(request) : null;
+  return <section className={`procurement-integration${integration.status === 'blocked' ? ' warning' : ''}`} data-testid="procurement-order-status"><strong>{text[0]}</strong><div>{text[1]}</div>{manager && integration.error_code && <div className="procurement-muted">{reasons[integration.error_code] ?? reasons.unknown}</div>}{url && <div><a className="btn btn-secondary btn-sm" href={url} target="_blank" rel="noopener noreferrer">Документ МойСклад<ExternalLink size={14} aria-hidden /></a></div>}<div className="procurement-muted">Обновлено {date(integration.updated_at, true)}</div></section>;
 }
 
 type OfferDraftLine = { product_id: string; now: string; later: string; refused: string; nowPrice: string; laterPrice: string; eta: string; reason: string };
@@ -207,17 +240,18 @@ function ProgressForm({ request, manager, busy, onProgress }: { request: Procure
 export function RequestDetail({ request, manager, counterparties, busy, error, onAction, onBack, onRefresh }: { request: ProcurementRequest; manager: boolean; counterparties: { id: string; name: string }[]; busy: boolean; error: unknown; onAction: (action: ProcurementAction, data: unknown) => Promise<void>; onBack: () => void; onRefresh: () => void }) {
   const [reason, setReason] = useState('');
   const [offerOpen, setOfferOpen] = useState(false);
-  const offered = request.status !== 'submitted' && !!request.offered_at;
+  const offered = request.source === 'checkout' || request.status !== 'submitted' && !!request.offered_at;
   const expired = request.valid_until !== null && new Date(request.valid_until).getTime() <= Date.now();
   return <div className="procurement-detail" data-unsaved={reason ? 'true' : undefined}>
     <div><Button size="sm" variant="ghost" onClick={onBack}><ArrowLeft size={16} aria-hidden />К заявкам</Button></div>
-    <div className="procurement-detail-head"><div><h2>Заявка № {request.number}</h2><div className="procurement-muted">{manager ? request.partner_name + ' · ' : ''}{date(request.created_at, true)} · версия {request.version}</div></div><Badge tone={STATUS[request.status][1]}>{fulfillment(request)}</Badge></div>
+    <div className="procurement-detail-head"><div><h2>{request.source === 'checkout' ? 'Заказ' : 'Заявка'} № {request.number}</h2><div className="procurement-muted">{manager ? request.partner_name + ' · ' : ''}{date(request.created_at, true)} · версия {request.version}</div></div><Badge tone={STATUS[request.status][1]}>{fulfillment(request)}</Badge></div>
+    <IntegrationStatus request={request} manager={manager} />
     <div className="procurement-note"><strong>{request.shipment_mode === 'partial' ? 'Отправка частями' : 'Отправка одной поставкой'}</strong>{request.note && <p>Комментарий партнёра: {request.note}</p>}{request.offer_note && <p>Условия менеджера: {request.offer_note}</p>}</div>
-    <div className="procurement-lines">{request.items.map(i => <LineSummary key={i.product_id} line={i} currency={request.currency} offered={offered} />)}</div>
-    {offered && request.currency && <div className="procurement-note"><strong>Товары: {formatMoney(offerTotal(request), request.currency)}</strong><div>Доставка — по условиям менеджера выше.</div>{request.status === 'offered' && <div>Предложение действует до {date(request.valid_until, true)}{expired ? ' — срок истёк, запросите новые условия' : ''}.</div>}</div>}
+    <div className="procurement-lines">{request.items.map(i => <LineSummary key={i.product_id} line={i} currency={request.currency} offered={offered} direct={request.source === 'checkout'} />)}</div>
+    {offered && request.currency && <div className="procurement-note"><strong>Товары: {formatMoney(offerTotal(request), request.currency)}</strong><div>Доставка — отдельно по согласованным условиям.</div>{request.status === 'offered' && <div>Предложение действует до {date(request.valid_until, true)}{expired ? ' — срок истёк, запросите новые условия' : ''}.</div>}</div>}
     {request.status === 'offered' && !manager && <section className="card procurement-summary" data-unsaved="true"><h3>Согласование</h3><p className="procurement-muted">Проверьте количества, индивидуальные цены, дату и доставку. Принятие фиксирует эту версию условий. Резерв подтверждается отдельным этапом.</p><Field label="Комментарий / причина отказа">{id => <Textarea id={id} value={reason} maxLength={2000} rows={2} disabled={busy} onChange={e => setReason(e.target.value)} />}</Field><div className="procurement-actions"><Button variant="primary" loading={busy} disabled={expired || request.items.every(i => i.now_qty + i.later_qty === 0)} onClick={() => void onAction('accept', { note: reason })}>Принять условия</Button><Button disabled={busy || !reason.trim()} onClick={() => void onAction('decline', { note: reason })}>Отказаться</Button></div></section>}
     {manager && ['submitted', 'offered'].includes(request.status) && <><Button onClick={() => setOfferOpen(v => !v)} disabled={busy}>{offerOpen ? 'Скрыть редактор' : request.status === 'offered' ? 'Изменить предложение' : 'Подготовить предложение'}</Button>{offerOpen && <OfferForm key={request.version} request={request} counterparties={counterparties} busy={busy} onOffer={async o => { await onAction('offer', o); }} />}</>}
-    {request.status === 'accepted' && <ProgressForm key={request.version} request={request} manager={manager} busy={busy} onProgress={onAction} />}
+    {request.status === 'accepted' && (!request.integration || request.integration.status === 'created') && <ProgressForm key={request.version} request={request} manager={manager} busy={busy} onProgress={onAction} />}
     {['submitted', 'offered'].includes(request.status) && <details><summary>Отменить запрос</summary><Field label="Причина отмены">{id => <Input id={id} maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} />}</Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void onAction('cancel', { note: reason })}>Отменить запрос</Button></details>}
     <ActionError error={error} />{!!error && <div><Button onClick={onRefresh}>Обновить состояние заявки</Button></div>}
     <section><h3 style={{ marginBottom: 14 }}>История</h3><ol className="procurement-timeline">{request.history.map((event, i) => <li key={`${event.version}:${i}`}><strong>{ACTION[event.action] ?? event.action}</strong><time>{date(event.at, true)} · {event.actor_name}</time>{event.note && <p>{event.note}</p>}{typeof event.data.document_id === 'string' && <p className="procurement-muted">Документ МойСклад: {event.data.document_id}</p>}</li>)}</ol></section>
@@ -299,18 +333,34 @@ function ProcurementWorkspace() {
   };
   const safeAction = async (a: ProcurementAction, data: unknown) => { try { await action(a, data); } catch { /* Error is rendered and the same receipt is retained. */ } };
   const submit = async () => {
-    setBusy(true); setError(null); const locked = { ...draft, attempted: true }; setDraft(locked); saveCart(user, locked);
+    const submission = submissionFor(draft, currentCatalog);
+    setBusy(true); setError(null);
+    const locked = { ...draft, attempted: true, submission };
+    setDraft(locked); saveCart(user, locked);
     try {
-      const sent = await procurementSubmit(draft.operation, draft.items.map(i => ({ product_id: i.product_id, quantity: quantityNumber(i.quantity)! })), draft.shipment_mode, draft.note);
-      setDraft(emptyCart()); setSelected(sent.id); setTab('requests'); toast(`Запрос № ${sent.number} отправлен менеджеру`); await refresh();
-    } catch (e) { setError(e); if (['validation', 'forbidden', 'unauthenticated', 'not-found'].includes(toAppError(e).code)) setDraft(d => ({ ...d, attempted: false })); }
-    finally { setBusy(false); }
+      const sent = submission.mode === 'checkout'
+        ? await procurementCheckout(draft.operation, submission.items as { product_id: string; quantity: number; price_minor: number }[], submission.price_version!, submission.shipment_mode, submission.note)
+        : await procurementSubmit(draft.operation, submission.items.map(({ product_id, quantity }) => ({ product_id, quantity })), submission.shipment_mode, submission.note);
+      qc.setQueryData(['procurement', 'list'], (old: typeof list.data) => old ? { ...old, requests: [sent, ...old.requests.filter(r => r.id !== sent.id)], total: old.total + (old.requests.some(r => r.id === sent.id) ? 0 : 1) } : old);
+      setDraft(emptyCart()); setSelected(sent.id); setTab('requests');
+      toast(submission.mode === 'checkout' ? `Заказ № ${sent.number} поставлен в очередь` : `Запрос № ${sent.number} отправлен менеджеру`);
+      await refresh();
+    } catch (e) {
+      setError(e);
+      // Access can be revoked after a successful but unacknowledged submission.
+      // An auth error cannot prove that the original operation did not create an order.
+      if (['validation', 'not-found', 'version-conflict', 'integration-pending'].includes(toAppError(e).code)) {
+        setDraft(d => ({ ...d, attempted: false, submission: undefined, operation: crypto.randomUUID() }));
+        void catalog.refetch();
+      }
+    } finally { setBusy(false); }
   };
   const needsAttention = list.data?.requests.filter(r => isManager ? r.status === 'submitted' : r.status === 'offered').length ?? 0;
-  const tabs: { id: 'catalog' | 'cart' | 'requests' | 'demand'; label: string }[] = isManager ? [{ id: 'requests', label: `Заявки${needsAttention ? ` · ${needsAttention}` : ''}` }, { id: 'demand', label: 'К закупке' }, { id: 'catalog', label: 'Каталог' }] : [{ id: 'catalog', label: 'Каталог' }, { id: 'cart', label: `Корзина${draft.items.length ? ` · ${draft.items.length}` : ''}` }, { id: 'requests', label: `Мои заявки${needsAttention ? ` · ${needsAttention}` : ''}` }];
+  const tabs: { id: 'catalog' | 'cart' | 'requests' | 'demand'; label: string }[] = isManager ? [{ id: 'requests', label: `Заявки${needsAttention ? ` · ${needsAttention}` : ''}` }, { id: 'demand', label: 'К закупке' }, { id: 'catalog', label: 'Каталог' }] : [{ id: 'catalog', label: 'Каталог' }, { id: 'cart', label: `Корзина${draft.items.length ? ` · ${draft.items.length}` : ''}` }, { id: 'requests', label: `Мои заказы${needsAttention ? ` · ${needsAttention}` : ''}` }];
   const blocked = list.error && ['forbidden', 'unauthenticated'].includes(toAppError(list.error).code);
-  return <div className="procurement" data-unsaved={draft.items.length ? 'true' : undefined}>
-    <PageHeader title={isManager ? 'Закупки партнёров' : 'Заказать материалы'} actions={<Button size="sm" onClick={() => void refresh()} disabled={busy}><RefreshCw size={15} aria-hidden />Обновить</Button>} />
+  return <div className="procurement" data-testid="procurement-page" data-unsaved={draft.items.length ? 'true' : undefined}>
+    <PageHeader title={isManager ? 'Закупки партнёров' : 'Материалы'} actions={<Button size="sm" aria-label="Обновить каталог и заказы" title="Обновить" onClick={() => void refresh()} disabled={busy}><RefreshCw size={18} aria-hidden /></Button>} />
+    {!isManager && <PersonalStoreLink />}
     <div className="procurement-top"><Tabs tabs={tabs} value={tab} onChange={v => { setTab(v); setSelected(null); setError(null); }} label="Закупки" /></div>
     {!navigator.onLine && <div className="procurement-note warning" role="status">Нет сети. Черновик остаётся на этом устройстве; отправка и подтверждение недоступны.</div>}
     {tab === 'catalog' && (currentCatalog ? <><CatalogView catalog={currentCatalog} cartIds={new Set(draft.items.map(i => i.product_id))} manager={isManager} locked={draft.attempted} onAdd={p => { setDraft(d => ({ ...d, items: [...d.items, { product_id: p.product_id, quantity: '1', name: p.name, uom: p.uom }] })); toast('Товар добавлен в корзину'); }} />{isManager && <IncomingManager catalog={currentCatalog} user={user} onSaved={refresh} />}{!isManager && draft.items.length > 0 && <Button variant="primary" onClick={() => setTab('cart')}><ShoppingCart size={17} aria-hidden />Открыть корзину · {draft.items.length}</Button>}</> : catalog.error ? <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} /> : <Skeleton lines={6} />)}
@@ -319,6 +369,6 @@ function ProcurementWorkspace() {
       {list.error && <div className="procurement-note warning">Не удалось обновить заявки. Показано последнее состояние.</div>}{list.data.total > list.data.requests.length && <div className="procurement-note">Показаны последние {list.data.requests.length} из {list.data.total} заявок. Более ранняя история сохранена; для её просмотра обратитесь к менеджеру.</div>}
       {tab === 'demand' ? <DemandView demand={list.data.demand} /> : request ? <RequestDetail key={request.id} request={request} manager={isManager} counterparties={request.counterparties} busy={busy || !navigator.onLine} error={error} onAction={safeAction} onBack={() => { setSelected(null); setError(null); }} onRefresh={() => void refresh()} /> : <RequestList requests={list.data.requests} manager={isManager} onOpen={id => { setSelected(id); setError(null); }} />}
     </>)}
-    {!isManager && <details className="procurement-fallback"><summary>Персональный магазин и каталог плёнок</summary><p className="procurement-muted" style={{ marginTop: 12 }}>Используйте отдельный магазин для самостоятельного заказа из наличия. Не оформляйте повторно уже отправленную здесь заявку.</p><OrderFallback /></details>}
+    {!isManager && <div className="procurement-catalog-reference"><a href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">Дополнительный каталог плёнок</a><span className="procurement-muted">Наличие и условия для отсутствующих товаров уточняются в заявке.</span></div>}
   </div>;
 }

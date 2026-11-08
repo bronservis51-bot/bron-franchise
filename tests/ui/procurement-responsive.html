@@ -21,31 +21,115 @@
     <label for="text">Размер текста<select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
     <button type="button" id="reload">Загрузить выбранный экран</button>
     <button type="button" id="measure">Проверить ширину страницы</button>
+    <button type="button" id="matrix">Прогнать матрицу экранов</button>
   </header>
   <p>Внутри — настоящие компоненты приложения с вымышленными данными. Прокрутка широкого экрана находится только в контейнере проверки.</p>
   <div class="frame-scroll" aria-label="Контейнер выбранного размера"><iframe id="preview" title="Закупки: приложение с вымышленными данными"></iframe></div>
   <output id="result" aria-live="polite"></output>
+  <output id="matrix-result" aria-live="polite"></output>
+  <details><summary>Измерения всех экранов</summary><pre id="matrix-cases" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
   <script>
     const frame=document.getElementById('preview');
     const byId=id=>document.getElementById(id);
+    let running=false,manualMeasurement=0;
+    function source(test){
+      const params=new URLSearchParams({role:test.role,text:test.text});
+      if(test.state!=='filled')params.set('procurement',test.state);
+      return '/tests/ui/responsive-app.html?'+params+'#/order';
+    }
     function show(){
+      manualMeasurement++;
       frame.style.width=byId('width').value+'px';
-      const params=new URLSearchParams({role:byId('role').value,text:byId('text').value});
-      if(byId('state').value!=='filled')params.set('procurement',byId('state').value);
-      frame.src='/tests/ui/responsive-app.html?'+params+'#/order';
+      frame.src=source({role:byId('role').value,text:byId('text').value,state:byId('state').value});
       byId('result').textContent='Загрузка…';
     }
-    function measure(){
+    function geometry(doc){
+      const root=doc.documentElement,view=doc.defaultView;
+      const controls=[...doc.querySelectorAll('input,select,textarea')].filter(el=>el.getClientRects().length&&view.getComputedStyle(el).visibility!=='hidden'&&!['hidden','checkbox','radio','range','button','submit','reset'].includes(el.type));
+      const fonts=controls.map(el=>({control:el.id||el.getAttribute('aria-label')||el.tagName,font:parseFloat(view.getComputedStyle(el).fontSize)}));
+      const minimum=fonts.length?Math.min(...fonts.map(x=>x.font)):null;
+      const touchLayout=root.clientWidth<=960||view.matchMedia('(pointer:coarse)').matches;
+      const floor=touchLayout?Math.max(16,parseFloat(view.getComputedStyle(root).getPropertyValue('--fs'))||16):null;
+      const overflowingElements=[...doc.body.querySelectorAll('*')].filter(el=>el.getClientRects().length).map(el=>{
+        const rect=el.getBoundingClientRect();return {element:el.tagName.toLowerCase()+(el.classList.length?'.'+[...el.classList].join('.'):''),left:Math.round(rect.left*100)/100,right:Math.round(rect.right*100)/100,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth};
+      }).filter(el=>el.right>root.clientWidth+1||el.left< -1).slice(-20);
+      return {layoutWidth:view.innerWidth,viewport:root.clientWidth,scrollWidth:root.scrollWidth,overflow:root.scrollWidth>root.clientWidth+1,overflowingElements,controls:fonts.length,minControlFont:minimum,requiredControlFont:floor,smallControls:floor===null?[]:fonts.filter(x=>x.font<floor-.1),visualScale:view.visualViewport?.scale??null,rootOverscroll:view.getComputedStyle(root).overscrollBehavior};
+    }
+    async function measure(){
       const doc=frame.contentDocument;
       if(!doc){byId('result').textContent='Экран ещё не загружен.';return;}
-      const root=doc.documentElement;
-      byId('result').textContent=JSON.stringify({requestedWidth:Number(byId('width').value),viewport:root.clientWidth,scrollWidth:root.scrollWidth,overflow:root.scrollWidth>root.clientWidth,role:byId('role').value,state:byId('state').value,text:byId('text').value},null,2);
+      const sequence=++manualMeasurement,test={width:Number(byId('width').value),role:byId('role').value,state:byId('state').value,text:byId('text').value};
+      byId('result').textContent='Ожидание данных и шрифтов текущего экрана…';
+      try{
+        const measured=await waitReady(doc,test,false);
+        if(!running&&sequence===manualMeasurement)byId('result').textContent=JSON.stringify(measured,null,2);
+      }catch(error){if(!running&&sequence===manualMeasurement)byId('result').textContent=JSON.stringify({...test,loaded:false,error:String(error.message||error)},null,2);}
+    }
+    const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function waitReady(doc,test,catalogRequired){
+      const start=performance.now();let previous='',stable=0;
+      while(performance.now()-start<20000){
+        if(frame.contentDocument!==doc)throw new Error('Экран изменился до завершения измерения');
+        const page=doc.querySelector('[data-testid="procurement-page"],.procurement');
+        const catalogTab=page&&[...page.querySelectorAll('[role="tab"]')].find(el=>el.textContent.trim()==='Каталог');
+        if(catalogRequired&&catalogTab&&catalogTab.getAttribute('aria-selected')!=='true'){
+          catalogTab.click();stable=0;await pause(50);continue;
+        }
+        const inCatalog=catalogTab?.getAttribute('aria-selected')==='true';
+        const metrics=page?geometry(doc):null;
+        const detail=page?.querySelector('.procurement-detail'),cart=page?.querySelector('.procurement-cart');
+        const view=inCatalog?'catalog':detail?'detail':cart?'cart':'list';
+        const contentReady=inCatalog||detail||cart||page?.querySelector('.procurement-request-list,.procurement-lines,.state');
+        const filledReady=!inCatalog||!['filled','stale'].includes(test.state)||(page.querySelector('[data-testid="procurement-catalog"],.procurement-grid')&&metrics.controls>=2);
+        const emptyReady=!inCatalog||test.state!=='empty'||page.querySelector('.state:not([role="alert"])');
+        const errorReady=test.state!=='error'||page?.querySelector('[role="alert"]');
+        if(page&&contentReady&&(!catalogRequired||inCatalog)&&filledReady&&emptyReady&&errorReady&&!page.querySelector('.skeleton,[aria-busy="true"]')){
+          await doc.fonts.ready;
+          const signature=[view,doc.documentElement.clientWidth,doc.documentElement.scrollWidth,doc.documentElement.scrollHeight,doc.fonts.status,page.textContent].join(':');
+          stable=signature===previous?stable+1:0;previous=signature;
+          if(stable>=4&&performance.now()-start>=500&&doc.fonts.status==='loaded')return {...test,loaded:true,view,...geometry(doc)};
+        }else stable=0;
+        await pause(50);
+      }
+      throw new Error('Нет готового состояния с ожидаемым содержимым после загрузки данных и шрифтов');
+    }
+    async function loadCase(test){
+      frame.style.width=test.width+'px';
+      if(frame.src===new URL(source(test),location.href).href && frame.contentDocument?.readyState==='complete')return waitReady(frame.contentDocument,test,true);
+      await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>{frame.removeEventListener('load',loaded);reject(new Error('Не загрузился iframe'));},20000);
+        const loaded=()=>{clearTimeout(timeout);resolve();};
+        frame.addEventListener('load',loaded,{once:true});frame.src=source(test);
+      });
+      return waitReady(frame.contentDocument,test,true);
+    }
+    async function runMatrix(){
+      if(running)return;running=true;
+      const buttons=[...document.querySelectorAll('header button,header select')];
+      buttons.forEach(el=>el.disabled=true);
+      const output=byId('matrix-result');output.dataset.running='true';byId('matrix-cases').textContent='';
+      const cases=[],results=[];
+      for(const width of [320,360,390,430,768,1280,1366,1440,1920])for(const role of ['franchisee','manager'])for(const text of ['100','200'])cases.push({width,role,text,state:'filled'});
+      for(const width of [320,390,430])for(const state of ['stale','empty','error'])for(const role of ['franchisee','manager'])for(const text of ['100','200'])cases.push({width,role,text,state});
+      try{
+        for(const test of cases){
+          output.textContent=`Проверено ${results.length}/${cases.length}: ${test.width}px, ${test.role}, текст ${test.text}%, ${test.state}`;
+          try{results.push(await loadCase(test));}catch(error){results.push({...test,loaded:false,error:String(error.message||error)});}
+        }
+        const failed=results.filter(r=>!r.loaded||r.overflow||r.smallControls.length||r.layoutWidth!==r.width);
+        output.textContent=JSON.stringify({total:results.length,passed:results.length-failed.length,failed:failed.length,loadFailures:results.filter(r=>!r.loaded).length,overflowFailures:results.filter(r=>r.overflow).length,controlFontFailures:results.filter(r=>r.smallControls?.length).length,failures:failed},null,2);
+        byId('matrix-cases').textContent=JSON.stringify(results,null,2);
+        window.procurementMatrixResults=results;
+      }finally{
+        output.dataset.running='false';running=false;buttons.forEach(el=>el.disabled=false);show();
+      }
     }
     byId('width').addEventListener('change',()=>{frame.style.width=byId('width').value+'px';measure();});
     ['role','state','text'].forEach(id=>byId(id).addEventListener('change',show));
     byId('reload').addEventListener('click',show);
     byId('measure').addEventListener('click',measure);
-    frame.addEventListener('load',measure);show();
+    byId('matrix').addEventListener('click',runMatrix);
+    frame.addEventListener('load',()=>{if(!running)measure();});show();
   </script>
 </body>
 </html>
