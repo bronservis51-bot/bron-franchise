@@ -63,6 +63,7 @@ export const CONTRACT = {
   revenue_plan_set: { args: ['location', 'month', 'amount'], returns: 'void' },
   revenue_save: { args: ['location', 'day', 'cash', 'card', 'comment', 'employee'], returns: 'single' },
   revenue_save_checked: { args: ['location', 'day', 'cash', 'card', 'expected_revision', 'operation', 'comment', 'employee'], returns: 'scalar' },
+  revenue_total_set: { args: ['location', 'day', 'total', 'expected_version', 'operation', 'comment'], returns: 'scalar' },
   royalty_manual_add: { args: ['partner', 'month', 'amount', 'note'], returns: 'scalar' },
   royalty_manual_delete: { args: ['id'], returns: 'void' },
   royalty_my: { args: [], returns: 'scalar' },
@@ -82,6 +83,9 @@ export const CONTRACT = {
   staff_list: { args: ['partner', 'month'], returns: 'scalar' },
   staff_set_active: { args: ['user', 'active'], returns: 'void' },
   staff_update: { args: ['user', 'full_name', 'locations', 'rate_bp', 'shift_fee'], returns: 'void' },
+  team_create: { args: ['partner', 'full_name', 'phone', 'password'], returns: 'scalar' },
+  team_list: { args: ['partner'], returns: 'scalar' },
+  team_set_active: { args: ['partner', 'user', 'active'], returns: 'void' },
   user_set_password: { args: ['user', 'password'], returns: 'void' },
 } as const satisfies Record<string, { args: readonly string[]; returns: 'single' | 'set' | 'scalar' | 'void' }>;
 

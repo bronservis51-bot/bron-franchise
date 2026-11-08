@@ -71,11 +71,11 @@ function AllPoints({ points, month, onPick, onEnter }: {
   const sameCurrency = points.every((p) => p.currency === points[0].currency);
   const currency = points[0].currency;
   const sum = (f: (p: LocationMonth) => number | null) => points.reduce((a, p) => a + Number(f(p) ?? 0), 0);
-  const plan = points.some((p) => p.plan_minor) ? sum((p) => p.plan_minor) : null;
+  const plan = points.every((p) => p.plan_minor !== null) ? sum((p) => p.plan_minor) : null;
   const fact = sum((p) => p.fact_minor);
   const total = {
     ...points[0], month, fact_minor: fact, plan_minor: plan, pct: plan ? Math.round((fact * 1000) / plan) / 10 : null,
-    need_per_day_minor: plan ? sum((p) => p.need_per_day_minor) : null,
+    need_per_day_minor: plan && points[0].days_left > 0 ? Math.ceil(Math.max(0, plan - fact) / points[0].days_left) : null,
   } as unknown as MonthDetail;
   const ready = details.every((q) => q.data);
   const isCurrent = month === monthStart();
@@ -202,7 +202,7 @@ export function FranchiseeHome() {
                       <div className="alert-body">Не внесена выручка: {d.missing_days.slice(-5).map((x) => formatDate(x).slice(0, 5)).join(', ')}{d.missing_days.length > 5 ? ` и ещё ${d.missing_days.length - 5}` : ''}. Нажмите на день ниже, чтобы внести.</div>
                     </div>
                   )}
-                  <Insights m={d} />
+                  <details><summary>Сравнение с прошлым месяцем</summary><Insights m={d} /></details>
                   <RoyaltyCard />
                   <section>
                     <div className="row between" style={{ marginBottom: 8 }}>

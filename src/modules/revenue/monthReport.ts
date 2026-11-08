@@ -11,13 +11,13 @@ export async function downloadMonthReport(m: MonthDetail) {
   const data = [
     [{ value: `${m.location_name} — выручка за ${monthLabel(m.month)}`, fontWeight: 'bold' as const, fontSize: 14 }],
     [],
-    ['Дата', 'Наличные', 'Карта', 'Итого', 'Кто работал', 'Комментарий'].map(head),
-    ...days.map((d) => [formatDate(d.day), money(d.cash_minor), money(d.card_minor), money(d.total_minor),
+    ['Дата', 'Наличные', 'Карта', 'Без разбивки', 'Итого', 'Кто работал', 'Комментарий'].map(head),
+    ...days.map((d) => [formatDate(d.day), money(d.cash_minor), money(d.card_minor), money(d.unallocated_minor ?? 0), money(d.total_minor),
       d.entries.map((e) => e.employee_name ?? 'франчайзи').join(', '), d.comment ?? '']),
     [],
-    [{ value: 'Итого', fontWeight: 'bold' as const }, money(m.cash_minor), money(m.card_minor), { ...money(m.fact_minor), fontWeight: 'bold' as const }],
-    ...(m.plan_minor ? [['План', null, null, money(m.plan_minor)], ['Выполнение', null, null, { value: (m.pct ?? 0) / 100, type: Number, format: '0.0%' }]] : []),
+    [{ value: 'Итого', fontWeight: 'bold' as const }, money(m.cash_minor), money(m.card_minor), money(Number(m.fact_minor)-Number(m.cash_minor)-Number(m.card_minor)), { ...money(m.fact_minor), fontWeight: 'bold' as const }],
+    ...(m.plan_minor ? [['План', null, null, null, money(m.plan_minor)], ['Выполнение', null, null, null, { value: (m.pct ?? 0) / 100, type: Number, format: '0.0%' }]] : []),
   ];
-  await writeXlsxFile(data, { sheet: 'Выручка', columns: [{ width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 24 }, { width: 30 }] })
+  await writeXlsxFile(data, { sheet: 'Выручка', columns: [{ width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 24 }, { width: 30 }] })
     .toFile(`vyruchka-${m.location_name.replace(/\s+/g, '-')}-${m.month.slice(0, 7)}.xlsx`);
 }

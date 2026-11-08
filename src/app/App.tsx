@@ -7,6 +7,7 @@ import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
+import { TeamHome } from '../modules/staff/TeamAccounts';
 import { LoginPage, SetupPage } from './LoginPage';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
@@ -27,7 +28,7 @@ const SectionPage = page(kbView, 'SectionPage');
 const KbManagePage = page(kbView, 'KbManagePage');
 const ArticleEditPage = page(kb, 'ArticleEditPage');
 const SupplyFinancePage = page(() => import('../modules/manager/SupplyFinancePage'), 'SupplyFinancePage');
-const ProcurementPage = page(() => import('../modules/orders/ProcurementPage'), 'ProcurementPage');
+const OrderPage = page(() => import('../modules/orders/OrderLink'), 'OrderPage');
 const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
 const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
@@ -67,12 +68,12 @@ const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'order', element: <ByRole manager={<ProcurementPage />} franchisee={<ProcurementPage />} /> },
+      { path: 'order', element: <ByRole manager={<OrderPage />} franchisee={<OrderPage />} team={<OrderPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
       { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
-      { path: 'staff', element: <ByRole franchisee={<StaffPage />} /> },
+      { path: 'staff', element: <ByRole franchisee={<StaffPage />} team={<StaffPage />} /> },
       { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingOnly><RatingPage /></RatingOnly>} /> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },
@@ -96,14 +97,14 @@ function BootScreen() {
 }
 
 function Home() {
-  const { isManager, isStaff } = useSession();
-  return isManager ? <NetworkPage /> : isStaff ? <StaffHome /> : <FranchiseeHome />;
+  const { isManager, isStaff, isTeamManager } = useSession();
+  return isManager ? <NetworkPage /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
 }
 
 /** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
-function ByRole({ manager, franchisee }: { manager?: ReactNode; franchisee?: ReactNode }) {
-  const { isManager, isStaff } = useSession();
-  const el = isManager ? manager : isStaff ? null : franchisee;
+function ByRole({ manager, franchisee, team }: { manager?: ReactNode; franchisee?: ReactNode; team?: ReactNode }) {
+  const { isManager, isStaff, isTeamManager } = useSession();
+  const el = isManager ? manager : isStaff ? null : isTeamManager ? team : franchisee;
   return el ? <>{el}</> : <Navigate to="/" replace />;
 }
 

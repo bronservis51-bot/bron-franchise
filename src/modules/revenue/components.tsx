@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Button } from '../../ui';
 import { CalendarX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, monthLabel, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
@@ -43,6 +45,7 @@ export function PlanCard({ m }: { m: MonthDetail }) {
 }
 
 export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, row?: DayRow) => void }) {
+  const [expanded, setExpanded] = useState(false);
   const byDay = new Map(m.days.map((d) => [d.day, d]));
   const missing = new Set(m.missing_days);
   const monthEnd = shiftDay(m.month, m.days_in_month - 1);
@@ -53,8 +56,8 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
   const editable = (d: string) => !m.editable_from || d >= m.editable_from;
   if (!days.length) return <EmptyState title="В этом месяце записей нет" />;
   return (
-    <ul className="day-list2">
-      {days.map((d) => {
+    <><ul className="day-list2">
+      {(expanded ? days : days.slice(0,7)).map((d) => {
         const r = byDay.get(d);
         const miss = missing.has(d);
         if (!r && !miss && d !== m.today) return null;
@@ -69,8 +72,9 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
                   <span className="day-split">{r.comment && (/Google-таблиц/i.test(r.comment) || /Google Sheets/i.test(r.comment))
                     ? 'Из Google-таблицы: способ оплаты не указан'
                     : r.entries.some((e) => e.employee_id)
-                      ? r.entries.map((e) => `${e.employee_name ?? 'вы'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
-                      : `нал. ${formatMoneyShort(r.cash_minor, m.currency)} · карта ${formatMoneyShort(r.card_minor, m.currency)}`}</span>
+                      ? r.entries.map((e) => `${e.employee_name ?? 'без разбивки'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
+                      : 'Всего за день'}</span>
+                  {r.reported_total_minor != null && Number(r.total_minor) > Number(r.reported_total_minor) && <span className="day-split" role="status">Сумма смен больше ранее указанного итога — проверьте день</span>}
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
               ) : <span className="day-sum2 day-empty">{miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
@@ -79,7 +83,7 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
           </li>
         );
       })}
-    </ul>
+    </ul>{days.length > 7 && <Button variant="ghost" onClick={() => setExpanded(v => !v)}>{expanded ? 'Свернуть' : 'Все дни месяца'}</Button>}</>
   );
 }
 
