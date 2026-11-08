@@ -8,6 +8,7 @@ import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader } from '../../ui';
 import { useToast } from '../../ui/toast';
+import { TeamAccounts } from './TeamAccounts';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, pctBp, phoneDigits, randomPassword, staffCreate, staffList, staffSetActive, staffUpdate, userSetPassword, type StaffRow } from './api';
 
@@ -120,10 +121,11 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const currency = locs.data?.[0]?.currency ?? 'RUB';
   const exp = useMutation({ mutationFn: () => downloadPayroll((q.data ?? []).filter((s) => s.month_shifts > 0), month, currency) });
   const active = (q.data ?? []).filter((s) => s.active);
-  const total = active.reduce((a, s) => a + Number(s.month_earned_minor), 0);
+  const total = (q.data ?? []).reduce((a, s) => a + Number(s.month_earned_minor), 0);
 
   return (
     <>
+      <TeamAccounts partner={partnerId} />
       <div className="row between" style={{ marginBottom: 8 }}>
         <MonthNav month={month} onChange={setMonth} max={monthStart()} />
         <div className="row">
@@ -200,7 +202,7 @@ export function StaffPage() {
   const partnerId = me?.assignments.find((a) => a.scope_type === 'partner')?.scope_id;
   return (
     <>
-      <PageHeader title="Сотрудники" sub="Продавцы сами открывают и закрывают смены и видят свой заработок. Вы управляете ими без компании." />
+      <PageHeader title="Сотрудники" sub="Продавцы сами открывают и закрывают смены и видят свой заработок. Вы назначаете точки и условия оплаты." />
       {partnerId ? <StaffPanel partnerId={partnerId} /> : <EmptyState title="Нет франчайзи" />}
     </>
   );

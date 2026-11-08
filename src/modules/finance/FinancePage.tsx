@@ -71,13 +71,13 @@ async function downloadFinance(f: Finance) {
   const money = (v: number) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
   const scope = f.location_id ? f.locations.find((l) => l.id === f.location_id)?.name ?? '' : 'все точки';
-  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Расходы', 'Остаётся'].map(head);
-  const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), m.plan_minor ? money(m.plan_minor) : null,
+  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'Без разбивки', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Расходы', 'Остаётся'].map(head);
+  const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), money(Number(m.revenue_minor)-Number(m.cash_minor)-Number(m.card_minor)), m.plan_minor ? money(m.plan_minor) : null,
     m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(m.royalty_minor), money(m.expenses_minor), money(m.net_minor)];
   const sheets = [
-    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(9).fill({ width: 14 })],
+    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(10).fill({ width: 14 })],
       data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
-    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(9).fill({ width: 14 })],
+    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(10).fill({ width: 14 })],
       data: [[head('Точка'), ...cols.slice(1)], ...f.by_location.map((l) => row(l.location_name, l))] }] : []),
     ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 16 }],
       data: [['Сотрудник', 'Смен', 'Выручка смен', 'Заработок'].map(head), ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor)])] }] : []),
@@ -123,7 +123,7 @@ export function FinancePage() {
               )}
               <div className="kpis fin-kpis">
                 <div className="kpi"><span className="v">{formatMoneyShort(c.revenue_minor, f.currency)}</span>
-                  <span className="l">выручка · нал. {formatMoneyShort(c.cash_minor, f.currency)} · карта {formatMoneyShort(c.card_minor, f.currency)}</span></div>
+                  <span className="l">выручка за месяц</span></div>
                 <div className="kpi"><span className="v">{c.pct !== null ? `${n(c.pct).toLocaleString('ru-RU')} %` : '—'}</span>
                   <span className="l">{c.plan_minor ? `плана ${formatMoneyShort(c.plan_minor, f.currency)}` : 'план не поставлен'}</span></div>
                 <div className="kpi"><span className="v">{formatMoneyShort(c.payroll_minor, f.currency)}</span><span className="l">зарплата сотрудников · {c.shifts} смен</span></div>
@@ -139,7 +139,7 @@ export function FinancePage() {
 
               <Card title="За полгода">
                 <MonthsChart months={f.months} currency={f.currency} />
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <details className="finance-details"><summary>Таблица по месяцам</summary><div className="table-wrap" style={{ marginTop: 12 }}>
                   <table className="table">
                     <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                     <tbody>{[...f.months].reverse().map((m) => (
@@ -152,7 +152,7 @@ export function FinancePage() {
                         <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
                     ))}</tbody>
                   </table>
-                </div>
+                </div></details>
               </Card>
 
               {f.by_location && f.by_location.length > 1 && (

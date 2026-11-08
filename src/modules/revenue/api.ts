@@ -3,7 +3,7 @@ import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
 export interface DayEntry { revision: number; employee_id: string | null; employee_name: string | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null }
-export interface DayRow { day: string; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; updated_at: string; entries: DayEntry[] }
+export interface DayRow { day_version?: string; reported_total_minor?: number | null; unallocated_minor?: number; day: string; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; updated_at: string; entries: DayEntry[] }
 
 export interface LocationMonth {
   location_id: string; location_name: string; city: string; currency: string; status: string;
@@ -38,3 +38,10 @@ export const planSet = (location: string, month: string, amount: string) => comm
 
 export const WEEKDAY = ['', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
 export const WEEKDAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+export const revenueTotalSet = async (userId: string, location: string, day: string, total: string, expected_version: string, comment: string | null) => {
+  const args = { location, day, total, expected_version, comment };
+  const receipt = await operationKey(userId, 'revenue_total_set', args);
+  const result = await sendOrQueue(userId, 'revenue_total_set', { ...args, operation: receipt.id });
+  receipt.complete(); return result;
+};

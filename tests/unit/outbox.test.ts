@@ -8,11 +8,11 @@ afterEach(()=>vi.clearAllMocks());
 describe('offline storage truthfulness',()=>{
   it('never returns queued success after the device rejects the write',async()=>{
     rpc.mockRejectedValue({code:'offline'});add.mockRejectedValue(new Error('QuotaExceededError'));
-    await expect(sendOrQueue('user','revenue_save_checked',{operation:'opaque-id'})).rejects.toThrow('QuotaExceededError');
+    await expect(sendOrQueue('user','revenue_total_set',{operation:'opaque-id'})).rejects.toThrow('QuotaExceededError');
   });
   it('preserves the same operation key in the durable queue',async()=>{
     rpc.mockRejectedValue({code:'offline'});add.mockResolvedValue(undefined);
-    await expect(sendOrQueue('user','revenue_save_checked',{operation:'opaque-id'})).resolves.toEqual({queued:true});
+    await expect(sendOrQueue('user','revenue_total_set',{operation:'opaque-id'})).resolves.toEqual({queued:true});
     expect(add).toHaveBeenCalledWith(expect.objectContaining({clientOpId:'opaque-id',payload:{operation:'opaque-id'}}));
   });
 });

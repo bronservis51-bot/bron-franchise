@@ -2,7 +2,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config, isConfigured } from './config';
 
-const REMEMBER_KEY = 'bron.remember-device';
+const profile = typeof location === 'undefined' ? '' : new URLSearchParams(location.search).get('profile') ?? '';
+const slot = /^[a-z0-9-]{1,40}$/.test(profile) ? `.${profile}` : '';
+const REMEMBER_KEY = `bron.remember-device${slot}`;
 
 function safe<T>(fn: () => T, fallback: T): T {
   try {
@@ -34,7 +36,7 @@ const authStorage = {
  * Снимок последних ответов (профиль, «Сегодня») для мгновенного старта: экран рисуется сразу, свежие данные догружаются.
  * Лежит там же, где сессия: без «Запомнить устройство» — до закрытия вкладки. Стирается при выходе.
  */
-const CACHE_PREFIX = 'bron.cache.';
+const CACHE_PREFIX = slot ? `bron.profile${slot}.cache.` : 'bron.cache.';
 export const snapshot = {
   get<T>(key: string): T | null {
     return safe(() => {
@@ -66,7 +68,7 @@ const tracedFetch: typeof fetch = (input, init) => {
 
 export const supabase: SupabaseClient | null = isConfigured
   ? createClient(config.supabaseUrl, config.supabaseKey, {
-      auth: { storage: authStorage, storageKey: 'bron.auth', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      auth: { storage: authStorage, storageKey: `bron.auth${slot}`, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
       global: { fetch: tracedFetch },
     })
   : null;

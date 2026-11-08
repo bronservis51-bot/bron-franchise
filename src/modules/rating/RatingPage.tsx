@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Award, CalendarCheck, Crown, Target, TrendingUp } from 'lucide-react';
 import { command } from '../../platform/backend';
+import { useSession } from '../../platform/session';
 import { monthStart } from '../../platform/dates';
 import { Chips, DataState, EmptyState, PageHeader } from '../../ui';
 import { formatMoneyShort } from '../../platform/money';
@@ -25,11 +26,11 @@ export function RatingPage() {
   const [month, setMonth] = useState(monthStart());
   const [by, setBy] = useState<'plan' | 'revenue'>('plan');
   const q = useQuery({ queryKey: ['rating', month], queryFn: () => command<{ month: string; rows: Row[] }>('rating', { month }) });
-  const current = month === monthStart();
+  const { isManager } = useSession();
   return (
     <div className="home" style={{ maxWidth: 760 }}>
       <PageHeader title="Рейтинг франчайзи" sub={by === 'revenue' ? 'Место — по выручке месяца'
-        : current ? 'Место — по прогнозу выполнения плана на конец месяца при текущем темпе' : 'Итог месяца: выполнение плана'} />
+        : 'Место — по фактическому выполнению плана'} />
       <MonthNav month={month} onChange={setMonth} max={monthStart()} />
       <Chips label="Сортировка" value={by} onChange={(v) => setBy(v as 'plan' | 'revenue')}
         options={[{ id: 'plan', label: 'По выполнению плана' }, { id: 'revenue', label: 'По выручке' }]} />
@@ -48,8 +49,8 @@ export function RatingPage() {
                     <div><strong>Ваше место из {rows.length}</strong></div>
                     <div className="faint">{by === 'revenue'
                       ? `Выручка ${formatMoneyShort(me.fact_minor, me.currency)}${above?.fact_rub_minor != null && me.fact_rub_minor != null ? ` · до ${me.rank - 1}-го места ${formatMoneyShort(Number(above.fact_rub_minor) - Number(me.fact_rub_minor), 'RUB')}` : ''}`
-                      : `${me.forecast_pct !== null ? `Прогноз: ${fmt(me.forecast_pct)} плана` : 'Без плана на этот месяц'}${above?.forecast_pct != null && me.forecast_pct !== null
-                        ? ` · до ${me.rank - 1}-го места ${(above.forecast_pct - me.forecast_pct).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} п.` : ''}`}</div>
+                      : `${me.pct_to_date !== null ? `Выполнено: ${fmt(me.pct_to_date)} плана` : 'Без плана на этот месяц'}${above?.pct_to_date != null && me.pct_to_date !== null
+                        ? ` · до ${me.rank - 1}-го места ${(above.pct_to_date - me.pct_to_date).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} п.` : ''}`}</div>
                   </div>
                 </div>
               )}
@@ -59,22 +60,22 @@ export function RatingPage() {
                     <span className="rating-place">{r.rank <= 3 ? <Award size={22} aria-label={`${r.rank} место`} /> : r.rank}</span>
                     <span className="rating-main">
                       <span className="rating-name">{r.partner_name}{r.is_me && <span className="faint"> · вы</span>}</span>
-                      <span className="rating-badges">{r.badges.map((b) => { const B = BADGE[b]; return B ? <span key={b} className="rating-badge"><B.icon size={12} aria-hidden />{B.label}</span> : null; })}</span>
+                      {isManager && <span className="rating-badges">{r.badges.map((b) => { const B = BADGE[b]; return B ? <span key={b} className="rating-badge"><B.icon size={12} aria-hidden />{B.label}</span> : null; })}</span>}
                       <span className="rating-money">
                         <strong className="num">{formatMoneyShort(r.fact_minor, r.currency)}</strong>
                         {r.plan_minor ? <span className="faint"> из плана {formatMoneyShort(r.plan_minor, r.currency)}</span> : null}
                         {r.currency !== 'RUB' && r.fact_rub_minor != null && <span className="faint"> · ≈ {formatMoneyShort(r.fact_rub_minor, 'RUB')}</span>}
                       </span>
-                      <span className="faint">{r.cities ? `${r.cities} · ` : ''}{r.points > 1 ? `${r.points} точки · ` : ''}заполнено дней {fmt(r.fill_pct)} · к прошлому месяцу {fmt(r.growth_pct, true)}</span>
+                      {isManager && <span className="faint">{r.cities ? `${r.cities} · ` : ''}{r.points > 1 ? `${r.points} точки · ` : ''}заполнено дней {fmt(r.fill_pct)} · к прошлому месяцу {fmt(r.growth_pct, true)}</span>}
                     </span>
                     <span className="rating-score">
-                      <strong>{fmt(current ? r.forecast_pct : r.pct_to_date)}</strong>
-                      <span className="faint">{current ? 'прогноз плана' : 'плана'}</span>
+                      <strong>{fmt(r.pct_to_date)}</strong>
+                      <span className="faint">плана</span>
                     </span>
                   </li>
                 ))}
               </ol>
-              <p className="faint" style={{ marginTop: 12 }}>Выручка — за прошедшие дни месяца (по вчера), все точки франчайзи. Прогноз = эта выручка, пересчитанная на весь месяц, к плану. В рейтинге участвуют франчайзи в России. Заполненные дни — доля дней, за которые внесена выручка.</p>
+              <p className="faint" style={{ marginTop: 12 }}>Выручка — за прошедшие дни месяца (по вчера), все точки франчайзи. В рейтинге участвуют франчайзи в России.</p>
             </>
           );
         }}

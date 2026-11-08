@@ -1,5 +1,6 @@
 // Browser QA only. Every backend request is intercepted; all data and tokens below are synthetic.
 import { createRoot } from 'react-dom/client';
+import { startViewport } from '../../src/platform/viewport';
 import { App } from '../../src/app/App';
 import '../../src/ui/styles.css';
 import { procurementFixture } from './procurement-fixture';
@@ -48,6 +49,7 @@ window.fetch = async (input, init) => {
     const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
     if (procurementResponse) return procurementResponse;
     const answers: Record<string, unknown> = {
+      team_list: [],
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
@@ -87,4 +89,5 @@ if (textScale === '200') {
   const sizes = ['--fs-xs', '--fs-s', '--fs', '--fs-l', '--fs-xl', '--fs-2xl'].map(key => [key, parseFloat(styles.getPropertyValue(key)) * 2] as const);
   sizes.forEach(([key, value]) => root.style.setProperty(key, `${value}px`));
 }
+startViewport();
 createRoot(document.getElementById('root')!).render(<App />);

@@ -16,11 +16,12 @@ import { SectionSelect } from './KbBrowse';
 export function AskDialog({ initial = '', article = null, onClose }: { initial?: string; article?: string | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [q, setQ] = useState(initial);
+  const [q, setQ] = useState('');
   const m = useMutation({ mutationFn: () => kbAsk(q, article), onSuccess: () => { toast('Вопрос отправлен. Ответ появится в «Мои вопросы»'); void qc.invalidateQueries({ queryKey: ['kb'] }); onClose(); } });
   return (
     <ConfirmDialog open title="Задать вопрос" confirmLabel="Отправить" busy={m.isPending} error={m.error} disabled={q.trim().length < 3} onClose={onClose} onConfirm={() => m.mutate()}>
       <p className="muted">Вопрос получит менеджер по франшизе. Частые вопросы становятся статьями — так база знаний пополняется ответами на то, что действительно нужно.</p>
+      {initial.trim() && <p className="faint">Тема: {initial.replace(/: $/, '')}</p>}
       <Field label="Ваш вопрос" required>{(id) => <Textarea id={id} rows={4} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />}</Field>
     </ConfirmDialog>
   );

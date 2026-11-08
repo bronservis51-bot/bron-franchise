@@ -10,7 +10,7 @@ import { setRememberDevice, snapshot, supabase } from './supabase';
 
 export interface Assignment {
   id: string;
-  role: 'franchise_manager' | 'franchisee' | 'franchisee_staff';
+  role: 'franchise_manager' | 'franchisee' | 'franchisee_staff' | 'franchisee_manager';
   role_name: string;
   scope_type: 'company' | 'partner';
   scope_id: string | null;
@@ -31,6 +31,7 @@ interface SessionState {
   isManager: boolean;
   /** Сотрудник франчайзи: смены и свой заработок. */
   isStaff: boolean;
+  isTeamManager: boolean;
   changePassword: (password: string) => Promise<void>;
   signIn: (email: string, password: string, remember: boolean) => Promise<void>;
   signOut: () => Promise<void>;
@@ -94,7 +95,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (!fresh || toAppError(e).code === 'unauthenticated') setStatus('signed-out');
       });
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session && snapshot.get<Me>('me')?.user.id !== session.user.id) {
+        qc.clear(); snapshot.clear(); setMe(null); setStatus('loading');
+        setTimeout(() => { if (active) void loadMe().catch(() => setStatus('signed-out')); }, 0);
+      }
       if (event === 'SIGNED_OUT') {
         snapshot.clear();
         setMe(null);
@@ -105,7 +110,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [loadMe, applyMe]);
+  }, [loadMe, applyMe, qc]);
 
   const signIn = useCallback(
     async (email: string, password: string, remember: boolean) => {
@@ -125,7 +130,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (uid) await clearUserData(uid); // черновики пользователя удаляются с устройства
     qc.clear();
     snapshot.clear();
-    await supabase?.auth.signOut();
+    await supabase?.auth.signOut({ scope: 'local' });
     setRememberDevice(false);
     setMe(null);
     setStatus('signed-out');
@@ -143,6 +148,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       status,
       me,
       can: (perm) => perms.has(perm),
+      isTeamManager: !!me?.assignments.length && me.assignments.every(a => a.role === 'franchisee_manager'),
       isManager: me?.assignments.some((a) => a.scope_type === 'company') ?? false,
       isStaff: (me?.assignments.length ?? 0) > 0 && (me?.assignments.every((a) => a.role === 'franchisee_staff') ?? false),
       changePassword,

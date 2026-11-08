@@ -11,7 +11,7 @@ export interface NavItem {
   badge?: 'kb' | 'leads';
 }
 
-export function navFor(role: 'manager' | 'franchisee' | 'staff'): NavItem[] {
+export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team'): NavItem[] {
   if (role === 'manager') return [
     { to: '/', label: 'Франчайзи', icon: Store },
     { to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' },
@@ -21,6 +21,7 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff'): NavItem[] {
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
+  if (role === 'team') return [{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
   if (role === 'staff') return [
     { to: '/', label: 'Смена', icon: Clock },
     { to: '/kb', label: 'База знаний', icon: BookOpen, badge: 'kb' },

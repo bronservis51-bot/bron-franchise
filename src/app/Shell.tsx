@@ -82,7 +82,6 @@ function UserMenu({ pending }: { pending: number }) {
     return () => document.removeEventListener('click', close);
   }, []);
   const toast = useToast();
-  const role = me?.assignments[0];
   const out = () => {
     if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
     void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
@@ -96,7 +95,6 @@ function UserMenu({ pending }: { pending: number }) {
         <div className="menu" role="menu">
           <div style={{ padding: '8px 10px' }}>
             <div style={{ fontWeight: 650 }}>{me?.user.full_name}</div>
-            <div className="faint">{role ? `${role.role_name}${role.scope_type === 'partner' ? ` · ${role.scope_name}` : ''}` : 'Нет доступа'}</div>
             <div className="faint">{me?.user.email?.endsWith('@staff.bron.local') ? `вход по телефону +${me.user.email.split('@')[0]}` : me?.user.email}</div>
           </div>
           <div className="sep" />
@@ -127,10 +125,10 @@ function InstallHint() {
 }
 
 export function Shell() {
-  const { isManager, isStaff, me, can } = useSession();
+  const { isManager, isStaff, isTeamManager, me, can } = useSession();
   const online = useOnline();
   const loc = useLocation();
-  const role = isManager ? 'manager' : isStaff ? 'staff' : 'franchisee';
+  const role = isManager ? 'manager' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
   const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const mainRef = useRef<HTMLElement>(null);
   const ops = useOutbox(me?.user.id, online);
@@ -160,7 +158,6 @@ export function Shell() {
       <aside className="sidebar" aria-label="Основная навигация">
         <div className="brand">
           <LogoFull height={40} />
-          <span className="brand-sub">{isManager ? 'Менеджер по франшизе' : isStaff ? 'Кабинет сотрудника' : 'Кабинет франчайзи'}</span>
         </div>
         <nav className="nav">{nav.map((n) => link(n))}</nav>
         <div className="sidebar-foot">
@@ -171,7 +168,7 @@ export function Shell() {
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.assignments[0]?.scope_type === 'partner' ? me.assignments[0].scope_name : ''}</div>
-          {role === 'franchisee' && <OrderTopButton />}
+          {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
           <UserMenu pending={ops.length} />
         </header>
         {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
@@ -220,7 +217,7 @@ function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
     <Button disabled={!q.data?.length} onClick={download}>Скачать копию записей</Button>
     {q.data?.map(o=><div key={o.clientOpId} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
       <strong>{o.kind.startsWith('revenue') ? `Выручка за ${String(o.payload.day)}` : 'Закрытие смены'}</strong>
-      <div className="faint">Наличные: {(Number(o.payload.cash)/100).toLocaleString('ru-RU')} · карта: {(Number(o.payload.card)/100).toLocaleString('ru-RU')}</div>
+      <div className="faint">{o.kind === 'revenue_total_set' ? `Всего: ${(Number(o.payload.total)/100).toLocaleString('ru-RU')}` : `Наличные: ${(Number(o.payload.cash)/100).toLocaleString('ru-RU')} · карта: ${(Number(o.payload.card)/100).toLocaleString('ru-RU')}`}</div>
       <div className="faint">{o.lastError ?? 'Ожидает отправки'}</div>
       {o.lastError && <Button variant="ghost" size="sm" disabled={!copied} onClick={()=>{
         void dropOp(userId,o.clientOpId).then(()=>qc.invalidateQueries({queryKey:['local-queue',userId]})).catch(setError);

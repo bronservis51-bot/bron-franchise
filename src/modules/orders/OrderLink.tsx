@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
 import { command, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
-import { ConfirmDialog, ErrorState } from '../../ui';
+import { ConfirmDialog, ErrorState, PageHeader } from '../../ui';
 
 export function useOrderLink(enabled = true) {
   const q = useQuery({ queryKey: ['order-link'], enabled, staleTime: 5 * 60_000, queryFn: () => command<{ url: string | null }>('order_link') });
@@ -55,7 +55,7 @@ export function OrderCard() {
         <span className="todo-icon"><ShoppingCart size={18} aria-hidden /></span>
         <span className="todo-main">
           <span className="todo-title">Заказать материалы</span>
-          <span className="todo-meta">Каталог, согласование и ваши поставки</span>
+          <span className="todo-meta">Из наличия или под заказ</span>
         </span>
         <ChevronRight size={16} className="todo-chevron" aria-hidden />
       </Link>
@@ -81,18 +81,21 @@ export function PersonalStoreLink() {
   </div>;
 }
 
+export function OrderPage() { return <><PageHeader title="Заказать" /><OrderFallback /></>; }
+
 export function OrderFallback() {
-  const { url, pending, error, retry } = useOrderLink();
+  const { isManager } = useSession();
+  const { url, pending, error, retry } = useOrderLink(!isManager);
   const open = useOrderOpen(url);
   return (
     <div>
       <div className="order-options">
         <section className="card order-option" aria-labelledby="order-stock-title">
           <ShoppingCart size={24} aria-hidden />
-          <h2 id="order-stock-title">Персональный МойСклад</h2>
+          <h2 id="order-stock-title">Заказ</h2>
           <p>Покупка из наличия на складе — через ваш персональный магазин МойСклад.</p>
-          <p className="faint">Выберите доступные товары и количество. Заказ оформится на вашу компанию.</p>
-          {error ? <ErrorState error={error} onRetry={retry} compact /> : pending ? <p role="status">Загружаем вашу ссылку…</p> : url ? (
+          <p className="faint">Выберите товары и количество. Заказ сразу поступит в МойСклад и оформится на вашу компанию.</p>
+          {isManager ? <p className="faint">Персональные ссылки доступны в карточках франчайзи.</p> : error ? <ErrorState error={error} onRetry={retry} compact /> : pending ? <p role="status">Загружаем вашу ссылку…</p> : url ? (
             <>
               <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}>
                 Открыть заказ<ExternalLink size={16} aria-hidden />
@@ -103,7 +106,7 @@ export function OrderFallback() {
         </section>
         <section className="card order-option" aria-labelledby="order-preorder-title">
           <Package size={24} aria-hidden />
-          <h2 id="order-preorder-title">Каталог плёнок</h2>
+          <h2 id="order-preorder-title">Предзаказ</h2>
           <p>Заявка на плёнки, которых нет в наличии, — через bronserviceshop.</p>
           <p className="faint">Каталог сайта не синхронизирован со складом. Возможность поставки, срок и итоговую стоимость нужно подтвердить у менеджера.</p>
           <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
