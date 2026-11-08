@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from '../../src/app/App';
 import '../../src/ui/styles.css';
 import { procurementFixture } from './procurement-fixture';
+import { knowledgeFixture } from './knowledge-fixture';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
@@ -31,6 +32,7 @@ const detail = { ...location, location_id: location.id, location_name: location.
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'rating.read', 'finance.read'] }] };
 const qaParams = new URLSearchParams(window.location.search);
+if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
   me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'rating.read', 'finance.read'] }];
 }
@@ -40,6 +42,8 @@ window.fetch = async (input, init) => {
   if (url.pathname.includes('/auth/v1/')) return Response.json(url.pathname.endsWith('/user') ? user : {});
   if (!url.pathname.includes('/rest/v1/')) return originalFetch(input, init);
   const name = url.pathname.split('/').pop();
+  const knowledgeResponse = knowledgeFixture(url, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
+  if (knowledgeResponse) return knowledgeResponse;
   if (url.pathname.includes('/rpc/')) {
     const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
     if (procurementResponse) return procurementResponse;

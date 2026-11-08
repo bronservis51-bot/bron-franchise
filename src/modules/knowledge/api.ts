@@ -21,7 +21,7 @@ export const revisionsOf = (articleId: string) => rows<Revision>(from('article_r
 export const myAcks = (articleId: string, userId: string) => rows<{ rev_no: number; at: string }>(
   from('acknowledgement').select('rev_no, at').eq('article_id', articleId).eq('user_id', userId).order('rev_no', { ascending: false }));
 
-export const search = (q: string, includeDrafts: boolean) => command<SearchHit[]>('kb_search', { query: q, include_drafts: includeDrafts, limit: 20 });
+export const search = (q: string, includeDrafts: boolean) => command<SearchHit[]>('kb_search', { query: q, include_drafts: includeDrafts, limit: 100 });
 export const toRead = () => command<ToRead[]>('kb_to_read');
 export const ackStatus = (article: string) => command<{ user_id: string; full_name: string; partner: string | null; acknowledged_at: string | null }[]>('kb_ack_status', { article });
 

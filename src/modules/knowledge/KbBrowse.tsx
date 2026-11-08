@@ -10,7 +10,7 @@ import {
 import { command } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { formatDate, formatDateTime } from '../../platform/dates';
-import { ActionError, Alert, Badge, Button, Card, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, LinkButton, NoResults, PageHeader, Select } from '../../ui';
+import { ActionError, Alert, Badge, Button, Card, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, LinkButton, PageHeader, Select } from '../../ui';
 import { ARTICLE_STATUS, st } from '../../ui/status';
 import { headings, Markdown } from '../../ui/markdown';
 import { useToast } from '../../ui/toast';
@@ -19,6 +19,8 @@ import {
   TYPE_LABEL, type Card as ArticleCard, type SectionNode,
 } from './api';
 import { AckStatusCard, AskDialog } from './KnowledgePages';
+import { KbJourneys } from './KbJourneys';
+import './knowledge.css';
 
 export const SECTION_ICON: Record<string, ComponentType<{ size?: number; 'aria-hidden'?: boolean }>> = {
   book: BookOpen, rocket: Rocket, smartphone: Smartphone, scissors: Scissors, shield: ShieldCheck, users: Users, wallet: Wallet,
@@ -73,53 +75,81 @@ function ArticleItem({ a, editor, sectionTitle }: { a: ArticleCard; editor?: boo
   );
 }
 
-/** Поиск по всей базе: подсказки появляются по мере ввода. */
+/** The URL is the source of truth: a returned article preserves the query and filters. */
 function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
   const { can } = useSession();
   const editor = can('kb.edit');
   const [params, setParams] = useSearchParams();
-  const [q, setQ] = useState(params.get('q') ?? '');
-  const [debounced, setDebounced] = useState(q);
+  const q = params.get('q') ?? '';
+  const includeDrafts = editor && params.get('drafts') === '1';
+  const requestedType = params.get('type') ?? 'all';
+  const filter = Object.hasOwn(TYPE_LABEL, requestedType) ? requestedType : 'all';
+  const [debounced, setDebounced] = useState(q.trim());
   const [asking, setAsking] = useState<string | null>(null);
-  useEffect(() => { const h = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(h); }, [q]);
-  useEffect(() => { setParams(debounced ? { q: debounced } : {}, { replace: true }); onResults(debounced.length >= 2); }, [debounced, setParams, onResults]);
-  const results = useQuery({ queryKey: ['kb', 'search', debounced, editor], enabled: debounced.length >= 2, queryFn: () => search(debounced, editor) });
+  const active = q.trim().length >= 2;
+  useEffect(() => { const h = setTimeout(() => setDebounced(q.trim()), 300); return () => clearTimeout(h); }, [q]);
+  useEffect(() => onResults(active), [active, onResults]);
+  const results = useQuery({ queryKey: ['kb', 'search', debounced, includeDrafts], enabled: active && debounced.length >= 2, queryFn: () => search(debounced, includeDrafts) });
+  function update(key: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    if (key === 'q') next.delete('type');
+    setParams(next, { replace: true });
+  }
+  const waiting = q.trim() !== debounced;
   return (
     <>
-      <div className="kb-search-box">
-        <Search size={20} aria-hidden />
-        <label htmlFor="kb-q" className="sr-only">Найти в базе знаний</label>
-        <input id="kb-q" type="search" className="kb-search-input" placeholder="Что ищете? Например: пузыри после оклейки, нож плоттера, гарантия"
-          value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
-        {q && <button type="button" className="link-btn" onClick={() => setQ('')}>Очистить</button>}
-      </div>
-      {debounced.length >= 2 && (
+      <section className="kb-search-panel" aria-label="Поиск по базе знаний">
+        <label className="kb-search-heading" htmlFor="kb-q">Найдём ответ на ваш вопрос</label>
+        <div className="kb-search-box" role="search">
+          <Search size={22} aria-hidden />
+          <input id="kb-q" type="search" className="kb-search-input" placeholder="Например: как провести собеседование"
+            value={q} onChange={(e) => update('q', e.target.value)} autoComplete="off" maxLength={200}
+            aria-describedby="kb-search-hint" aria-controls={active ? 'kb-search-results' : undefined} />
+          {q && <button type="button" className="kb-search-clear" onClick={() => { update('q', ''); document.getElementById('kb-q')?.focus(); }}>Очистить</button>}
+        </div>
+        <div id="kb-search-hint" className="kb-search-hint">Поиск по названиям, текстам и ключевым словам</div>
+        {!active && <div className="kb-search-examples" aria-label="Примеры запросов">
+          {['Анкета кандидата', 'Гарантия', 'Заказ материалов', 'Пузыри после оклейки'].map(example => <button key={example} type="button" onClick={() => update('q', example)}>{example}<ChevronRight size={12} aria-hidden /></button>)}
+        </div>}
+        {q.trim().length === 1 && <div className="kb-search-hint" role="status">Введите ещё хотя бы один символ</div>}
+      </section>
+      {active && (
         <Card bodyless className="kb-results">
-          <DataState query={results} empty={(d) => (d.length ? null : (
-            <NoResults query={debounced} action={!editor && <Button variant="primary" onClick={() => setAsking(debounced)}><HelpCircle size={16} aria-hidden />Спросить менеджера</Button>} />
-          ))}>
-            {(d) => (
-              <>
-                <div className="kb-results-head faint">Найдено: {d.length}</div>
-                <ul className="kb-list">
-                  {d.map((h) => (
-                    <li key={h.article_id}>
-                      <Link className="kb-item" to={`/kb/articles/${h.article_id}`}>
-                        <span className="kb-item-main">
-                          <span className="kb-item-title">{h.title}</span>
-                          <span className="kb-item-sum"><Snippet html={h.snippet} /></span>
-                          <span className="kb-item-meta"><span>{TYPE_LABEL[h.type] ?? h.type}</span><span>{h.section_title}</span>
-                            {h.status !== 'published' && <Badge tone={st(ARTICLE_STATUS, h.status)[1]}>{st(ARTICLE_STATUS, h.status)[0]}</Badge>}</span>
-                        </span>
-                        <ChevronRight size={16} className="todo-chevron" aria-hidden />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {!editor && <div className="card-body faint">Не то? <button type="button" className="link-btn" onClick={() => setAsking(debounced)}>Задайте вопрос менеджеру</button></div>}
-              </>
-            )}
-          </DataState>
+          <div className="kb-search-filters">
+            <label>Формат <Select aria-label="Формат результата" value={filter} onChange={e => update('type', e.target.value === 'all' ? '' : e.target.value)}>
+              <option value="all">Все материалы</option>{Object.entries(TYPE_LABEL).map(([id, title]) => <option key={id} value={id}>{title}</option>)}
+            </Select></label>
+            {editor && <label className="kb-draft-switch"><input type="checkbox" checked={includeDrafts} onChange={e => update('drafts', e.target.checked ? '1' : '')} />Включая черновики</label>}
+          </div>
+          <div id="kb-search-results" aria-busy={waiting || results.isFetching}>
+            {waiting ? <p className="card-body faint" role="status">Ищем ответ…</p> : <DataState query={results}>
+              {(all) => {
+                const found = filter === 'all' ? all : all.filter(h => h.type === filter);
+                return <>
+                  <div className="kb-results-head faint" role="status">{all.length >= 100 ? `Первые 100 совпадений · показано ${found.length}. Уточните запрос, чтобы сузить поиск.` : `Найдено: ${found.length}`}</div>
+                  {found.length ? <ul className="kb-list">
+                    {found.map((h) => (
+                      <li key={h.article_id}>
+                        <Link className="kb-item" to={`/kb/articles/${h.article_id}`}>
+                          <span className="kb-item-main">
+                            <span className="kb-item-title">{h.title}</span>
+                            <span className="kb-item-sum kb-search-snippet"><Snippet html={h.snippet} /></span>
+                            <span className="kb-item-meta"><span>{TYPE_LABEL[h.type] ?? h.type}</span><span>{h.section_title}</span>
+                              {h.status !== 'published' && <Badge tone={st(ARTICLE_STATUS, h.status)[1]}>{st(ARTICLE_STATUS, h.status)[0]}</Badge>}</span>
+                          </span>
+                          <ChevronRight size={16} className="todo-chevron" aria-hidden />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul> : <EmptyState title={all.length ? 'В этом формате ничего нет' : 'Пока не нашли ответ'} icon={<SearchX size={22} aria-hidden />}
+                    text={all.length ? 'Попробуйте показать все форматы материалов.' : 'Попробуйте назвать проблему другими словами. Если материала ещё нет, отправьте вопрос менеджеру.'}
+                    action={all.length ? <Button onClick={() => update('type', '')}>Все форматы</Button> : <Button variant="primary" onClick={() => setAsking(debounced)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />}
+                  {found.length > 0 && <div className="card-body faint">Не нашли нужного? <button type="button" className="link-btn" onClick={() => setAsking(debounced)}>Задайте вопрос менеджеру</button></div>}
+                </>;
+              }}
+            </DataState>}
+          </div>
         </Card>
       )}
       {asking !== null && <AskDialog initial={asking} onClose={() => setAsking(null)} />}
@@ -138,7 +168,7 @@ function SectionTiles({ nodes }: { nodes: (SectionNode & { children: SectionNode
             {s.description && <span className="kb-tile-desc">{s.description}</span>}
             {s.children.length > 0 && <span className="kb-tile-subs">{s.children.map((c) => c.title).join(' · ')}</span>}
           </span>
-          <span className="kb-tile-count">{s.count}</span>
+          <span className="kb-tile-count" aria-label={`${s.count} опубликованных материалов`}>{s.count || 'Скоро'}</span>
         </Link>
       ))}
     </div>
@@ -151,7 +181,7 @@ export function KbHomePage() {
   const navigate = useNavigate();
   const [searching, setSearching] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
   const home = useQuery({ queryKey: ['kb', 'home'], queryFn: kbHome });
   const reading = useQuery({ queryKey: ['kb', 'to-read'], enabled: !editor, queryFn: toRead });
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
@@ -161,7 +191,7 @@ export function KbHomePage() {
 
   return (
     <div className="kb">
-      <PageHeader title="База знаний" sub={home.data ? `${home.data.total} статей: инструкции, регламенты, ответы на вопросы и видео` : 'Инструкции, регламенты, ответы на вопросы и видео'}
+      <PageHeader title="База знаний" sub="Бронь Сервис · от запуска до ежедневной работы"
         actions={editor ? (
           <>
             <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Вопросы{inbox.data?.unanswered ? ` (${inbox.data.unanswered})` : ''}</LinkButton>
@@ -171,7 +201,7 @@ export function KbHomePage() {
         ) : (
           <>
             <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
-            <Button onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
+            <Button onClick={() => setAsking('')}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
           </>
         )} />
       <KbSearch onResults={setSearching} />
@@ -179,6 +209,7 @@ export function KbHomePage() {
         <DataState query={home} skeleton={6}>
           {(h) => (
             <div className="stack">
+              <KbJourneys nodes={h.sections} onAsk={setAsking} />
               {Boolean(reading.data?.length) && (
                 <Card title="Нужно прочитать" bodyless className="to-read">
                   <ul className="kb-list">
@@ -203,7 +234,7 @@ export function KbHomePage() {
                 </section>
               )}
               <section>
-                <h2 className="section-title">Разделы</h2>
+                <div className="kb-section-label"><h2>Все темы</h2><span>{h.total} опубликованных материалов</span></div>
                 {tree.length ? <SectionTiles nodes={tree} /> : <EmptyState title="Разделов пока нет" />}
               </section>
               <div className="grid grid-2">
@@ -225,7 +256,7 @@ export function KbHomePage() {
         </DataState>
       )}
       {creating && <NewArticleDialog onClose={() => setCreating(false)} onCreated={(id) => navigate(`/kb/articles/${id}/edit`)} />}
-      {asking && <AskDialog onClose={() => setAsking(false)} />}
+      {asking !== null && <AskDialog initial={asking} onClose={() => setAsking(null)} />}
     </div>
   );
 }
@@ -273,6 +304,7 @@ export function SectionPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [query, setQuery] = useState('');
   const q = useQuery({ queryKey: ['kb', 'section', id], queryFn: () => kbSectionPage(id) });
   useEffect(() => setType('all'), [id]);
   return (
@@ -293,6 +325,11 @@ export function SectionPage() {
                   <Button variant="primary" onClick={() => setCreating(true)}><FilePlus size={16} aria-hidden />Статья</Button>
                 </div>}
               </header>
+              <form className="kb-section-search" role="search" onSubmit={e => { e.preventDefault(); if (query.trim().length >= 2) navigate(`/kb?q=${encodeURIComponent(query.trim())}`); }}>
+                <Search size={18} aria-hidden />
+                <Input aria-label="Поиск по всей базе знаний" value={query} onChange={e => setQuery(e.target.value)} placeholder="Найти ответ во всей базе" maxLength={200} />
+                <Button type="submit" disabled={query.trim().length < 2}>Найти</Button>
+              </form>
               {p.children.length > 0 && <SectionTiles nodes={p.children.map((c) => ({ ...c, children: [] }))} />}
               {p.articles.length > 0 && (types.length > 1 || hasVideo) && (
                 <Chips label="Тип статей" value={type} onChange={setType}
@@ -300,11 +337,12 @@ export function SectionPage() {
               )}
               {list.length > 0 ? (
                 <Card bodyless><ul className="kb-list">{list.map((a) => <ArticleItem key={a.id} a={a} editor={editor} />)}</ul></Card>
-              ) : p.children.length === 0 && <EmptyState title="В разделе пока нет статей" />}
+              ) : p.children.length === 0 && <EmptyState title="Материалы этого раздела готовятся" text="Если вопрос нужен для работы сейчас, передайте его менеджеру."
+                action={<Button onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />}
               {!editor && <p className="faint" style={{ marginTop: 12 }}>Не нашли нужное? <button type="button" className="link-btn" onClick={() => setAsking(true)}>Задайте вопрос менеджеру</button></p>}
               {creating && <NewArticleDialog section={p.section.id} onClose={() => setCreating(false)} onCreated={(aid) => navigate(`/kb/articles/${aid}/edit`)} />}
               {editing && <SectionEditDialog section={p.section} onClose={() => setEditing(false)} onDeleted={() => navigate('/kb')} />}
-              {asking && <AskDialog onClose={() => setAsking(false)} />}
+              {asking && <AskDialog initial={`${p.section.title}: `} onClose={() => setAsking(false)} />}
             </>
           );
         }}
@@ -386,6 +424,12 @@ export function ArticlePage() {
                     : r && <Button variant="ghost" loading={archive.isPending} onClick={() => archive.mutate(true)}><Archive size={16} aria-hidden />В архив</Button>}
                 </>
               )} />
+            {toc.length > 2 && <details className="kb-mobile-toc">
+              <summary>Содержание статьи</summary>
+              <nav aria-label="Содержание статьи на телефоне">{toc.map(h => <a key={h.id} className={h.level === 3 ? 'sub' : undefined} href={`#${h.id}`} onClick={e => {
+                e.preventDefault(); document.getElementById(h.id)?.scrollIntoView({ behavior: 'smooth' });
+              }}>{h.text}</a>)}</nav>
+            </details>}
             {a.required_ack && r && !editor && !acks.isLoading && (
               <div style={{ marginBottom: 16 }}>
                 {ack ? <Alert tone="success">Вы ознакомились {formatDateTime(ack.at)}.</Alert>
@@ -413,7 +457,7 @@ export function ArticlePage() {
               </div>
               <div className="stack kb-side">
                 {toc.length > 2 && (
-                  <Card title="Содержание">
+                  <Card title="Содержание" className="kb-desktop-toc">
                     <nav aria-label="Содержание статьи">
                       {toc.map((h) => <div key={h.id} style={{ paddingLeft: h.level === 3 ? 14 : 0, padding: '3px 0' }}><a href={`#${h.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(h.id)?.scrollIntoView({ behavior: 'smooth' }); }}>{h.text}</a></div>)}
                     </nav>
