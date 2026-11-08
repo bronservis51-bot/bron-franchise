@@ -1,4 +1,4 @@
-// Два канала закупки: персональный МойСклад и заявки на предзаказ в bronserviceshop.
+// Резервные каналы закупки во время подключения единого раздела.
 // Ссылка персональная (ссылка контрагента): при первом переходе франчайзи подтверждает, что не будет ею делиться.
 import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router';
@@ -54,7 +54,7 @@ export function OrderCard() {
         <span className="todo-icon"><ShoppingCart size={18} aria-hidden /></span>
         <span className="todo-main">
           <span className="todo-title">Заказать материалы</span>
-          <span className="todo-meta">Заказ из наличия или предзаказ плёнок</span>
+          <span className="todo-meta">Каталог, согласование и ваши поставки</span>
         </span>
         <ChevronRight size={16} className="todo-chevron" aria-hidden />
       </Link>
@@ -70,16 +70,15 @@ export function OrderTopButton() {
   );
 }
 
-export function OrderPage() {
+export function OrderFallback() {
   const { url, pending, error, retry } = useOrderLink();
   const open = useOrderOpen(url);
   return (
     <div>
-      <div className="page-head"><h1>Заказать</h1></div>
       <div className="order-options">
         <section className="card order-option" aria-labelledby="order-stock-title">
           <ShoppingCart size={24} aria-hidden />
-          <h2 id="order-stock-title">Заказ</h2>
+          <h2 id="order-stock-title">Персональный МойСклад</h2>
           <p>Покупка из наличия на складе — через ваш персональный магазин МойСклад.</p>
           <p className="faint">Выберите доступные товары и количество. Заказ оформится на вашу компанию.</p>
           {error ? <ErrorState error={error} onRetry={retry} compact /> : pending ? <p role="status">Загружаем вашу ссылку…</p> : url ? (
@@ -93,11 +92,11 @@ export function OrderPage() {
         </section>
         <section className="card order-option" aria-labelledby="order-preorder-title">
           <Package size={24} aria-hidden />
-          <h2 id="order-preorder-title">Предзаказ</h2>
+          <h2 id="order-preorder-title">Каталог плёнок</h2>
           <p>Заявка на плёнки, которых нет в наличии, — через bronserviceshop.</p>
           <p className="faint">Каталог сайта не синхронизирован со складом. Возможность поставки, срок и итоговую стоимость нужно подтвердить у менеджера.</p>
           <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
-            Открыть предзаказ<ExternalLink size={16} aria-hidden />
+            Открыть каталог<ExternalLink size={16} aria-hidden />
           </a>
         </section>
       </div>

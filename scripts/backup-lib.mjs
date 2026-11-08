@@ -29,6 +29,28 @@ async function tablesInOrder(db) {
   return order;
 }
 
+/** Private business tables only; command/permission registries are rebuilt by migrations. */
+async function privateTablesInOrder(db) {
+  const tables = (await db.query(`select c.relname as name from pg_class c
+    join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='app_private' and c.relkind='r'
+      and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt')
+        or c.relname ~ '^procurement_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
+  const fks = (await db.query(`select child.relname as child, parent.relname as parent
+    from pg_constraint f join pg_class child on child.oid=f.conrelid
+    join pg_class parent on parent.oid=f.confrelid
+    join pg_namespace cn on cn.oid=child.relnamespace
+    join pg_namespace pn on pn.oid=parent.relnamespace
+    where f.contype='f' and cn.nspname='app_private' and pn.nspname='app_private'`)).rows;
+  const result = [], left = new Set(tables);
+  while (left.size) {
+    const ready = [...left].filter(t => !fks.some(f => f.child === t && f.parent !== t && left.has(f.parent)));
+    if (!ready.length) throw new Error('Циклические зависимости приватных таблиц: требуется отдельный порядок восстановления');
+    for (const t of ready) { result.push(t); left.delete(t); }
+  }
+  return result;
+}
+
 async function columns(db, table) {
   return (await db.query(`select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, a.attgenerated <> '' as generated,
       a.attidentity <> '' as identity
@@ -44,7 +66,7 @@ export async function exportData(db) {
   const users = (await db.query(`select u.id, u.email, u.full_name, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
   const migrations = await db.query(`select coalesce(jsonb_agg(name order by name), '[]'::jsonb) as m from app_private.schema_migration`).catch(() => ({ rows: [{ m: [] }] }));
   const private_tables = {};
-  for (const name of ['supply_snapshot', 'supply_counterparty', 'operation_receipt']) {
+  for (const name of await privateTablesInOrder(db)) {
     private_tables[name] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from app_private.${name} x`)).rows[0].rows;
   }
   const auth_users = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from auth.users x`)).rows[0].rows;
@@ -80,7 +102,9 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   const order = await tablesInOrder(db);
   // Целевая установка очищается (кроме профилей пользователей, созданных заново): справочники тоже берутся из копии
   const wipeList = order.filter((t) => t !== 'app_user').map((t) => `public.${JSON.stringify(t)}`).join(', ');
-  await db.query(`truncate table app_private.supply_counterparty, app_private.supply_snapshot, app_private.operation_receipt, ${wipeList} restart identity`);
+  const privateOrder = await privateTablesInOrder(db);
+  const privateWipe = privateOrder.map(t => `app_private.${JSON.stringify(t)}`).join(', ');
+  await db.query(`truncate table ${privateWipe}, ${wipeList} restart identity`);
   // Ссылка откладывается, если указывает на эту же или ещё не восстановленную таблицу (цикл)
   const later = (t, col) => fkCols.some((f) => f.child === t && f.col === col && (f.parent === t || order.indexOf(f.parent) > order.indexOf(t)));
   const deferred = [];
@@ -129,15 +153,20 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
       await db.query(`select setval(pg_get_serial_sequence('public.${t}', '${c.name}'), greatest((select max(${JSON.stringify(c.name)}) from public.${JSON.stringify(t)}), 1))`);
     }
   }
-  for (const name of ['supply_snapshot', 'supply_counterparty', 'operation_receipt']) {
+  for (const name of privateOrder) {
     const cols = (await columns(db, `app_private.${name}`)).filter(c => !c.generated);
     for (const row of dump.private_tables?.[name] ?? []) {
       const values = cols.map(c => {
         let v = row[c.name] ?? null;
-        if (name === 'operation_receipt' && c.name === 'user_id') v = userMap.get(v) ?? v;
+        if (v !== null && isUserCol(`app_private.${name}`, c.name)) v = userMap.get(v) ?? v;
         return v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
       });
-      await db.query(`insert into app_private.${name} (${cols.map(c => JSON.stringify(c.name)).join(',')}) values (${cols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);
+      await db.query(`insert into app_private.${name} (${cols.map(c => JSON.stringify(c.name)).join(',')}) ${cols.some(c => c.identity) ? 'overriding system value' : ''} values (${cols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);
+    }
+    for (const c of cols.filter(c => c.identity)) {
+      await db.query(`select setval(pg_get_serial_sequence('app_private.${name}', '${c.name}'),
+        coalesce((select max(${JSON.stringify(c.name)}) from app_private.${name}), 1),
+        exists(select 1 from app_private.${name}))`);
     }
   }
   return inserted;

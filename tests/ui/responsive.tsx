@@ -2,6 +2,7 @@
 import { createRoot } from 'react-dom/client';
 import { App } from '../../src/app/App';
 import '../../src/ui/styles.css';
+import { procurementFixture } from './procurement-fixture';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
@@ -40,6 +41,8 @@ window.fetch = async (input, init) => {
   if (!url.pathname.includes('/rest/v1/')) return originalFetch(input, init);
   const name = url.pathname.split('/').pop();
   if (url.pathname.includes('/rpc/')) {
+    const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
+    if (procurementResponse) return procurementResponse;
     const answers: Record<string, unknown> = {
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],

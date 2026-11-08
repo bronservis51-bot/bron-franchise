@@ -1,0 +1,88 @@
+.procurement { display: grid; gap: 20px; min-width: 0; }
+.procurement .btn { max-width: 100%; white-space: normal; }
+.procurement .field, .procurement fieldset, .procurement form { min-width: 0; }
+.procurement .field input, .procurement .field select, .procurement .field textarea { min-width: 0; max-width: 100%; }
+.procurement h2, .procurement h3 { margin: 0; }
+.procurement-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.procurement-top .tabs { margin: 0; }
+.procurement-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, .45fr); gap: 12px; }
+.procurement-tools .field { margin: 0; }
+.procurement-search { position: relative; }
+.procurement-search svg { position: absolute; top: 13px; left: 12px; color: var(--text-3); pointer-events: none; }
+.procurement-search input { padding-left: 40px; }
+.procurement-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr)); gap: 14px; }
+.procurement-product { display: flex; flex-direction: column; min-width: 0; padding: 16px; gap: 12px; }
+.procurement-product h3 { font-size: var(--fs-l); line-height: 1.4; overflow-wrap: anywhere; }
+.procurement-product .product-meta { font-size: var(--fs-xs); color: var(--text-3); }
+.procurement-product .product-image { width: 100%; aspect-ratio: 16 / 10; border-radius: 8px; object-fit: contain; background: var(--surface-2); }
+.procurement-product .product-icon { display: grid; place-items: center; height: 62px; background: var(--surface-2); border-radius: 8px; color: var(--text-3); }
+.procurement-availability { display: grid; gap: 5px; font-size: var(--fs-s); }
+.procurement-availability span { display: flex; align-items: flex-start; gap: 7px; }
+.procurement-availability svg { flex: 0 0 auto; margin-top: 2px; }
+.procurement-availability .now { color: var(--success); }
+.procurement-availability .later { color: var(--info); }
+.procurement-availability .unknown { color: var(--warning); }
+.procurement-product footer { margin-top: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.procurement-product footer .btn { white-space: normal; }
+.procurement-product footer .faint { font-size: var(--fs-xs); }
+.procurement-muted { color: var(--text-2); font-size: var(--fs-s); }
+.procurement-note { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: var(--fs-s); }
+.procurement-note.warning { border-color: var(--warning); color: var(--warning); }
+.procurement-note p:last-child { margin-bottom: 0; }
+.procurement-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.procurement-actions .btn { max-width: 100%; white-space: normal; }
+.procurement-cart { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.procurement-lines { display: grid; gap: 12px; }
+.procurement-line { padding: 16px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.procurement-line-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.procurement-line-head > div { min-width: 0; }
+.procurement-line-head h3 { overflow-wrap: anywhere; }
+.procurement-line-head .icon-btn { flex-shrink: 0; }
+.procurement-quantity { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.procurement-quantity input { width: 105px; }
+.procurement-summary { display: grid; gap: 16px; padding: 18px; }
+.procurement-summary .field { margin: 0; }
+.procurement-shipping { display: grid; gap: 8px; padding: 0; border: 0; margin: 0; min-width: 0; }
+.procurement-shipping legend { font-weight: 650; margin-bottom: 8px; }
+.procurement-shipping label { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.procurement-shipping input { flex: 0 0 auto; margin-top: 5px; }
+.procurement-shipping label:has(input:checked) { border-color: var(--primary); background: var(--primary-weak); }
+.procurement-shipping small { display: block; color: var(--text-2); }
+.procurement-request-list { display: grid; gap: 10px; }
+.procurement-request-card { width: 100%; padding: 16px; text-align: left; color: var(--text); font: inherit; cursor: pointer; display: grid; gap: 10px; }
+.procurement-request-card:hover { border-color: var(--border-strong); }
+.procurement-request-card .request-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.procurement-request-card .request-title { font-weight: 650; overflow-wrap: anywhere; }
+.procurement-detail { display: grid; gap: 18px; }
+.procurement-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.procurement-detail-head h2 { overflow-wrap: anywhere; }
+.procurement-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.procurement-fact { padding: 12px; background: var(--surface-2); border-radius: 8px; min-width: 0; }
+.procurement-fact strong { display: block; font-size: var(--fs-l); }
+.procurement-fact span { color: var(--text-2); font-size: var(--fs-s); }
+.procurement-offer-form { display: grid; gap: 16px; padding: 18px; }
+.procurement-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.procurement-form-grid .field { margin: 0; min-width: 0; }
+.procurement-form-grid .wide { grid-column: 1 / -1; }
+.procurement-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.procurement-timeline li { position: relative; padding: 0 0 18px 22px; border-left: 1px solid var(--border); margin-left: 4px; }
+.procurement-timeline li::before { position: absolute; content: ''; width: 9px; height: 9px; background: var(--brand-silver); border-radius: 50%; left: -5px; top: 5px; }
+.procurement-timeline li:last-child { padding-bottom: 0; border-left-color: transparent; }
+.procurement-timeline time { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+.procurement-timeline p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.procurement-fallback { border-top: 1px solid var(--border); padding-top: 16px; }
+.procurement-fallback summary { cursor: pointer; font-weight: 600; }
+.procurement-fallback .order-options { margin-top: 16px; }
+.procurement-fallback .order-option { padding: 16px; }
+.procurement-progress { display: grid; gap: 12px; padding: 16px; background: var(--surface-2); border-radius: 10px; }
+.procurement-progress .field { margin: 0; }
+.procurement-detail .badge { white-space: normal; }
+.procurement-load-more { justify-self: center; }
+@media (max-width: 700px) {
+  .procurement-cart, .procurement-tools { grid-template-columns: minmax(0, 1fr); }
+  .procurement-facts { grid-template-columns: minmax(0, 1fr); }
+  .procurement-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .procurement-summary, .procurement-offer-form { padding: 14px; }
+  .procurement-top { align-items: flex-start; }
+  .procurement-top .tabs { flex-wrap: wrap; }
+}

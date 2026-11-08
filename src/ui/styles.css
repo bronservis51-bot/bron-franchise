@@ -816,7 +816,10 @@ tr.clickable:hover td { background: var(--surface-2); }
 .supply-mapping { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--border); }
 .supply-mapping > div { flex:1; }
 .supply-mapping select { max-width:240px; }
-@media(max-width:960px) { .bottom-nav.cols-6 { grid-template-columns:repeat(6,1fr); } }
+@media(max-width:960px) {
+  .bottom-nav.cols-6 { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .bottom-nav.cols-7 { grid-template-columns:repeat(7,minmax(0,1fr)); }
+}
 @media(max-width:600px) { .supply-mapping { flex-wrap:wrap; } .supply-mapping > div { flex-basis:100%; } .supply-mapping select { flex:1; min-width:0; } .economics-table th,.economics-table td { padding:12px 10px; } }
 
 /* Рабочая CRM: синий акцент лендинга, светлая доска и компактные карточки. */
