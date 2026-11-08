@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Проверка закупок — размеры экранов</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:16px;font:14px/1.5 system-ui;background:#eceef2;color:#17171a}
+    h1{font-size:20px;margin:0 0 12px}header{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+    label{display:grid;gap:4px}select,button{font:inherit;padding:9px 12px;min-height:44px;border:1px solid #999;border-radius:6px;background:#fff;color:#17171a}
+    button{cursor:pointer}p{margin:8px 0 12px}.frame-scroll{overflow:auto;max-width:100%;border:1px solid #999;background:#dfe2e7}
+    iframe{display:block;border:0;height:1100px;background:#fff}output{display:block;margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+  <h1>Проверка интерфейса закупок</h1>
+  <header>
+    <label for="width">Ширина экрана<select id="width"><option>320</option><option>360</option><option selected>390</option><option>430</option><option>768</option><option>1280</option><option>1366</option><option>1440</option><option>1920</option></select></label>
+    <label for="role">Роль<select id="role"><option value="franchisee">Партнёр</option><option value="manager">Менеджер</option></select></label>
+    <label for="state">Состояние<select id="state"><option value="filled">Заполнено</option><option value="empty">Пусто</option><option value="stale">Остатки устарели</option><option value="error">Ошибка загрузки</option></select></label>
+    <label for="text">Размер текста<select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
+    <button type="button" id="reload">Загрузить выбранный экран</button>
+    <button type="button" id="measure">Проверить ширину страницы</button>
+  </header>
+  <p>Внутри — настоящие компоненты приложения с вымышленными данными. Прокрутка широкого экрана находится только в контейнере проверки.</p>
+  <div class="frame-scroll" aria-label="Контейнер выбранного размера"><iframe id="preview" title="Закупки: приложение с вымышленными данными"></iframe></div>
+  <output id="result" aria-live="polite"></output>
+  <script>
+    const frame=document.getElementById('preview');
+    const byId=id=>document.getElementById(id);
+    function show(){
+      frame.style.width=byId('width').value+'px';
+      const params=new URLSearchParams({role:byId('role').value,text:byId('text').value});
+      if(byId('state').value!=='filled')params.set('procurement',byId('state').value);
+      frame.src='/tests/ui/responsive-app.html?'+params+'#/order';
+      byId('result').textContent='Загрузка…';
+    }
+    function measure(){
+      const doc=frame.contentDocument;
+      if(!doc){byId('result').textContent='Экран ещё не загружен.';return;}
+      const root=doc.documentElement;
+      byId('result').textContent=JSON.stringify({requestedWidth:Number(byId('width').value),viewport:root.clientWidth,scrollWidth:root.scrollWidth,overflow:root.scrollWidth>root.clientWidth,role:byId('role').value,state:byId('state').value,text:byId('text').value},null,2);
+    }
+    byId('width').addEventListener('change',()=>{frame.style.width=byId('width').value+'px';measure();});
+    ['role','state','text'].forEach(id=>byId(id).addEventListener('change',show));
+    byId('reload').addEventListener('click',show);
+    byId('measure').addEventListener('click',measure);
+    frame.addEventListener('load',measure);show();
+  </script>
+</body>
+</html>

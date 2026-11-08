@@ -7,7 +7,6 @@ import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
-import { OrderPage } from '../modules/orders/OrderLink';
 import { LoginPage, SetupPage } from './LoginPage';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
@@ -28,6 +27,7 @@ const SectionPage = page(kbView, 'SectionPage');
 const KbManagePage = page(kbView, 'KbManagePage');
 const ArticleEditPage = page(kb, 'ArticleEditPage');
 const SupplyFinancePage = page(() => import('../modules/manager/SupplyFinancePage'), 'SupplyFinancePage');
+const ProcurementPage = page(() => import('../modules/orders/ProcurementPage'), 'ProcurementPage');
 const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
 const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
@@ -67,7 +67,7 @@ const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'order', element: <ByRole franchisee={<OrderPage />} /> },
+      { path: 'order', element: <ByRole manager={<ProcurementPage />} franchisee={<ProcurementPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
