@@ -36,6 +36,7 @@ export function LeadsPage() {
   const restored = useMutation({ mutationFn: (l: Lead) => leadSetDeleted(l, false), onSuccess: row => {
     qc.setQueryData<Lead[]>(['leads', 'trash'], all => all?.filter(l => l.id !== row.id));
     qc.setQueryData<Lead[]>(['leads'], (all = []) => [row, ...all.filter(l => l.id !== row.id)]);
+    void qc.invalidateQueries({queryKey:['leads']});
     setRestore(null); toast('Заявка восстановлена');
   }});
   useEffect(() => { if (q.data) qc.setQueryData(['leads', 'inbox'], q.data.filter(l => l.status === 'new').length); }, [q.data, qc]);
@@ -48,8 +49,8 @@ export function LeadsPage() {
   return <div className="leads-workspace">
     <PageHeader title={trash ? 'Корзина заявок' : 'Заявки'} actions={<>
       <Button onClick={() => { setTrash(v => !v); setRestore(null); }}>{trash ? 'К заявкам' : <><Trash2 size={17} aria-hidden />Корзина</>}</Button>
-      <Button aria-label="Обновить заявки" title="Обновить" onClick={() => void q.refetch()} loading={q.isFetching}><RefreshCw size={17} aria-hidden /></Button>
-      <Button variant="primary" onClick={() => setEditor({ column: '000' })}><Plus size={17} aria-hidden />Добавить</Button>
+      <Button aria-label="Обновить заявки" title="Обновить" onClick={() => void (trash ? tq : q).refetch()} loading={trash ? tq.isFetching : q.isFetching}><RefreshCw size={17} aria-hidden /></Button>
+      {!trash && <Button variant="primary" onClick={() => setEditor({ column: '000' })}><Plus size={17} aria-hidden />Добавить</Button>}
     </>} />
     {trash ? <DataState query={tq}>{all => <>
       {!all.length && <p className="faint">В корзине нет заявок.</p>}
@@ -105,7 +106,7 @@ export function LeadsPage() {
     {restore && <ConfirmDialog open title="Восстановить заявку?" confirmLabel="Восстановить" busy={restored.isPending} error={restored.error} onClose={() => { if (!restored.isPending) setRestore(null); }} onConfirm={() => restored.mutate(restore)}><p>{restore.name}</p><p>Заявка вернётся в свою прежнюю колонку.</p></ConfirmDialog>}
     {editor && <LeadEditor lead={editor.lead} initialColumn={editor.column} onClose={() => setEditor(null)} onDeleted={id => {
       qc.setQueryData<Lead[]>(['leads'], all => all?.filter(l => l.id !== id));
-      void qc.invalidateQueries({queryKey:['leads','trash']}); setEditor(null);
+      void qc.invalidateQueries({queryKey:['leads']}); setEditor(null);
     }} onSaved={row => {
       qc.setQueryData<Lead[]>(['leads'], (all = []) => all.some(l => l.id === row.id) ? all.map(l => l.id === row.id ? row : l) : [row, ...all]);
       setEditor(null); setSearch(''); setOnlyNew(false); requestAnimationFrame(() => jump(columnFor(row)));
