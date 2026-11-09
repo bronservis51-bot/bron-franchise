@@ -8,9 +8,10 @@ import { command } from '../../platform/backend';
 import { dayLabel, monthLabel } from '../../platform/dates';
 import { formatMoneyShort, sumMinor } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput } from '../../ui';
+import { ActionError, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { pctBp, shiftCancel, shiftClose, shiftOpen, staffHome, type Shift } from './api';
+import {onOutboxChange,queuedOps} from '../../platform/outbox';
+import { pctBp, shiftCancel, shiftClose, shiftOpen, staffHome, type Shift, type StaffHomeData } from './api';
 
 function since(iso: string) {
   const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -25,25 +26,29 @@ function useTick(ms: number) {
 function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
   shift: Shift; currency: string; rate: number; fee: number; policy?: ShiftPolicy | null; onClose: () => void; onDone: (earned: number, month: number | null) => void;
 }) {
-  const { me } = useSession();
+  const { me } = useSession(); const qc=useQueryClient();
   const editing = shift.status === 'closed';
   const [cash, setCash] = useState(editing ? String(shift.cash_minor) : '');
   const [card, setCard] = useState(editing ? String(shift.card_minor) : '');
+  const [cashValid,setCashValid]=useState(true); const [cardValid,setCardValid]=useState(true); const [zero,setZero]=useState(false);
   const [comment, setComment] = useState(shift.comment ?? '');
   const total = sumMinor([cash || '0', card || '0']);
   const earned = calculatePay(total,rate,fee,shift.pay_policy ?? policy);
   const m = useMutation({
-    mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null, shift.closed_at),
-    onSuccess: (r) => onDone(Number(earned), 'queued' in r ? null : Number(r.month_earned_minor)),
+    mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null, shift.revision),
+    onSuccess: (r) => onDone('queued' in r?Number(earned):Number(r.shift.earned_minor), 'queued' in r ? null : Number(r.month_earned_minor)),
+    onError:()=>void qc.invalidateQueries({queryKey:['staff']}),
   });
   return (
     <ConfirmDialog open title={editing ? 'Исправить смену' : 'Закрыть смену'} confirmLabel={editing ? 'Сохранить' : 'Закрыть смену'} busy={m.isPending} error={m.error}
-      onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">Внесите выручку за смену{shift.location_name ? ` — ${shift.location_name}` : ''}.</p>
+      disabled={cash===''||card===''||!cashValid||!cardValid||(total===0n&&!zero)} onClose={onClose} onConfirm={() => m.mutate()}>
+      <p className="muted">{dayLabel(shift.day)}. Внесите выручку за смену{shift.location_name ? ` — ${shift.location_name}` : ''}.</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label="Наличные">{(id) => <MoneyInput id={id} value={cash} onChange={setCash} currency={currency} placeholder="0" />}</Field>
-        <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} currency={currency} placeholder="0" />}</Field>
+        <Field label="Наличные">{(id) => <MoneyInput id={id} value={cash} onChange={setCash} requireExplicitValue onValidityChange={setCashValid} currency={currency} placeholder="0" />}</Field>
+        <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} requireExplicitValue onValidityChange={setCardValid} currency={currency} placeholder="0" />}</Field>
       </div>
+      {total===0n&&<Checkbox label="Подтверждаю: продаж за эту смену не было" checked={zero} onChange={setZero}/>}
+      {editing&&<p className="faint">Если закрыли раньше времени, внесите здесь полный итог своей смены в конце дня. Новая смена и второй фикс не создаются.</p>}
       <div className="day-total-line"><span>Выручка смены</span><Money minor={total} currency={currency} strong /></div>
       <div className="earn-line"><Wallet size={18} aria-hidden /><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
       <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Сумма по ступени кассы: максимум фикса или процента, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
@@ -59,10 +64,15 @@ export function StaffHome() {
   useTick(60_000);
   const q = useQuery({ queryKey: ['staff', 'home'], queryFn: () => staffHome(null), refetchInterval: 120_000 });
   const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string }[]>('kb_to_read') });
+  const [opening,setOpening]=useState<StaffHomeData['locations'][number]|null>(null);
+  const [cancelling,setCancelling]=useState<Shift|null>(null);
+  const pending=useQuery({queryKey:['staff','pending',me?.user.id],enabled:!!me?.user.id,queryFn:()=>queuedOps(me!.user.id)});
+  useEffect(()=>onOutboxChange(()=>void qc.invalidateQueries({queryKey:['staff']})),[qc]);
+  const queuedShift=(id:string)=>pending.data?.some(op=>op.payload.shift===id);
   const [closing, setClosing] = useState<Shift | null>(null);
   const [result, setResult] = useState<{ earned: number; month: number | null } | null>(null);
-  const open = useMutation({ mutationFn: shiftOpen, onSuccess: () => { toast('Смена открыта'); void qc.invalidateQueries({ queryKey: ['staff'] }); } });
-  const cancel = useMutation({ mutationFn: shiftCancel, onSuccess: () => void qc.invalidateQueries({ queryKey: ['staff'] }) });
+  const open = useMutation({ mutationFn: shiftOpen, onSuccess: () => { toast('Смена открыта'); setOpening(null); setResult(null); void qc.invalidateQueries({ queryKey: ['staff'] }); } });
+  const cancel = useMutation({ mutationFn: shiftCancel, onSuccess: () => {setCancelling(null);void qc.invalidateQueries({ queryKey: ['staff'] });} });
   const first = me?.user.full_name.split(' ')[0];
 
   return (
@@ -79,7 +89,7 @@ export function StaffHome() {
               <div className="earn-result" role="status">
                 <span className="ok-icon"><Check size={18} aria-hidden /></span>
                 <div>
-                  <div>Смена закрыта. Вы заработали <strong>{formatMoneyShort(result.earned, d.currency)}</strong></div>
+                  <div>{result.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(result.earned, d.currency)}</strong></div>
                   {result.month !== null
                     ? <div className="faint">За {monthLabel(d.month, false)} — {formatMoneyShort(result.month, d.currency)}</div>
                     : <div className="faint">Нет сети: запись сохранена на телефоне и отправится сама</div>}
@@ -89,29 +99,33 @@ export function StaffHome() {
             {d.open_shift ? (
               <section className="shift-card" aria-label="Открытая смена">
                 <div className="shift-label"><span className="on-dot" />На смене · {d.open_shift.location_name}</div>
+                <div className="faint">За {dayLabel(d.open_shift.day)}</div>
+                {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
                 <div className="shift-time"><Clock size={18} aria-hidden /> {since(d.open_shift.opened_at)}</div>
-                <Button variant="primary" block className="btn-lg" onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
+                <Button variant="primary" block className="btn-lg" disabled={!!queuedShift(d.open_shift.id)||result?.month===null} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
                   <Square size={18} aria-hidden />Закрыть смену и внести выручку
                 </Button>
-                <button type="button" className="link-btn" onClick={() => cancel.mutate(d.open_shift!.id)}>Открыл по ошибке — отменить</button>
+                <button type="button" className="link-btn" disabled={!!queuedShift(d.open_shift.id)||result?.month===null} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
               </section>
             ) : d.locations.length ? (
               <section className="stack">
                 {d.locations.map((l) => l.my_today ? (
-                  <button key={l.location_id} type="button" className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
+                  <button key={l.location_id} type="button" disabled={!!queuedShift(l.my_today.id)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
                     <span className="ok-icon"><Check size={18} aria-hidden /></span>
                     <span>{l.location_name}: смена закрыта, заработано <strong>{formatMoneyShort(l.my_today.earned_minor ?? 0, l.currency)}</strong></span>
-                    <span className="faint">исправить</span>
+                    <span className="faint">исправить суммы</span>
                   </button>
                 ) : (
-                  <Button key={l.location_id} variant="primary" block className="btn-lg" loading={open.isPending && open.variables === l.location_id} onClick={() => open.mutate(l.location_id)}>
+                  <Button key={l.location_id} variant="primary" block className="btn-lg" disabled={open.isPending} onClick={() => setOpening(l)}>
                     <Play size={18} aria-hidden />Открыть смену{d.locations.length > 1 ? ` — ${l.location_name}` : ''}
                   </Button>
                 ))}
-                <ActionError error={open.error ?? cancel.error} />
+
               </section>
             ) : <EmptyState title="Вам пока не назначены точки" text="Попросите франчайзи добавить вас на точку." />}
 
+            <ActionError error={open.error ?? cancel.error} />
+            {d.open_shift&&queuedShift(d.open_shift.id)&&<p role="status">Итог ожидает отправки. Не закрывайте смену повторно; состояние обновится после подтверждения сервера.</p>}
             <section className="plan-card earn-card" aria-label="Заработок за месяц">
               <div className="plan-label">Заработано за {monthLabel(d.month, false)}</div>
               <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
@@ -147,6 +161,8 @@ export function StaffHome() {
           </div>
         )}
       </DataState>
+      {opening&&<ConfirmDialog open title="Открыть смену?" confirmLabel="Да, начать" busy={open.isPending} error={open.error} onClose={()=>setOpening(null)} onConfirm={()=>open.mutate(opening.location_id)}><p>{opening.location_name} · {dayLabel(opening.today)}</p><p className="faint">Проверьте точку. Если открыли по ошибке, пустую смену можно отменить.</p></ConfirmDialog>}
+      {cancelling&&<ConfirmDialog open title="Отменить ошибочное открытие?" confirmLabel="Отменить открытие" cancelLabel="Вернуться" busy={cancel.isPending} error={cancel.error} onClose={()=>setCancelling(null)} onConfirm={()=>cancel.mutate(cancelling.id)}><p>{cancelling.location_name} · {dayLabel(cancelling.day)}</p><p>Отменяется только пустая открытая смена. Сохранённую выручку это действие не удаляет.</p></ConfirmDialog>}
       {closing && q.data && (
         <CloseDialog shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
           onClose={() => setClosing(null)}

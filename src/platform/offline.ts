@@ -5,7 +5,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 export interface QueuedOperation {
   userId: string;
   clientOpId: string;
-  kind: 'revenue_total_set' | 'revenue_save' | 'shift_close' | 'revenue_save_checked' | 'shift_close_checked';
+  kind: 'shift_close_versioned' | 'revenue_total_set' | 'revenue_save' | 'shift_close' | 'revenue_save_checked' | 'shift_close_checked';
   payload: Record<string, unknown>;
   createdAt: string;
   attempts: number;

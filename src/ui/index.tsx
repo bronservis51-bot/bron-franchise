@@ -224,11 +224,11 @@ export function Money({ minor, currency, strong, short }: { minor: MinorInput; c
 }
 
 /** Ввод суммы в рублях/тенге/лирах с запятой; наружу — минорные единицы строкой (без float). */
-export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter }: {
+export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, onValidityChange, requireExplicitValue = false }: {
   id: string; value: string; onChange: (minor: string) => void; currency: string; invalid?: boolean; placeholder?: string;
-  inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void;
+  inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void; onValidityChange?: (valid:boolean) => void; requireExplicitValue?:boolean;
 }) {
-  const show = (v: string) => (v && v !== '0' ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
+  const show = (v: string) => (v && (v !== '0' || requireExplicitValue) ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
   const [text, setText] = useState(() => show(value));
   const [bad, setBad] = useState(false);
   // Значение изменили снаружи (например, «Заполнить из смен») — показать его, не трогая ввод, который уже ему равен
@@ -241,8 +241,9 @@ export function MoneyInput({ id, value, onChange, currency, invalid, placeholder
       onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } } : undefined}
       onChange={(e) => {
         setText(e.target.value);
+        if(requireExplicitValue&&e.target.value.trim()===''){setBad(false);onValidityChange?.(false);onChange('');return;}
         const v = e.target.value.trim() === '' ? 0n : parseMoney(e.target.value, currency);
-        setBad(v === null);
+        setBad(v === null); onValidityChange?.(v !== null);
         if (v !== null) onChange(v.toString());
       }} />
   );

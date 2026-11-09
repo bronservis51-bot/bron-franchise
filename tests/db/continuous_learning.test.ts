@@ -15,7 +15,8 @@ it('daily dot is personal and does not cap the number of lessons',async()=>{
  expect((await t.as<{j:any}>(STAFF,'select learning_notice() j'))[0].j.new_day).toBe(true);
  await t.as(STAFF,'select learning_visit()');
  expect((await t.as<{j:any}>(STAFF,'select learning_notice() j'))[0].j.new_day).toBe(false);
- expect((await t.as<{j:any}>(OWNER,'select learning_notice() j'))[0].j.new_day).toBe(true);
+ expect((await t.as<{j:any}>('79000000011@staff.bron.local','select learning_notice() j'))[0].j.new_day).toBe(true);
+ expect((await t.as<{j:any}>(OWNER,'select learning_notice() j'))[0].j.new_day).toBe(false);
  for(const a of articles){
   const start=(await t.as<{j:any}>(STAFF,'select learning_start($1) j',[a.id]))[0].j;
   expect(start.questions).toHaveLength(12);expect(start.questions[0]).not.toHaveProperty('correct');
@@ -84,7 +85,8 @@ it('global and tenant repetition settings use versions and cannot be written by 
  await t.expectError(OTHER,'select learning_policy_get($1)','forbidden',[p]);
  await t.expectError(OWNER,'select learning_policy_get(null)','forbidden');
  const owner=(await t.as<{j:any}>(OWNER,'select learning_overview() j'))[0].j;
- expect(owner.audience).toBe('franchisees');expect(owner.items.length).toBeGreaterThan(0);
+ // Requirement changed: owners administer staff training and never take lessons.
+ expect(owner.audience).toBe('none');expect(owner.items).toEqual([]);
 });
 it('daily notice follows the assigned location and trainees do not skip into manager training',async()=>{
  await t.admin("update location set timezone='Pacific/Kiritimati' where id=$1",[loc]);

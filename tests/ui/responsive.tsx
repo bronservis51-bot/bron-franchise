@@ -4,6 +4,7 @@ import { startViewport } from '../../src/platform/viewport';
 import { App } from '../../src/app/App';
 import '../../src/ui/styles.css';
 import { procurementFixture } from './procurement-fixture';
+import {createShiftFixture} from './shift-fixture';
 import {learningFixture} from './learning-fixture';
 import { knowledgeFixture } from './knowledge-fixture';
 
@@ -46,6 +47,7 @@ if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
 if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
 const qaPolicy={floor_minor:100000,tiers:[{from_minor:0,rate_bp:1700,bonus_minor:0},{from_minor:500000,rate_bp:1800,bonus_minor:0},{from_minor:600000,rate_bp:1900,bonus_minor:0},{from_minor:800000,rate_bp:2000,bonus_minor:0},{from_minor:1000000,rate_bp:2200,bonus_minor:20000},{from_minor:1300000,rate_bp:2300,bonus_minor:20000},{from_minor:1800000,rate_bp:2500,bonus_minor:30000}]};
 const qaTask={id:'qa-task',article_id:'qa-article',revision_id:'qa-revision',title:'Учебный материал для проверки',read_at:null as string|null,completed_at:null as string|null,score:null as number|null,total:1,questions:[{prompt:'Какой ответ указан в учебном материале?',choices:['Проверенный','Случайный']}]};
+const shiftFixture=createShiftFixture(qaParams,location,partner,qaPolicy);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, locationOrigin());
   if (url.pathname.includes('/auth/v1/')) return Response.json(url.pathname.endsWith('/user') ? user : {});
@@ -58,6 +60,7 @@ window.fetch = async (input, init) => {
     if (procurementResponse) return procurementResponse;
     if(name==='learning_read'){qaTask.read_at=new Date().toISOString();return Response.json(null);}
     if(name==='learning_submit'){qaTask.completed_at=new Date().toISOString();qaTask.score=1;return Response.json({score:1,total:1});}
+    const shiftResponse=shiftFixture(name,init?.body?JSON.parse(String(init.body)):{});if(shiftResponse)return shiftResponse;
     const learningResponse=learningFixture(name,init?.body?JSON.parse(String(init.body)):{},qaParams);
     if(learningResponse)return learningResponse;
     const answers: Record<string, unknown> = {
@@ -106,3 +109,10 @@ if (textScale === '200') {
 }
 startViewport();
 createRoot(document.getElementById('root')!).render(<App />);
+
+// Open real controls for responsive form measurements; no production data is used.
+if(qaParams.get('scene')){
+ const desired=qaParams.get('scene')==='close'?'Закрыть смену и внести выручку':'Разобрать';
+ const timer=setInterval(()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()===desired);if(button){clearInterval(timer);button.click();}},50);
+ setTimeout(()=>clearInterval(timer),10000);
+}
