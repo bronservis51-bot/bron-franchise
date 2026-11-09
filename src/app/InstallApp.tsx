@@ -57,7 +57,7 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
         'Браузер не открыл установку. Воспользуйтесь инструкцией ниже.');
   }
 
-  return <ConfirmDialog open title="Установить Бронь Сервис" cancelLabel="Закрыть" onClose={onClose}>
+  return <ConfirmDialog open className="install-dialog" title="Установить Бронь Сервис" cancelLabel="Закрыть" onClose={onClose}>
     <div className="install-guide">
       {state.installed ? <p role="status">Приложение установлено. Откройте его через значок «Бронь Сервис».</p> : <>
         <p>Кабинет будет открываться отдельным приложением. Установка бесплатная.</p>
