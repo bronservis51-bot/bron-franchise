@@ -7,6 +7,7 @@ import { Button, Checkbox, Field, Input } from '../ui';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
 import { onAvailableUpdate } from '../platform/update';
 import { loginEmail } from '../platform/login';
+import { InstallButton } from './InstallApp';
 
 export function LoginPage() {
   const { status, signIn } = useSession();
@@ -56,6 +57,7 @@ export function LoginPage() {
           {updateApp && <Button size="sm" onClick={() => void updateApp().catch(e => setError({ text: e.message, detail: '' }))}>Обновить приложение</Button>}
           <ServerStatus s={server} onRetry={recheck} />
           <div className="card"><div className="card-body">{form()}</div></div>
+          <div style={{ marginTop: 12 }}><InstallButton /></div>
           <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>
           <p className="faint">Версия от {new Date(import.meta.env.VITE_BUILD_TIME ?? Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
           <a href={`${import.meta.env.BASE_URL}help.html`} target="_blank" rel="noopener noreferrer">Помощь при сбое</a>
