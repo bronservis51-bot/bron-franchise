@@ -260,9 +260,10 @@ export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
 }
 
 /** Подтверждение необратимого/финансового действия с итогом операции (UX-06). */
-export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, children, busy, error, disabled }: {
+export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, children, busy, error, disabled, className = '' }: {
   open: boolean; title: string; summary?: [string, ReactNode][]; confirmLabel?: string; cancelLabel?: string; danger?: boolean;
   onConfirm?: () => void; onClose: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -279,7 +280,7 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel 
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby={titleId}>
+    <dialog ref={ref} className={`dialog ${className}`} onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby={titleId}>
       <div className="dialog-head" tabIndex={-1} autoFocus><h2 id={titleId}>{title}</h2></div>
       <div className="dialog-body">
         {summary && (
