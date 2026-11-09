@@ -2,6 +2,7 @@
 
 | Инструкция | Когда |
 | --- | --- |
+| [availability.md](availability.md) | Не открывается вход/заявки, сетевой сбой, очередь и восстановление |
 | [deploy.md](deploy.md) | Безопасное обновление рабочей системы и отдельное демо |
 | [backup-restore.md](backup-restore.md) | Регулярная копия и восстановление |
 | [supabase-paused.md](supabase-paused.md) | Проект Supabase приостановлен |

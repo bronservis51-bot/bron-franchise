@@ -39,6 +39,8 @@ export const CONTRACT = {
   lead_list: { args: [], returns: 'scalar' },
   lead_move: { args: ['id', 'column', 'expected_updated_at'], returns: 'scalar' },
   lead_save: { args: ['lead', 'expected_updated_at', 'operation'], returns: 'scalar' },
+  lead_set_deleted: { args: ['id', 'deleted', 'expected_updated_at'], returns: 'scalar' },
+  lead_trash_list: { args: [], returns: 'scalar' },
   lead_update: { args: ['id', 'status', 'note'], returns: 'void' },
   learning_attempt_read: { args: ['attempt'], returns: 'void' },
   learning_attempt_submit: { args: ['attempt', 'answers'], returns: 'scalar' },

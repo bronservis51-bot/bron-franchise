@@ -15,7 +15,7 @@ function cspPlugin(supabaseUrl: string): Plugin {
   const csp = [
     "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
     // картинки статей — по https-ссылкам; видео — только встроенные плееры YouTube, Rutube и VK
-    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws}`.trim(),
+    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws} https://raw.githubusercontent.com`.trim(),
     'frame-src https://www.youtube-nocookie.com https://rutube.ru https://vk.com https://vkvideo.ru',
     "worker-src 'self'", "manifest-src 'self'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
   ].join('; ');
@@ -82,7 +82,7 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 900,
       // Стабильные библиотеки не скачиваются заново при каждой правке интерфейса.
-      rolldownOptions: { output: { codeSplitting: { groups: [
+      rolldownOptions: { input: { main:'index.html', help:'help.html' }, output: { codeSplitting: { groups: [
         { name: 'vendor-react', test: /node_modules\/(react|react-dom|scheduler|react-router|@tanstack)\// },
         { name: 'vendor-backend', test: /node_modules\/@supabase\// },
       ] } } },

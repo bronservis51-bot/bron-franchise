@@ -9,10 +9,12 @@ export interface Lead {
   experience: 'business' | 'some' | 'none' | null; place: 'has' | 'options' | 'help' | null;
   instagram?: string | null; pipeline_column?: string | null;
   comment: string | null; source: string | null; score: number; tier: LeadTier; status: LeadStatus; note: string | null;
-  updated_at: string; updated_by_name: string | null;
+  updated_at: string; updated_by_name: string | null; deleted_at?: string | null;
 }
 
 export const leadList = () => command<Lead[]>('lead_list');
+export const leadTrashList = () => command<Lead[]>('lead_trash_list');
+export const leadSetDeleted = (lead: Lead, deleted: boolean) => command<Lead>('lead_set_deleted', { id: lead.id, deleted, expected_updated_at: lead.updated_at });
 export const leadMove = (lead: Lead, column: string) => command<Lead>('lead_move', { id: lead.id, column, expected_updated_at: lead.updated_at });
 export interface LeadInput { id?: string; name: string; instagram: string | null; phone: string; city: string; column: string; note: string; }
 export const leadSave = (lead: LeadInput, expected: string | null, operation: string) => command<Lead>('lead_save', { lead, expected_updated_at: expected, operation });

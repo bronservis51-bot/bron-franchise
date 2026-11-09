@@ -9,7 +9,7 @@
 <iframe title="Тест приложения с вымышленными данными" id="preview"></iframe>
 <script>
 const frame=document.getElementById('preview');
-function show(){frame.style.width=document.getElementById('width').value+'px';frame.src='/tests/ui/responsive-app.html?role='+ (document.getElementById('route').value==='/order'?'franchisee':'manager') +'&text='+document.getElementById('text').value+'#'+document.getElementById('route').value;}
+function show(){frame.style.width=document.getElementById('width').value+'px';frame.src='/tests/ui/responsive-app.html?role='+ (document.getElementById('route').value==='/order'?'franchisee':'manager') +'&leads=filled&text='+document.getElementById('text').value+'#'+document.getElementById('route').value;}
 document.querySelectorAll('select').forEach(el=>el.addEventListener('change',show));show();
 </script>
 </html>

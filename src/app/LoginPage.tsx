@@ -58,6 +58,7 @@ export function LoginPage() {
           <div className="card"><div className="card-body">{form()}</div></div>
           <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>
           <p className="faint">Версия от {new Date(import.meta.env.VITE_BUILD_TIME ?? Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+          <a href={`${import.meta.env.BASE_URL}help.html`} target="_blank" rel="noopener noreferrer">Помощь при сбое</a>
         </div>
       </main>
     </div>
@@ -106,8 +107,9 @@ function ServerStatus({ s, onRetry }: { s: ReturnType<typeof useServerCheck>[0];
   return (
     <div className="alert tone-warning" role="status" style={{ marginBottom: 16 }}>
       <div className="alert-body">
-        <strong>Нет связи с сервером базы данных с этого устройства.</strong> Сайт открылся, но данные хранятся на другом сервере, и до него запрос не доходит. Попробуйте другую сеть (Wi‑Fi или мобильный интернет).
-        <div className="faint" style={{ marginTop: 4 }}>Причина: {s.reason}</div>
+        <strong>{s.reason}</strong>
+        <div>Вход можно попробовать. Если не получается — откройте «Помощь при сбое» ниже формы.</div>
+        <div className="faint" style={{ marginTop: 4 }}>Код: {s.connection.auth.code} / {s.connection.data.code}</div>
       </div>
       <button type="button" className="btn btn-sm" onClick={onRetry}>Проверить снова</button>
     </div>
