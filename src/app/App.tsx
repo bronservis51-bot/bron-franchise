@@ -39,6 +39,7 @@ const RatingPage = page(() => import('../modules/rating/RatingPage'), 'RatingPag
 const FinancePage = page(() => import('../modules/finance/FinancePage'), 'FinancePage');
 const QuestionsPage = page(kb, 'QuestionsPage');
 const LearningPage = page(() => import('../modules/learning/Learning'), 'LearningPage');
+const LearningManagePage = page(() => import('../modules/learning/Learning'), 'LearningManagePage');
 const LearningLessonPage = page(() => import('../modules/learning/Learning'), 'LearningLessonPage');
 const LeadsPage = page(() => import('../modules/leads/LeadsPage'), 'LeadsPage');
 
@@ -71,6 +72,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'learning', element: <LearningPage /> },
+      { path: 'learning/manage', element: <LearningManagePage /> },
       { path: 'learning/lesson/:id', element: <LearningLessonPage /> },
       { path: 'order', element: <ByRole franchisee={<OrderPage />} team={<OrderPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },

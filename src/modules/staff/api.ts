@@ -3,7 +3,7 @@ import { command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
-export interface Shift { id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
+export interface Shift { revision: number; id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
   pay_policy?: ShiftPolicy | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
 export interface StaffHomeData {
   pay_policy?: ShiftPolicy | null; use_partner_motivation?: boolean; month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
@@ -23,10 +23,10 @@ export interface CloseResult { shift: Shift; month_earned_minor: number; month_s
 
 export const staffHome = (month: string | null) => command<StaffHomeData>('staff_home', { month });
 export const shiftOpen = (location: string) => command<Shift>('shift_open', { location });
-export const shiftClose = async (userId: string, shift: string, cash: string, card: string, comment: string | null, expected_closed_at: string | null) => {
-  const args = { shift, cash, card, comment, expected_closed_at };
-  const receipt = await operationKey(userId, 'shift_close_checked', args);
-  const result = await sendOrQueue<CloseResult>(userId, 'shift_close_checked', { ...args, operation: receipt.id });
+export const shiftClose = async (userId: string, shift: string, cash: string, card: string, comment: string | null, expected_revision: number) => {
+  const args = { shift, cash, card, comment, expected_revision };
+  const receipt = await operationKey(userId, 'shift_close_versioned', args);
+  const result = await sendOrQueue<CloseResult>(userId, 'shift_close_versioned', { ...args, operation: receipt.id });
   receipt.complete();
   return result;
 };

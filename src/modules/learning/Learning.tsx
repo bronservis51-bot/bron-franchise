@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useBlocker, useParams } from 'react-router';
+import { Link, useBlocker, useParams, useSearchParams, Navigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { command, from, rows } from '../../platform/backend';
 import { useSession } from '../../platform/session';
@@ -11,7 +11,7 @@ import { MonthNav } from '../revenue/components';
 
 type Quiz = {prompt:string; choices:string[]; correct:number};
 type Config = {version:number; revision_id?:string; enabled?:boolean; for_managers?:boolean; for_sales?:boolean; for_trainees?:boolean; for_franchisees?:boolean; stage?:string; position?:number; pass_percent?:number; quiz_size?:number; questions:Quiz[]};
-const audiences = [['for_trainees','Стажёры'],['for_sales','Менеджеры продаж'],['for_managers','Управляющие'],['for_franchisees','Франчайзи']] as const;
+const audiences = [['for_trainees','Стажёры'],['for_sales','Менеджеры продаж'],['for_managers','Управляющие']] as const;
 
 function QuestionsEditor({value,onChange}:{value:Quiz[];onChange:(q:Quiz[])=>void}) {
  const patch=(i:number,x:Partial<Quiz>)=>onChange(value.map((q,n)=>n===i?{...q,...x}:q));
@@ -34,10 +34,10 @@ function LessonSettings({article,revision,partner}:{article:string;revision:stri
  return <div data-unsaved={edit?'true':undefined}><DataState query={q}>{()=>value&&<div className="stack">
   <p className="faint">{partner?'Ваши вопросы дополняют общую программу только для вашей команды. Текст материала меняет редактор базы знаний.':'Количество вопросов зависит от темы. Для короткой памятки достаточно нескольких, для сложного процесса нужен более полный тест.'}</p>
   {partner&&<Checkbox label="Урок включён для команды" checked={value.enabled??true} onChange={enabled=>patch({enabled})}/>}
-  {audiences.filter(([key])=>!partner||key!=='for_franchisees').map(([key,label])=>partner?<Field key={key} label={label}>{id=><Select id={id} value={value[key]===undefined?'inherit':String(value[key])} onChange={e=>patch({[key]:e.target.value==='inherit'?undefined:e.target.value==='true'})}><option value="inherit">По общей программе</option><option value="true">Включить</option><option value="false">Выключить</option></Select>}</Field>:<Checkbox key={key} label={label} checked={value[key]??false} onChange={v=>patch({[key]:v})}/>)}
-  {!partner&&<><Field label="Этап адаптации">{id=><Input id={id} value={value.stage??''} onChange={e=>patch({stage:e.target.value})}/>}</Field>
+  {audiences.map(([key,label])=>partner?<Field key={key} label={label}>{id=><Select id={id} value={value[key]===undefined?'inherit':String(value[key])} onChange={e=>patch({[key]:e.target.value==='inherit'?undefined:e.target.value==='true'})}><option value="inherit">По общей программе</option><option value="true">Включить</option><option value="false">Выключить</option></Select>}</Field>:<Checkbox key={key} label={label} checked={value[key]??false} onChange={v=>patch({[key]:v})}/>)}
+  {!partner&&<details><summary>Дополнительные настройки урока</summary><Field label="Этап адаптации">{id=><Input id={id} value={value.stage??''} onChange={e=>patch({stage:e.target.value})}/>}</Field>
    <div className="grid grid-2"><Field label="Порядок урока">{id=><Input id={id} type="number" min="0" value={value.position??100} onChange={e=>patch({position:Number(e.target.value)})}/>}</Field><Field label="Проходной балл, %">{id=><Input id={id} type="number" min="1" max="100" value={value.pass_percent??80} onChange={e=>patch({pass_percent:Number(e.target.value)})}/>}</Field></div>
-   <Field label="Вопросов в одной попытке" hint="0 — весь банк. Другое число — случайная подборка из банка; следующий урок доступен сразу.">{id=><Input id={id} type="number" min="0" value={value.quiz_size??0} onChange={e=>patch({quiz_size:Number(e.target.value)})}/>}</Field></>}
+   <Field label="Вопросов в одной попытке" hint="0 — весь банк. Другое число — случайная подборка из банка; следующий урок доступен сразу.">{id=><Input id={id} type="number" min="0" value={value.quiz_size??0} onChange={e=>patch({quiz_size:Number(e.target.value)})}/>}</Field></details>}
   {revision&&value.revision_id&&revision!==value.revision_id&&<p role="status">Материал обновлён. Проверьте вопросы по новой редакции.</p>}
   <p>{value.questions.length} вопросов {partner?'добавлено вами':'в банке'}</p>
   <QuestionsEditor value={value.questions} onChange={questions=>patch({questions})}/>
@@ -48,24 +48,27 @@ function LessonSettings({article,revision,partner}:{article:string;revision:stri
 type Lesson = {article_id:string;revision_id:string;title:string;stage:string;questions:number;due:string|null;percent:number|null;completed:boolean;active:boolean};
 type Overview = {day:string;audience:string;items:Lesson[]};
 type Catalog = Lesson & {position:number;ready:boolean;local_current:boolean;local_questions:number;for_sales:boolean;for_trainees:boolean;for_managers:boolean;for_franchisees:boolean};
-export function LearningPage() {
- const {me,isManager,isTechnical,can}=useSession();
- const [tab,setTab]=useState<'lessons'|'program'|'report'|'settings'>(isManager||isTechnical?'program':'lessons');
- const [partner,setPartner]=useState<string|null>(me?.assignments.find(a=>a.scope_type==='partner')?.scope_id??null);
+export function LearningPage(){
+ const {isStaff,isTeamManager}=useSession();
+ return isStaff||isTeamManager?<><PageHeader title="Обучение"/><MyLessons/></>:<Navigate to="/learning/manage" replace/>;
+}
+export function LearningManagePage() {
+ const {me,isManager,isTechnical,can}=useSession(); const [params]=useSearchParams();
+ const [tab,setTab]=useState<'program'|'report'|'settings'>(isManager||isTechnical?'program':'report');
+ const [partner,setPartner]=useState<string|null>(isManager?params.get('partner'):me?.assignments.find(a=>a.scope_type==='partner')?.scope_id??null);
  const partners=useQuery({queryKey:['learning','partners'],enabled:isManager,queryFn:()=>rows<{id:string;name:string}>(from('partner').select('id,name').eq('status','active').order('name'))});
  const [month,setMonth]=useState(monthStart());
  const global=(isManager||isTechnical)&&!partner;
  const editable=global?can('kb.edit'):can('team.manage');
  const report=can('staff.manage');
- return <><PageHeader title="Обучение"/>
+ if(!can('staff.manage')&&!can('kb.edit'))return <Navigate to="/learning" replace/>;
+ return <><PageHeader title="Обучение сотрудников"/>
   <div className="row learning-tabs" role="group" aria-label="Разделы обучения">
-   {!isManager&&!isTechnical&&<Button variant={tab==='lessons'?'primary':'ghost'} onClick={()=>setTab('lessons')}>Мои уроки</Button>}
    {(can('kb.edit')||report)&&<Button variant={tab==='program'?'primary':'ghost'} onClick={()=>setTab('program')}>Программа и вопросы</Button>}
    {report&&<Button variant={tab==='report'?'primary':'ghost'} onClick={()=>setTab('report')}>Занятия команды</Button>}
    {(isManager||can('team.manage'))&&<Button variant={tab==='settings'?'primary':'ghost'} onClick={()=>setTab('settings')}>Настройки</Button>}
   </div>
-  {isManager&&tab!=='lessons'&&<Field label="Программа">{id=><Select id={id} value={partner??''} onChange={e=>setPartner(e.target.value||null)}><option value="">Общая программа сети</option>{partners.data?.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</Select>}</Field>}
-  {tab==='lessons'&&<MyLessons/>}
+  {isManager&&<Field label="Программа">{id=><Select id={id} value={partner??''} onChange={e=>setPartner(e.target.value||null)}><option value="">Общая программа сети</option>{partners.data?.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</Select>}</Field>}
   {tab==='program'&&<Program key={partner??'global'} partner={partner} editable={editable}/>}
   {tab==='settings'&&<Policy key={partner??'global'} partner={partner}/>}
   {tab==='report'&&(partner?<><MonthNav month={month} onChange={setMonth} max={monthStart()}/><LearningReport partner={partner} month={month}/></>:<EmptyState title="Выберите франчайзи" text="Занятия и результаты доступны отдельно по каждой команде."/>)}
@@ -75,19 +78,19 @@ function MyLessons(){
  const qc=useQueryClient();
  const q=useQuery({queryKey:['learning','overview'],queryFn:()=>command<Overview>('learning_overview')});
  useEffect(()=>{void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc]);
- return <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены" text="Франчайзи и менеджер франшизы настраивают программу для вашей роли."/>}>{d=>{
+ return <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены" text="Уроки появятся после назначения руководителем."/>}>{d=>{
   const next=d.items.find(l=>l.active)||d.items.find(l=>!l.completed||!l.due||l.due<=d.day)||d.items[0];
   return <div className="stack"><Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><p>{next.questions} вопросов · После теста можно сразу перейти дальше</p><Link className="btn btn-primary" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':'Начать'}</Link></Card>
-   <h2>Программа</h2>{d.items.map(l=><Card key={l.article_id}><div className="row between"><div className="grow"><span className="faint">{l.stage}</span><h3>{l.title}</h3><span className="faint">{l.percent!==null?`Последний результат: ${l.percent}% · повтор ${formatDate(l.due!)}`:'Ещё не пройден'}</span></div><Link className="btn" to={`/learning/lesson/${l.article_id}`}>{l.active?'Продолжить':l.completed?'Повторить':'Начать'}</Link></div></Card>)}
+   <details className="learning-program"><summary>Все уроки · {d.items.filter(l=>l.completed).length} из {d.items.length} пройдено</summary><div className="stack">{d.items.map(l=><Card key={l.article_id}><div className="row between"><div className="grow"><span className="faint">{l.stage}</span><h3>{l.title}</h3><span className="faint">{l.percent!==null?`Последний результат: ${l.percent}% · повтор ${formatDate(l.due!)}`:'Ещё не пройден'}</span></div><Link className="btn" to={`/learning/lesson/${l.article_id}`}>{l.active?'Продолжить':l.completed?'Повторить':'Начать'}</Link></div></Card>)}</div></details>
   </div>;
  }}</DataState>;
 }
 function Program({partner,editable}:{partner:string|null;editable:boolean}) {
  const q=useQuery({queryKey:['learning','catalog',partner],queryFn:()=>command<Catalog[]>('learning_catalog',{partner})});
- const [selected,setSelected]=useState<Catalog|null>(null);const [search,setSearch]=useState('');
+ const [selected,setSelected]=useState<Catalog|null>(null);const [search,setSearch]=useState('');const [all,setAll]=useState(false);
  return <><Field label="Найти тему">{id=><Input id={id} value={search} onChange={e=>setSearch(e.target.value)}/>}</Field>
- <DataState query={q}>{list=><div className="stack"><p className="faint">Готово к обучению: {list.filter(l=>l.ready).length} из {list.length}. Материалы без проверенных вопросов остаются в базе знаний.</p>
- {list.filter(l=>l.title.toLowerCase().includes(search.toLowerCase())).map(l=><Card key={l.article_id}><div className="row between"><div className="grow"><h3>{l.title}</h3><span className="faint">{l.stage} · {l.questions} общих{partner?` + ${l.local_questions} ваших`:''} вопросов</span><div>{l.ready?<Badge tone="success">Вопросы проверены</Badge>:<Badge tone="warning">Нужна проверка и вопросы</Badge>}</div><span className="faint">{audiences.filter(([k])=>l[k]).map(([,label])=>label).join(' · ')||'Аудитории не назначены'}</span></div>{editable&&<Button onClick={()=>setSelected(l)}>{partner?'Мои вопросы':'Настроить'}</Button>}</div></Card>)}
+ <Checkbox label="Показать все материалы базы знаний" checked={all} onChange={setAll}/><DataState query={q}>{list=><div className="stack"><p className="faint">В программе сотрудников: {list.filter(l=>l.for_sales||l.for_managers||l.for_trainees).length} уроков. Другие материалы остаются в базе знаний.</p>
+ {list.filter(l=>(all||l.for_sales||l.for_managers||l.for_trainees||l.local_questions>0)&&l.title.toLowerCase().includes(search.toLowerCase())).map(l=><Card key={l.article_id}><div className="row between"><div className="grow"><h3>{l.title}</h3><span className="faint">{l.stage} · {l.questions} общих{partner?` + ${l.local_questions} ваших`:''} вопросов</span><div>{l.ready?<Badge tone="success">Вопросы проверены</Badge>:<Badge tone="warning">Нужна проверка и вопросы</Badge>}</div><span className="faint">{audiences.filter(([k])=>l[k]).map(([,label])=>label).join(' · ')||'Аудитории не назначены'}</span></div>{editable&&<Button onClick={()=>setSelected(l)}>{partner?'Мои вопросы':'Настроить'}</Button>}</div></Card>)}
  </div>}</DataState>
  {selected&&<LessonDialog lesson={selected} partner={partner} onClose={()=>setSelected(null)}/>}
  </>;
@@ -112,8 +115,9 @@ function Policy({partner}:{partner:string|null}) {
 type Result={score:number;total:number;percent:number;passed:boolean;interval_days:number;next_due:string;feedback:{prompt:string;correct:string;chosen:number;choices:string[]}[]};
 type Attempt={id:string;article_id:string;revision_id:string;title:string;pass_percent:number;read_at:string|null;completed_at:string|null;questions:Omit<Quiz,'correct'>[];result:Result|null};
 export function LearningLessonPage(){
- const {id}=useParams();const qc=useQueryClient();
- const q=useQuery({queryKey:['learning-attempt',id],queryFn:()=>command<Attempt>('learning_start',{article:id}),staleTime:Infinity,gcTime:0,retry:false});
+ const {id}=useParams();const qc=useQueryClient();const {isStaff,isTeamManager}=useSession();
+ const q=useQuery({queryKey:['learning-attempt',id],enabled:isStaff||isTeamManager,queryFn:()=>command<Attempt>('learning_start',{article:id}),staleTime:Infinity,gcTime:0,retry:false});
+ if(!isStaff&&!isTeamManager)return <Navigate to="/learning/manage" replace/>;
  return <DataState query={q}>{t=><Study key={t.id} attempt={t} onFinish={()=>{void qc.invalidateQueries({queryKey:['learning']});}}/>}</DataState>;
 }
 function Study({attempt:t,onFinish}:{attempt:Attempt;onFinish:()=>void}) {
@@ -129,7 +133,7 @@ function Study({attempt:t,onFinish}:{attempt:Attempt;onFinish:()=>void}) {
  <PageHeader title={t.title} back={{to:'/learning',label:'Обучение'}}/>
  {result?<Card title={result.passed?'Урок пройден':'Нужно повторить'}><h2>{result.percent}% · {result.score} из {result.total}</h2><p>{result.passed?`Повторение: ${formatDate(result.next_due)}. Следующий урок можно начать сейчас.`:'Перечитайте материал и попробуйте ещё раз. Ждать следующего дня не нужно.'}</p>
  <details><summary>Разобрать ответы</summary>{result.feedback?.map((x,i)=><div className="quiz-question" key={i}><strong>{x.prompt}</strong><p>Ваш ответ: {x.choices[x.chosen]}</p>{String(x.chosen)!==x.correct&&<p>Верно: {x.choices[Number(x.correct)]}</p>}</div>)}</details>
- <Link className="btn btn-primary" to="/learning">{result.passed?'Следующий урок':'Вернуться к урокам'}</Link></Card>:!quiz?<DataState query={rev}>{r=><Card className="learning-material"><Markdown source={r?.body??''}/><Button variant="primary" loading={read.isPending} onClick={()=>read.mutate()}>Пройти тест</Button><p className="faint">Для зачёта нужно {t.pass_percent}%. Если что-то не получится, можно повторить.</p><ActionError error={read.error}/></Card>}</DataState>:<Card title="Тест"><Button variant="ghost" onClick={()=>setQuiz(false)}>Перечитать материал</Button>{t.questions.map((x,i)=><fieldset className="quiz-question" key={i}><legend>{i+1}. {x.prompt}</legend>{x.choices.map((c,n)=><label className="quiz-choice" key={n}><input type="radio" name={`quiz-${t.id}-${i}`} checked={answers[i]===n} onChange={()=>choose(i,n)}/><span>{c}</span></label>)}</fieldset>)}<Button variant="primary" disabled={t.questions.some((_,i)=>answers[i]===undefined)} loading={submit.isPending} onClick={()=>submit.mutate()}>Проверить ответы</Button><ActionError error={submit.error}/></Card>}
+ <Link className="btn btn-primary" to="/learning">{result.passed?'Следующий урок':'Вернуться к урокам'}</Link></Card>:!quiz?<DataState query={rev}>{r=><Card className="learning-material"><Markdown source={(r?.body??'').split(/\n## Источник(?:и)?[^\n]*\n/)[0]}/><Button variant="primary" loading={read.isPending} onClick={()=>read.mutate()}>Пройти тест</Button><p className="faint">Для зачёта нужно {t.pass_percent}%. Если что-то не получится, можно повторить.</p><ActionError error={read.error}/></Card>}</DataState>:<Card title="Тест"><Button variant="ghost" onClick={()=>setQuiz(false)}>Перечитать материал</Button>{t.questions.map((x,i)=><fieldset className="quiz-question" key={i}><legend>{i+1}. {x.prompt}</legend>{x.choices.map((c,n)=><label className="quiz-choice" key={n}><input type="radio" name={`quiz-${t.id}-${i}`} checked={answers[i]===n} onChange={()=>choose(i,n)}/><span>{c}</span></label>)}</fieldset>)}<Button variant="primary" disabled={t.questions.some((_,i)=>answers[i]===undefined)} loading={submit.isPending} onClick={()=>submit.mutate()}>Проверить ответы</Button><ActionError error={submit.error}/></Card>}
  {blocked.state==='blocked'&&<ConfirmDialog open title="Выйти без завершения теста?" confirmLabel="Выйти" cancelLabel="Продолжить урок" onClose={()=>blocked.reset()} onConfirm={()=>blocked.proceed()}><p>Урок ещё не пройден. Вы сможете вернуться к этой попытке, но зачёт появится только после теста.</p></ConfirmDialog>}
  </div>;
 }

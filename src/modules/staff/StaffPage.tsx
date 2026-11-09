@@ -1,4 +1,6 @@
 // Сотрудники франчайзи: добавить, изменить оплату и точки, сменить пароль, удалить; ведомость заработка за месяц.
+import {Link} from 'react-router';
+import {ShiftReview} from './ShiftReview';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Download, KeyRound, Pencil, UserMinus, UserPlus, UserRoundCheck } from 'lucide-react';
@@ -142,6 +144,8 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
 
   return (
     <>
+      <div className="row" style={{marginBottom:16}}><Link className="btn" to={`/learning/manage?partner=${partnerId}`}>Обучение сотрудников</Link></div>
+      <ShiftReview partner={partnerId}/>
       <TeamAccounts partner={partnerId} />
       <MotivationPanel partner={partnerId} />
       <div className="row between" style={{ marginBottom: 8 }}>

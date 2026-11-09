@@ -545,7 +545,7 @@ export function KbManagePage() {
   return (
     <div className="kb">
       <Crumbs items={[{ to: '/kb', label: 'База знаний' }, { label: 'Управление' }]} />
-      <PageHeader title="Управление базой знаний" sub="Все статьи, их читаемость и оценки; структура разделов" />
+      <PageHeader title="Управление базой знаний" sub="Все статьи, их читаемость и оценки; структура разделов" actions={<LinkButton to="/learning/manage">Обучение сотрудников</LinkButton>} />
       <div className="tabs" role="tablist" aria-label="Управление">
         <button type="button" role="tab" aria-selected={tab === 'articles'} onClick={() => setTab('articles')}>Статьи</button>
         <button type="button" role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Разделы</button>

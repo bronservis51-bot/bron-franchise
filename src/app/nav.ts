@@ -20,10 +20,9 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
     { to: '/royalty', label: 'Роялти', icon: Landmark },
     { to: '/finance', label: 'Экономика', icon: Wallet },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
-    training,
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
-  if (role === 'support') return [training,{to:'/',label:'Вопросы',icon:Inbox,badge:'kb'},{to:'/kb',label:'Знания',icon:BookOpen}];
+  if (role === 'support') return [{to:'/',label:'Вопросы',icon:Inbox,badge:'kb'},{to:'/kb',label:'Знания',icon:BookOpen}];
   if (role === 'team') return [training,{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
   if (role === 'staff') return [
     { to: '/', label: 'Смена', icon: Clock },
@@ -35,7 +34,6 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
     { to: '/staff', label: 'Сотрудники', icon: Users },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/finance', label: 'Финансы', icon: Wallet },
-    training,
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
 }
