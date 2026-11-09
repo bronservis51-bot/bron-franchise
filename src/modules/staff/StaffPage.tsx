@@ -156,7 +156,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                       <div className="row"><strong>{s.full_name}</strong>
                         {!s.active ? <Badge tone="neutral">удалён</Badge> : s.open_shift ? <Badge tone="success">на смене · {s.open_shift.location_name}</Badge> : null}</div>
                       <div className="faint">{formatPhone(s.phone)} · {s.location_names.join(', ')}</div>
-                      <div className="faint">{s.shift_fee_minor ? `${formatMoneyShort(s.shift_fee_minor, currency)} за выход` : ''}{s.shift_fee_minor && s.rate_bp ? ' + ' : ''}{s.rate_bp ? `${pctBp(s.rate_bp)} от выручки` : ''}{!s.shift_fee_minor && !s.rate_bp ? 'оплата не задана' : ''}</div>
+                      <div className="faint">{s.use_partner_motivation ? 'По ступенчатой системе франчайзи' : <>{s.shift_fee_minor ? `${formatMoneyShort(s.shift_fee_minor, currency)} за выход` : ''}{s.shift_fee_minor && s.rate_bp ? ' + ' : ''}{s.rate_bp ? `${pctBp(s.rate_bp)} от выручки` : ''}{!s.shift_fee_minor && !s.rate_bp ? 'оплата не задана' : ''}</>}</div>
                     </div>
                     <div className="staff-totals">
                       <div className="num"><strong>{formatMoneyShort(s.month_earned_minor, currency)}</strong></div>

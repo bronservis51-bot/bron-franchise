@@ -117,7 +117,7 @@ export function StaffHome() {
               <div className="plan-label">Заработано за {monthLabel(d.month, false)}</div>
               <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
               <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
-              <div className="plan-foot"><span>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</span></div>
+              <div className="plan-foot"><span>{d.use_partner_motivation ? 'По ступеням кассы: фикс или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>
             </section>
 
             {Boolean(toRead.data?.length) && (
