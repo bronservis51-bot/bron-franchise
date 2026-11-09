@@ -11,6 +11,8 @@ import { OrderTopButton } from '../modules/orders/OrderLink';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
+import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
+import { installDevice } from '../platform/install';
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -75,6 +77,8 @@ function UserMenu({ pending }: { pending: number }) {
   const { me, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
+  const installState = useInstallState();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -99,10 +103,12 @@ function UserMenu({ pending }: { pending: number }) {
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
+          {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
       )}
       {pw && <PasswordDialog onClose={() => setPw(false)} />}
+      {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
     </div>
   );
 }
@@ -110,15 +116,14 @@ function UserMenu({ pending }: { pending: number }) {
 /** Подсказка установить на экран телефона (один раз, можно закрыть). */
 function InstallHint() {
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem('bron.install-hint') === 'off'; } catch { return false; } });
-  const standalone = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone);
-  const mobile = typeof navigator !== 'undefined' && /iphone|ipad|android/i.test(navigator.userAgent);
-  if (hidden || standalone || !mobile) return null;
-  const ios = /iphone|ipad/i.test(navigator.userAgent);
+  const state = useInstallState();
+  const mobile = installDevice(navigator.userAgent, navigator.maxTouchPoints) !== 'desktop';
+  if (hidden || state.installed || !mobile) return null;
   return (
     <div className="install-hint" role="status">
       <Smartphone size={18} aria-hidden />
       <div className="alert-body">Добавьте кабинет на экран телефона — он будет открываться как приложение.
-        <span className="faint" style={{ display: 'block' }}>{ios ? 'Safari: кнопка «Поделиться» → «На экран «Домой»».' : 'Chrome: меню ⋮ → «Добавить на главный экран».'}</span></div>
+        <div style={{ marginTop: 8 }}><InstallButton /></div></div>
       <button type="button" className="icon-btn" aria-label="Скрыть" onClick={() => { setHidden(true); try { localStorage.setItem('bron.install-hint', 'off'); } catch { /* удобство */ } }}><X size={16} /></button>
     </div>
   );
