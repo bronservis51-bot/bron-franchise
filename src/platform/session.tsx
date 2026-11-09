@@ -10,7 +10,7 @@ import { setRememberDevice, snapshot, supabase } from './supabase';
 
 export interface Assignment {
   id: string;
-  role: 'franchise_manager' | 'franchisee' | 'franchisee_staff' | 'franchisee_manager';
+  role: 'franchise_manager' | 'franchisee' | 'franchisee_staff' | 'franchisee_manager' | 'technical_specialist';
   role_name: string;
   scope_type: 'company' | 'partner';
   scope_id: string | null;
@@ -31,6 +31,7 @@ interface SessionState {
   isManager: boolean;
   /** Сотрудник франчайзи: смены и свой заработок. */
   isStaff: boolean;
+  isTechnical: boolean;
   isTeamManager: boolean;
   changePassword: (password: string) => Promise<void>;
   signIn: (email: string, password: string, remember: boolean) => Promise<void>;
@@ -148,8 +149,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       status,
       me,
       can: (perm) => perms.has(perm),
-      isTeamManager: !!me?.assignments.length && me.assignments.every(a => a.role === 'franchisee_manager'),
-      isManager: me?.assignments.some((a) => a.scope_type === 'company') ?? false,
+      isTeamManager: !!me?.assignments.some(a => a.role === 'franchisee_manager') && !me.assignments.some(a=>a.role==='franchisee' || a.role==='franchise_manager'),
+      isTechnical: !!me?.assignments.some(a=>a.role==='technical_specialist') && !me.assignments.some(a=>a.role==='franchise_manager'),
+      isManager: me?.assignments.some((a) => a.role === 'franchise_manager') ?? false,
       isStaff: (me?.assignments.length ?? 0) > 0 && (me?.assignments.every((a) => a.role === 'franchisee_staff') ?? false),
       changePassword,
       signIn,

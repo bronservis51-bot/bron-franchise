@@ -37,7 +37,7 @@ async function privateTablesInOrder(db) {
   const tables = (await db.query(`select c.relname as name from pg_class c
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='app_private' and c.relkind='r'
-      and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt')
+      and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme','learning_config','learning_task')
         or c.relname ~ '^procurement_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid
@@ -92,6 +92,12 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   }
   if (missing.length) throw new Error(`В целевой установке нет пользователей: ${missing.join(', ')}. Создайте их (npm run seed:users) и повторите.`);
 
+  // Restore profile facts/timestamps too; Auth identity/password migration is separate.
+  for (const u of dump.tables.app_user ?? []) {
+    const target = userMap.get(u.id);
+    if (target) await db.query('update public.app_user set full_name=$1,status=$2,is_demo=$3,created_at=$4,updated_at=$5 where id=$6',
+      [u.full_name,u.status,u.is_demo,u.created_at,u.updated_at,target]);
+  }
   const userCols = (await db.query(`select replace(c.conrelid::regclass::text, 'public.', '') as tbl, a.attname as col
     from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
     where c.contype = 'f' and c.confrelid in ('public.app_user'::regclass, 'auth.users'::regclass)`)).rows;
@@ -120,8 +126,11 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
     const identity = cols.some((c) => c.identity);
     await db.query(`alter table public.${JSON.stringify(t)} disable trigger user`);
     let n = 0;
-    for (const row of rows) {
-      const values = cols.map((c) => {
+    for (const sourceRow of rows) {
+      // Pre-tier backups retain their historical individual pay mode.
+      const row = t === 'staff_member' && !Object.hasOwn(sourceRow,'use_partner_motivation') ? {...sourceRow,use_partner_motivation:false} : sourceRow;
+      const rowCols = cols.filter(c => Object.hasOwn(row,c.name));
+      const values = rowCols.map((c) => {
         let v = row[c.name];
         if (v !== null && v !== undefined && isUserCol(t, c.name)) v = userMap.get(v) ?? null;
         // ссылки на ещё не восстановленные строки (циклы) — вторым проходом
@@ -134,8 +143,8 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
         if (v !== null && typeof v === 'object') return JSON.stringify(v);
         return v ?? null;
       });
-      const sql = `insert into public.${JSON.stringify(t)} (${cols.map((c) => JSON.stringify(c.name)).join(', ')})
-        ${identity ? 'overriding system value' : ''} values (${cols.map((c, i) => `$${i + 1}::${c.type}`).join(', ')})
+      const sql = `insert into public.${JSON.stringify(t)} (${rowCols.map((c) => JSON.stringify(c.name)).join(', ')})
+        ${identity ? 'overriding system value' : ''} values (${rowCols.map((c, i) => `$${i + 1}::${c.type}`).join(', ')})
         ${keys.length ? `on conflict (${keys.map((k) => JSON.stringify(k)).join(', ')}) do nothing` : ''}`;
       const r = await db.query(sql, values);
       n += r.affectedRows ?? r.rowCount ?? 0;

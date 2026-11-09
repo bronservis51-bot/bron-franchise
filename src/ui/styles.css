@@ -925,7 +925,7 @@ tr.clickable:hover td { background: var(--surface-2); }
 @media (max-width: 960px) {
   html { touch-action: pan-x pan-y; }
   body { position: fixed; inset: 0; width: 100%; height: 100%; }
-  #root { position: fixed; top: var(--app-top, 0px); left: 0; right: 0; height: var(--app-height, 100dvh); min-height: 0; }
+  #root { position: fixed; top: 0; left: 0; right: 0; height: var(--app-height, 100dvh); min-height: 0; }
   .app { height: 100%; min-height: 0; grid-template-rows: minmax(0,1fr) auto; }
   .main { min-height: 0; }
   .topbar { position: relative; flex: 0 0 auto; }
@@ -938,4 +938,19 @@ tr.clickable:hover td { background: var(--surface-2); }
   .keyboard-open .login-split { display: block; }
   .keyboard-open .login-panel { min-height: 100%; padding-top: 16px; }
   dialog[open] { max-height: calc(var(--app-height, 100dvh) - 24px); }
+}
+
+.learning-editor { margin-top: 20px; }
+.quiz-question { min-width: 0; margin: 18px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.quiz-question legend { padding: 0 6px; font-weight: 600; overflow-wrap: anywhere; }
+.quiz-choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 0; }
+.quiz-choice input { flex: 0 0 auto; width: 20px; height: 20px; }
+.learning-material { margin: 16px 0; }
+
+@media (max-width: 960px) {
+ dialog.dialog[open] { position: fixed; inset: auto; top: calc(var(--visual-top, 0px) + 12px); left: 0; right: 0; margin: 0 auto; display: flex; flex-direction: column; max-height: calc(var(--app-height, 100dvh) - 24px); }
+ .dialog-head, .dialog-foot { flex: 0 0 auto; }
+ .dialog-head { outline: none; }
+ .dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+ .dialog-foot { padding-top: 12px; border-top: 1px solid var(--border); }
 }

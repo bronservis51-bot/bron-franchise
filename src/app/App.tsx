@@ -68,7 +68,7 @@ const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'order', element: <ByRole manager={<OrderPage />} franchisee={<OrderPage />} team={<OrderPage />} /> },
+      { path: 'order', element: <ByRole franchisee={<OrderPage />} team={<OrderPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
@@ -97,14 +97,14 @@ function BootScreen() {
 }
 
 function Home() {
-  const { isManager, isStaff, isTeamManager } = useSession();
-  return isManager ? <NetworkPage /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
+  const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
+  return isManager ? <NetworkPage /> : isTechnical ? <QuestionsPage /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
 }
 
 /** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
 function ByRole({ manager, franchisee, team }: { manager?: ReactNode; franchisee?: ReactNode; team?: ReactNode }) {
-  const { isManager, isStaff, isTeamManager } = useSession();
-  const el = isManager ? manager : isStaff ? null : isTeamManager ? team : franchisee;
+  const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
+  const el = isManager ? manager : isTechnical ? null : isStaff ? null : isTeamManager ? team : franchisee;
   return el ? <>{el}</> : <Navigate to="/" replace />;
 }
 

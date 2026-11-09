@@ -2,15 +2,17 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Download, KeyRound, Pencil, UserMinus, UserPlus, UserRoundCheck } from 'lucide-react';
-import { from, rows } from '../../platform/backend';
+import { command, from, rows } from '../../platform/backend';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader } from '../../ui';
 import { useToast } from '../../ui/toast';
+import { LearningReport } from '../learning/Learning';
+import { MotivationPanel } from './Motivation';
 import { TeamAccounts } from './TeamAccounts';
 import { MonthNav } from '../revenue/components';
-import { formatPhone, pctBp, phoneDigits, randomPassword, staffCreate, staffList, staffSetActive, staffUpdate, userSetPassword, type StaffRow } from './api';
+import { formatPhone, pctBp, phoneDigits, randomPassword, staffList, staffSetActive, userSetPassword, type StaffRow } from './api';
 
 interface Loc { id: string; name: string; currency: string; status: string }
 const locationsOf = (partner: string) => rows<Loc>(from('location').select('id, name, currency, status').eq('partner_id', partner).order('name'));
@@ -20,6 +22,7 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const toast = useToast();
   const currency = locs[0]?.currency ?? 'RUB';
   const [name, setName] = useState(staff?.full_name ?? '');
+  const [usePartner,setUsePartner]=useState(staff?.use_partner_motivation ?? true);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(randomPassword);
   const [sel, setSel] = useState<string[]>(staff?.location_ids ?? (locs.length === 1 ? [locs[0].id] : []));
@@ -29,12 +32,12 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const bp = Math.round(Number((rate || '0').replace(',', '.')) * 100);
   const m = useMutation({
     mutationFn: async () => {
-      if (staff) await staffUpdate({ user: staff.user_id, full_name: name, locations: sel, rate_bp: bp, shift_fee: fee || '0' });
-      else await staffCreate({ partner: partnerId, full_name: name, phone, password, locations: sel, rate_bp: bp, shift_fee: fee || '0' });
+      if (staff) await command('staff_terms_set',{user:staff.user_id,full_name:name,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner});
+      else await command('staff_create_terms',{partner:partnerId,full_name:name,phone,password,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner});
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['staff-list'] });
-      if (staff) { toast('Сохранено'); onClose(); } else setCreated({ phone: formatPhone(phoneDigits(phone)), password });
+      if (staff) { toast('Сохранено'); onClose(); } else setCreated({ phone: formatPhone(/[a-z]/i.test(phone)?phone:phoneDigits(phone)), password });
     },
   });
   if (created) {
@@ -50,14 +53,14 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
       </ConfirmDialog>
     );
   }
-  const valid = name.trim() && sel.length && (staff || (phone.replace(/\D/g, '').length >= 10 && password.length >= 6)) && bp >= 0 && bp <= 10000;
+  const valid = name.trim() && sel.length && (staff || ((phone.replace(/\D/g, '').length >= 10 || /^[a-z][a-z0-9._-]{1,39}$/.test(phone)) && password.length >= 6)) && bp >= 0 && bp <= 10000;
   return (
     <ConfirmDialog open title={staff ? 'Сотрудник' : 'Новый сотрудник'} confirmLabel={staff ? 'Сохранить' : 'Добавить'} busy={m.isPending} error={m.error}
       disabled={!valid} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Дина" />}</Field>
       {!staff && (
         <div className="grid grid-2" style={{ gap: 12 }}>
-          <Field label="Телефон" required hint="Это логин для входа">{(id) => <Input id={id} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
+          <Field label="Телефон или короткий логин" required hint="Латинские буквы для логина или полный номер телефона">{(id) => <Input id={id} type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
           <Field label="Пароль" required hint="Можно оставить предложенный">{(id) => <Input id={id} value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
         </div>
       )}
@@ -66,11 +69,13 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
           <Checkbox key={l.id} label={l.name} checked={sel.includes(l.id)} onChange={(v) => setSel(v ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
         ))}</div>
       )}</Field>
-      <div className="grid grid-2" style={{ gap: 12 }}>
+      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="По общей схеме: фикс или процент, плюс премия" />
+      {!usePartner && <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label={`За выход, ${currency}`} hint="Фикс за смену">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
         <Field label="% от выручки смены">{(id) => <Input id={id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
       </div>
-      <p className="faint">Новая оплата действует для следующих смен; закрытые смены не пересчитываются.</p>
+      }
+      <p className="faint">Новая оплата действует для смен, открытых после изменения; закрытые смены не пересчитываются.</p>
     </ConfirmDialog>
   );
 }
@@ -126,6 +131,8 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   return (
     <>
       <TeamAccounts partner={partnerId} />
+      <MotivationPanel partner={partnerId} />
+      <LearningReport partner={partnerId} month={month} />
       <div className="row between" style={{ marginBottom: 8 }}>
         <MonthNav month={month} onChange={setMonth} max={monthStart()} />
         <div className="row">

@@ -21,14 +21,14 @@
       <option value="/royalty">Роялти</option><option value="/kb">База знаний</option>
       <option value="/kb/manage">Управление базой знаний</option><option value="/finance">Экономика франшизы</option>
     </select></label>
-    <label for="width">Ширина экрана<select id="width"><option>320</option><option selected>390</option><option>768</option><option>1440</option></select></label>
+    <label for="width">Ширина экрана<select id="width"><option>320</option><option>360</option><option selected>390</option><option>430</option><option>768</option><option>1280</option><option>1366</option><option>1440</option><option>1920</option></select></label>
     <label for="text">Размер текста<select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
     <button type="button" id="reload">Загрузить выбранный экран</button>
     <button type="button" id="measure">Измерить текущий экран</button>
-    <button type="button" id="matrix">Прогнать 48 экранов</button>
+    <button type="button" id="matrix">Прогнать 108 экранов</button>
   </header>
   <p>Настоящие компоненты приложения, роль менеджера, вымышленные данные. Проверка ждёт содержимое раздела и шрифты; измеряет ширину документа и размер полей. Таблицы и канбан могут прокручиваться внутри своих контейнеров.</p>
-  <p>Матрица: 6 разделов × 4 ширины × текст 100% и 200%. Она не заменяет проверку клавиатуры, жестов и масштаба на физическом телефоне.</p>
+  <p>Матрица: 6 разделов × 9 ширин × текст 100% и 200%. Она не заменяет проверку клавиатуры, жестов и масштаба на физическом телефоне.</p>
   <div class="frame-scroll" aria-label="Контейнер выбранного размера"><iframe id="preview" title="Основные разделы: приложение с вымышленными данными"></iframe></div>
   <output id="result" aria-live="polite"></output>
   <output id="matrix-result" aria-live="polite"></output>
@@ -104,7 +104,7 @@
       if(running)return;running=true;sequence++;
       const inputs=[...document.querySelectorAll('header button,header select')];inputs.forEach(el=>el.disabled=true);
       const output=byId('matrix-result'),results=[],cases=[];output.dataset.running='true';byId('matrix-cases').textContent='';
-      for(const route of Object.keys(routes))for(const width of [320,390,768,1440])for(const text of ['100','200'])cases.push({route,width,text});
+      for(const route of Object.keys(routes))for(const width of [320,360,390,430,768,1280,1366,1440,1920])for(const text of ['100','200'])cases.push({route,width,text});
       try{
         for(const test of cases){
           output.textContent=`Проверено ${results.length}/${cases.length}: ${test.route}, ${test.width}px, текст ${test.text}%`;
