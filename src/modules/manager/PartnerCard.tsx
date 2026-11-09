@@ -183,7 +183,7 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
   const toast = useToast();
   const [edit, setEdit] = useState(false);
   const [value, setValue] = useState(url ?? '');
-  const bad = value.trim() !== '' && !/^https:\/\/\S+$/.test(value.trim());
+  const bad = value.trim() !== '' && !/^https:\/\/(b2b\.moysklad\.ru\/[A-Za-z0-9]+(\/catalog)?|online\.moysklad\.ru\/public\/[A-Za-z0-9]+\/catalog)\/?$/.test(value.trim());
   const m = useMutation({
     mutationFn: (v: string) => command('partner_order_url_set', { partner: partnerId, url: v }),
     onSuccess: (_, v) => {
@@ -194,7 +194,7 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
     },
   });
   return (
-    <Card title="Заказ материалов" icon={<ShoppingCart size={16} aria-hidden />}
+    <Card title="Персональный магазин МойСклад" icon={<ShoppingCart size={16} aria-hidden />}
       actions={<Button size="sm" onClick={() => { setValue(url ?? ''); setEdit(true); }}><Link2 size={15} aria-hidden />{url ? 'Изменить' : 'Добавить ссылку'}</Button>}>
       {url ? (
         <>
@@ -208,7 +208,7 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
           disabled={bad || value.trim() === (url ?? '')} onClose={() => setEdit(false)} onConfirm={() => m.mutate(value)}>
           <p className="muted">Скопируйте из МойСклад ссылку, по которой этот франчайзи (контрагент) оформляет заказ, и вставьте сюда.
             По ней откроется МойСклад, когда франчайзи нажмёт «Заказать материалы».</p>
-          <Field label="Ссылка" hint="Полная ссылка, начинается с https://. Пусто — убрать кнопку заказа" error={bad ? 'Ссылка должна начинаться с https://' : null}>
+          <Field label="Ссылка" hint="Полная ссылка, начинается с https://. Пусто — убрать кнопку заказа" error={bad ? 'Нужна ссылка https://b2b.moysklad.ru/…' : null}>
             {(id) => <Input id={id} type="url" inputMode="url" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" autoFocus />}
           </Field>
           {value.trim() && !bad && <a className="order-url" href={value.trim()} target="_blank" rel="noopener noreferrer">Проверить ссылку<ExternalLink size={13} aria-hidden /></a>}

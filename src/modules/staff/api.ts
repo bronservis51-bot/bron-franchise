@@ -1,18 +1,19 @@
+import type { ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
 export interface Shift { id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
-  cash_minor: number; card_minor: number; total_minor: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
+  pay_policy?: ShiftPolicy | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
 export interface StaffHomeData {
-  month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
+  pay_policy?: ShiftPolicy | null; use_partner_motivation?: boolean; month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
   open_shift: (Shift & { location_name: string; currency: string }) | null;
   locations: { location_id: string; location_name: string; currency: string; today: string; my_today: Shift | null }[];
   month_earned_minor: number; month_revenue_minor: number; month_shifts: number;
   shifts: Shift[];
 }
 export interface StaffRow {
-  user_id: string; full_name: string; phone: string; active: boolean; location_ids: string[]; location_names: string[];
+  user_id: string; full_name: string; phone: string; active: boolean; use_partner_motivation?: boolean; location_ids: string[]; location_names: string[];
   rate_bp: number; shift_fee_minor: number; open_shift: { id: string; location_name: string; opened_at: string } | null;
   month_shifts: number; month_revenue_minor: number; month_earned_minor: number;
   shifts: { id: string; day: string; location_name: string; total_minor: number; earned_minor: number; opened_at: string; closed_at: string }[];
@@ -45,11 +46,11 @@ export function phoneDigits(phone: string): string {
   return d;
 }
 export const staffEmail = (phone: string) => `${phoneDigits(phone)}@staff.bron.local`;
-export const formatPhone = (digits: string) => (/^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
+export const formatPhone = (digits: string) => (!/^\d+$/.test(digits) ? digits : /^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
 export const pctBp = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 
-/** Пароль для выдачи человеку: 8 символов без похожих (0/O, 1/l). */
+/** Пароль для выдачи человеку: 16 символов без похожих (0/O, 1/l). */
 export function randomPassword() {
   const a = 'abcdefghijkmnpqrstuvwxyz23456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => a[b % a.length]).join('');
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => a[b % a.length]).join('');
 }

@@ -99,7 +99,7 @@ export function knowledgeFixture(url: URL, args: Record<string, unknown>, params
     if (name === 'kb_search_misses') return Response.json([{ query: 'как обучить новичка', times: 3, last_at: stamp }]);
     if (name === 'kb_inbox') return Response.json({ unanswered: editor ? 2 : 0, new_answers: editor ? 0 : 1 });
     if (name === 'kb_to_read' || name === 'kb_questions') return Response.json([]);
-    if (name === 'kb_ask') return Response.json('qa-question-created');
+    if (name === 'kb_ask' || name === 'kb_ask_categorized') return Response.json('qa-question-created');
   } else {
     if (name === 'kb_section') return Response.json(knowledgeSections);
     if (name === 'article') {

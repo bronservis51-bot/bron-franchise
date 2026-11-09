@@ -125,10 +125,10 @@ function InstallHint() {
 }
 
 export function Shell() {
-  const { isManager, isStaff, isTeamManager, me, can } = useSession();
+  const { isManager, isStaff, isTeamManager, isTechnical, me, can } = useSession();
   const online = useOnline();
   const loc = useLocation();
-  const role = isManager ? 'manager' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
+  const role = isManager ? 'manager' : isTechnical ? 'support' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
   const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const mainRef = useRef<HTMLElement>(null);
   const ops = useOutbox(me?.user.id, online);
@@ -138,7 +138,7 @@ export function Shell() {
   useEffect(()=>onAvailableUpdate(fn=>setUpdateApp(()=>fn)),[]);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
-  const kbCount = isManager ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
+  const kbCount = can('kb.edit') ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
   const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager && loc.pathname !== '/leads', staleTime: 120_000, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
   const leadCount = leads.data ?? 0;
   // Фокус на основное содержимое при смене экрана — для экранных дикторов

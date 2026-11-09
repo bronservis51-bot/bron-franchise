@@ -31,13 +31,20 @@ const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
 }));
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
-const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'rating.read', 'finance.read'] }] };
+const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }] };
 const qaParams = new URLSearchParams(window.location.search);
 if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
-  me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'rating.read', 'finance.read'] }];
+  me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }];
 }
 const originalFetch = window.fetch;
+if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
+ const team=qaParams.get('role')==='team';
+ me.assignments=[{id:'qa-worker',role:team?'franchisee_manager':'franchisee_staff',role_name:team?'Управляющий':'Менеджер продаж',scope_type:'partner',scope_id:partner.id,scope_name:partner.name,permissions:['kb.read','shift.work',...(team?['staff.manage']:[])]}];
+}
+if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
+const qaPolicy={floor_minor:100000,tiers:[{from_minor:0,rate_bp:1700,bonus_minor:0},{from_minor:500000,rate_bp:1800,bonus_minor:0},{from_minor:600000,rate_bp:1900,bonus_minor:0},{from_minor:800000,rate_bp:2000,bonus_minor:0},{from_minor:1000000,rate_bp:2200,bonus_minor:20000},{from_minor:1300000,rate_bp:2300,bonus_minor:20000},{from_minor:1800000,rate_bp:2500,bonus_minor:30000}]};
+const qaTask={id:'qa-task',article_id:'qa-article',revision_id:'qa-revision',title:'Учебный материал для проверки',read_at:null as string|null,completed_at:null as string|null,score:null as number|null,total:1,questions:[{prompt:'Какой ответ указан в учебном материале?',choices:['Проверенный','Случайный']}]};
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, locationOrigin());
   if (url.pathname.includes('/auth/v1/')) return Response.json(url.pathname.endsWith('/user') ? user : {});
@@ -48,13 +55,18 @@ window.fetch = async (input, init) => {
   if (url.pathname.includes('/rpc/')) {
     const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
     if (procurementResponse) return procurementResponse;
+    if(name==='learning_read'){qaTask.read_at=new Date().toISOString();return Response.json(null);}
+    if(name==='learning_submit'){qaTask.completed_at=new Date().toISOString();qaTask.score=1;return Response.json({score:1,total:1});}
     const answers: Record<string, unknown> = {
+      support_accounts:[],learning_config_get:{for_managers:false,for_sales:false,questions:[],version:0},
+      motivation_get:{version:0,policy:qaPolicy,currency:'RUB'},learning_report:[],learning_today:{day:'2026-11-09',items:qaParams.get('learning')==='empty'?[]:[qaTask]},
+      staff_home:{month,currency:'RUB',partner_name:partner.name,rate_bp:0,shift_fee_minor:0,pay_policy:qaPolicy,use_partner_motivation:true,open_shift:null,locations:[{location_id:location.id,location_name:location.name,currency:'RUB',today:'2026-11-09',my_today:null}],month_earned_minor:0,month_revenue_minor:0,month_shifts:0,shifts:[]},
       team_list: [],
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
       partner_access: { users: [{ assignment_id: 'qa-access', user_id: uid, full_name: 'Вымышленный пользователь с длинным именем', email: 'very-long-synthetic-login@example.invalid' }], invites: [] },
-      staff_list: [{user_id:uid,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
+      staff_list: [{user_id:uid,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
       revenue_overview: { month, rows: [detail], fact_rub_minor: 0, plan_rub_minor: null, missing_fx: [] },
       kb_home: { sections: [section, { ...section, id: 'qa-empty', title: 'Раздел для будущего наполнения', count: 0 }], recent: articles, popular: [], continue: [], drafts: 0, total: articles.length },
       kb_section_page: { section, parent: null, children: [], articles }, kb_article_open: { section, parent: null, related: articles.slice(1), my_rating: null, stats: { views_30: 0, helpful: 0, not_helpful: 0, comments: [] } },

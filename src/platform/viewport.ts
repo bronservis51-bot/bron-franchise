@@ -3,15 +3,19 @@ export function startViewport() {
   const root = document.documentElement;
   const vv = window.visualViewport;
   let frame = 0;
+  let unfocusedHeight = window.innerHeight;
+  let width = window.innerWidth;
   const update = () => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       const mobile = window.matchMedia('(max-width: 960px)').matches;
       const height = vv?.height ?? window.innerHeight;
       root.style.setProperty('--app-height', `${height}px`);
-      root.style.setProperty('--app-top', `${vv?.offsetTop ?? 0}px`);
+      root.style.setProperty('--visual-top', `${vv?.offsetTop ?? 0}px`);
       const input = document.activeElement?.matches('input, textarea, [contenteditable="true"]');
-      root.classList.toggle('keyboard-open', mobile && !!input && window.innerHeight-height > 100);
+      if (Math.abs(window.innerWidth-width)>80) { width=window.innerWidth; unfocusedHeight=window.innerHeight; }
+      if (!input) unfocusedHeight=Math.max(window.innerHeight,height);
+      root.classList.toggle('keyboard-open', mobile && !!input && Math.max(unfocusedHeight,window.innerHeight)-height > 100);
     });
   };
   const noGesture = (e: Event) => { if (window.matchMedia('(max-width: 960px)').matches) e.preventDefault(); };

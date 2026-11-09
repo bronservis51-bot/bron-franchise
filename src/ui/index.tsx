@@ -264,15 +264,22 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel 
   onConfirm: () => void; onClose: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      const scroll = document.querySelector('.content');
+      const y = scroll?.scrollTop;
+      d.showModal();
+      d.querySelector<HTMLElement>('.dialog-head')?.focus({preventScroll:true});
+      if (scroll && y !== undefined) scroll.scrollTop=y;
+    }
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby="dlg-title">
-      <div className="dialog-head"><h2 id="dlg-title">{title}</h2></div>
+    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby={titleId}>
+      <div className="dialog-head" tabIndex={-1} autoFocus><h2 id={titleId}>{title}</h2></div>
       <div className="dialog-body">
         {summary && (
           <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>

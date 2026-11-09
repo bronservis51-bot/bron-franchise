@@ -41,10 +41,11 @@ export const kbCommands = {
 export const TYPE_LABEL: Record<string, string> = { article: 'Статья', instruction: 'Инструкция', faq: 'Вопросы и ответы', regulation: 'Регламент', checklist: 'Чек-лист' };
 
 export interface Question { id: string; question: string; answer: string | null; answered_at: string | null; created_at: string; article_id: string | null;
-  user_name: string; partner_name: string | null; mine: boolean; unseen: boolean }
-export const kbAsk = (question: string, article: string | null) => command<string>('kb_ask', { question, article });
+  user_name: string; partner_name: string | null; mine: boolean; unseen: boolean; category: string; route: string }
+export const QUESTION_CATEGORIES: Record<string,string> = {films:'Плёнки и оклейка',equipment:'Оборудование',app:'Приложение и доступ',orders:'Заказ и предзаказ',finance:'Финансы и роялти',team:'Команда и управление',other:'Другое'};
+export const kbAsk = (question: string, category: string, article: string | null) => command<string>('kb_ask_categorized', { question, category, article });
 export const kbQuestions = () => command<Question[]>('kb_questions');
-export const kbAnswer = (question: string, answer: string, article: string | null) => command('kb_answer', { question, answer, article });
+export const kbAnswer = (question: string, answer: string, article: string | null, expected_answered_at: string | null = null) => command('kb_answer_checked', { question, answer, article, expected_answered_at });
 export const kbMisses = () => command<{ query: string; times: number; last_at: string }[]>('kb_search_misses');
 
 /** Карточка статьи в списках. */

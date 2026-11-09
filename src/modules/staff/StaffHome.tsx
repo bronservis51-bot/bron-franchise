@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Check, ChevronRight, Clock, Play, Square, Wallet } from 'lucide-react';
+import { DailyLearning } from '../learning/Learning';
+import { calculatePay, type ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
 import { dayLabel, monthLabel } from '../../platform/dates';
 import { formatMoneyShort, sumMinor } from '../../platform/money';
@@ -21,8 +23,8 @@ function useTick(ms: number) {
   useEffect(() => { const h = setInterval(() => set((x) => x + 1), ms); return () => clearInterval(h); }, [ms]);
 }
 
-function CloseDialog({ shift, currency, rate, fee, onClose, onDone }: {
-  shift: Shift; currency: string; rate: number; fee: number; onClose: () => void; onDone: (earned: number, month: number | null) => void;
+function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
+  shift: Shift; currency: string; rate: number; fee: number; policy?: ShiftPolicy | null; onClose: () => void; onDone: (earned: number, month: number | null) => void;
 }) {
   const { me } = useSession();
   const editing = shift.status === 'closed';
@@ -30,7 +32,7 @@ function CloseDialog({ shift, currency, rate, fee, onClose, onDone }: {
   const [card, setCard] = useState(editing ? String(shift.card_minor) : '');
   const [comment, setComment] = useState(shift.comment ?? '');
   const total = sumMinor([cash || '0', card || '0']);
-  const earned = BigInt(fee) + (total * BigInt(rate) + 5000n) / 10000n;
+  const earned = calculatePay(total,rate,fee,shift.pay_policy ?? policy);
   const m = useMutation({
     mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null, shift.closed_at),
     onSuccess: (r) => onDone(Number(earned), 'queued' in r ? null : Number(r.month_earned_minor)),
@@ -45,7 +47,7 @@ function CloseDialog({ shift, currency, rate, fee, onClose, onDone }: {
       </div>
       <div className="day-total-line"><span>Выручка смены</span><Money minor={total} currency={currency} strong /></div>
       <div className="earn-line"><Wallet size={18} aria-hidden /><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
-      <p className="faint">{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</p>
+      <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Сумма по ступени кассы: максимум фикса или процента, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
       <Field label="Комментарий">{(id) => <Input id={id} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />}</Field>
     </ConfirmDialog>
   );
@@ -70,6 +72,7 @@ export function StaffHome() {
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <h1>{first ? `${first}, ` : ''}{q.data?.open_shift ? 'хорошей смены!' : 'привет!'}</h1>
       </header>
+      <DailyLearning />
       <DataState query={q} skeleton={4}>
         {(d) => (
           <div className="home-body">
@@ -114,7 +117,7 @@ export function StaffHome() {
               <div className="plan-label">Заработано за {monthLabel(d.month, false)}</div>
               <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
               <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
-              <div className="plan-foot"><span>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</span></div>
+              <div className="plan-foot"><span>{d.use_partner_motivation ? 'По ступеням кассы: фикс или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>
             </section>
 
             {Boolean(toRead.data?.length) && (
@@ -146,7 +149,7 @@ export function StaffHome() {
         )}
       </DataState>
       {closing && q.data && (
-        <CloseDialog shift={closing} currency={q.data.currency} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
+        <CloseDialog shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
           onClose={() => setClosing(null)}
           onDone={(earned, month) => { setClosing(null); setResult({ earned, month }); void qc.invalidateQueries({ queryKey: ['staff'] }); }} />
       )}
