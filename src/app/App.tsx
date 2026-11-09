@@ -98,6 +98,7 @@ function BootScreen() {
     <div className="boot-screen" role="status" aria-label="Загрузка">
       <img src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" />
       <div className="boot-bar"><span /></div>
+      <a href={`${import.meta.env.BASE_URL}help.html`} style={{color:'#8798cf',fontSize:14}}>Помощь при сбое</a>
     </div>
   );
 }

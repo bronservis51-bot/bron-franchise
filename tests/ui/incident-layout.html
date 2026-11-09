@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Проверка заявок и корзины</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:16px;font:14px/1.5 system-ui;background:#eceef2;color:#17171a}
+    h1{font-size:20px;margin:0 0 12px}header{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+    label{display:grid;gap:4px}select,button{font:inherit;padding:9px 12px;min-height:44px;max-width:100%;border:1px solid #999;border-radius:6px;background:#fff;color:#17171a}
+    button{cursor:pointer}p{margin:8px 0 12px}.frame-scroll{overflow:auto;max-width:100%;border:1px solid #999;background:#dfe2e7}
+    iframe{display:block;border:0;height:1100px;background:#fff}output{display:block;margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+  <h1>Проверка заявок и корзины</h1>
+  <header>
+    <label for="route">Раздел<select id="route">
+      <option value="list">Канбан</option><option value="edit">Карточка заявки</option><option value="delete">Подтверждение удаления</option><option value="restore">Восстановление из корзины</option>
+    </select></label>
+    <label for="width">Ширина экрана<select id="width"><option>320</option><option>360</option><option selected>390</option><option>430</option><option>768</option><option>1280</option><option>1366</option><option>1440</option><option>1920</option></select></label>
+    <label for="text">Размер текста<select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
+    <button type="button" id="reload">Загрузить выбранный экран</button>
+    <button type="button" id="measure">Измерить текущий экран</button>
+    <button type="button" id="matrix">Прогнать 72 экрана</button>
+  </header>
+  <p>Настоящие компоненты приложения, роль менеджера, вымышленные данные. Проверка ждёт содержимое раздела и шрифты; измеряет ширину документа и размер полей. Таблицы и канбан могут прокручиваться внутри своих контейнеров.</p>
+  <p>Матрица: 4 новых экрана × 9 ширин × текст 100% и 200%. Она не заменяет проверку клавиатуры, жестов и масштаба на физическом телефоне.</p>
+  <div class="frame-scroll" aria-label="Контейнер выбранного размера"><iframe id="preview" title="Основные разделы: приложение с вымышленными данными"></iframe></div>
+  <output id="result" aria-live="polite"></output>
+  <output id="matrix-result" aria-live="polite"></output>
+  <details><summary>Измерения всех экранов</summary><pre id="matrix-cases"></pre></details>
+  <script>
+    const frame=document.getElementById('preview'),byId=id=>document.getElementById(id);
+    const routes={
+      'list':{route:'/leads',ready:'.lead-tile',minControls:2,role:'manager'},
+      'edit':{route:'/leads',ready:'.dialog-body input',minControls:4,role:'manager',scene:'lead-edit'},
+      'delete':{route:'/leads',ready:'.dialog-body strong',minControls:0,role:'manager',scene:'lead-delete'},
+      'restore':{route:'/leads',ready:'.dialog-body p',minControls:0,role:'manager',scene:'lead-restore'},
+    };
+    let running=false,sequence=0,navigation=0;
+    const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const selected=()=>({route:byId('route').value,width:Number(byId('width').value),text:byId('text').value});
+    function source(test){
+      // A unique query value forces an actual navigation even for the same route.
+      const config=routes[test.route];const params=new URLSearchParams({role:config.role,leads:'filled',knowledge:'1',text:test.text,layoutCase:String(++navigation),...(config.shift?{shift:config.shift}:{}),...(config.scene?{scene:config.scene}:{})});
+      return '/tests/ui/responsive-app.html?'+params+'#'+config.route;
+    }
+    function geometry(doc){
+      const root=doc.documentElement,view=doc.defaultView;
+      const controls=[...doc.querySelectorAll('input,select,textarea')].filter(el=>el.getClientRects().length&&view.getComputedStyle(el).visibility!=='hidden'&&!['hidden','checkbox','radio','range','button','submit','reset'].includes(el.type));
+      const fonts=controls.map(el=>({control:el.id||el.getAttribute('aria-label')||el.tagName,font:parseFloat(view.getComputedStyle(el).fontSize)}));
+      const touch=root.clientWidth<=960||view.matchMedia('(pointer:coarse)').matches;
+      const floor=touch?Math.max(16,parseFloat(view.getComputedStyle(root).getPropertyValue('--fs'))||16):null;
+      const localScrollRegions=[...doc.querySelectorAll('.table-wrap,.economics-table-wrap,.pipeline-board,.tabs,.point-chips,.prose table')].filter(el=>el.getClientRects().length).map(el=>({region:el.getAttribute('aria-label')||el.className,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,overflowX:view.getComputedStyle(el).overflowX}));
+      return {layoutWidth:view.innerWidth,viewport:root.clientWidth,scrollWidth:root.scrollWidth,bodyScrollWidth:doc.body.scrollWidth,overflow:root.scrollWidth>root.clientWidth+1,controls:fonts.length,minControlFont:fonts.length?Math.min(...fonts.map(x=>x.font)):null,requiredControlFont:floor,smallControls:floor===null?[]:fonts.filter(x=>!Number.isFinite(x.font)||x.font<floor-.1),visualScale:view.visualViewport?.scale??null,rootOverscroll:view.getComputedStyle(root).overscrollBehavior,localScrollRegions};
+    }
+    async function waitReady(doc,test){
+      const start=performance.now(),expected=routes[test.route];let previous='',stable=0;
+      while(performance.now()-start<15000){
+        if(frame.contentDocument!==doc)throw new Error('Экран изменился до завершения измерения');
+        const main=doc.querySelector('main#main');
+        const routeMatches=doc.defaultView.location.hash.split('?')[0]==='#'+expected.route;
+        const markers=expected.ready.split(',');
+        const scope=expected.scene?doc:main;const contentReady=scope&&(expected.all?markers.every(selector=>scope.querySelector(selector)):scope.querySelector(expected.ready));
+        const errors=main?.querySelector('[role="alert"]');
+        if(errors)throw new Error('Ошибка вместо содержимого: '+errors.textContent.trim().slice(0,250));
+        const metrics=main?geometry(doc):null;
+        if(routeMatches&&contentReady&&metrics.controls>=expected.minControls&&!main.querySelector('.skeleton,[aria-busy="true"]')){
+          await doc.fonts.ready;
+          const signature=[doc.documentElement.scrollWidth,doc.documentElement.scrollHeight,main.textContent].join(':');
+          stable=signature===previous?stable+1:0;previous=signature;
+          if(stable>=3&&performance.now()-start>=250)return {...test,loaded:true,heading:main.querySelector('h1')?.textContent??null,...geometry(doc)};
+        }else stable=0;
+        await pause(50);
+      }
+      throw new Error('Нет готового содержимого раздела или ожидаемых полей после загрузки данных и шрифтов');
+    }
+    async function loadCase(test){
+      frame.style.width=test.width+'px';
+      await new Promise((resolve,reject)=>{
+        const loaded=()=>{clearTimeout(timeout);resolve();};
+        const timeout=setTimeout(()=>{frame.removeEventListener('load',loaded);reject(new Error('Не загрузился iframe'));},15000);
+        frame.addEventListener('load',loaded,{once:true});frame.src=source(test);
+      });
+      return waitReady(frame.contentDocument,test);
+    }
+    async function show(){
+      const current=++sequence,test=selected();byId('result').textContent='Ожидание данных, содержимого и шрифтов…';
+      try{const result=await loadCase(test);if(!running&&current===sequence)byId('result').textContent=JSON.stringify(result,null,2);}
+      catch(error){if(!running&&current===sequence)byId('result').textContent=JSON.stringify({...test,loaded:false,error:String(error.message||error)},null,2);}
+    }
+    async function measure(){
+      const current=++sequence,test=selected();byId('result').textContent='Ожидание готового содержимого…';
+      try{const result=await waitReady(frame.contentDocument,test);if(!running&&current===sequence)byId('result').textContent=JSON.stringify(result,null,2);}
+      catch(error){if(!running&&current===sequence)byId('result').textContent=JSON.stringify({...test,loaded:false,error:String(error.message||error)},null,2);}
+    }
+    async function runMatrix(){
+      if(running)return;running=true;sequence++;
+      const inputs=[...document.querySelectorAll('header button,header select')];inputs.forEach(el=>el.disabled=true);
+      const output=byId('matrix-result'),results=[],cases=[];output.dataset.running='true';byId('matrix-cases').textContent='';
+      for(const route of Object.keys(routes))for(const width of [320,360,390,430,768,1280,1366,1440,1920])for(const text of ['100','200'])cases.push({route,width,text});
+      try{
+        for(const test of cases){
+          output.textContent=`Проверено ${results.length}/${cases.length}: ${test.route}, ${test.width}px, текст ${test.text}%`;
+          try{results.push(await loadCase(test));}catch(error){results.push({...test,loaded:false,error:String(error.message||error)});}
+        }
+        const failed=results.filter(r=>!r.loaded||r.overflow||r.smallControls?.length||r.layoutWidth!==r.width);
+        const routeResults=Object.keys(routes).map(route=>({route,total:results.filter(r=>r.route===route).length,failed:failed.filter(r=>r.route===route).length}));
+        output.textContent=JSON.stringify({total:results.length,passed:results.length-failed.length,failed:failed.length,loadFailures:results.filter(r=>!r.loaded).length,overflowFailures:results.filter(r=>r.overflow).length,controlFontFailures:results.filter(r=>r.smallControls?.length).length,routes:routeResults,failures:failed},null,2);
+        byId('matrix-cases').textContent=JSON.stringify(results,null,2);window.mobileLayoutMatrixResults=results;
+      }finally{output.dataset.running='false';running=false;inputs.forEach(el=>el.disabled=false);show();}
+    }
+    ['route','text'].forEach(id=>byId(id).addEventListener('change',show));
+    byId('width').addEventListener('change',()=>{frame.style.width=byId('width').value+'px';measure();});
+    byId('reload').addEventListener('click',show);byId('measure').addEventListener('click',measure);byId('matrix').addEventListener('click',runMatrix);show();
+  </script>
+</body>
+</html>

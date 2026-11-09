@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBeforeUnload, useBlocker } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Banknote, Building2, Check, Clock3, GripVertical, AtSign, MessageCircle, Phone, Plus, RefreshCw, Search, Send } from 'lucide-react';
+import { ArrowRight, Banknote, Building2, Check, Clock3, GripVertical, AtSign, MessageCircle, Phone, Plus, RefreshCw, Search, Send, Trash2 } from 'lucide-react';
 import { formatDateTime } from '../../platform/dates';
 import { ActionError, Button, Checkbox, ConfirmDialog, DataState, Field, Input, KV, PageHeader, Select, Textarea } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { ANSWERS, leadList, leadMove, leadSave, type Lead } from './api';
+import { ANSWERS, leadList, leadMove, leadSave, leadTrashList, leadSetDeleted, type Lead } from './api';
 import { COLUMNS, columnFor, groupLeads, readiness, type Readiness } from './pipeline';
 import { parseLeadContact } from './contact';
 
@@ -28,9 +28,17 @@ export function LeadsPage() {
   const qc = useQueryClient(); const toast = useToast();
   const [search, setSearch] = useState(''); const [onlyNew, setOnlyNew] = useState(false);
   const [editor, setEditor] = useState<{ lead?: Lead; column: string } | null>(null);
+  const [trash, setTrash] = useState(false); const [restore, setRestore] = useState<Lead | null>(null);
   const [dragId, setDragId] = useState<string | null>(null); const [over, setOver] = useState<string | null>(null);
   const board = useRef<HTMLDivElement>(null);
   const q = useQuery({ queryKey: ['leads'], queryFn: leadList, staleTime: 60_000, refetchInterval: 60_000 });
+  const tq = useQuery({ queryKey: ['leads', 'trash'], queryFn: leadTrashList, enabled: trash });
+  const restored = useMutation({ mutationFn: (l: Lead) => leadSetDeleted(l, false), onSuccess: row => {
+    qc.setQueryData<Lead[]>(['leads', 'trash'], all => all?.filter(l => l.id !== row.id));
+    qc.setQueryData<Lead[]>(['leads'], (all = []) => [row, ...all.filter(l => l.id !== row.id)]);
+    void qc.invalidateQueries({queryKey:['leads']});
+    setRestore(null); toast('Заявка восстановлена');
+  }});
   useEffect(() => { if (q.data) qc.setQueryData(['leads', 'inbox'], q.data.filter(l => l.status === 'new').length); }, [q.data, qc]);
   const groups = useMemo(() => groupLeads(q.data ?? [], search, onlyNew), [q.data, search, onlyNew]);
   const moved = useMutation({
@@ -39,11 +47,18 @@ export function LeadsPage() {
   });
   const jump = (id: string) => { const el = document.getElementById(`lead-column-${id}`); if (el && board.current) board.current.scrollTo({ left: el.offsetLeft }); };
   return <div className="leads-workspace">
-    <PageHeader title="Заявки" actions={<>
-      <Button aria-label="Обновить заявки" title="Обновить" onClick={() => void q.refetch()} loading={q.isFetching}><RefreshCw size={17} aria-hidden /></Button>
-      <Button variant="primary" onClick={() => setEditor({ column: '000' })}><Plus size={17} aria-hidden />Добавить</Button>
+    <PageHeader title={trash ? 'Корзина заявок' : 'Заявки'} actions={<>
+      <Button onClick={() => { setTrash(v => !v); setRestore(null); }}>{trash ? 'К заявкам' : <><Trash2 size={17} aria-hidden />Корзина</>}</Button>
+      <Button aria-label="Обновить заявки" title="Обновить" onClick={() => void (trash ? tq : q).refetch()} loading={trash ? tq.isFetching : q.isFetching}><RefreshCw size={17} aria-hidden /></Button>
+      {!trash && <Button variant="primary" onClick={() => setEditor({ column: '000' })}><Plus size={17} aria-hidden />Добавить</Button>}
     </>} />
-    <div className="pipeline-tools">
+    {trash ? <DataState query={tq}>{all => <>
+      {!all.length && <p className="faint">В корзине нет заявок.</p>}
+      {all.map(l => <div className="card" key={l.id}><div className="card-body row" style={{justifyContent:'space-between',flexWrap:'wrap',marginBottom:12}}>
+        <div style={{minWidth:0,overflowWrap:'anywhere'}}><strong>{l.name}</strong><div className="faint">Удалена {l.deleted_at && formatDateTime(l.deleted_at)}</div>{l.note && <p>{l.note}</p>}</div>
+        <Button onClick={() => { restored.reset(); setRestore(l); }}>Восстановить</Button>
+      </div></div>)}
+    </>}</DataState> : <><div className="pipeline-tools">
       <label className="pipeline-search"><Search size={18} aria-hidden /><Input aria-label="Поиск заявок" placeholder="Instagram, имя, город, телефон" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <Checkbox label="Только новые" checked={onlyNew} onChange={setOnlyNew} />
       <div className="pipeline-jump"><Select aria-label="Перейти к колонке" disabled={!q.data} defaultValue="" onChange={e => { jump(e.target.value); e.target.value = ''; }}>
@@ -87,31 +102,39 @@ export function LeadsPage() {
         </section>)}
       </div>
     </>}</DataState>
-    {editor && <LeadEditor lead={editor.lead} initialColumn={editor.column} onClose={() => setEditor(null)} onSaved={row => {
+    </>}
+    {restore && <ConfirmDialog open title="Восстановить заявку?" confirmLabel="Восстановить" busy={restored.isPending} error={restored.error} onClose={() => { if (!restored.isPending) setRestore(null); }} onConfirm={() => restored.mutate(restore)}><p>{restore.name}</p><p>Заявка вернётся в свою прежнюю колонку.</p></ConfirmDialog>}
+    {editor && <LeadEditor lead={editor.lead} initialColumn={editor.column} onClose={() => setEditor(null)} onDeleted={id => {
+      qc.setQueryData<Lead[]>(['leads'], all => all?.filter(l => l.id !== id));
+      void qc.invalidateQueries({queryKey:['leads']}); setEditor(null);
+    }} onSaved={row => {
       qc.setQueryData<Lead[]>(['leads'], (all = []) => all.some(l => l.id === row.id) ? all.map(l => l.id === row.id ? row : l) : [row, ...all]);
       setEditor(null); setSearch(''); setOnlyNew(false); requestAnimationFrame(() => jump(columnFor(row)));
     }} />}
   </div>;
 }
 
-function LeadEditor({ lead: l, initialColumn, onClose, onSaved }: { lead?: Lead; initialColumn: string; onClose: () => void; onSaved: (row: Lead) => void }) {
+function LeadEditor({ lead: l, initialColumn, onClose, onSaved, onDeleted }: { lead?: Lead; initialColumn: string; onClose: () => void; onSaved: (row: Lead) => void; onDeleted: (id: string) => void }) {
   const toast = useToast(); const initial = l?.instagram ? `@${l.instagram}` : l?.name ?? '';
   const [contact, setContact] = useState(initial); const [phone, setPhone] = useState(l?.phone ?? ''); const [city, setCity] = useState(l?.city ?? '');
   const [note, setNote] = useState(l?.note ?? ''); const [column, setColumn] = useState(initialColumn); const [operation] = useState(() => crypto.randomUUID());
+  const [deleting, setDeleting] = useState(false);
+  const removed = useMutation({mutationFn: () => leadSetDeleted(l!, true), onSuccess: row => { toast('Заявка удалена. Её можно восстановить из корзины'); onDeleted(row.id); }});
   const dirty = contact !== initial || phone !== (l?.phone ?? '') || city !== (l?.city ?? '') || note !== (l?.note ?? '') || column !== initialColumn;
   const save = useMutation({ mutationFn: () => { const parsed = parseLeadContact(contact); return leadSave({ id: l?.id, ...parsed, name: contact === initial && l ? l.name : parsed.name, phone, city, note, column }, l?.updated_at ?? null, operation); },
     onSuccess: row => { toast(l ? 'Заявка сохранена' : 'Заявка добавлена'); onSaved(row); } });
-  const blocker = useBlocker(dirty || save.isPending);
-  useEffect(() => { if (blocker.state === 'blocked') { if (!save.isPending && window.confirm('Уйти без сохранения заявки?')) blocker.proceed(); else blocker.reset(); } }, [blocker, save.isPending]);
-  useBeforeUnload(useCallback(e => { if (dirty || save.isPending) { e.preventDefault(); e.returnValue = ''; } }, [dirty, save.isPending]));
-  const close = () => { if (!save.isPending && (!dirty || window.confirm('Закрыть без сохранения изменений?'))) onClose(); };
+  const busy = save.isPending || removed.isPending;
+  const blocker = useBlocker(dirty || busy);
+  useEffect(() => { if (blocker.state === 'blocked') { if (!busy && window.confirm('Уйти без сохранения заявки?')) blocker.proceed(); else blocker.reset(); } }, [blocker, busy]);
+  useBeforeUnload(useCallback(e => { if (dirty || busy) { e.preventDefault(); e.returnValue = ''; } }, [dirty, busy]));
+  const close = () => { if (busy) return; if (deleting) { setDeleting(false); return; } if (!dirty || window.confirm('Закрыть без сохранения изменений?')) onClose(); };
   const details: [string, string][] = l ? [
     ...(l.budget ? [['Бюджет', ANSWERS.budget[l.budget]] as [string,string]] : []), ...(l.timing ? [['Открытие', ANSWERS.timing[l.timing]] as [string,string]] : []),
     ...(l.place ? [['Место', ANSWERS.place[l.place]] as [string,string]] : []), ...(l.manage ? [['Управление', ANSWERS.manage[l.manage]] as [string,string]] : []),
     ...(l.experience ? [['Опыт', ANSWERS.experience[l.experience]] as [string,string]] : []), ...(l.comment ? [['Комментарий', l.comment] as [string,string]] : []),
   ] : [];
-  return <ConfirmDialog open title={l ? 'Заявка' : 'Новая заявка'} confirmLabel={l ? 'Сохранить' : 'Добавить'} busy={save.isPending} error={save.error} disabled={!contact.trim() || !!l && !dirty} onClose={close} onConfirm={() => save.mutate()}>
-    <div className="lead-editor" data-unsaved={dirty || undefined}>
+  return <ConfirmDialog open title={deleting ? 'Удалить заявку?' : l ? 'Заявка' : 'Новая заявка'} confirmLabel={deleting ? 'Удалить' : l ? 'Сохранить' : 'Добавить'} danger={deleting} busy={busy} error={deleting ? removed.error : save.error} disabled={!deleting && (!contact.trim() || !!l && !dirty)} onClose={close} onConfirm={() => deleting ? removed.mutate() : save.mutate()}>
+    {deleting ? <><p><strong>{l?.name}</strong></p><p>Заявка исчезнет из канбана. Восстановить её можно через «Корзина».</p>{dirty && <p>Несохранённые изменения будут отменены.</p>}</> : <div className="lead-editor" data-unsaved={dirty || undefined}>
       <Field label="Instagram или имя" required>{id => <Input id={id} autoFocus value={contact} maxLength={100} placeholder="@nik или имя" autoCapitalize="none" spellCheck={false} onChange={e => setContact(e.target.value)} />}</Field>
       {l?.instagram && <a className="lead-contact-link" href={`https://www.instagram.com/${l.instagram}/`} target="_blank" rel="noopener noreferrer"><AtSign size={17} aria-hidden />Открыть Instagram</a>}
       {l?.phone && <div className="row">
@@ -127,6 +150,7 @@ function LeadEditor({ lead: l, initialColumn, onClose, onSaved }: { lead?: Lead;
         {details.length > 0 && <><h3>Ответы анкеты</h3><KV items={details} /></>}
         {l && <p className="faint">{formatDateTime(l.created_at)}{l.updated_by_name ? ` · ${l.updated_by_name}` : ''}</p>}
       </details>
-    </div>
+      {l && <Button variant="danger" disabled={busy} onClick={() => { removed.reset(); setDeleting(true); }}><Trash2 size={16} aria-hidden />Удалить заявку</Button>}
+    </div>}
   </ConfirmDialog>;
 }

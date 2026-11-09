@@ -7,6 +7,7 @@ import { procurementFixture } from './procurement-fixture';
 import {createShiftFixture} from './shift-fixture';
 import {learningFixture} from './learning-fixture';
 import { knowledgeFixture } from './knowledge-fixture';
+import {createLeadFixture} from './lead-fixture';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
@@ -35,6 +36,7 @@ const detail = { ...location, location_id: location.id, location_name: location.
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }] };
 const qaParams = new URLSearchParams(window.location.search);
+const leadFixture=createLeadFixture(qaParams);
 if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
   me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }];
@@ -56,6 +58,7 @@ window.fetch = async (input, init) => {
   const knowledgeResponse = knowledgeFixture(url, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
   if (knowledgeResponse) return knowledgeResponse;
   if (url.pathname.includes('/rpc/')) {
+    const leadResponse=leadFixture(name??'',init?.body?JSON.parse(String(init.body)):{});if(leadResponse)return leadResponse;
     const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
     if (procurementResponse) return procurementResponse;
     if(name==='learning_read'){qaTask.read_at=new Date().toISOString();return Response.json(null);}
@@ -112,7 +115,18 @@ createRoot(document.getElementById('root')!).render(<App />);
 
 // Open real controls for responsive form measurements; no production data is used.
 if(qaParams.get('scene')){
+ if(qaParams.get('scene')!.startsWith('lead-')){
+  const scene=qaParams.get('scene');let stage=0;
+  const timer=setInterval(()=>{
+   const buttons=[...document.querySelectorAll('button')];
+   if(stage===0){const b=scene==='lead-restore'?buttons.find(b=>b.textContent?.trim()==='Корзина'):document.querySelector<HTMLButtonElement>('.lead-open');if(b){b.click();stage++;}}
+   else if(stage===1&&scene!=='lead-edit'){
+    const b=buttons.find(b=>b.textContent?.trim()===(scene==='lead-restore'?'Восстановить':'Удалить заявку'));if(b){b.click();clearInterval(timer);}
+   }else clearInterval(timer);
+  },50);setTimeout(()=>clearInterval(timer),10_000);
+ }else{
  const desired=qaParams.get('scene')==='close'?'Закрыть смену и внести выручку':'Разобрать';
  const timer=setInterval(()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()===desired);if(button){clearInterval(timer);button.click();}},50);
  setTimeout(()=>clearInterval(timer),10000);
+ }
 }
