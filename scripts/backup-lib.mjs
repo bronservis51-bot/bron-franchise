@@ -38,7 +38,7 @@ async function privateTablesInOrder(db) {
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='app_private' and c.relkind='r'
       and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme','learning_config','learning_task')
-        or c.relname ~ '^procurement_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
+        or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid
     join pg_class parent on parent.oid=f.confrelid
@@ -169,14 +169,15 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   for (const name of privateOrder) {
     const cols = (await columns(db, `app_private.${name}`)).filter(c => !c.generated);
     for (const row of dump.private_tables?.[name] ?? []) {
-      const values = cols.map(c => {
+      const rowCols = cols.filter(c => Object.hasOwn(row,c.name));
+      const values = rowCols.map(c => {
         let v = row[c.name] ?? null;
         if (v !== null && isUserCol(`app_private.${name}`, c.name)) v = userMap.get(v) ?? v;
         if (c.type === 'bytea' && typeof v === 'string' && /^\\x[0-9a-f]*$/i.test(v)) return Buffer.from(v.slice(2), 'hex');
         if (Array.isArray(v) && c.type.endsWith('[]')) return `{${v.map((x) => (x === null ? 'NULL' : `"${String(x).replace(/["\\]/g, '\\$&')}"`)).join(',')}}`;
         return v !== null && typeof v === 'object' ? JSON.stringify(v) : v;
       });
-      await db.query(`insert into app_private.${name} (${cols.map(c => JSON.stringify(c.name)).join(',')}) ${cols.some(c => c.identity) ? 'overriding system value' : ''} values (${cols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);
+      await db.query(`insert into app_private.${name} (${rowCols.map(c => JSON.stringify(c.name)).join(',')}) ${rowCols.some(c => c.identity) ? 'overriding system value' : ''} values (${rowCols.map((c,i) => `$${i+1}::${c.type}`).join(',')})`,values);
     }
     for (const c of cols.filter(c => c.identity)) {
       await db.query(`select setval(pg_get_serial_sequence('app_private.${name}', '${c.name}'),

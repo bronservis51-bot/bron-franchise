@@ -6,9 +6,8 @@ import { command, from, rows } from '../../platform/backend';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader } from '../../ui';
+import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { LearningReport } from '../learning/Learning';
 import { MotivationPanel } from './Motivation';
 import { TeamAccounts } from './TeamAccounts';
 import { MonthNav } from '../revenue/components';
@@ -23,6 +22,11 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const currency = locs[0]?.currency ?? 'RUB';
   const [name, setName] = useState(staff?.full_name ?? '');
   const [usePartner,setUsePartner]=useState(staff?.use_partner_motivation ?? true);
+  const [kind,setKind]=useState(staff?.employee_kind??'employee');
+  const [start,setStart]=useState(staff?.internship_from??new Date().toLocaleDateString('en-CA'));
+  const [until,setUntil]=useState(staff?.internship_until??'');
+  const [traineeFee,setTraineeFee]=useState(String(staff?.internship_floor_minor??50000));
+  const [learningEnabled,setLearningEnabled]=useState(staff?.learning_enabled??true);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(randomPassword);
   const [sel, setSel] = useState<string[]>(staff?.location_ids ?? (locs.length === 1 ? [locs[0].id] : []));
@@ -32,8 +36,8 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const bp = Math.round(Number((rate || '0').replace(',', '.')) * 100);
   const m = useMutation({
     mutationFn: async () => {
-      if (staff) await command('staff_terms_set',{user:staff.user_id,full_name:name,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner});
-      else await command('staff_create_terms',{partner:partnerId,full_name:name,phone,password,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner});
+      const settings={employee_kind:kind,internship_from:start,internship_until:until||null,internship_floor_minor:traineeFee,learning_enabled:learningEnabled};
+      await command('staff_profile_save',{user:staff?.user_id??null,partner:partnerId,full_name:name,phone,password,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner,settings});
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['staff-list'] });
@@ -69,6 +73,13 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
           <Checkbox key={l.id} label={l.name} checked={sel.includes(l.id)} onChange={(v) => setSel(v ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
         ))}</div>
       )}</Field>
+      <Field label="Статус сотрудника">{id=><Select id={id} value={kind} onChange={e=>setKind(e.target.value as 'employee'|'trainee')}><option value="employee">Менеджер продаж</option><option value="trainee">Стажёр</option></Select>}</Field>
+      {kind==='trainee'&&<>
+        <div className="grid grid-2"><Field label="Начало стажировки">{id=><Input id={id} type="date" value={start} onChange={e=>setStart(e.target.value)}/>}</Field><Field label="Последний день" hint="Пусто — один календарный месяц">{id=><Input id={id} type="date" value={until} onChange={e=>setUntil(e.target.value)}/>}</Field></div>
+        <Field label={`Фикс стажёра за смену, ${currency}`} hint="Фикс или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
+        <p className="faint">После последнего дня действуют обычные условия ниже. Статус не закрывает доступ и не подтверждает практические навыки автоматически.</p>
+      </>}
+      <Checkbox label="Обучение для сотрудника включено" checked={learningEnabled} onChange={setLearningEnabled}/>
       <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="По общей схеме: фикс или процент, плюс премия" />
       {!usePartner && <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label={`За выход, ${currency}`} hint="Фикс за смену">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
@@ -133,7 +144,6 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
     <>
       <TeamAccounts partner={partnerId} />
       <MotivationPanel partner={partnerId} />
-      <LearningReport partner={partnerId} month={month} />
       <div className="row between" style={{ marginBottom: 8 }}>
         <MonthNav month={month} onChange={setMonth} max={monthStart()} />
         <div className="row">
@@ -154,7 +164,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                 <Card key={s.user_id} className={s.active ? '' : 'muted-card'}>
                   <div className="row between staff-summary" style={{ alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
-                      <div className="row"><strong>{s.full_name}</strong>
+                      <div className="row"><strong>{s.full_name}</strong>{s.employee_kind==='trainee'&&<Badge tone="info">стажёр до {s.internship_until}</Badge>}
                         {!s.active ? <Badge tone="neutral">удалён</Badge> : s.open_shift ? <Badge tone="success">на смене · {s.open_shift.location_name}</Badge> : null}</div>
                       <div className="faint">{formatPhone(s.phone)} · {s.location_names.join(', ')}</div>
                       <div className="faint">{s.use_partner_motivation ? 'По ступенчатой системе франчайзи' : <>{s.shift_fee_minor ? `${formatMoneyShort(s.shift_fee_minor, currency)} за выход` : ''}{s.shift_fee_minor && s.rate_bp ? ' + ' : ''}{s.rate_bp ? `${pctBp(s.rate_bp)} от выручки` : ''}{!s.shift_fee_minor && !s.rate_bp ? 'оплата не задана' : ''}</>}</div>

@@ -5,7 +5,6 @@ import { command,from,rows } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { Button, Checkbox, ConfirmDialog, DataState, Field, Input, PageHeader } from '../../ui';
 import { StaffHome } from './StaffHome';
-import { DailyLearning } from '../learning/Learning';
 import { OrderCard } from '../orders/OrderLink';
 import { formatPhone, randomPassword, userSetPassword } from './api';
 
@@ -13,7 +12,7 @@ type Team = {user_id:string; full_name:string; phone:string; active:boolean};
 export function TeamHome() {
   const { me,can } = useSession();
   return <div className="home"><PageHeader title={me?.user.full_name ?? 'Главная'} /><OrderCard />
-    {can('shift.work') ? <StaffHome /> : <DailyLearning />}<div className="stack"><Link className="read-card" to="/staff">Сотрудники</Link><Link className="read-card" to="/kb">База знаний</Link></div></div>;
+    {can('shift.work') && <StaffHome />}<div className="stack"><Link className="read-card" to="/staff">Сотрудники</Link><Link className="read-card" to="/kb">База знаний</Link></div></div>;
 }
 export function TeamAccounts({partner}:{partner:string}) {
   const {can}=useSession(); const qc=useQueryClient();

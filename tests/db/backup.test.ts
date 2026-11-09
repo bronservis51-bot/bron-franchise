@@ -29,7 +29,12 @@ describe('резервная копия и восстановление', () => 
     await src.query(`insert into app_private.procurement_incoming(product_id,purchase_order_id,quantity,eta,note,updated_by)
       select $1,$2,12,current_date+1,'Проверка восстановления подтверждённой поставки',id from public.app_user where email='fm@demo.example.com'`,
     [product, '10000000-0000-0000-0000-000000000085']);
+    await src.query(`insert into app_private.learning_config(article_id,revision_id,questions)
+      select id,published_revision_id,'[{"prompt":"Проверка копии?","choices":["Да","Нет"],"correct":0}]'::jsonb
+      from article where status='published' limit 1`);
     const dump = await exportData(src);
+    // Older private-table backups must receive defaults for columns added later.
+    for (const key of ['for_trainees','for_franchisees','stage','position','pass_percent','quiz_size']) delete dump.private_tables.learning_config[0][key];
     expect(dump.tables.daily_revenue.length).toBeGreaterThan(0);
     expect(dump.private_tables.procurement_catalog).toHaveLength(1);
     expect(dump.private_tables.procurement_request).toHaveLength(1);
@@ -44,6 +49,8 @@ describe('резервная копия и восстановление', () => 
     await expect(restoreData(dst, dump)).rejects.toThrow(/confirm-wipe/);
     await restoreData(dst, dump, { wipe: true });
 
+    const restoredLesson=(await dst.query('select questions,for_trainees,pass_percent from app_private.learning_config')).rows[0];
+    expect(restoredLesson.questions).toHaveLength(1);expect(restoredLesson.for_trainees).toBe(false);expect(restoredLesson.pass_percent).toBe(80);
     const restored = (await dst.query(`select id, number, created_by, items from app_private.procurement_request`)).rows[0];
     const restoredOwner = (await dst.query(`select id from public.app_user where email='alpha.owner@demo.example.com'`)).rows[0].id;
     expect(restored.id).toBe(request.id);

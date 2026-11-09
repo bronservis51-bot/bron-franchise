@@ -4,6 +4,7 @@ import { startViewport } from '../../src/platform/viewport';
 import { App } from '../../src/app/App';
 import '../../src/ui/styles.css';
 import { procurementFixture } from './procurement-fixture';
+import {learningFixture} from './learning-fixture';
 import { knowledgeFixture } from './knowledge-fixture';
 
 const uid = '00000000-0000-4000-8000-000000000001';
@@ -57,16 +58,18 @@ window.fetch = async (input, init) => {
     if (procurementResponse) return procurementResponse;
     if(name==='learning_read'){qaTask.read_at=new Date().toISOString();return Response.json(null);}
     if(name==='learning_submit'){qaTask.completed_at=new Date().toISOString();qaTask.score=1;return Response.json({score:1,total:1});}
+    const learningResponse=learningFixture(name,init?.body?JSON.parse(String(init.body)):{},qaParams);
+    if(learningResponse)return learningResponse;
     const answers: Record<string, unknown> = {
       support_accounts:[],learning_config_get:{for_managers:false,for_sales:false,questions:[],version:0},
       motivation_get:{version:0,policy:qaPolicy,currency:'RUB'},learning_report:[],learning_today:{day:'2026-11-09',items:qaParams.get('learning')==='empty'?[]:[qaTask]},
       staff_home:{month,currency:'RUB',partner_name:partner.name,rate_bp:0,shift_fee_minor:0,pay_policy:qaPolicy,use_partner_motivation:true,open_shift:null,locations:[{location_id:location.id,location_name:location.name,currency:'RUB',today:'2026-11-09',my_today:null}],month_earned_minor:0,month_revenue_minor:0,month_shifts:0,shifts:[]},
-      team_list: [],
+      staff_profile_save:'qa-created',team_list: [],
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
       partner_access: { users: [{ assignment_id: 'qa-access', user_id: uid, full_name: 'Вымышленный пользователь с длинным именем', email: 'very-long-synthetic-login@example.invalid' }], invites: [] },
-      staff_list: [{user_id:uid,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
+      staff_list: [{user_id:'qa-worker-edit',employee_kind:'trainee',internship_from:'2026-11-09',internship_until:'2026-12-08',internship_floor_minor:50000,learning_enabled:true,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
       revenue_overview: { month, rows: [detail], fact_rub_minor: 0, plan_rub_minor: null, missing_fx: [] },
       kb_home: { sections: [section, { ...section, id: 'qa-empty', title: 'Раздел для будущего наполнения', count: 0 }], recent: articles, popular: [], continue: [], drafts: 0, total: articles.length },
       kb_section_page: { section, parent: null, children: [], articles }, kb_article_open: { section, parent: null, related: articles.slice(1), my_rating: null, stats: { views_30: 0, helpful: 0, not_helpful: 0, comments: [] } },

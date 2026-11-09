@@ -954,3 +954,11 @@ tr.clickable:hover td { background: var(--surface-2); }
  .dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
  .dialog-foot { padding-top: 12px; border-top: 1px solid var(--border); }
 }
+
+/* Continuous learning shares the app's surfaces and focus/spacing rules. */
+.learning-dot { display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:var(--success);margin-left:auto; }
+.learning-tabs { margin-bottom:20px; }
+.learning-study,.learning-study .card,.learning-settings-dialog,.quiz-question { min-width:0; }
+.learning-study h1,.learning-next h2,.learning-settings-dialog { overflow-wrap:anywhere; }
+.quiz-question .row input { min-width:0;flex:1; }
+@media(max-width:960px){ .bottom-nav .learning-dot{position:absolute;top:7px;right:calc(50% - 20px);margin:0;} }

@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Check, ChevronRight, Clock, Play, Square, Wallet } from 'lucide-react';
-import { DailyLearning } from '../learning/Learning';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
 import { dayLabel, monthLabel } from '../../platform/dates';
@@ -72,7 +71,7 @@ export function StaffHome() {
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <h1>{first ? `${first}, ` : ''}{q.data?.open_shift ? 'хорошей смены!' : 'привет!'}</h1>
       </header>
-      <DailyLearning />
+
       <DataState query={q} skeleton={4}>
         {(d) => (
           <div className="home-body">
