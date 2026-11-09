@@ -110,6 +110,7 @@ async function downloadPayroll(list: StaffRow[], month: string, currency: string
 
 /** Список сотрудников франчайзи с ведомостью — для франчайзи и для менеджера в карточке франчайзи. */
 export function StaffPanel({ partnerId }: { partnerId: string }) {
+  const {me}=useSession();
   const qc = useQueryClient();
   const toast = useToast();
   const [month, setMonth] = useState(monthStart());
@@ -164,11 +165,11 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     </div>
                   </div>
                   <div className="row" style={{ marginTop: 10 }}>
-                    {s.active ? <>
+                    {s.user_id!==me?.user.id && (s.active ? <>
                       <Button size="sm" variant="ghost" onClick={() => setEdit(s)}><Pencil size={14} aria-hidden />Изменить</Button>
                       <Button size="sm" variant="ghost" onClick={() => setPw(s)}><KeyRound size={14} aria-hidden />Пароль</Button>
                       <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}><UserMinus size={14} aria-hidden />Удалить</Button>
-                    </> : <Button size="sm" variant="ghost" loading={setActive.isPending} onClick={() => setActive.mutate({ user: s.user_id, active: true })}><UserRoundCheck size={14} aria-hidden />Вернуть</Button>}
+                    </> : <Button size="sm" variant="ghost" loading={setActive.isPending} onClick={() => setActive.mutate({ user: s.user_id, active: true })}><UserRoundCheck size={14} aria-hidden />Вернуть</Button>)}
                     {s.shifts.length > 0 && (
                       <Button size="sm" variant="ghost" onClick={() => setOpen(open === s.user_id ? null : s.user_id)}>
                         {open === s.user_id ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}Смены
