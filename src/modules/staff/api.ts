@@ -13,6 +13,7 @@ export interface StaffHomeData {
   shifts: Shift[];
 }
 export interface StaffRow {
+  employee_kind?: 'employee'|'trainee'; internship_from?:string|null; internship_until?:string|null; internship_floor_minor?:number; learning_enabled?:boolean;
   user_id: string; full_name: string; phone: string; active: boolean; use_partner_motivation?: boolean; location_ids: string[]; location_names: string[];
   rate_bp: number; shift_fee_minor: number; open_shift: { id: string; location_name: string; opened_at: string } | null;
   month_shifts: number; month_revenue_minor: number; month_earned_minor: number;

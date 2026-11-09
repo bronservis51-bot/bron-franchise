@@ -140,6 +140,7 @@ export function Shell() {
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = can('kb.edit') ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
   const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager && loc.pathname !== '/leads', staleTime: 120_000, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
+  const learning = useQuery({queryKey:['learning','notice'],queryFn:()=>command<{new_day:boolean}>('learning_notice'),staleTime:60_000,refetchInterval:60_000});
   const leadCount = leads.data ?? 0;
   // Фокус на основное содержимое при смене экрана — для экранных дикторов
   useEffect(() => mainRef.current?.focus({ preventScroll: true }), [loc.pathname]);
@@ -147,6 +148,7 @@ export function Shell() {
   const link = (n: NavItem, mobile = false) => (
     <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
       <n.icon size={mobile ? 22 : 18} aria-hidden />{mobile ? <span className="nav-label">{n.label}</span> : n.label}
+      {n.badge === 'learning' && learning.data?.new_day && <span className="learning-dot" aria-label="Загляните в обучение сегодня" />}
       {n.badge === 'kb' && kbCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={`новых: ${kbCount}`}>{mobile ? '' : kbCount}</span>}
       {n.badge === 'leads' && leadCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={`новых заявок: ${leadCount}`}>{mobile ? '' : leadCount}</span>}
     </NavLink>
@@ -167,7 +169,7 @@ export function Shell() {
       <div className="main">
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
-          <div className="grow topbar-title">{me?.assignments[0]?.scope_type === 'partner' ? me.assignments[0].scope_name : ''}</div>
+          <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
           {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
           <UserMenu pending={ops.length} />
         </header>
