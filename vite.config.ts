@@ -15,7 +15,7 @@ function cspPlugin(supabaseUrl: string): Plugin {
   const csp = [
     "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
     // картинки статей — по https-ссылкам; видео — только встроенные плееры YouTube, Rutube и VK
-    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws} https://raw.githubusercontent.com`.trim(),
+    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws} https://api.github.com`.trim(),
     'frame-src https://www.youtube-nocookie.com https://rutube.ru https://vk.com https://vkvideo.ru',
     "worker-src 'self'", "manifest-src 'self'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
   ].join('; ');

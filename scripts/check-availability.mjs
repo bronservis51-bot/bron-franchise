@@ -18,4 +18,4 @@ const [frontend,auth,data,landing]=await Promise.all([
 const report={checked_at:new Date().toISOString(),checks:{frontend,auth,data,landing}};
 writeFileSync(process.env.STATUS_OUTPUT??'/tmp/bron-status.json',JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report));
-// Report must be published even when a check failed; the workflow marks failure afterwards.
+if(Object.values(report.checks).some(v=>!v.ok))process.exitCode=1;
