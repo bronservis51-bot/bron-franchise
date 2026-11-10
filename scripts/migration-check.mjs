@@ -1,12 +1,13 @@
 // Read-only reconciliation. Full transfer/restore must happen separately.
 import pg from 'pg';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 import { snapshotDatabase, compareSnapshots } from './migration-audit.mjs';
 loadEnv();
 const sourceUrl = need('SOURCE_DATABASE_URL'), targetUrl = need('TARGET_DATABASE_URL');
 const endpoint = value => { const u = new URL(value); return `${u.hostname}:${u.port || '5432'}${u.pathname}`; };
 async function state(url) {
-  const db = new pg.Client({ connectionString: url });
+  const db = new pg.Client(databaseConfig(url));
   try { await db.connect(); return await snapshotDatabase(db); }
   finally { await db.end(); }
 }
