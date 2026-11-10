@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 import { readSourceLeads, reconcileLateLeads, LeadBridgeError } from './late-leads-lib.mjs';
 
 loadEnv();
@@ -13,8 +14,8 @@ const endpoint = value => { const u = new URL(value); return `${u.hostname}:${u.
 let source, target;
 try {
   if (endpoint(sourceUrl) === endpoint(targetUrl)) throw new LeadBridgeError('same-database-endpoint');
-  source = new pg.Client({ connectionString: sourceUrl, application_name: 'bron-late-leads-source', connectionTimeoutMillis: 15000 });
-  target = new pg.Client({ connectionString: targetUrl, application_name: 'bron-late-leads-target', connectionTimeoutMillis: 15000 });
+  source = new pg.Client({ ...databaseConfig(sourceUrl), application_name: 'bron-late-leads-source' });
+  target = new pg.Client({ ...databaseConfig(targetUrl), application_name: 'bron-late-leads-target' });
   await source.connect();
   const snapshot = await readSourceLeads(source);
   await source.end(); source = null;
