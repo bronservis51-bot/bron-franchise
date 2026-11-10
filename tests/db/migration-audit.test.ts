@@ -7,7 +7,12 @@ describe('полнота сверки переноса', () => {
   let db: PGlite;
   beforeEach(async () => {
     db = new PGlite();
-    await db.exec(`create schema auth; create schema app_private;
+    await db.exec(`create schema auth; create schema app_private; create schema storage;
+      create table storage.buckets(id text primary key,public boolean);
+      create table storage.objects(id int primary key,bucket_id text,name text);
+      alter table storage.objects enable row level security;
+      create policy document_read on storage.objects for select using (false);
+      insert into storage.buckets values('private-files',false);
       create table auth.users(id int primary key,email text,encrypted_password text);
       create table auth.identities(id int primary key,user_id int,identity_data jsonb);
       create table public.partner(id int primary key,name text);
@@ -56,5 +61,28 @@ describe('полнота сверки переноса', () => {
     await db.exec('drop table public.article_revision');
     await expect(snapshotDatabase(db)).rejects.toThrow('Missing required table: public.article_revision');
     expect((await db.query('select count(*) as n from public.partner')).rows).toEqual([{n:1}]);
+  });
+  it('обнаруживает публичный бакет и изменение политики закрытых файлов', async () => {
+    const before = await snapshotDatabase(db);
+    await db.exec(`update storage.buckets set public=true;
+      alter policy document_read on storage.objects using (true);`);
+    expect(compareSnapshots(before, await snapshotDatabase(db))).toEqual([
+      'data:storage.buckets','schema:storage_policies',
+    ]);
+  });
+  it('обнаруживает пропущенный файл, триггер и колонковые права', async () => {
+    const before = await snapshotDatabase(db);
+    await db.exec(`insert into storage.objects values(1,'private-files','synthetic.pdf');
+      create function public.trigger_probe() returns trigger language plpgsql as 'begin return new; end';
+      create trigger preserve_revision before update on public.article_revision
+        for each row execute function public.trigger_probe();
+      grant select(name) on public.partner to public;`);
+    expect(compareSnapshots(before, await snapshotDatabase(db))).toEqual([
+      'data:storage.objects','schema:columns','schema:routines','schema:triggers',
+    ]);
+  });
+  it('не принимает отсутствующее хранилище за пустое', async () => {
+    await db.exec('drop table storage.objects');
+    await expect(snapshotDatabase(db)).rejects.toThrow('Missing required table: storage.objects');
   });
 });
