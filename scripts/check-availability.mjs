@@ -1,6 +1,9 @@
 // No real submissions, passwords or personal data. A honeypot exercises the landing contract without inserting a lead.
 import {writeFileSync} from 'node:fs';
 const url=process.env.VITE_SUPABASE_URL, key=process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const appUrl=new URL(process.env.APP_URL || 'https://bronservis51-bot.github.io/bron-franchise/');
+if(appUrl.protocol!=='https:'||appUrl.username||appUrl.password||appUrl.search||appUrl.hash)throw Error('APP_URL must be a public HTTPS application base URL');
+if(!appUrl.pathname.endsWith('/'))appUrl.pathname+='/';
 if(!url?.startsWith('https://')||!key||key.startsWith('sb_secret_'))throw Error('Public connection variables are missing or invalid');
 async function check(target, init, valid){
  const start=Date.now();
@@ -10,7 +13,7 @@ async function check(target, init, valid){
 }
 const headers={apikey:key,'Content-Type':'application/json'};
 const [frontend,auth,data,landing]=await Promise.all([
- check('https://bronservis51-bot.github.io/bron-franchise/app-version.json',{},b=>typeof b?.build==='string'&&Number.isFinite(Date.parse(b.build))),
+ check(new URL('app-version.json',appUrl),{},b=>typeof b?.build==='string'&&Number.isFinite(Date.parse(b.build))),
  check(`${url}/auth/v1/health`,{headers},b=>b?.name==='GoTrue'),
  check(`${url}/rest/v1/rpc/ping`,{method:'POST',headers,body:'{}'},b=>b==='ok'),
  check(`${url}/rest/v1/rpc/lead_submit`,{method:'POST',headers,body:JSON.stringify({p_lead:{website:'availability-check'}})},b=>b?.ok===true),
