@@ -20,11 +20,13 @@ export async function snapshotDatabase(db) {
       from pg_class c join pg_namespace n on n.oid=c.relnamespace
       where c.relkind in ('r','p') and (
         n.nspname in ('public','app_private') or
-        (n.nspname='auth' and c.relname in ('users','identities')))
+        (n.nspname='auth' and c.relname in ('users','identities')) or
+        (n.nspname='storage' and c.relname in ('buckets','objects')))
       and not exists (select 1 from pg_depend d where d.classid='pg_class'::regclass and d.objid=c.oid and d.deptype='e')
       order by n.nspname, c.relname`)).rows;
     for (const required of ['auth.users','auth.identities','public.partner','public.location',
-      'public.role_assignment','public.daily_revenue','public.franchise_lead','public.article_revision']) {
+      'public.role_assignment','public.daily_revenue','public.franchise_lead','public.article_revision',
+      'storage.buckets','storage.objects']) {
       if (!tables.some(t => `${t.schema}.${t.name}` === required)) throw new Error(`Missing required table: ${required}`);
     }
     const result = {};
@@ -35,7 +37,7 @@ export async function snapshotDatabase(db) {
     }
     const catalogs = {
       columns: `select n.nspname,c.relname,a.attname,a.attnum,format_type(a.atttypid,a.atttypmod) as type,
-        a.attnotnull,a.attidentity,a.attgenerated,pg_get_expr(d.adbin,d.adrelid) as default_value
+        a.attnotnull,a.attidentity,a.attgenerated,a.attacl,pg_get_expr(d.adbin,d.adrelid) as default_value
         from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
         left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v') and a.attnum>0 and not a.attisdropped`,
@@ -45,6 +47,18 @@ export async function snapshotDatabase(db) {
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v','S')`,
       policies: `select schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
         from pg_policies where schemaname in ('public','app_private')`,
+      storage_policies: `select schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
+        from pg_policies where schemaname='storage'`,
+      storage_grants: `select n.nspname,c.relname,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,c.relacl,
+        a.attname,a.attacl
+        from pg_class c join pg_namespace n on n.oid=c.relnamespace
+        join pg_attribute a on a.attrelid=c.oid and a.attnum>0 and not a.attisdropped
+        where n.nspname='storage' and c.relname in ('buckets','objects')`,
+      triggers: `select n.nspname,c.relname,t.tgname,t.tgenabled,pg_get_triggerdef(t.oid,true) as definition
+        from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+        where n.nspname in ('public','app_private') and not t.tgisinternal`,
+      extensions: `select e.extname,e.extversion,n.nspname as schema from pg_extension e
+        join pg_namespace n on n.oid=e.extnamespace`,
       constraints: `select n.nspname,c.relname,k.conname,pg_get_constraintdef(k.oid,true) as definition
         from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace
         where n.nspname in ('public','app_private')`,
@@ -57,7 +71,7 @@ export async function snapshotDatabase(db) {
       enums: `select n.nspname,t.typname,e.enumsortorder,e.enumlabel from pg_enum e
         join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace
         where n.nspname in ('public','app_private')`,
-      schemas: `select nspname,pg_get_userbyid(nspowner) as owner,nspacl from pg_namespace where nspname in ('public','app_private')`,
+      schemas: `select nspname,pg_get_userbyid(nspowner) as owner,nspacl from pg_namespace where nspname in ('public','app_private','storage')`,
       default_grants: `select pg_get_userbyid(d.defaclrole) as owner,n.nspname,d.defaclobjtype,d.defaclacl
         from pg_default_acl d left join pg_namespace n on n.oid=d.defaclnamespace
         where n.nspname in ('public','app_private') or d.defaclnamespace=0`,
