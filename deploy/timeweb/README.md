@@ -1,8 +1,11 @@
 # Перенос в Timeweb
 
 Это подготовка, а не отметка о завершённом переезде. Не запускать на источнике.
-Домен приложения — `bsfranchise.site`, лендинг — `bsfranchise.ru`, API —
-`api.bsfranchise.site`. Оба сайта и backend размещаются в РФ. Домен и сервер —
+Домен приложения — `app.bronservis.ru`, лендинг — `bronservis.ru`, API —
+`api.bronservis.ru`. Регистрируется только `bronservis.ru`; `app` и `api` —
+бесплатные поддомены. Решение владельца и последствия:
+[ADR-0022](../../docs/adr/0022-bronservis-domain-and-subdomains.md).
+Оба сайта и backend размещаются в РФ. Домен и сервер —
 разные услуги; парковка домена не предоставляет Docker/PostgreSQL.
 
 ## Целевая площадка
@@ -36,12 +39,16 @@ PostgreSQL 17 и gateway **Envoy**, сервис `api-gw`. Не применят
 1. Получить именно этот commit, скопировать каталог `deploy/timeweb` в `docker/bron`.
 2. По официальной инструкции создать закрытый `docker/.env` с новыми секретами.
    Заполнить все поля upstream; не оставлять примеры паролей. Никаких секретов в git.
-   `SITE_URL=https://bsfranchise.site`,
-   `SUPABASE_PUBLIC_URL=https://api.bsfranchise.site`,
-   `API_EXTERNAL_URL=https://api.bsfranchise.site/auth/v1`. В текущем upstream
+   `SITE_URL=https://app.bronservis.ru`,
+   `SUPABASE_PUBLIC_URL=https://api.bronservis.ru`,
+   `API_EXTERNAL_URL=https://api.bronservis.ru/auth/v1`. В текущем upstream
    Auth URL включает `/auth/v1`; URL клиентского SDK остаётся без этого суффикса.
    Регистрация закрыта; доступы создаёт менеджер.
    Публичный клиентский ключ и JWT должны соответствовать новой установке.
+   Auth redirect URLs перечисляются явно; не вводить общие авторизационные cookies
+   на родительском домене. Существующая сессия клиента хранится в browser storage
+   конкретного origin. Для DNS нужны записи `@`, `app` и `api` на проверенный IP
+   российской цели; не публиковать непроверенный IPv6 или wildcard-запись.
 3. Проверить объединённый `docker compose ... config`, образы через `pull`,
    затем поднять изолированную цель. Не применять seed и `reset.sh`.
 4. Восстановить roles/schema/data по официальной процедуре. Не восстанавливать
