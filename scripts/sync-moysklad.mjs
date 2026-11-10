@@ -1,6 +1,7 @@
 // Run on the trusted server. Only GET requests are made to MoySklad.
 import pg from 'pg';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 import { normalizeProfitRows } from './supply-lib.mjs';
 
 loadEnv();
@@ -34,7 +35,7 @@ for (let offset=0; ; offset+=200) {
   if (page.rows.length!==200) throw new Error('Missing report page; snapshot unchanged');
 }
 const normalized = normalizeProfitRows(rows);
-const db = new pg.Client({connectionString});
+const db = new pg.Client(databaseConfig(connectionString));
 await db.connect();
 try {
   await db.query('begin');
