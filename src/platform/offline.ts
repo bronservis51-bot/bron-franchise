@@ -10,6 +10,8 @@ export interface QueuedOperation {
   createdAt: string;
   attempts: number;
   lastError?: string;
+  /** Missing on old records: an unknown old error must never be retried automatically. */
+  lastErrorCode?: string;
 }
 
 interface DraftRow {
@@ -62,23 +64,28 @@ export const drafts = {
 
 export const opQueue = {
   add: async (op: QueuedOperation) => { await (await db()).put('queue', op); },
-  list: (userId: string) => guarded(async () => (await db()).getAllFromIndex('queue', 'byUser', userId), [] as QueuedOperation[]),
-  remove: (userId: string, clientOpId: string) => guarded(async () => void (await (await db()).delete('queue', [userId, clientOpId])), undefined),
+  // A storage failure is not an empty queue or a successful removal.
+  list: async (userId: string) => (await db()).getAllFromIndex('queue', 'byUser', userId),
+  remove: async (userId: string, clientOpId: string) => { await (await db()).delete('queue', [userId, clientOpId]); },
 };
 
-/** Clear only after the caller has verified that the outgoing queue is empty. */
+/** Sign-out checks the queue and clears drafts atomically; it never deletes queued operations. */
 export async function clearUserData(userId: string) {
-  {
-    const d = await db();
-    const tx = d.transaction(['drafts', 'queue'], 'readwrite');
-    for (const store of ['drafts', 'queue'] as const) {
-      let cursor = await tx.objectStore(store).index('byUser').openCursor(userId);
-      while (cursor) {
-        await cursor.delete();
-        cursor = await cursor.continue();
-      }
+  const tx = (await db()).transaction(['drafts', 'queue'], 'readwrite');
+  try {
+    if (await tx.objectStore('queue').index('byUser').count(userId)) {
+      throw new Error('Есть неотправленные записи. Сначала отправьте их или сохраните копию из списка очереди.');
+    }
+    let cursor = await tx.objectStore('drafts').index('byUser').openCursor(userId);
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
     }
     await tx.done;
+  } catch (error) {
+    try { tx.abort(); } catch { /* The failed transaction may already have aborted. */ }
+    await tx.done.catch(() => undefined);
+    throw error;
   }
 }
 

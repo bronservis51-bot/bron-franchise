@@ -34,23 +34,33 @@ function useOutbox(userId: string | undefined, online: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
   const [ops, setOps] = useState<{ id: string; error?: string }[]>([]);
+  const [error, setError] = useState<unknown>(null);
+  const [sendError, setSendError] = useState<unknown>(null);
   useEffect(() => {
+    let active = true;
+    setOps([]); setError(null); setSendError(null);
     if (!userId) return;
-    const load = () => void queuedOps(userId).then((l) => setOps(l.map((o) => ({ id: o.clientOpId, error: o.lastError }))));
+    const load = () => void queuedOps(userId).then((l) => {
+      if (active) { setOps(l.map((o) => ({ id: o.clientOpId, error: o.lastError }))); setError(null); }
+    }).catch(e => { if (active) setError(e); });
     load();
-    return onOutboxChange(load);
+    const unsubscribe = onOutboxChange(load);
+    return () => { active = false; unsubscribe(); };
   }, [userId]);
   useEffect(() => {
     if (!userId || !online) return;
+    let active = true;
     const send = () => void flushOutbox(userId).then((r) => {
+      if (!active) return;
+      setSendError(null);
       if (r.sent) { toast(`Отправлено записей, сохранённых без сети: ${r.sent}`); void qc.invalidateQueries(); }
-    }).catch(() => undefined);
+    }).catch(e => { if (active) setSendError(e); });
     send();
     const timer = window.setInterval(send, 30000);
     window.addEventListener('focus', send);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', send); };
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', send); };
   }, [userId, online, qc, toast]);
-  return ops;
+  return { ops, error: error ?? sendError };
 }
 
 function PasswordDialog({ onClose }: { onClose: () => void }) {
@@ -136,7 +146,7 @@ export function Shell() {
   const role = isManager ? 'manager' : isTechnical ? 'support' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
   const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
   const mainRef = useRef<HTMLElement>(null);
-  const ops = useOutbox(me?.user.id, online);
+  const { ops, error: queueError } = useOutbox(me?.user.id, online);
   const [queueOpen, setQueueOpen] = useState(false);
   const [updateApp,setUpdateApp]=useState<(() => Promise<void>) | null>(null);
   const toast=useToast();
@@ -188,10 +198,10 @@ export function Shell() {
             <div className="alert-body">Нет сети. Выручку и закрытие смены можно сохранить — они отправятся сами, когда связь вернётся.</div>
           </div>
         )}
-        {ops.length > 0 && (
+        {(ops.length > 0 || queueError != null) && (
           <div className="alert tone-info" role="status" style={{ margin: '12px 24px 0' }}>
             <CloudOff size={18} aria-hidden />
-            <div className="alert-body">Сохранено на устройстве и ждёт отправки: {ops.length}.{ops.some((o) => o.error) && <span className="faint" style={{ display: 'block' }}>Сервер не принял запись: {ops.find((o) => o.error)?.error}</span>}</div>
+            <div className="alert-body">{queueError != null ? 'Не удалось проверить очередь на устройстве. Повторите проверку перед выходом.' : <>Сохранено на устройстве и ждёт отправки: {ops.length}.</>}{ops.some((o) => o.error) && <span className="faint" style={{ display: 'block' }}>Сервер не принял запись: {ops.find((o) => o.error)?.error}</span>}</div>
             <Button size="sm" onClick={() => setQueueOpen(true)}>Посмотреть записи</Button>
           </div>
         )}
@@ -219,7 +229,7 @@ function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
     const blob=new Blob([JSON.stringify({format:'bron-pending',exported_at:new Date().toISOString(),operations:q.data??[]},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='bron-pending-records.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); setCopied(true);
   };
-  return <ConfirmDialog open title="Неотправленные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} error={error}>
+  return <ConfirmDialog open title="Неотправленные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} error={error ?? q.error}>
     <p className="faint">При конфликте откройте день заново и сверьте суммы. Сначала сохраните копию, затем удалите обработанную запись из очереди.</p>
     <Button disabled={!q.data?.length} onClick={download}>Скачать копию записей</Button>
     {q.data?.map(o=><div key={o.clientOpId} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
