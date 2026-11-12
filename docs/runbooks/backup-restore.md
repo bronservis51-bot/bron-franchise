@@ -77,6 +77,41 @@ URI, реальные credentials потребляет нативный libpq. `
 сохранением UUID; это не утверждение о готовом byte-exact cryptographic restore.
 Наличие driver и 34 offline-тестов не доказывает реальную выгрузку.
 
+Исполнение 12.11: driver из `5201bbb6380b5620e463530690c2d3ac2546359b`
+загружен как `/root/f`; SHA-256
+`e5ab158d6ea4290f00141913fa401154553075ed5008b35aa1796bad337b941a`
+совпал. На VPS `--tunnel --check` прошёл, в том числе проверку реального CLI
+и vendor hashes. При `--backup` завершены зашифрованные roles/schema/data,
+raw-schema и Vault-ciphertext. На managed-migration-versions получен
+`artifact_pipeline_failed`; manifest успеха не опубликован, logical Vault ещё
+не подтверждён. Частичные файлы не считать полной копией. У source роли postgres
+подтверждены SELECT на Auth/Storage history; таблица supabase_functions.migrations
+отсутствует. Причина сбоя требует отдельной безопасной диагностики; обрыв
+долгоживущего snapshot пока только гипотеза.
+
+Для уточнения подготовлен обновлённый driver SHA-256
+`8850934693632c872d162420333f490c6509b1d496669bc641957fb3e8c08eca`:
+`--tunnel --diagnose-managed` выполняет только прежний managed dump под свежим
+read-only snapshot, отбрасывает stdout и выдаёт фиксированный диагностический
+код; stderr остаётся ограниченным буфером в RAM на VPS и не печатается.
+Snapshot heartbeat каждые25с проверяет прежний backend PID, MVCC snapshot,
+READ ONLY и REPEATABLE READ, без переподключения/смены снимка. Код прошёл
+45 offline-тестов вместе с helper; **на VPS эта версия ещё не установлена**.
+Сначала её проверить и диагностировать фазу; неполные старые файлы нельзя
+объединять с новым snapshot и объявлять согласованной полной копией.
+
+Для сверки через защищённый source service на самом VPS предусмотрен
+`npm run migration:check -- --source-service`. Source URL при этом запрещён;
+`scripts/migration-source.mjs` читает фиксированные root/0600 service/pgpass,
+сохраняет canonical TLS/SAN при TCP на loopback15432 и не использует чужой
+PGPASSWORD. Target задаётся отдельно через закрытый `TARGET_DATABASE_URL`,
+для plaintext loopback15433 — только с явным `BRON_DB_ALLOW_LOCAL_PLAIN=1`.
+Общий `database-config.mjs` не ослабляется. Node/зависимости и реальный запуск
+этого режима на VPS ещё не подтверждены; профильные offline TLS-тесты прошли.
+
+Порядок изоляции и freeze до первого старта цели:
+[restore-rehearsal.md](restore-rehearsal.md). Его Compose override ещё не применён.
+
 Для сохранения пользователей, UUID и паролей при переходе platform → self-hosted
 использовать актуальную [официальную процедуру Supabase](https://supabase.com/docs/guides/self-hosting/restore-from-platform),
 а не прикладной JSON restore. Переносятся роли, схема и данные, включая Auth;

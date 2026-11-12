@@ -45,6 +45,8 @@ VENDOR_HASHES = {
     "schema": "dfb40eb1e3a3f838b71ded195a372022898a069dfae4e906739b2dac6fef3f91",
     "data": "f9fab9e7e5ac0241b0e12bd0f2c69300147d994ddb90fd895fd3fb35a8432cde",
 }
+MAX_REPLY_BYTES = 65536
+HEARTBEAT_SECONDS = 25
 MISSING = [
     "storage_object_bytes_and_checksums_not_backed_up",
     "auth_jwt_smtp_settings_edge_functions_and_other_server_secrets_not_backed_up",
@@ -205,16 +207,62 @@ class Snapshot:
             ["/usr/bin/psql", "-X", "-q", "-A", "-t", "-w", "-v", "ON_ERROR_STOP=1",
              "--dbname", "service=bron_source"],
             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, start_new_session=True)
+            stderr=subprocess.DEVNULL, start_new_session=True, bufsize=0)
         self.metadata = None
         self.deadline = time.monotonic() + 30 * 60
+        self.last_heartbeat = None
+
+    def _send(self, sql):
+        try:
+            if self.process.stdin.write(sql) != len(sql):
+                raise BackupError("snapshot_keeper_write_failed")
+            self.process.stdin.flush()
+        except (OSError, ValueError):
+            raise BackupError("snapshot_keeper_write_failed") from None
+
+    def _read_json(self, timeout, phase):
+        # One unbuffered request/reply at a time. Never mix readline buffering
+        # with fd polling, or block forever after only a partial JSON line arrives.
+        deadline = time.monotonic() + timeout
+        response = bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(self.process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise BackupError(phase + "_timeout")
+                try:
+                    chunk = os.read(self.process.stdout.fileno(), 4096)
+                except OSError:
+                    raise BackupError("snapshot_keeper_read_failed") from None
+                if not chunk:
+                    raise BackupError("snapshot_keeper_lost")
+                response.extend(chunk)
+                if len(response) > MAX_REPLY_BYTES:
+                    raise BackupError("snapshot_reply_limit_exceeded")
+                if b"\n" not in response:
+                    continue
+                line, extra = response.split(b"\n", 1)
+                if extra.strip():
+                    raise BackupError("snapshot_reply_protocol_failed")
+                try:
+                    data = json.loads(line)
+                except (ValueError, UnicodeError):
+                    raise BackupError(phase + "_failed") from None
+                if not isinstance(data, dict):
+                    raise BackupError(phase + "_failed")
+                return data
 
     def start(self):
         sql = """BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '30s';
 SET LOCAL idle_in_transaction_session_timeout = '35min';
 SELECT json_build_object(
+ 'phase','snapshot_start',
  'snapshot',pg_export_snapshot(),
+ 'backend_pid',pg_backend_pid(),
+ 'isolation',current_setting('transaction_isolation'),
+ 'mvcc_snapshot',pg_current_snapshot()::text,
  'server_version_num',current_setting('server_version_num')::integer,
  'read_only',current_setting('transaction_read_only'),
  'default_read_only',current_setting('default_transaction_read_only'),
@@ -227,36 +275,49 @@ SELECT json_build_object(
  'objects',(select count(*) from storage.objects),
  'vault_secrets',(select count(*) from vault.secrets));
 """
-        self.process.stdin.write(sql.encode())
-        self.process.stdin.flush()
-        with selectors.DefaultSelector() as selector:
-            selector.register(self.process.stdout, selectors.EVENT_READ)
-            if not selector.select(45):
-                raise BackupError("snapshot_guard_timeout")
-        try:
-            data = json.loads(self.process.stdout.readline())
-        except (ValueError, UnicodeError):
-            raise BackupError("snapshot_guard_failed") from None
-        if not isinstance(data, dict):
-            raise BackupError("snapshot_guard_failed")
+        self._send(sql.encode())
+        data = self._read_json(45, "snapshot_guard")
         if (not isinstance(data.get("server_version_num"), int)
                 or data["server_version_num"] // 10000 != 17 or data.get("read_only") != "on"):
             raise BackupError("snapshot_version_or_actual_read_only_guard_failed")
+        if (data.get("phase") != "snapshot_start" or not isinstance(data.get("backend_pid"), int)
+                or data["backend_pid"] <= 0 or data.get("isolation") != "repeatable read"
+                or not isinstance(data.get("mvcc_snapshot"), str)
+                or not re.fullmatch(r"[0-9]+:[0-9]+:(?:[0-9]+(?:,[0-9]+)*)?", data.get("mvcc_snapshot", ""))):
+            raise BackupError("snapshot_identity_guard_failed")
         if not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", data.get("snapshot", "")):
             raise BackupError("invalid_exported_snapshot")
         self.metadata = data
+        self.last_heartbeat = time.monotonic()
         return data
 
-    def alive(self):
+    def alive(self, force=False):
         if self.process.poll() is not None:
             raise BackupError("snapshot_keeper_lost")
-        if time.monotonic() >= self.deadline:
+        now = time.monotonic()
+        if now >= self.deadline:
             raise BackupError("snapshot_total_time_budget_exceeded")
+        if self.metadata is None or self.last_heartbeat is None:
+            raise BackupError("snapshot_not_started")
+        if not force and now - self.last_heartbeat < HEARTBEAT_SECONDS:
+            return
+        self._send(b"SELECT json_build_object('phase','snapshot_heartbeat',"
+                   b"'backend_pid',pg_backend_pid(),'read_only',current_setting('transaction_read_only'),"
+                   b"'isolation',current_setting('transaction_isolation'),"
+                   b"'mvcc_snapshot',pg_current_snapshot()::text);\n")
+        data = self._read_json(15, "snapshot_heartbeat")
+        if (data.get("phase") != "snapshot_heartbeat" or data.get("read_only") != "on"
+                or data.get("isolation") != "repeatable read"):
+            raise BackupError("snapshot_heartbeat_mode_changed")
+        if data.get("backend_pid") != self.metadata["backend_pid"]:
+            raise BackupError("snapshot_heartbeat_backend_changed")
+        if data.get("mvcc_snapshot") != self.metadata["mvcc_snapshot"]:
+            raise BackupError("snapshot_heartbeat_snapshot_changed")
+        self.last_heartbeat = time.monotonic()
 
     def finish(self):
-        self.alive()
-        self.process.stdin.write(b"ROLLBACK;\n\\q\n")
-        self.process.stdin.flush()
+        self.alive(force=True)
+        self._send(b"ROLLBACK;\n\\q\n")
         self.process.stdin.close()
         try:
             if self.process.wait(timeout=15) != 0:
@@ -381,6 +442,88 @@ ROLLBACK;"""
     ]
 
 
+def classify_managed_error(stderr, returncode):
+    """Only fixed codes leave the process; stderr may contain sensitive SQL context."""
+    if returncode == 0:
+        return "DIAG_MANAGED_OK"
+    text = stderr.lower()
+    rules = [
+        ("DIAG_INVALID_SNAPSHOT", (b"invalid snapshot", b"snapshot does not exist", b"could not import")),
+        ("DIAG_AUTH_FAILED", (b"authentication failed", b"no password supplied", b"tenant or user not found")),
+        ("DIAG_PERMISSION_DENIED", (b"permission denied", b"must be owner", b"must be superuser")),
+        ("DIAG_NO_MATCHING_TABLES", (b"no matching tables", b"no matching relations")),
+        ("DIAG_LOCK_TIMEOUT", (b"lock timeout", b"could not obtain lock")),
+        ("DIAG_STATEMENT_TIMEOUT", (b"statement timeout",)),
+        ("DIAG_TLS_FAILED", (b"certificate verify failed", b"server certificate", b"root certificate")),
+        ("DIAG_CONNECTION_LOST", (b"server closed the connection", b"connection reset", b"broken pipe",
+                                 b"ssl syscall error", b"connection to server", b"terminating connection")),
+    ]
+    for code, patterns in rules:
+        if any(pattern in text for pattern in patterns):
+            return code
+    if b"does not exist" in text and (b"relation" in text or b"schema" in text):
+        return "DIAG_RELATION_OR_SCHEMA_MISSING"
+    return "DIAG_UNKNOWN_ERROR"
+
+
+def run_managed_diagnostic(command, env, keeper):
+    keeper.alive(force=True)
+    process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                               start_new_session=True, bufsize=0)
+    error_bytes = bytearray()
+    try:
+        deadline = time.monotonic() + 180
+        eof = False
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stderr, selectors.EVENT_READ)
+            while not eof or process.poll() is None:
+                keeper.alive()
+                if time.monotonic() >= deadline:
+                    raise BackupError("DIAG_PROCESS_TIMEOUT")
+                events = selector.select(0.25) if not eof else []
+                if events:
+                    try:
+                        chunk = os.read(process.stderr.fileno(), 4096)
+                    except OSError:
+                        raise BackupError("DIAG_STDERR_READ_FAILED") from None
+                    if not chunk:
+                        eof = True
+                        selector.unregister(process.stderr)
+                    else:
+                        error_bytes.extend(chunk)
+                        if len(error_bytes) > MAX_REPLY_BYTES:
+                            raise BackupError("DIAG_STDERR_LIMIT_EXCEEDED")
+                elif eof:
+                    time.sleep(0.05)
+        keeper.alive(force=True)
+        return classify_managed_error(error_bytes, process.returncode), process.returncode
+    finally:
+        stop_processes([process])
+        process.stderr.close()
+        error_bytes.clear()
+
+
+def diagnose_managed(tunnel):
+    # New snapshot only: never retry/reconnect the keeper or mix partial backups.
+    with tempfile.TemporaryDirectory(prefix=".managed-diagnostic-", dir=BACKUP_ROOT) as temporary:
+        env = source_env(Path(temporary), tunnel)
+        keeper = Snapshot(env)
+        try:
+            metadata = keeper.start()
+            command = dict(archive_commands(metadata["snapshot"]))["managed-migration-versions.sql"]
+            print("Checking managed migration metadata with a fresh read-only snapshot...", flush=True)
+            code, status = run_managed_diagnostic(command, env, keeper)
+            keeper.finish()
+            print(json.dumps({"diagnostic": code, "command_exit": status,
+                              "source_read_only": "on", "backup_created": False}, sort_keys=True), flush=True)
+            if status != 0:
+                raise BackupError(code)
+            return code
+        finally:
+            keeper.stop()
+
+
 def backup(tunnel):
     os.umask(0o077)
     lockfd = os.open(BACKUP_ROOT / ".source-backup.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -453,6 +596,8 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--backup", action="store_true")
+    mode.add_argument("--diagnose-managed", action="store_true",
+                      help="Diagnose only managed metadata under a fresh read-only snapshot; no backup")
     mode.add_argument("--prepare-key", action="store_true",
                       help="Prepare/reuse the protected local age identity; no source query")
     parser.add_argument("--tunnel", action="store_true", help="Explicit loopback SSH route at 127.0.0.1:15432")
@@ -463,7 +608,9 @@ def main():
     tunnel = args.tunnel or existing == "15432"
     os.umask(0o077)
     preflight(tunnel)
-    if args.prepare_key:
+    if args.diagnose_managed:
+        diagnose_managed(tunnel)
+    elif args.prepare_key:
         with tempfile.TemporaryDirectory(prefix=".source-key-", dir=BACKUP_ROOT) as temporary:
             recipient(Path(temporary))
         print(f"Protected backup key ready at {IDENTITY_FILE}; recovery custody is not verified. No source query.")

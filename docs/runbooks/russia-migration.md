@@ -11,7 +11,18 @@ SHA-256 `05b381f28f69377f87a980b7444190fa00047544d81b6b0f9d65ad1d8a68817e` со�
 16 Auth users/16 identities/1 bucket/0 objects. Сохранённые credentials root/0600
 переиспользованы без запроса секрета. `install -m600` установил исправление как
 `/opt/bron/source-db-access.py`; этап доступа завершён. Полной копии и
-восстановления ещё нет. SQL/Auth driver подготовлен, его реальный запуск впереди.
+восстановления ещё нет. Driver `/root/f` из `5201bbb…`, SHA-256
+`e5ab158d6ea4290f00141913fa401154553075ed5008b35aa1796bad337b941a`, прошёл
+реальный `--check`. Первый SQL/Auth-экспорт сохранил основные зашифрованные файлы,
+но остановился на managed-migration-versions с `artifact_pipeline_failed`.
+Полного manifest нет; требуется диагностика, не переключение клиентов.
+
+Подготовлены узкий Node source service для сверки и отдельный restore override
+с cron freeze, pg_net batch0, internal network и DB только на loopback15433.
+Они ещё не применены на VPS. В Timeweb подтверждены приватный бакет602119,
+1GB, баланс499₽ и endpoint s3.twcstorage.ru/ru-1. Подготовлена форма отдельного
+пользователя `bron-franchise-backup`, **не создан и права не выданы**; нужен
+отдельный ограниченный доступ для сервера, не главный S3 administrator.
 
 Проверено 12.11.2026. Домен `bronservis.ru` зарегистрирован и оплачен до 11.11.2027.
 Статус: подготовка; VPS активен. В панели подтверждены Москва, Ubuntu 24.04,

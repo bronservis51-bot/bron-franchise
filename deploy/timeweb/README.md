@@ -132,6 +132,13 @@ Override заменяет его официальным `17.11.0.019` с неи�
 
 ## Сборки сайтов
 
+Для изолированной репетиции подготовлен отдельный
+[compose.restore.override.yml](compose.restore.override.yml), применяемый последним.
+Он замораживает cron/pg_net с первого старта, закрывает публичные порты и оставляет
+только loopback15433 для сверки. Он **не применён** и не предназначен для выпуска;
+порядок init/импорта и runtime gates — в
+[restore-rehearsal.md](../../docs/runbooks/restore-rehearsal.md).
+
 Приложение собирается с `VITE_BASE_PATH=/`, новым `VITE_SUPABASE_URL`,
 соответствующим публичным ключом и `VITE_APP_ENV=production`. Его `dist/`
 попадает в `docker/bron/site/app/` целиком, включая worker, manifest и версию.

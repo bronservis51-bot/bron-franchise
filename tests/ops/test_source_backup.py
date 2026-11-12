@@ -18,7 +18,11 @@ SNAPSHOT = "00000004-00000048-1"
 RECIPIENT = "age1" + "a" * 58
 METADATA = {"snapshot": SNAPSHOT, "server_version_num": 170011, "read_only": "on",
             "default_read_only": "off", "auth_users": 16, "identities": 16,
-            "buckets": 1, "objects": 0, "vault_secrets": 1}
+            "buckets": 1, "objects": 0, "vault_secrets": 1,
+            "phase": "snapshot_start", "backend_pid": 31415,
+            "isolation": "repeatable read", "mvcc_snapshot": "100:105:102,104"}
+HEARTBEAT = {key: METADATA[key] for key in ("backend_pid", "read_only", "isolation", "mvcc_snapshot")}
+HEARTBEAT["phase"] = "snapshot_heartbeat"
 
 
 def vendor_fixture(mode):
@@ -120,12 +124,13 @@ class VendorAndEnvironmentTests(unittest.TestCase):
 class SnapshotTests(unittest.TestCase):
     def start_with(self, metadata):
         process = mock.Mock()
-        process.stdout.readline.return_value = json.dumps(metadata).encode() + b"\n"
+        process.stdin.write.side_effect = len
         selector = mock.MagicMock()
         selector.__enter__.return_value = selector
         selector.select.return_value = [True]
         with mock.patch.object(backup.subprocess, "Popen", return_value=process) as start, \
-             mock.patch.object(backup.selectors, "DefaultSelector", return_value=selector):
+             mock.patch.object(backup.selectors, "DefaultSelector", return_value=selector), \
+             mock.patch.object(backup.os, "read", return_value=json.dumps(metadata).encode() + b"\n"):
             snapshot = backup.Snapshot({"PGPASSWORD_MUST_NOT_EXIST": "not-a-password"})
             result = snapshot.start()
         return snapshot, result, process, start
@@ -139,6 +144,8 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("pg_export_snapshot()", sql)
         self.assertEqual(start.call_args.kwargs["stderr"], backup.subprocess.DEVNULL)
         self.assertIn("-q", start.call_args.args[0])
+        self.assertEqual(start.call_args.kwargs["bufsize"], 0)
+        process.stdout.readline.assert_not_called()
         self.assertEqual(snapshot.metadata["snapshot"], SNAPSHOT)
 
     def test_actual_read_write_or_wrong_major_version_cannot_start_backup(self):
@@ -180,6 +187,160 @@ class SnapshotTests(unittest.TestCase):
                 self.assertTrue(sql.rstrip().endswith("ROLLBACK;"))
         with self.assertRaisesRegex(backup.BackupError, "invalid_exported_snapshot"):
             backup.archive_commands("snapshot'; unsafe SQL")
+
+
+class HeartbeatTests(unittest.TestCase):
+    def keeper(self):
+        keeper = object.__new__(backup.Snapshot)
+        keeper.process = mock.Mock()
+        keeper.process.poll.return_value = None
+        keeper.process.stdin.write.side_effect = len
+        keeper.metadata = METADATA.copy()
+        keeper.deadline = 9999
+        keeper.last_heartbeat = 0
+        return keeper
+
+    def test_due_heartbeat_uses_same_transaction_without_reexporting_snapshot(self):
+        keeper = self.keeper()
+        with mock.patch.object(backup.time, "monotonic", return_value=25), \
+             mock.patch.object(keeper, "_read_json", return_value=HEARTBEAT.copy()) as reply:
+            keeper.alive()
+        sql = keeper.process.stdin.write.call_args.args[0]
+        self.assertIn(b"pg_backend_pid()", sql)
+        self.assertIn(b"transaction_read_only", sql)
+        self.assertNotIn(b"BEGIN", sql)
+        self.assertNotIn(b"pg_export_snapshot", sql)
+        self.assertEqual(keeper.metadata["snapshot"], SNAPSHOT)
+        self.assertEqual(keeper.last_heartbeat, 25)
+        reply.assert_called_once_with(15, "snapshot_heartbeat")
+
+    def test_no_ping_before_interval_but_forced_final_check_is_real(self):
+        keeper = self.keeper()
+        with mock.patch.object(backup.time, "monotonic", return_value=10), \
+             mock.patch.object(keeper, "_read_json", return_value=HEARTBEAT.copy()) as reply:
+            keeper.alive()
+            keeper.process.stdin.write.assert_not_called()
+            keeper.alive(force=True)
+            reply.assert_called_once()
+
+    def test_backend_mvcc_read_only_isolation_or_phase_changes_fail_closed(self):
+        for change, code in [({"backend_pid": 22}, "backend_changed"),
+                             ({"mvcc_snapshot": "200:201:"}, "snapshot_changed"),
+                             ({"read_only": "off"}, "mode_changed"),
+                             ({"isolation": "read committed"}, "mode_changed"),
+                             ({"phase": "snapshot_start"}, "mode_changed")]:
+            keeper = self.keeper()
+            with self.subTest(change=change), \
+                 mock.patch.object(backup.time, "monotonic", return_value=30), \
+                 mock.patch.object(keeper, "_read_json", return_value={**HEARTBEAT, **change}):
+                with self.assertRaisesRegex(backup.BackupError, code):
+                    keeper.alive()
+
+    def test_broken_stdin_reports_only_a_fixed_code(self):
+        keeper = self.keeper()
+        keeper.process.stdin.write.side_effect = BrokenPipeError("private-context-must-not-leak")
+        with mock.patch.object(backup.time, "monotonic", return_value=30):
+            with self.assertRaisesRegex(backup.BackupError, "^snapshot_keeper_write_failed$"):
+                keeper.alive()
+
+    def read_reply(self, chunks, clock=None):
+        keeper = self.keeper()
+        selector = mock.MagicMock()
+        selector.__enter__.return_value = selector
+        selector.select.return_value = [True]
+        with mock.patch.object(backup.selectors, "DefaultSelector", return_value=selector), \
+             mock.patch.object(backup.os, "read", side_effect=chunks), \
+             mock.patch.object(backup.time, "monotonic", side_effect=clock or [0, 0, 1, 2, 3]):
+            try:
+                return keeper._read_json(15, "snapshot_heartbeat")
+            finally:
+                keeper.process.stdout.readline.assert_not_called()
+
+    def test_partial_json_cannot_block_past_deadline(self):
+        with self.assertRaisesRegex(backup.BackupError, "snapshot_heartbeat_timeout"):
+            self.read_reply([b'{"phase":'], [0, 0, 16])
+
+    def test_partial_json_is_reassembled_without_buffered_readline(self):
+        self.assertEqual(self.read_reply([b'{"ok":', b'true}\n']), {"ok": True})
+
+    def test_server_eof_oversized_malformed_or_stale_replies_fail_closed(self):
+        for chunks, code in [([b""], "snapshot_keeper_lost"),
+                             ([b"x" * (backup.MAX_REPLY_BYTES + 1)], "snapshot_reply_limit_exceeded"),
+                             ([b"not-json\n"], "snapshot_heartbeat_failed"),
+                             ([b"[]\n"], "snapshot_heartbeat_failed"),
+                             ([b'{}\n{"stale":true}\n'], "snapshot_reply_protocol_failed")]:
+            with self.subTest(code=code), self.assertRaisesRegex(backup.BackupError, code):
+                self.read_reply(chunks)
+
+
+class ManagedDiagnosticTests(unittest.TestCase):
+    def test_classifier_never_returns_raw_sql_or_credentials(self):
+        for raw, code in [(b"invalid snapshot identifier", "DIAG_INVALID_SNAPSHOT"),
+                          (b"password authentication failed", "DIAG_AUTH_FAILED"),
+                          (b"permission denied for table", "DIAG_PERMISSION_DENIED"),
+                          (b"no matching tables were found", "DIAG_NO_MATCHING_TABLES"),
+                          (b"canceling statement due to lock timeout", "DIAG_LOCK_TIMEOUT"),
+                          (b"SSL SYSCALL error: EOF detected", "DIAG_CONNECTION_LOST"),
+                          (b"server certificate does not match", "DIAG_TLS_FAILED"),
+                          (b"unrecognised error", "DIAG_UNKNOWN_ERROR")]:
+            self.assertEqual(backup.classify_managed_error(raw + b" PRIVATE-CONTEXT", 1), code)
+        self.assertEqual(backup.classify_managed_error(b"", 0), "DIAG_MANAGED_OK")
+
+    def run_command(self, chunks, clock=None):
+        process = mock.Mock()
+        process.poll.return_value = 1
+        process.returncode = 1
+        keeper = mock.Mock()
+        selector = mock.MagicMock()
+        selector.__enter__.return_value = selector
+        selector.select.return_value = [True]
+        command = dict(backup.archive_commands(SNAPSHOT))["managed-migration-versions.sql"]
+        with mock.patch.object(backup.subprocess, "Popen", return_value=process) as start, \
+             mock.patch.object(backup.selectors, "DefaultSelector", return_value=selector), \
+             mock.patch.object(backup.os, "read", side_effect=chunks), \
+             mock.patch.object(backup.time, "monotonic", side_effect=clock or [0, 0, 1, 2, 3]), \
+             mock.patch.object(backup, "stop_processes") as stop:
+            try:
+                result = backup.run_managed_diagnostic(command, {}, keeper)
+            finally:
+                stop.assert_called_once_with([process])
+                process.stderr.close.assert_called_once()
+                self.assertEqual(start.call_args.kwargs["stdout"], backup.subprocess.DEVNULL)
+                self.assertEqual(start.call_args.kwargs["stderr"], backup.subprocess.PIPE)
+                self.assertIn("--table=auth.schema_migrations", start.call_args.args[0])
+                self.assertNotIn("--table=auth.users", start.call_args.args[0])
+        keeper.alive.assert_any_call(force=True)
+        return result
+
+    def test_stderr_is_drained_and_classified_without_creating_a_dump(self):
+        result = self.run_command([b"permission denied PRIVATE-CONTEXT", b""])
+        self.assertEqual(result, ("DIAG_PERMISSION_DENIED", 1))
+
+    def test_error_volume_and_time_are_bounded_and_process_is_stopped(self):
+        with self.assertRaisesRegex(backup.BackupError, "DIAG_STDERR_LIMIT_EXCEEDED"):
+            self.run_command([b"x" * (backup.MAX_REPLY_BYTES + 1)])
+        with self.assertRaisesRegex(backup.BackupError, "DIAG_PROCESS_TIMEOUT"):
+            self.run_command([], [0, 181])
+
+    def test_diagnosis_uses_a_fresh_snapshot_and_never_calls_backup_key_or_manifest(self):
+        keeper = mock.Mock()
+        keeper.start.return_value = METADATA.copy()
+        with tempfile.TemporaryDirectory() as temporary, \
+             mock.patch.object(backup, "BACKUP_ROOT", Path(temporary)), \
+             mock.patch.object(backup, "Snapshot", return_value=keeper), \
+             mock.patch.object(backup, "run_managed_diagnostic", return_value=("DIAG_MANAGED_OK", 0)) as run, \
+             mock.patch.object(backup, "recipient") as key, \
+             mock.patch.object(backup, "encrypted_artifact") as artifact, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(backup.diagnose_managed(True), "DIAG_MANAGED_OK")
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+        keeper.start.assert_called_once()
+        keeper.finish.assert_called_once()
+        keeper.stop.assert_called_once()
+        key.assert_not_called()
+        artifact.assert_not_called()
+        self.assertIn(f"--snapshot={SNAPSHOT}", run.call_args.args[0])
+        self.assertIn('"backup_created": false', output.getvalue())
 
 
 class AtomicPipelineTests(unittest.TestCase):

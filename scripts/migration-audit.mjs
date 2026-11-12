@@ -15,6 +15,9 @@ export function fingerprintRows(rows) {
 export async function snapshotDatabase(db) {
   await db.query('begin isolation level repeatable read read only');
   try {
+    const mode = (await db.query("select current_setting('transaction_read_only') as mode")).rows[0]?.mode;
+    if (mode !== 'on') throw Object.assign(new Error('Migration audit requires an actual read-only transaction.'),
+      { code: 'MIGRATION_TRANSACTION_NOT_READ_ONLY' });
     await db.query("set local timezone = 'UTC'");
     const tables = (await db.query(`select n.nspname as schema, c.relname as name
       from pg_class c join pg_namespace n on n.oid=c.relnamespace
