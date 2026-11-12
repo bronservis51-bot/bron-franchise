@@ -202,15 +202,35 @@ def vendor_scripts(home):
 
 
 class Snapshot:
-    def __init__(self, env):
+    def __init__(self, env, capture_stderr=False):
         self.process = subprocess.Popen(
             ["/usr/bin/psql", "-X", "-q", "-A", "-t", "-w", "-v", "ON_ERROR_STOP=1",
              "--dbname", "service=bron_source"],
             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, start_new_session=True, bufsize=0)
+            stderr=subprocess.PIPE if capture_stderr else subprocess.DEVNULL,
+            start_new_session=True, bufsize=0)
         self.metadata = None
         self.deadline = time.monotonic() + 30 * 60
         self.last_heartbeat = None
+        self.last_reply_bytes = 0
+        self.capture_stderr = capture_stderr
+        self.stderr_bytes = bytearray()
+        self.stderr_limit_exceeded = False
+
+    def _read_stderr(self):
+        """Diagnostic only: keep bounded bytes in RAM; never return their contents."""
+        remaining = MAX_REPLY_BYTES - len(self.stderr_bytes)
+        if remaining <= 0:
+            self.stderr_limit_exceeded = True
+            raise BackupError("DIAG_STDERR_LIMIT_EXCEEDED")
+        try:
+            chunk = os.read(self.process.stderr.fileno(), min(4096, remaining))
+        except BlockingIOError:
+            return None
+        except OSError:
+            raise BackupError("DIAG_STDERR_READ_FAILED") from None
+        self.stderr_bytes.extend(chunk)
+        return bool(chunk)
 
     def _send(self, sql):
         try:
@@ -225,12 +245,28 @@ class Snapshot:
         # with fd polling, or block forever after only a partial JSON line arrives.
         deadline = time.monotonic() + timeout
         response = bytearray()
+        self.last_reply_bytes = 0
         with selectors.DefaultSelector() as selector:
             selector.register(self.process.stdout, selectors.EVENT_READ)
+            if getattr(self, "capture_stderr", False):
+                selector.register(self.process.stderr, selectors.EVENT_READ)
             while True:
                 remaining = deadline - time.monotonic()
-                if remaining <= 0 or not selector.select(remaining):
+                if remaining <= 0:
                     raise BackupError(phase + "_timeout")
+                events = selector.select(remaining)
+                if not events:
+                    raise BackupError(phase + "_timeout")
+                if getattr(self, "capture_stderr", False):
+                    stdout_ready = False
+                    for key, _mask in events:
+                        if key.fileobj is self.process.stderr:
+                            if self._read_stderr() is False:
+                                selector.unregister(self.process.stderr)
+                        elif key.fileobj is self.process.stdout:
+                            stdout_ready = True
+                    if not stdout_ready:
+                        continue
                 try:
                     chunk = os.read(self.process.stdout.fileno(), 4096)
                 except OSError:
@@ -238,6 +274,7 @@ class Snapshot:
                 if not chunk:
                     raise BackupError("snapshot_keeper_lost")
                 response.extend(chunk)
+                self.last_reply_bytes = len(response)
                 if len(response) > MAX_REPLY_BYTES:
                     raise BackupError("snapshot_reply_limit_exceeded")
                 if b"\n" not in response:
@@ -315,8 +352,9 @@ SELECT json_build_object(
             raise BackupError("snapshot_heartbeat_snapshot_changed")
         self.last_heartbeat = time.monotonic()
 
-    def finish(self):
-        self.alive(force=True)
+    def finish(self, check_heartbeat=True):
+        if check_heartbeat:
+            self.alive(force=True)
         self._send(b"ROLLBACK;\n\\q\n")
         self.process.stdin.close()
         try:
@@ -324,6 +362,52 @@ SELECT json_build_object(
                 raise BackupError("snapshot_keeper_failed")
         except subprocess.TimeoutExpired:
             raise BackupError("snapshot_keeper_close_timeout") from None
+
+    def diagnostic_state(self):
+        """Only counts, fixed classes and numeric syscall/fd may leave this method."""
+        state = {"last_reply_bytes": self.last_reply_bytes,
+                 "process_poll": self.process.poll(), "wchan_class": "unavailable",
+                 "syscall_number": None, "syscall_fd": None}
+        waits = {"pipe_read": "pipe_read", "pipe_write": "pipe_write",
+                 "poll_schedule_timeout": "poll", "do_poll": "poll",
+                 "do_select": "poll", "ep_poll": "poll",
+                 "wait_woken": "wait", "futex_wait_queue": "futex",
+                 "hrtimer_nanosleep": "sleep", "0": "running"}
+        if state["process_poll"] is None:
+            process_dir = Path("/proc") / str(self.process.pid)
+            try:
+                wait = (process_dir / "wchan").read_text().strip()
+                state["wchan_class"] = waits.get(wait, "other")
+            except OSError:
+                pass
+            # On x86-64 only these syscall first arguments are file descriptors.
+            # Never emit syscall pointer arguments or proc file contents.
+            if os.uname().machine == "x86_64":
+                try:
+                    fields = (process_dir / "syscall").read_text().split()
+                    number = int(fields[0], 0)
+                    if -1 <= number <= 1024:
+                        state["syscall_number"] = number
+                    if number in (0, 1, 17, 18, 19, 20, 44, 45):
+                        fd = int(fields[1], 0)
+                        if 0 <= fd <= 1048576:
+                            state["syscall_fd"] = fd
+                except (OSError, ValueError, IndexError):
+                    pass
+        stderr_code = "DIAG_STDERR_EMPTY"
+        if not self.stderr_limit_exceeded:
+            try:
+                os.set_blocking(self.process.stderr.fileno(), False)
+                while self._read_stderr():
+                    pass
+            except (OSError, BackupError):
+                stderr_code = "DIAG_STDERR_READ_FAILED"
+        if self.stderr_limit_exceeded:
+            stderr_code = "DIAG_STDERR_LIMIT_EXCEEDED"
+        elif self.stderr_bytes:
+            stderr_code = classify_managed_error(self.stderr_bytes, 1)
+        state["stderr_diagnostic"] = stderr_code
+        return state
 
     def stop(self):
         if self.process.poll() is None:
@@ -524,6 +608,35 @@ def diagnose_managed(tunnel):
             keeper.stop()
 
 
+def diagnose_keeper(tunnel):
+    # No dump, key, backup directory or reconnect: isolate the first heartbeat.
+    keeper = None
+    phase = "snapshot_spawn"
+    try:
+        keeper = Snapshot(source_env("/root", tunnel), capture_stderr=True)
+        phase = "snapshot_start"
+        keeper.start()
+        phase = "first_heartbeat"
+        keeper.alive(force=True)
+        phase = "rollback"
+        keeper.finish(check_heartbeat=False)
+        print(json.dumps({"diagnostic": "DIAG_KEEPER_PASS", "source_read_only": "on",
+                          "backup_created": False}, sort_keys=True), flush=True)
+        return "DIAG_KEEPER_PASS"
+    except (OSError, ValueError, subprocess.SubprocessError, BackupError, KeyboardInterrupt):
+        state = keeper.diagnostic_state() if keeper is not None else {
+            "last_reply_bytes": 0, "process_poll": None, "wchan_class": "unavailable",
+            "syscall_number": None, "syscall_fd": None, "stderr_diagnostic": "DIAG_STDERR_EMPTY"}
+        state.update(diagnostic="DIAG_KEEPER_FAILED", phase=phase, backup_created=False)
+        print(json.dumps(state, sort_keys=True), flush=True)
+        raise
+    finally:
+        if keeper is not None:
+            keeper.stop()
+            keeper.process.stderr.close()
+            keeper.stderr_bytes.clear()
+
+
 def backup(tunnel):
     os.umask(0o077)
     lockfd = os.open(BACKUP_ROOT / ".source-backup.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -598,6 +711,8 @@ def main():
     mode.add_argument("--backup", action="store_true")
     mode.add_argument("--diagnose-managed", action="store_true",
                       help="Diagnose only managed metadata under a fresh read-only snapshot; no backup")
+    mode.add_argument("--diagnose-keeper", action="store_true",
+                      help="Diagnose only a fresh read-only snapshot and its first heartbeat; no backup")
     mode.add_argument("--prepare-key", action="store_true",
                       help="Prepare/reuse the protected local age identity; no source query")
     parser.add_argument("--tunnel", action="store_true", help="Explicit loopback SSH route at 127.0.0.1:15432")
@@ -608,7 +723,9 @@ def main():
     tunnel = args.tunnel or existing == "15432"
     os.umask(0o077)
     preflight(tunnel)
-    if args.diagnose_managed:
+    if args.diagnose_keeper:
+        diagnose_keeper(tunnel)
+    elif args.diagnose_managed:
         diagnose_managed(tunnel)
     elif args.prepare_key:
         with tempfile.TemporaryDirectory(prefix=".source-key-", dir=BACKUP_ROOT) as temporary:

@@ -343,6 +343,176 @@ class ManagedDiagnosticTests(unittest.TestCase):
         self.assertIn('"backup_created": false', output.getvalue())
 
 
+class KeeperDiagnosticTests(unittest.TestCase):
+    def keeper(self):
+        keeper = object.__new__(backup.Snapshot)
+        keeper.process = mock.Mock(pid=31415)
+        keeper.process.poll.return_value = None
+        keeper.last_reply_bytes = 0
+        keeper.capture_stderr = True
+        keeper.stderr_bytes = bytearray()
+        keeper.stderr_limit_exceeded = False
+        return keeper
+
+    def test_stderr_pipe_is_opt_in_and_normal_snapshot_still_discards_stderr(self):
+        with mock.patch.object(backup.subprocess, "Popen") as start:
+            backup.Snapshot({}, capture_stderr=True)
+            self.assertEqual(start.call_args.kwargs["stderr"], backup.subprocess.PIPE)
+            backup.Snapshot({})
+            self.assertEqual(start.call_args.kwargs["stderr"], backup.subprocess.DEVNULL)
+
+    def test_real_pipes_drain_private_stderr_and_count_only_reply_bytes(self):
+        keeper = self.keeper()
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+        keeper.process.stdout = os.fdopen(stdout_read, "rb", buffering=0)
+        keeper.process.stderr = os.fdopen(stderr_read, "rb", buffering=0)
+        reply = b'{"phase":"synthetic"}\n'
+        try:
+            os.write(stdout_write, reply)
+            os.write(stderr_write, b"permission denied PRIVATE-SQL-CONTEXT")
+            os.close(stderr_write)
+            self.assertEqual(keeper._read_json(1, "snapshot_heartbeat"), {"phase": "synthetic"})
+            self.assertEqual(keeper.last_reply_bytes, len(reply))
+            with mock.patch.object(backup.Path, "read_text", side_effect=OSError):
+                state = keeper.diagnostic_state()
+            self.assertEqual(state["stderr_diagnostic"], "DIAG_PERMISSION_DENIED")
+            self.assertNotIn("PRIVATE", json.dumps(state))
+        finally:
+            os.close(stdout_write)
+            keeper.process.stdout.close()
+            keeper.process.stderr.close()
+
+    def test_real_pipe_partial_reply_timeout_keeps_count_for_failure_state(self):
+        keeper = self.keeper()
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+        keeper.process.stdout = os.fdopen(stdout_read, "rb", buffering=0)
+        keeper.process.stderr = os.fdopen(stderr_read, "rb", buffering=0)
+        try:
+            os.write(stdout_write, b'{"phase":')
+            os.close(stderr_write)
+            with self.assertRaisesRegex(backup.BackupError, "snapshot_heartbeat_timeout"):
+                keeper._read_json(0.01, "snapshot_heartbeat")
+            self.assertEqual(keeper.last_reply_bytes, 9)
+        finally:
+            os.close(stdout_write)
+            keeper.process.stdout.close()
+            keeper.process.stderr.close()
+
+    def test_stderr_overflow_is_bounded_and_only_fixed_class_leaves_state(self):
+        keeper = self.keeper()
+        keeper.stderr_bytes.extend(b"x" * backup.MAX_REPLY_BYTES)
+        with mock.patch.object(backup.os, "read", return_value=b"SECRET"):
+            with self.assertRaisesRegex(backup.BackupError, "^DIAG_STDERR_LIMIT_EXCEEDED$"):
+                keeper._read_stderr()
+        self.assertEqual(len(keeper.stderr_bytes), backup.MAX_REPLY_BYTES)
+        with mock.patch.object(backup.Path, "read_text", side_effect=OSError):
+            state = keeper.diagnostic_state()
+        self.assertEqual(state["stderr_diagnostic"], "DIAG_STDERR_LIMIT_EXCEEDED")
+        self.assertNotIn("SECRET", json.dumps(state))
+
+    def test_proc_samples_emit_only_whitelisted_class_and_numeric_syscall_fd(self):
+        for wait, syscall, expected in [
+                ("pipe_read", "0 0x0 0xSECRET 0x100 0 0 0 0 0", ("pipe_read", 0, 0)),
+                ("poll_schedule_timeout", "7 0x123456 1 0 0 0 0 0 0", ("poll", 7, None)),
+                ("PRIVATE-PROC-CONTENT", "running", ("other", None, None))]:
+            keeper = self.keeper()
+            with self.subTest(wait=wait), \
+                 mock.patch.object(backup.Path, "read_text", side_effect=[wait, syscall]) as read, \
+                 mock.patch.object(backup.os, "uname", return_value=SimpleNamespace(machine="x86_64")), \
+                 mock.patch.object(backup.os, "set_blocking"), \
+                 mock.patch.object(keeper, "_read_stderr", return_value=None):
+                state = keeper.diagnostic_state()
+            self.assertEqual((state["wchan_class"], state["syscall_number"], state["syscall_fd"]), expected)
+            self.assertEqual(read.call_count, 2)
+            self.assertNotIn("PRIVATE", json.dumps(state))
+            self.assertNotIn("SECRET", json.dumps(state))
+
+    def test_success_checks_only_first_heartbeat_then_validates_rollback_without_files(self):
+        keeper = mock.Mock()
+        order = mock.Mock()
+        order.attach_mock(keeper, "keeper")
+        with mock.patch.object(backup, "Snapshot", return_value=keeper) as source, \
+             mock.patch.object(backup.tempfile, "TemporaryDirectory") as files, \
+             mock.patch.object(backup, "recipient") as key, \
+             mock.patch.object(backup, "encrypted_artifact") as artifact, \
+             mock.patch.object(backup, "archive_commands") as dumps, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(backup.diagnose_keeper(True), "DIAG_KEEPER_PASS")
+        self.assertEqual(source.call_args.kwargs, {"capture_stderr": True})
+        self.assertEqual(source.call_args.args[0]["PGSSLMODE"], "verify-full")
+        self.assertEqual(source.call_args.args[0]["PGHOSTADDR"], "127.0.0.1")
+        self.assertEqual(order.mock_calls[:4], [mock.call.keeper.start(),
+                         mock.call.keeper.alive(force=True),
+                         mock.call.keeper.finish(check_heartbeat=False), mock.call.keeper.stop()])
+        files.assert_not_called()
+        key.assert_not_called()
+        artifact.assert_not_called()
+        dumps.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue()), {"diagnostic": "DIAG_KEEPER_PASS",
+                         "source_read_only": "on", "backup_created": False})
+        keeper.diagnostic_state.assert_not_called()
+        keeper.process.stderr.close.assert_called_once()
+        keeper.stderr_bytes.clear.assert_called_once()
+
+    def test_failure_state_is_printed_before_stop_and_always_cleans_up(self):
+        keeper = mock.Mock()
+        keeper.alive.side_effect = backup.BackupError("snapshot_heartbeat_timeout")
+        keeper.diagnostic_state.return_value = {"last_reply_bytes": 9, "process_poll": None,
+            "wchan_class": "poll", "syscall_number": 7, "syscall_fd": None,
+            "stderr_diagnostic": "DIAG_STDERR_EMPTY"}
+        def stop():
+            self.assertIn('"diagnostic": "DIAG_KEEPER_FAILED"', output.getvalue())
+        keeper.stop.side_effect = stop
+        with mock.patch.object(backup, "Snapshot", return_value=keeper), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaisesRegex(backup.BackupError, "^snapshot_heartbeat_timeout$"):
+                backup.diagnose_keeper(True)
+        state = json.loads(output.getvalue())
+        self.assertEqual(state["phase"], "first_heartbeat")
+        self.assertEqual(state["last_reply_bytes"], 9)
+        keeper.finish.assert_not_called()
+        keeper.stop.assert_called_once()
+        keeper.process.stderr.close.assert_called_once()
+        keeper.stderr_bytes.clear.assert_called_once()
+
+    def test_rollback_requires_successful_exit_without_an_extra_heartbeat(self):
+        keeper = self.keeper()
+        keeper.process.stdin.write.side_effect = len
+        keeper.process.wait.return_value = 1
+        with mock.patch.object(keeper, "alive") as heartbeat:
+            with self.assertRaisesRegex(backup.BackupError, "^snapshot_keeper_failed$"):
+                keeper.finish(check_heartbeat=False)
+        heartbeat.assert_not_called()
+        keeper.process.stdin.write.assert_called_once_with(b"ROLLBACK;\n\\q\n")
+        keeper.process.stdin.close.assert_called_once()
+        keeper.process.wait.assert_called_once_with(timeout=15)
+
+    def test_spawn_failure_emits_fixed_empty_state_without_os_error_text(self):
+        with mock.patch.object(backup, "Snapshot", side_effect=OSError("PRIVATE-PATH")), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(OSError):
+                backup.diagnose_keeper(True)
+        state = json.loads(output.getvalue())
+        self.assertEqual(state["diagnostic"], "DIAG_KEEPER_FAILED")
+        self.assertEqual(state["phase"], "snapshot_spawn")
+        self.assertEqual(state["last_reply_bytes"], 0)
+        self.assertIsNone(state["process_poll"])
+        self.assertNotIn("PRIVATE", output.getvalue())
+
+    def test_cli_runs_same_preflight_before_keeper_diagnosis_without_backup(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch.object(backup.sys, "argv", [str(SCRIPT), "--tunnel", "--diagnose-keeper"]), \
+             mock.patch.object(backup, "preflight") as preflight, \
+             mock.patch.object(backup, "diagnose_keeper") as diagnosis, \
+             mock.patch.object(backup, "backup") as dump:
+            backup.main()
+        preflight.assert_called_once_with(True)
+        diagnosis.assert_called_once_with(True)
+        dump.assert_not_called()
+
+
 class AtomicPipelineTests(unittest.TestCase):
     def pipeline(self, directory, codes, keeper=None):
         processes = []
