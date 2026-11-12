@@ -162,18 +162,30 @@ def connect():
     environment.update(PGSERVICEFILE=str(SERVICE_FILE), PGPASSFILE=str(PASSWORD_FILE),
                        PGSERVICE="bron_source",
                        PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=30000")
-    query = """select json_build_object(
+    # Session poolers may not propagate startup PGOPTIONS to the backend.
+    # Protect this query with an explicit transaction, then verify its actual
+    # mode rather than treating the session default as the safety guarantee.
+    query = """BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+    select json_build_object(
       'server_version',current_setting('server_version'),
-      'read_only',current_setting('default_transaction_read_only'),
+      'server_version_num',current_setting('server_version_num')::integer,
+      'read_only',current_setting('transaction_read_only'),
+      'default_read_only',current_setting('default_transaction_read_only'),
       'auth_users',(select count(*) from auth.users),
       'identities',(select count(*) from auth.identities),
       'buckets',(select count(*) from storage.buckets),
-      'objects',(select count(*) from storage.objects));"""
-    result = json.loads(run(["psql", "-X", "-A", "-t", "-w", "-v", "ON_ERROR_STOP=1",
+      'objects',(select count(*) from storage.objects));
+    ROLLBACK;"""
+    result = json.loads(run(["psql", "-X", "-q", "-A", "-t", "-w", "-v", "ON_ERROR_STOP=1",
                              "--dbname", "service=bron_source", "--command", query],
                             env=environment))
-    if not result["server_version"].startswith("17.") or result["read_only"] != "on":
-        raise RuntimeError("Unexpected source version or access mode")
+    version_num = result.get("server_version_num")
+    if (not isinstance(version_num, int) or version_num // 10000 != 17
+            or result.get("read_only") != "on"):
+        diagnostic = {key: result.get(key) for key in
+                      ("server_version", "server_version_num", "read_only", "default_read_only")}
+        raise RuntimeError("Unexpected source version or access mode: " +
+                           json.dumps(diagnostic, sort_keys=True))
     print("Read-only source connection verified: " + json.dumps(result, sort_keys=True))
     print("Existing DB credentials are protected on this VPS (root only).")
     print("No database copied or modified. Next: consistent backup and restore rehearsal.")
@@ -184,7 +196,14 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--connect", action="store_true")
+    parser.add_argument("--tunnel", action="store_true",
+                        help="Explicitly use the reviewed SSH forward at 127.0.0.1:15432")
     args = parser.parse_args()
+    if args.tunnel:
+        existing_port = os.environ.get("BRON_SOURCE_TUNNEL_PORT")
+        if existing_port is not None and existing_port != "15432":
+            raise RuntimeError("--tunnel conflicts with BRON_SOURCE_TUNNEL_PORT; review the environment")
+        os.environ["BRON_SOURCE_TUNNEL_PORT"] = "15432"
     os.umask(0o077)
     preflight()
     if args.connect:

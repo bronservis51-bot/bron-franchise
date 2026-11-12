@@ -68,13 +68,13 @@ Terminal. Проверь **второй отдельный SSH-вход ключ
 Загрузи только этот файл, сначала во временный файл на VPS:
 
 ```text
-https://raw.githubusercontent.com/bronservis51-bot/bron-franchise/11116d25417ca93ebfabd98f01c01d7a23312d69/deploy/timeweb/source-db-access.py
-SHA256: 6b51705679976b6f2c4f1b0412ec9bd3973889e3232e726286553bc0f23b7f23
+https://raw.githubusercontent.com/bronservis51-bot/bron-franchise/ops/russia-migration-20261110/deploy/timeweb/source-db-access.py
+SHA256: 05b381f28f69377f87a980b7444190fa00047544d81b6b0f9d65ad1d8a68817e
 ```
 
 После проверки SHA установи как `/opt/bron/source-db-access.py` с root-владением
-и правами 0600. Старый helper ожидаемо имеет SHA
-`cb30b24e4aa44083a9b44638eaf2248e17d94f57a28bec63ac39cf1660b3cfd0`;
+и правами 0600. По последнему локальному отчёту установлен предыдущий helper SHA
+`6b51705679976b6f2c4f1b0412ec9bd3973889e3232e726286553bc0f23b7f23`;
 не заменяй неизвестный изменённый файл без разбора отличий.
 Существующие source service/pgpass нельзя молча перезаписывать.
 
@@ -137,10 +137,14 @@ BRON_SOURCE_TUNNEL_PORT=15432 python3 /opt/bron/source-db-access.py --check
 BRON_SOURCE_TUNNEL_PORT=15432 python3 /opt/bron/source-db-access.py --connect
 ```
 
+Эквивалентный явный вариант для консоли без корректной передачи underscores:
+`python3 /opt/bron/source-db-access.py --tunnel --connect`.
+
 Для прямого маршрута — те же команды без переменной. `--connect` сам повторяет
 защитные проверки, скрыто запрашивает **существующий пароль PostgreSQL в TTY VPS**,
 создаёт service/pgpass с правами 0600 в root-каталоге 0700 и делает только запрос
-метаданных с `default_transaction_read_only=on`. Организуй личный скрытый ввод
+метаданных в явной read-only транзакции, проверяя `transaction_read_only=on`.
+Default `off` допустим и печатается только для диагностики. Организуй личный скрытый ввод
 владельцем непосредственно в SSH/VNC TTY; не проси пароль сообщением Codex и не
 перехватывай ввод/экран с секретом.
 

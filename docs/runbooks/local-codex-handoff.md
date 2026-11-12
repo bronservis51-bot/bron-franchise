@@ -113,10 +113,10 @@ SHA-256 `700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7`.
 pgpass сопоставляется с **canonical host и портом15432**, не с IP/5432.
 
 Репозиторный `deploy/timeweb/source-db-access.py` поддерживает явный
-`BRON_SOURCE_TUNNEL_PORT=15432`; SHA-256
-`6b51705679976b6f2c4f1b0412ec9bd3973889e3232e726286553bc0f23b7f23`.
-На VPS ещё предыдущий helper, SHA-256
-`cb30b24e4aa44083a9b44638eaf2248e17d94f57a28bec63ac39cf1660b3cfd0`;
+`BRON_SOURCE_TUNNEL_PORT=15432` либо `--tunnel`; текущий SHA-256
+`05b381f28f69377f87a980b7444190fa00047544d81b6b0f9d65ad1d8a68817e`.
+По локальному отчёту на VPS установлен предыдущий helper, SHA-256
+`6b51705679976b6f2c4f1b0412ec9bd3973889e3232e726286553bc0f23b7f23`;
 проверь фактический файл и обнови точечно с проверкой суммы. `/root/d` — старый
 prefetch из `7dc0ed765…`, SHA-256
 `c61d3bc6958d52287ec74db917f05323c6137c4bb709e60f4a01f16eeab50e83`;

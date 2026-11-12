@@ -57,7 +57,7 @@ download_verified() {
 own_base=https://raw.githubusercontent.com/bronservis51-bot/bron-franchise/ops/russia-migration-20261110/deploy/timeweb
 download_verified "$own_base/compose.override.yml" "$checkout/docker/bron/compose.override.yml" a83fbde612c11b9e37b1760dc670760b7e8d94d045b91e9d9f9d2c4b70f7ba4a
 download_verified "$own_base/Caddyfile" "$checkout/docker/bron/Caddyfile" aa2f88e90b8eb54191d53448561f87fe990b4f31a03dfa19dc2872e7e7a80acd
-download_verified "$own_base/source-db-access.py" /opt/bron/source-db-access.py 6b51705679976b6f2c4f1b0412ec9bd3973889e3232e726286553bc0f23b7f23
+download_verified "$own_base/source-db-access.py" /opt/bron/source-db-access.py 05b381f28f69377f87a980b7444190fa00047544d81b6b0f9d65ad1d8a68817e
 download_verified https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt /opt/bron/source-ca.crt 700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7
 openssl x509 -in /opt/bron/source-ca.crt -noout -checkend 86400 >/dev/null
 cat /etc/ssl/certs/ca-certificates.crt /opt/bron/source-ca.crt > /opt/bron/source-ca-bundle.pem
