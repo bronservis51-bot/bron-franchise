@@ -46,6 +46,37 @@
 
 ## Полный перенос рабочей системы
 
+Для первого этапа SQL/Auth подготовлен
+[source-backup.py](../../deploy/timeweb/source-backup.py). Только на проверенном
+российском VPS с уже созданными root/0600 service/pgpass и сверенным файлом:
+
+```sh
+python3 source-backup.py --tunnel --check
+python3 source-backup.py --tunnel --prepare-key
+python3 source-backup.py --tunnel --backup
+```
+
+`--check` проверяет локальные ограничения, CA, PG17.11/CLI3.1.0 и точные хеши
+официальных dry-run сценариев; источник не запрашивается. CLI видит только dummy
+URI, реальные credentials потребляет нативный libpq. `--prepare-key` создаёт либо
+переиспользует `/root/bron-secrets/source-backup.agekey`, не печатая ключ.
+Его независимое хранение и способ восстановления ещё требуется подтвердить.
+
+`--backup` держит экспортированный read-only snapshot и применяет его ко всем
+`pg_dump`. Roles-only и последовательности не входят в общий MVCC-снимок, поэтому
+финальное окно без изменений остаётся обязательным. Vendor roles/schema/data,
+нефильтрованный архив схемы, managed migration versions и raw/logical Vault
+передаются непосредственно через zstd→age в закрытый каталог
+`/var/backups/bron-franchise/source-*`; plaintext на диск не записывается.
+Сбой producer/compressor/encryptor/keeper не публикует manifest успеха.
+
+**Этот этап всегда `complete=false`.** Storage bytes, конфигурация Auth/JWT/SMTP,
+функции/секреты, независимое S3, хранение ключа и пробное восстановление ещё не
+подтверждены. Raw schema/managed versions — архив для разбора, не SQL для слепого
+применения. Logical Vault нужен для проверенного повторного шифрования с
+сохранением UUID; это не утверждение о готовом byte-exact cryptographic restore.
+Наличие driver и 34 offline-тестов не доказывает реальную выгрузку.
+
 Для сохранения пользователей, UUID и паролей при переходе platform → self-hosted
 использовать актуальную [официальную процедуру Supabase](https://supabase.com/docs/guides/self-hosting/restore-from-platform),
 а не прикладной JSON restore. Переносятся роли, схема и данные, включая Auth;

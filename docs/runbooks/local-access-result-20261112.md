@@ -9,7 +9,7 @@
   пароля VPS установлен только публичный ключ владельца. Подтверждён отдельный
   вход под root с `BatchMode=yes` и строгой проверкой host key. Закрытый ключ
   остался на Mac с правами 0600.
-- **VPS и helper.** Подтверждены адрес целевого VPS, отсутствие
+- **VPS и helper.** Локальный исполнитель подтвердил адрес целевого VPS, отсутствие
   `/opt/bron/production-enabled` и контейнеров. Закреплённый
   `/opt/bron/source-db-access.py` установлен с владельцем `root:root` и
   правами 0600. SHA-256
@@ -24,10 +24,16 @@
   Эффективное `GatewayPorts no` проверено. VPS слушает только
   `127.0.0.1:15432`. Закреплённый helper подтвердил TLS 1.3, сертификат и
   каноническое имя `aws-1-us-west-2.pooler.supabase.com`.
-- **SQL.** Ожидается скрытый ввод владельца в TTY VPS. Проверен каталог
-  `/root/bron-secrets`, владелец `root:root`, права 0700. Файлы
-  `source.pg_service.conf` и `source.pgpass` пока отсутствуют. Версия
-  PostgreSQL, счётчики и read-only SQL в этом сеансе ещё не подтверждены.
+- **SQL — завершено в прежнем чате 12.11.** После личного ввода пароля запрос
+  выполнился, но предыдущий helper ошибочно потребовал session default read-only.
+  Исправленный helper из `84bfe538d5754b2a25e765d0b0ce68b428ac40dd` загружен как
+  `/root/e`; SHA-256 `05b381f28f69377f87a980b7444190fa00047544d81b6b0f9d65ad1d8a68817e`
+  совпал. `python3 /root/e --tunnel --connect` подтвердил TLS 1.3,
+  PostgreSQL 17.11 (`170011`), actual `read_only=on`, default `off`,
+  16 Auth users / 16 identities / 1 bucket / 0 objects. Existing credential
+  files прошли защитную проверку root/0600/точного service и были переиспользованы
+  без запроса пароля. Затем `install -m600 /root/e /opt/bron/source-db-access.py`
+  завершился без ошибки. Каталог `/root/bron-secrets` — root/0700.
 - **Канал на Mac.** SSH работает отдельным заданием пользовательского
   `launchd` с `caffeinate -i`. SSH и блокировка сна подтверждены повторно.
   В Terminal на Mac: остановка — `~/.ssh/bron-source-tunnel stop`,
@@ -37,15 +43,14 @@
   `ssh-add ~/.ssh/bron_adminvps_ed25519` и введите фразу ключа в Terminal.
   Mac оставить с открытой крышкой, питанием и интернетом.
 
-Последняя проверка 12.11.2026 в 14:23 MSK. SSH, единственный loopback listener
-и TLS работают. Точка передачи этапа после read-only SQL ещё не достигнута.
+Локальная проверка SSH/канала — 12.11.2026 в 14:23 MSK; SQL и установленный fix
+проверены позднее в прежнем чате. Этап доступа завершён; миграция продолжается
+здесь. Полной копии и восстановления пока нет.
 
 После первичного скрытого ввода команда повторной проверки на VPS от root:
 
 ```sh
-test -f /root/bron-secrets/source.pg_service.conf &&
-  test -f /root/bron-secrets/source.pgpass &&
-  BRON_SOURCE_TUNNEL_PORT=15432 python3 /opt/bron/source-db-access.py --connect
+python3 /opt/bron/source-db-access.py --tunnel --connect
 ```
 
 Команда проверяет TLS и выполняет только запрос метаданных с read-only режимом.
