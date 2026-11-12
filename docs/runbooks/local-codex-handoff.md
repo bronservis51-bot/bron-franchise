@@ -78,8 +78,10 @@ SSH недоступен; из VPS source:5432 получает таймаут �
 ssh-keygen -l -E sha256 -f /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Проверенный 12.11 через доверенную VNC fingerprint ED25519:
-`SHA256:8KA0F5NRZo8hIn84yT7pScIefFxk8zRg9JZuPullYh0`.
+Fingerprint ED25519 по сетевой проверке и сверке доверенной VNC локальным Codex
+12.11, [отчёт](local-access-result-20261112.md):
+`SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0`.
+Прежняя ручная расшифровка скриншота была ошибочной; её не использовать.
 Сверь с ключом SSH перед первым входом; при несовпадении остановись и перепроверь
 через панель провайдера.
 Не использовать `StrictHostKeyChecking=no`. Root SSH-аутентификация пока не
