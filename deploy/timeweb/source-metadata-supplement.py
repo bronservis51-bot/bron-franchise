@@ -264,6 +264,10 @@ def main():
     parser = Parser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     args = parser.parse_args()
+    # Avoid retyping timestamp paths in VNC. Do not resolve links: capture still
+    # checks the exact protected directory and opens the file with O_NOFOLLOW.
+    if args.manifest == Path("manifest.json"):
+        args.manifest = Path.cwd() / args.manifest
     print(json.dumps(capture(args.manifest), sort_keys=True))
 
 

@@ -20,6 +20,17 @@ class ServiceError(Exception):
 
 
 class S3SafetyTests(unittest.TestCase):
+    def test_short_manifest_still_passes_exact_absolute_path_to_upload(self):
+        directory = Path('/var/backups/bron-franchise/source-20261112T161139Z-0f8917c7')
+        with mock.patch.object(s3.sys, 'argv', ['backup-s3.py','--upload','--manifest','manifest.json']), \
+                mock.patch.object(s3.Path, 'cwd', return_value=directory), \
+                mock.patch.object(s3, 'runtime_guard'), mock.patch.object(s3, 'operation_lock'), \
+                mock.patch.object(s3, 'credentials', return_value={}), \
+                mock.patch.object(s3, 's3_client'), mock.patch.object(s3, 'upload', return_value={}) as upload, \
+                mock.patch('sys.stdout', new_callable=io.StringIO):
+            s3.main()
+        self.assertEqual(upload.call_args.args[0], directory/'manifest.json')
+
     def test_request_guard_never_deletes_backup_even_in_probe_mode(self):
         for key in ('migration/source-run/data.sql.zst.age', 'hourly/a', 'migration/probe-invalid/permission-probe.txt'):
             with self.subTest(key=key), self.assertRaises(s3.BackupError):

@@ -448,6 +448,8 @@ def main():
     args = parser.parse_args()
     if (args.hex_input and not args.setup) or bool(args.manifest) != args.upload:
         raise BackupError("INVALID_MODE_ARGUMENTS")
+    if args.manifest == Path("manifest.json"):
+        args.manifest = Path.cwd() / args.manifest
     runtime_guard()
     if args.check:
         sdk_modules()
