@@ -112,8 +112,13 @@ syscall/fd; stderr ограничен 64 KiB в RAM и наружу выходи
 `94c4a9411db6085ac18daae0fd18e7a5f14f2c9a82adb256e39f73039121f75d` совпал.
 Из `/opt/bron/migration/deploy/timeweb` прошли `--tunnel --diagnose-keeper`
 (`DIAG_KEEPER_PASS`) и `--tunnel --diagnose-managed` (`DIAG_MANAGED_OK`, exit0).
-После этого запущен `--tunnel --backup`; наблюдались фазы roles/schema, результат
-всего запуска ещё не подтверждён. Старый `/root/f` остаётся версией885093...,
+После этого `--tunnel --backup` завершил все семь зашифрованных артефактов:
+roles/schema/data, raw-schema, Vault ciphertext, managed migration versions и
+logical Vault. В консоли подтверждено `SQL/Auth stage saved ...; complete=false`.
+Это успешный SQL/Auth-этап, а не полная копия проекта: контрольные суммы/расшифровку
+после записи, config/files, S3/key custody и восстановление ещё надо проверить.
+Перед любым повторным запуском сначала прочитать фактический manifest на VPS.
+Старый `/root/f` остаётся версией885093...,
 не перепутать его с новым driver в распакованном каталоге.
 Повторный обычный helper после прежнего сбоя прошёл:
 TLS1.3 и read-only, 16 users/identities, 1 bucket, 0 objects. Частичные закрытые
