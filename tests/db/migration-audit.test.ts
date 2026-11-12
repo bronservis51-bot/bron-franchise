@@ -56,6 +56,15 @@ describe('полнота сверки переноса', () => {
       select setval('public.document_number',42,true);`);
     expect(compareSnapshots(before, await snapshotDatabase(db))).toEqual(['schema:policies','schema:routines','sequence:public.document_number']);
   });
+  it('сравнивает права владельца по смыслу, но видит лишний доступ роли', async () => {
+    const before = await snapshotDatabase(db);
+    await db.exec(`grant all privileges on table public.partner to postgres with grant option;
+      grant all privileges on table storage.buckets to postgres with grant option;`);
+    expect(compareSnapshots(before, await snapshotDatabase(db))).toEqual([]);
+
+    await db.exec('create role anon; grant select on table public.partner to anon');
+    expect(compareSnapshots(before, await snapshotDatabase(db))).toContain('schema:relations');
+  });
   it('останавливается на неполной схеме и видит лишние/пропущенные объекты', async () => {
     expect(compareSnapshots({one:1},{one:1,extra:2})).toEqual(['extra']);
     await db.exec('drop table public.article_revision');

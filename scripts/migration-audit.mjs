@@ -2,6 +2,33 @@
 import { createHash } from 'node:crypto';
 
 const quote = name => `"${name.replaceAll('"', '""')}"`;
+const canonicalAcl = (acl, owner, kindExpression) => `coalesce((
+  select jsonb_agg(jsonb_build_object(
+    'grantee', coalesce(pg_get_userbyid(x.grantee), 'PUBLIC'),
+    'grantor', pg_get_userbyid(x.grantor),
+    'privilege', x.privilege_type,
+    'grantable', x.is_grantable or x.grantee = ${owner}
+  ) order by coalesce(pg_get_userbyid(x.grantee), 'PUBLIC'),
+    pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable)
+  from pg_catalog.aclexplode(case
+    when ${acl} is null or cardinality(${acl}) = 0
+      then pg_catalog.acldefault(${kindExpression}, ${owner})
+    else ${acl}
+  end) x
+), '[]'::jsonb)`;
+const canonicalColumnAcl = (acl, owner) => `coalesce((
+  select jsonb_agg(jsonb_build_object(
+    'grantee', coalesce(pg_get_userbyid(x.grantee), 'PUBLIC'),
+    'grantor', pg_get_userbyid(x.grantor),
+    'privilege', x.privilege_type,
+    'grantable', x.is_grantable or x.grantee = ${owner}
+  ) order by coalesce(pg_get_userbyid(x.grantee), 'PUBLIC'),
+    pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable)
+  from pg_catalog.aclexplode(case
+    when ${acl} is null or cardinality(${acl}) = 0 then null::aclitem[]
+    else ${acl}
+  end) x
+), '[]'::jsonb)`;
 export function fingerprintRows(rows) {
   const hash = createHash('sha256');
   for (const row of rows) {
@@ -40,11 +67,13 @@ export async function snapshotDatabase(db) {
     }
     const catalogs = {
       columns: `select n.nspname,c.relname,a.attname,a.attnum,format_type(a.atttypid,a.atttypmod) as type,
-        a.attnotnull,a.attidentity,a.attgenerated,a.attacl,pg_get_expr(d.adbin,d.adrelid) as default_value
+        a.attnotnull,a.attidentity,a.attgenerated,${canonicalColumnAcl('a.attacl', 'c.relowner')} as attacl,
+        pg_get_expr(d.adbin,d.adrelid) as default_value
         from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
         left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v') and a.attnum>0 and not a.attisdropped`,
-      relations: `select n.nspname,c.relname,c.relkind,c.relpersistence,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,c.relacl,
+      relations: `select n.nspname,c.relname,c.relkind,c.relpersistence,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,
+        ${canonicalAcl('c.relacl', 'c.relowner', "case when c.relkind='S' then 'S'::\"char\" else 'r'::\"char\" end")} as relacl,
         case when c.relkind='v' then pg_get_viewdef(c.oid,true) end as view_definition
         from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v','S')`,
@@ -52,8 +81,9 @@ export async function snapshotDatabase(db) {
         from pg_policies where schemaname in ('public','app_private')`,
       storage_policies: `select schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
         from pg_policies where schemaname='storage'`,
-      storage_grants: `select n.nspname,c.relname,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,c.relacl,
-        a.attname,a.attacl
+      storage_grants: `select n.nspname,c.relname,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,
+        ${canonicalAcl('c.relacl', 'c.relowner', "'r'::\"char\"")} as relacl,
+        a.attname,${canonicalColumnAcl('a.attacl', 'c.relowner')} as attacl
         from pg_class c join pg_namespace n on n.oid=c.relnamespace
         join pg_attribute a on a.attrelid=c.oid and a.attnum>0 and not a.attisdropped
         where n.nspname='storage' and c.relname in ('buckets','objects')`,
@@ -67,7 +97,8 @@ export async function snapshotDatabase(db) {
         where n.nspname in ('public','app_private')`,
       indexes: `select schemaname,tablename,indexname,indexdef from pg_indexes where schemaname in ('public','app_private')`,
       routines: `select n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) as args,
-        pg_get_functiondef(p.oid) as definition,pg_get_userbyid(p.proowner) as owner,p.proacl,p.prosecdef,p.proconfig
+        pg_get_functiondef(p.oid) as definition,pg_get_userbyid(p.proowner) as owner,
+        ${canonicalAcl('p.proacl', 'p.proowner', "'f'::\"char\"")} as proacl,p.prosecdef,p.proconfig
         from pg_proc p join pg_namespace n on n.oid=p.pronamespace
         where n.nspname in ('public','app_private') and p.prokind in ('f','p')
         and not exists (select 1 from pg_depend d where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e')`,
@@ -75,7 +106,8 @@ export async function snapshotDatabase(db) {
         join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace
         where n.nspname in ('public','app_private')`,
       schemas: `select nspname,pg_get_userbyid(nspowner) as owner,nspacl from pg_namespace where nspname in ('public','app_private','storage')`,
-      default_grants: `select pg_get_userbyid(d.defaclrole) as owner,n.nspname,d.defaclobjtype,d.defaclacl
+      default_grants: `select pg_get_userbyid(d.defaclrole) as owner,n.nspname,d.defaclobjtype,
+        ${canonicalColumnAcl('d.defaclacl', 'd.defaclrole')} as defaclacl
         from pg_default_acl d left join pg_namespace n on n.oid=d.defaclnamespace
         where n.nspname in ('public','app_private') or d.defaclnamespace=0`,
       client_roles: `select rolname,rolsuper,rolinherit,rolbypassrls,rolcanlogin from pg_roles
