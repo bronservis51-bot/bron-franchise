@@ -257,7 +257,7 @@ function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
       }}/>}</Field>
     </div>
     {importFile&&<div className="alert tone-info" style={{marginTop:12,flexWrap:'wrap'}}>
-      <div className="alert-body">В копии: записей — {importFile.data.operations.length}, черновиков — {importFile.data.drafts.length}. После добавления очередь отправится при наличии связи. Существующие записи не перезаписываются.</div>
+      <div className="alert-body" style={{flex:'1 1 240px',overflowWrap:'anywhere'}}>В копии: записей — {importFile.data.operations.length}, черновиков — {importFile.data.drafts.length}. После добавления очередь отправится при наличии связи. Существующие записи не перезаписываются.</div>
       <Button disabled={busy} onClick={()=>{
         setBusy(true);setError(null);
         void importLocalRecovery(userId,importFile.text).then(added=>{setImportFile(null);setNotice(`Добавлено локальных записей: ${added}.`);notifyOutboxChange();return qc.invalidateQueries({queryKey:['local-queue',userId]});}).catch(fail).finally(()=>setBusy(false));
