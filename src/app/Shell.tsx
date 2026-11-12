@@ -3,9 +3,9 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudOff, KeyRound, LogOut, Smartphone, User, WifiOff, X } from 'lucide-react';
 import { onAvailableUpdate } from '../platform/update';
-import { command, commandsInFlight } from '../platform/backend';
+import { AppError, command, commandsInFlight } from '../platform/backend';
 import { useSession } from '../platform/session';
-import { dropOp, flushOutbox, onOutboxChange, queuedOps } from '../platform/outbox';
+import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
@@ -13,6 +13,8 @@ import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { installDevice } from '../platform/install';
+import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
+import { sameJson, type QueuedOperation } from '../platform/offline';
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -83,7 +85,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending }: { pending: number }) {
+function UserMenu({ pending, onLocalWork }: { pending: number; onLocalWork: () => void }) {
   const { me, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
@@ -113,6 +115,7 @@ function UserMenu({ pending }: { pending: number }) {
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
+          <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
@@ -186,7 +189,7 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
           {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
-          <UserMenu pending={ops.length} />
+          <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} />
         </header>
         {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
           if (ops.length || commandsInFlight() || document.querySelector('dialog[open], [role="dialog"], [data-unsaved="true"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
@@ -223,21 +226,51 @@ export function Shell() {
 function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
   const qc=useQueryClient();
   const q=useQuery({queryKey:['local-queue',userId],queryFn:()=>queuedOps(userId)});
-  const [copied,setCopied]=useState(false);
+  const [copied,setCopied]=useState<Map<string,QueuedOperation>>(new Map());
   const [error,setError]=useState<unknown>(null);
-  const download=()=>{
-    const blob=new Blob([JSON.stringify({format:'bron-pending',exported_at:new Date().toISOString(),operations:q.data??[]},null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='bron-pending-records.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); setCopied(true);
+  const fail=(value:unknown)=>setError(value instanceof Error ? new AppError('validation',value.message,'','') : value);
+  const [busy,setBusy]=useState(false);
+  const [importFile,setImportFile]=useState<{text:string;data:LocalRecovery}|null>(null);
+  const [notice,setNotice]=useState('');
+  const download=async()=>{
+    setError(null); setBusy(true);
+    try {
+      const text=await exportLocalRecovery(userId);
+      const saved=JSON.parse(text) as LocalRecovery;
+      const blob=new Blob([text],{type:'application/json'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;
+      a.download=`bron-local-records-${new Date().toISOString().slice(0,10)}.json`; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000); setCopied(new Map(saved.operations.map(o=>[o.clientOpId,o])));
+      setNotice('Копия подготовлена. Проверьте, что файл сохранился на устройстве.');
+    } catch(e) {fail(e);} finally {setBusy(false);}
   };
-  return <ConfirmDialog open title="Неотправленные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} error={error ?? q.error}>
-    <p className="faint">При конфликте откройте день заново и сверьте суммы. Сначала сохраните копию, затем удалите обработанную запись из очереди.</p>
-    <Button disabled={!q.data?.length} onClick={download}>Скачать копию записей</Button>
+  return <ConfirmDialog open title="Локальные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} busy={busy} error={error ?? q.error}>
+    <p className="faint">Копия содержит только ваши неотправленные записи и сохранённые черновики. Храните её в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
+    <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
+      <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
+      <Field label="Загрузить сохранённую копию">{id=><Input id={id} type="file" accept=".json,application/json" disabled={busy} onChange={event=>{
+        const file=event.target.files?.[0]; event.target.value=''; setImportFile(null); setError(null);setNotice('');
+        if(!file)return;
+        if(file.size>MAX_RECOVERY_BYTES){fail(new Error('Файл больше 5 МБ. Импорт отменён.'));return;}
+        setBusy(true);
+        void file.text().then(text=>setImportFile({text,data:parseLocalRecovery(text,userId)})).catch(fail).finally(()=>setBusy(false));
+      }}/>}</Field>
+    </div>
+    {importFile&&<div className="alert tone-info" style={{marginTop:12,flexWrap:'wrap'}}>
+      <div className="alert-body">В копии: записей — {importFile.data.operations.length}, черновиков — {importFile.data.drafts.length}. После добавления очередь отправится при наличии связи. Существующие записи не перезаписываются.</div>
+      <Button disabled={busy} onClick={()=>{
+        setBusy(true);setError(null);
+        void importLocalRecovery(userId,importFile.text).then(added=>{setImportFile(null);setNotice(`Добавлено локальных записей: ${added}.`);notifyOutboxChange();return qc.invalidateQueries({queryKey:['local-queue',userId]});}).catch(fail).finally(()=>setBusy(false));
+      }}>Добавить записи из копии</Button>
+    </div>}
+    {notice&&<p role="status">{notice}</p>}
+    <p className="faint">При конфликте откройте день заново и сверьте суммы. Удаляйте обработанную запись только после проверки сохранённой копии.</p>
     {q.data?.map(o=><div key={o.clientOpId} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
       <strong>{o.kind.startsWith('revenue') ? `Выручка за ${String(o.payload.day)}` : 'Закрытие смены'}</strong>
       <div className="faint">{o.kind === 'revenue_total_set' ? `Всего: ${(Number(o.payload.total)/100).toLocaleString('ru-RU')}` : `Наличные: ${(Number(o.payload.cash)/100).toLocaleString('ru-RU')} · карта: ${(Number(o.payload.card)/100).toLocaleString('ru-RU')}`}</div>
       <div className="faint">{o.lastError ?? 'Ожидает отправки'}</div>
-      {o.lastError && <Button variant="ghost" size="sm" disabled={!copied} onClick={()=>{
-        void dropOp(userId,o.clientOpId).then(()=>qc.invalidateQueries({queryKey:['local-queue',userId]})).catch(setError);
+      {o.lastError && <Button variant="ghost" size="sm" disabled={busy||copied.get(o.clientOpId)?.kind!==o.kind||!sameJson(copied.get(o.clientOpId)?.payload,o.payload)} onClick={()=>{
+        void dropOp(userId,o.clientOpId).then(()=>qc.invalidateQueries({queryKey:['local-queue',userId]})).catch(fail);
       }}>Копия сохранена — удалить из очереди</Button>}
     </div>)}
   </ConfirmDialog>;

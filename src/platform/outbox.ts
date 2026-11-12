@@ -7,7 +7,8 @@ import { requireClient } from './supabase';
 type Kind = QueuedOperation['kind'];
 const listeners = new Set<() => void>();
 export const onOutboxChange = (fn: () => void) => { listeners.add(fn); return () => void listeners.delete(fn); };
-const changed = () => listeners.forEach((l) => l());
+export const notifyOutboxChange = () => listeners.forEach((l) => l());
+const changed = notifyOutboxChange;
 
 const temporaryErrors = new Set(['offline', 'external-unavailable', 'unauthenticated', 'maintenance']);
 const isTemporary = (e: unknown) => temporaryErrors.has(toAppError(e).code);
