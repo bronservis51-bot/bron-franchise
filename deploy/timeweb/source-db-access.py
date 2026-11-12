@@ -26,6 +26,44 @@ STATE_DIR = Path("/opt/bron")
 SOURCE_CA = STATE_DIR / "source-ca-bundle.pem"
 
 
+def source_transport():
+    """Opt in only to the reviewed, loopback-only temporary SSH forward."""
+    tunnel_port = os.environ.get("BRON_SOURCE_TUNNEL_PORT")
+    if tunnel_port is None:
+        return {"socket_host": SOURCE_HOST, "port": 5432, "hostaddr": None}
+    if tunnel_port != "15432":
+        raise RuntimeError("BRON_SOURCE_TUNNEL_PORT permits only loopback port 15432")
+    return {"socket_host": "127.0.0.1", "port": 15432, "hostaddr": "127.0.0.1"}
+
+
+def source_service(transport):
+    # host remains the certificate/password identity even when routing locally.
+    hostaddr = f"hostaddr={transport['hostaddr']}\n" if transport["hostaddr"] else ""
+    return ("[bron_source]\n" + f"host={SOURCE_HOST}\n" + hostaddr
+            + f"port={transport['port']}\nuser={SOURCE_USER}\ndbname=postgres\n"
+            + "sslmode=verify-full\n" + f"sslrootcert={SOURCE_CA}\n"
+            + "connect_timeout=15\napplication_name=bron-migration-readonly\n")
+
+
+def password_prefix(transport):
+    return f"{SOURCE_HOST}:{transport['port']}:postgres:{SOURCE_USER}:"
+
+
+def validate_existing_credentials(transport):
+    for path in (SERVICE_FILE, PASSWORD_FILE):
+        if path.is_symlink() or path.stat().st_uid != 0 or path.stat().st_mode & 0o077:
+            raise RuntimeError("Unsafe source credential file permissions")
+    # Refuse even an apparently harmless config edit instead of silently changing
+    # an existing credential's destination, TLS settings or libpq service options.
+    if SERVICE_FILE.read_text() != source_service(transport):
+        raise RuntimeError("Existing source service uses a different or unsafe transport; review it explicitly")
+    lines = PASSWORD_FILE.read_text().splitlines()
+    prefix = password_prefix(transport)
+    if (len(lines) != 1 or not lines[0].startswith(prefix)
+            or len(lines[0]) == len(prefix) or "\x00" in lines[0]):
+        raise RuntimeError("Existing source password file does not match the selected transport")
+
+
 def run(args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True,
                           timeout=45, **kwargs).stdout.strip()
@@ -71,14 +109,17 @@ def preflight():
     # No credentials are sent by this network check. No insecure fallback.
     if not SOURCE_CA.is_file() or SOURCE_CA.is_symlink():
         raise RuntimeError("Prepare the verified source CA bundle first")
+    transport = source_transport()
     context = ssl.create_default_context(cafile=str(SOURCE_CA))
     def deadline(_signum, _frame):
         raise TimeoutError("Source network check exceeded 30 seconds")
     previous_handler = signal.signal(signal.SIGALRM, deadline)
     signal.alarm(30)
     try:
-        print("Checking source DNS and TCP/5432...", flush=True)
-        with socket.create_connection((SOURCE_HOST, 5432), timeout=10) as connection:
+        route = "loopback SSH forward" if transport["hostaddr"] else "direct"
+        print(f"Checking source TCP via {route} port {transport['port']}...", flush=True)
+        with socket.create_connection((transport["socket_host"], transport["port"]),
+                                      timeout=10) as connection:
             print("TCP connected; checking PostgreSQL TLS...", flush=True)
             connection.sendall(struct.pack("!II", 8, 80877103))
             if connection.recv(1) != b"S":
@@ -93,9 +134,12 @@ def preflight():
 
 
 def connect():
+    transport = source_transport()
     if SERVICE_FILE.exists() != PASSWORD_FILE.exists():
         raise RuntimeError("Incomplete source credential files require review")
-    if not SERVICE_FILE.exists():
+    if SERVICE_FILE.exists():
+        validate_existing_credentials(transport)
+    else:
         if not sys.stdin.isatty():
             raise RuntimeError("Enter the password at the server TTY")
         password = getpass.getpass("Existing SUPABASE DATABASE password (hidden): ")
@@ -104,22 +148,15 @@ def connect():
         if password == "[YOUR-PASSWORD]":
             raise RuntimeError("The connection template is not the database password")
         escaped_password = password.replace("\\", "\\\\").replace(":", "\\:")
-        service = ("[bron_source]\n" + f"host={SOURCE_HOST}\nport=5432\n"
-                   + f"user={SOURCE_USER}\ndbname=postgres\n"
-                   + "sslmode=verify-full\n"
-                   + f"sslrootcert={SOURCE_CA}\n"
-                   + "connect_timeout=15\napplication_name=bron-migration-readonly\n")
-        write_private(SERVICE_FILE, service)
+        write_private(SERVICE_FILE, source_service(transport))
         try:
             write_private(PASSWORD_FILE,
-                          f"{SOURCE_HOST}:5432:postgres:{SOURCE_USER}:{escaped_password}\n")
+                          f"{password_prefix(transport)}{escaped_password}\n")
         except BaseException:
             SERVICE_FILE.unlink()
             raise
         password = escaped_password = ""
-    for path in (SERVICE_FILE, PASSWORD_FILE):
-        if path.is_symlink() or path.stat().st_uid != 0 or path.stat().st_mode & 0o077:
-            raise RuntimeError("Unsafe source credential file permissions")
+    validate_existing_credentials(transport)
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("PG")}
     environment.update(PGSERVICEFILE=str(SERVICE_FILE), PGPASSFILE=str(PASSWORD_FILE),
