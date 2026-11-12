@@ -14,6 +14,7 @@ import ssl
 import struct
 import subprocess
 import sys
+import signal
 
 TARGET_IP = "152.228.115.115"
 SOURCE_HOST = "aws-1-us-west-2.pooler.supabase.com"
@@ -22,6 +23,7 @@ SECRET_DIR = Path("/root/bron-secrets")
 SERVICE_FILE = SECRET_DIR / "source.pg_service.conf"
 PASSWORD_FILE = SECRET_DIR / "source.pgpass"
 STATE_DIR = Path("/opt/bron")
+SOURCE_CA = STATE_DIR / "source-ca-bundle.pem"
 
 
 def run(args, **kwargs):
@@ -67,13 +69,25 @@ def preflight():
     private_directory(STATE_DIR)
     # PostgreSQL SSLRequest, then normal system CA + hostname verification.
     # No credentials are sent by this network check. No insecure fallback.
-    context = ssl.create_default_context()
-    with socket.create_connection((SOURCE_HOST, 5432), timeout=15) as connection:
-        connection.sendall(struct.pack("!II", 8, 80877103))
-        if connection.recv(1) != b"S":
-            raise RuntimeError("Source does not offer PostgreSQL TLS")
-        with context.wrap_socket(connection, server_hostname=SOURCE_HOST) as secure:
-            tls_version = secure.version()
+    if not SOURCE_CA.is_file() or SOURCE_CA.is_symlink():
+        raise RuntimeError("Prepare the verified source CA bundle first")
+    context = ssl.create_default_context(cafile=str(SOURCE_CA))
+    def deadline(_signum, _frame):
+        raise TimeoutError("Source network check exceeded 30 seconds")
+    previous_handler = signal.signal(signal.SIGALRM, deadline)
+    signal.alarm(30)
+    try:
+        print("Checking source DNS and TCP/5432...", flush=True)
+        with socket.create_connection((SOURCE_HOST, 5432), timeout=10) as connection:
+            print("TCP connected; checking PostgreSQL TLS...", flush=True)
+            connection.sendall(struct.pack("!II", 8, 80877103))
+            if connection.recv(1) != b"S":
+                raise RuntimeError("Source does not offer PostgreSQL TLS")
+            with context.wrap_socket(connection, server_hostname=SOURCE_HOST) as secure:
+                tls_version = secure.version()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
     print(f"Target checks passed; kernel {run(['uname', '-r'])}.")
     print(f"Source TCP/5432, certificate and hostname verified: {tls_version}.")
 
@@ -93,7 +107,7 @@ def connect():
         service = ("[bron_source]\n" + f"host={SOURCE_HOST}\nport=5432\n"
                    + f"user={SOURCE_USER}\ndbname=postgres\n"
                    + "sslmode=verify-full\n"
-                   + "sslrootcert=/etc/ssl/certs/ca-certificates.crt\n"
+                   + f"sslrootcert={SOURCE_CA}\n"
                    + "connect_timeout=15\napplication_name=bron-migration-readonly\n")
         write_private(SERVICE_FILE, service)
         try:

@@ -1,6 +1,10 @@
 # Copy this directory to <pinned supabase checkout>/docker/bron.
 # Run from docker/: docker compose -f docker-compose.yml -f bron/compose.override.yml ...
 services:
+  db:
+    # Source is PG 17.11. This patched, immutable image is a restore candidate;
+    # promotion still requires the full data/Auth/Storage rehearsal.
+    image: supabase/postgres:17.11.0.019@sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc
   api-gw:
     ports: !override
       - "127.0.0.1:8000:8000"
