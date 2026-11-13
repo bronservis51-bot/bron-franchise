@@ -1,0 +1,9 @@
+# TLS preparation only. No site files or backend endpoints are served.
+bronservis.ru, app.bronservis.ru, api.bronservis.ru {
+	header {
+		Cache-Control "no-store"
+		Retry-After "600"
+		X-Content-Type-Options "nosniff"
+	}
+	respond "Техническое обслуживание. Попробуйте позже." 503
+}
