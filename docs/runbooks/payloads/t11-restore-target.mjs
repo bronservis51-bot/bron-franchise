@@ -45,6 +45,47 @@ export function globalsStandardRoles(script,line) {
   const roles=[...new Set((source.match(/\b[a-z_][a-z0-9_]*\b/g)??[]).filter(word=>allowed.has(word)))].sort();
   return roles.length?roles:['OTHER'];
 }
+export function instrumentGlobals(script) {
+  const out=[],steps=[];let quote='',block=0,dollar='',start=true,escape=false;
+  for(const [index,line] of script.split('\n').entries()){
+    const kind=globalsStatementClass(line,1);
+    if(!quote&&!block&&!dollar&&start&&kind!=='OTHER'&&kind!=='UNAVAILABLE'){
+      const marker='BRON_GLOBAL_STEP_'+String(steps.length+1).padStart(4,'0');
+      steps.push({marker,statementLine:index+1,statementClass:kind,standardRoles:globalsStandardRoles(line,1)});
+      out.push("SELECT '"+marker+"';");
+    }
+    out.push(line);
+    if(!quote&&!block&&!dollar&&start&&line.trimStart().startsWith('\\'))continue;
+    for(let i=0;i<line.length;i++){
+      const c=line[i],next=line[i+1];
+      if(block){if(c==='/'&&next==='*'){block++;i++;}else if(c==='*'&&next==='/'){block--;i++;}continue;}
+      if(dollar){if(line.startsWith(dollar,i)){i+=dollar.length-1;dollar='';}continue;}
+      if(quote){if(quote==="'"&&escape&&c==='\\'){i++;continue;}
+        if(c===quote){if(next===quote)i++;else quote='';}continue;}
+      if(c==='-'&&next==='-')break;
+      if(c==='/'&&next==='*'){block++;i++;continue;}
+      if(/\s/.test(c))continue;
+      if(c==="'"||c==='"'){quote=c;escape=c==="'"&&/[eE]/.test(line[i-1]??'')&&
+        (i<2||!/[A-Za-z0-9_$]/.test(line[i-2]));start=false;continue;}
+      if(c==='$'){const tag=line.slice(i).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/)?.[0];
+        if(tag){dollar=tag;i+=tag.length-1;start=false;continue;}}
+      start=c===';';
+    }
+  }
+  if(quote||block||dollar||!start)fail('REHEARSAL_GLOBALS_SQL_INCOMPLETE');
+  return {sql:out.join('\n'),steps};
+}
+export function globalsRunSummary(result,steps) {
+  const markers=[...(result.stdout??'').matchAll(/^BRON_GLOBAL_STEP_\d+\r?$/gm)];
+  const marker=markers.at(-1)?.[0].trim();
+  const step=steps.find(s=>s.marker===marker);
+  const diagnostic=classifyRestoreFailure(result.stderr??'');
+  return {exitStatus:result.status,diagnostic:result.status===0?'GLOBALS_RESTORED':diagnostic.diagnostic,
+    sqlstate:diagnostic.sqlstate,statementLine:step?.statementLine??diagnostic.statementLine,
+    statementClass:step?.statementClass??'UNAVAILABLE',standardRoles:step?.standardRoles??[],
+    marker:step?.marker??null};
+}
+export const nativeGlobalsConfig=exact=>exact+"shared_preload_libraries = ''\nsession_preload_libraries = ''\n";
 function run(binary,args,{input,timeout=30000}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
     stdio:[input===undefined?'ignore':'pipe','pipe','ignore']});
@@ -202,7 +243,9 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     ...settings.map(s=>s.name+' = '+pgConf(s.setting)),"listen_addresses = ''",
     "unix_socket_directories = '/restore-socket'","shared_buffers = '32MB'","max_connections = 20",
     'cron.launch_active_jobs = off','pg_net.batch_size = 0','log_min_messages = fatal'].join('\n')+'\n';
-  d(['exec','-i','--user','postgres',ownId,'/bin/sh','-c','cat > /restore-data/postgresql.auto.conf'],{input:config});
+  // Native cluster bootstrap restores roles before role/security extension hooks.
+  const nativeConfig=nativeGlobalsConfig(config);
+  d(['exec','-i','--user','postgres',ownId,'/bin/sh','-c','cat > /restore-data/postgresql.auto.conf'],{input:nativeConfig});
   d(['exec','--user','postgres',ownId,'pg_ctl','-D','/restore-data','-l','/restore-data/server.log','-w','-t','45','start'],{timeout:60000});
   const psql=['psql','-h','/restore-socket','-U',bootstrap,'-d','postgres','-X','-q','-v','ON_ERROR_STOP=1',
     '-v','VERBOSITY=verbose','-v','SHOW_CONTEXT=never'];
@@ -211,21 +254,33 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     'session_is_bootstrap',session_user=${sqlLiteral(bootstrap)},'current_is_session',current_user=session_user,
     'role_superuser',(SELECT rolsuper FROM pg_roles WHERE rolname=current_user),
     'setting_superuser',current_setting('is_superuser')='on',
+    'shared_preload_empty',current_setting('shared_preload_libraries')='',
+    'session_preload_empty',current_setting('session_preload_libraries')='',
     'reserved_roles_configured',coalesce(current_setting('supautils.reserved_roles',true),'')<>'',
     'configured_superuser_is_bootstrap',coalesce(current_setting('supautils.superuser',true),'')=session_user);`]));
-  try{await decode(artifact('roles.sql'),owned([...psql,'--single-transaction']));}
-  catch(error){
-    if(!diagnose)throw error;
-    const script=(await decode(artifact('roles.sql'),['/usr/bin/cat',[]],true)).toString('utf8');
-    console.log('T13_GLOBALS_DIAGNOSTIC',JSON.stringify({actor,...error.diagnostic,
-      statementClass:globalsStatementClass(script,error.diagnostic?.statementLine),
-      standardRoles:globalsStandardRoles(script,error.diagnostic?.statementLine),restorePassed:false}));
-    if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
-    console.log('T13_DIAGNOSTICS_COMPLETE_NO_FULL_RESTORE');return;
-  }
+  if(!actor.role_superuser||!actor.setting_superuser||!actor.shared_preload_empty||!actor.session_preload_empty)
+    fail('REHEARSAL_NATIVE_GLOBALS_BOOTSTRAP_GUARD_FAILED');
+  const script=(await decode(artifact('roles.sql'),['/usr/bin/cat',[]],true)).toString('utf8');
+  const marked=instrumentGlobals(script);
+  const result=spawnSync('/usr/bin/docker',[...docker,'exec','-i',ownId,...psql,'-A','-t','--single-transaction'],{
+    env,input:marked.sql,encoding:'utf8',timeout:300000,maxBuffer:1024*1024,stdio:['pipe','pipe','pipe']});
+  const summary=globalsRunSummary(result,marked.steps);
+  console.log('T14_NATIVE_GLOBALS_RESULT',JSON.stringify({actor,...summary}));
+  if(result.error||result.status!==0)fail('REHEARSAL_NATIVE_GLOBALS_FAILED');
   if(diagnose){if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
     console.log('T13_GLOBALS_DIAGNOSTIC',JSON.stringify({actor,diagnostic:'GLOBALS_RESTORED',
     restorePassed:false}));console.log('T13_DIAGNOSTICS_COMPLETE_NO_FULL_RESTORE');return;}
+  phase='restore-exact-security-preloads';
+  d(['exec','-i','--user','postgres',ownId,'/bin/sh','-c','cat > /restore-data/postgresql.auto.conf'],{input:config});
+  d(['exec','--user','postgres',ownId,'pg_ctl','-D','/restore-data','-l','/restore-data/server.log',
+    '-m','fast','-w','-t','45','restart'],{timeout:60000});
+  const actualPreloads=JSON.parse(d(['exec',ownId,...psql,'-A','-t','--command',`SELECT json_object_agg(name,setting)
+    FROM pg_settings WHERE name IN ('shared_preload_libraries','session_preload_libraries','cron.launch_active_jobs','pg_net.batch_size');`]));
+  for(const name of ['shared_preload_libraries','session_preload_libraries'])
+    if(actualPreloads[name]!==settings.find(s=>s.name===name)?.setting)fail('REHEARSAL_SECURITY_PRELOAD_RESTORE_MISMATCH');
+  if(actualPreloads['cron.launch_active_jobs']!=='off'||actualPreloads['pg_net.batch_size']!=='0')
+    fail('REHEARSAL_SCHEDULER_ISOLATION_FAILED');
+  console.log('T14_EXACT_SECURITY_PRELOADS_RESTORED');
   const toc=(await decode(artifact('database.dump'),owned(['pg_restore','--list']),true)).toString('utf8');
   const lines=toc.split('\n');
   const dbCreate=lines.filter(l=>/^\d+;\s+\d+\s+\d+\s+DATABASE\s+-\s+postgres\s/.test(l));

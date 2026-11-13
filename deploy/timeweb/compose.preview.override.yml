@@ -1,0 +1,20 @@
+# Apply LAST, after the actual Compose files and maintenance override.
+# Never apply before cold restore, source freeze and final strict audit pass.
+services:
+  web:
+    pull_policy: never
+    env_file: !override
+      - path: /root/bron-secrets/preview.env
+        required: true
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes: !override
+      - ./bron/Caddyfile.preview:/etc/caddy/Caddyfile:ro
+      - ./bron/site:/srv:ro
+      - bron-caddy-data:/data
+      - bron-caddy-config:/config
+    networks: !override
+      - default
+      - bron-edge

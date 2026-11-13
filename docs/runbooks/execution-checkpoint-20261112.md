@@ -3,6 +3,35 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T13: откат подготовлен, причина globals ещё уточняется — 13.11.2026
+
+Диагностика завершилась exit 0 как диагностика, НЕ restore pass. Внутренний psql
+по-прежнему exit 3, SQLSTATE 42501 / ROLE_PERMISSION; bootstrap current/session
+совпадают, rolsuper/is_superuser=true. Номер команды не был получен. Причина не
+доказана только этими флагами; guards на рабочей цели не менялись. Временный
+контейнер/socket удалены, primary baseline совпал.
+
+Для T14 подготовлен нормальный cold-bootstrap порядок: initial native cluster
+без shared/session preload → globals → точная исходная конфигурация и restart →
+проверка preloads/изоляции → полный restore. SQL-маркеры в закрытом процессе
+идентифицируют команду при отказе без вывода SQL/password material. На рабочую
+цель этот порядок не применяется. Syntax и 9 offline tests PASS; actual run впереди.
+
+Rollback-only build PASS; три target архива T12 неизменны. Source app e487ec8,
+landing base fb5210c6. Готовы два дополнительных приватных архива:
+
+| Bundle | Manifest SHA256 | Archive SHA256 |
+| --- | --- | --- |
+| app-source-rollback | 792f8ab3a9dde77fed8ce958ef5af1fddf5f2b85db9c0dc8fcb0a816ec16f1d2 | 708da93efb467d371a856e57eb6919d431476e80325ca6396dbe896d65409e72 |
+| landing-source-rollback | 9634bc0e9df9f976c3c100e75cdbe831625d206cd26a1a615cebe8371cdc7a62 | cf7c79f873eb3d8dc851a9808d51c92499375f3753174f0098764ec33bff836e |
+
+Backup/watchdog enabled/active, freshness/health PASS. Source keys активны.
+Из облачной среды отдельные curl по обычному DNS всех трёх доменов дали exit 0,
+TLS verify 0 и HTTP503. Mac curl exit6 требует локального разбора, публичный DNS
+не менять по одному локальному отказу. Private-preview Caddy/override подготовлены,
+но не применены: cold restore/final freeze/audit и приёмка ещё впереди.
+Telegram credential relocation/PAT/Actions secrets всё ещё ожидают явного согласия.
+
 ## Фактический результат T12 и уточнения — 13.11.2026
 
 Настоящие GoTrue-сессии четырёх существующих пользователей, все семь DB/RLS-групп,
