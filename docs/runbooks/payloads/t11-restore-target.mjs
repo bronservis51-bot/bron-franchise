@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const runtime='/opt/bron/audit-runtime-c128f9b';
 const identity='/root/bron-secrets/source-backup.agekey';
@@ -12,6 +13,38 @@ const fail=code=>{throw Object.assign(new Error(code),{code});};
 const env={PATH:'/usr/bin:/bin',HOME:'/root',LANG:'C.UTF-8',LC_ALL:'C.UTF-8'};
 let phase='guards', ownId, socket, primary, restored;
 const marker=randomUUID().replaceAll('-','');
+export function classifyRestoreFailure(text) {
+  const headline=text.match(/ERROR:\s+(?:([0-9A-Z]{5}):\s*)?([^\r\n]*)/i);
+  const message=headline?.[2]??'';
+  const diagnostic=/reserved role|role memberships are reserved/i.test(message)?'RESERVED_ROLE':
+    /must be superuser|only superusers|superuser.*required/i.test(message)?'SUPERUSER_REQUIRED':
+    /permission denied to (?:create|alter|drop|grant|revoke).*role/i.test(message)?'ROLE_PERMISSION':
+    /permission denied to set parameter/i.test(message)?'PARAMETER_PERMISSION':
+    /already exists/i.test(message)?'OBJECT_EXISTS':/permission denied|must be owner/i.test(message)?'PERMISSION':
+    /could not open.*control|extension.*not available|no installation script/i.test(message)?'EXTENSION_UNAVAILABLE':
+    /does not exist/i.test(message)?'OBJECT_MISSING':/encryption key|pgsodium.*key/i.test(message)?'VAULT_KEY':'UNCLASSIFIED';
+  const line=text.match(/psql:(?:<stdin>|-):(\d+):\s*ERROR:/i);
+  return {diagnostic,sqlstate:headline?.[1]?.toUpperCase()??null,
+    statementLine:line?Number(line[1]):null};
+}
+export function globalsStatementClass(script,line) {
+  if(!Number.isSafeInteger(line)||line<1)return 'UNAVAILABLE';
+  const source=script.split(/\r?\n/)[line-1]?.trim()??'';
+  const patterns=[['CREATE_ROLE',/^CREATE ROLE\b/i],['ALTER_ROLE',/^ALTER ROLE\b/i],
+    ['GRANT_ROLE',/^GRANT\b/i],['REVOKE_ROLE',/^REVOKE\b/i],
+    ['SESSION_AUTHORIZATION',/^SET SESSION AUTHORIZATION\b/i],['SET_ROLE',/^SET ROLE\b/i],['SET_PARAMETER',/^SET\b/i]];
+  return patterns.find(([,pattern])=>pattern.test(source))?.[0]??'OTHER';
+}
+export function globalsStandardRoles(script,line) {
+  if(!Number.isSafeInteger(line)||line<1)return [];
+  const source=(script.split(/\r?\n/)[line-1]??'').replace(/'(?:[^']|'')*'/g,"''");
+  const allowed=new Set(['anon','authenticated','authenticator','service_role','postgres','supabase_admin',
+    'supabase_auth_admin','supabase_storage_admin','supabase_read_only_user','supabase_realtime_admin',
+    'supabase_replication_admin','supabase_etl_admin','supabase_privileged_role','pgbouncer','dashboard_user',
+    'pgsodium_keyholder','pgsodium_keyiduser','pgsodium_keymaker']);
+  const roles=[...new Set((source.match(/\b[a-z_][a-z0-9_]*\b/g)??[]).filter(word=>allowed.has(word)))].sort();
+  return roles.length?roles:['OTHER'];
+}
 function run(binary,args,{input,timeout=30000}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
     stdio:[input===undefined?'ignore':'pipe','pipe','ignore']});
@@ -49,11 +82,10 @@ async function decode(file,consumer,capture=false) {
       c.once('error',()=>reject(new Error('pipeline')));c.once('close',(status)=>resolve(status));})));
     if(overflow||statuses.some(status=>status!==0)){
       const text=Buffer.concat(diagnostics).toString('utf8');
-      const code=/already exists/i.test(text)?'OBJECT_EXISTS':/permission denied|must be owner/i.test(text)?'PERMISSION':
-        /could not open.*control|extension.*not available|no installation script/i.test(text)?'EXTENSION_UNAVAILABLE':
-        /does not exist/i.test(text)?'OBJECT_MISSING':/encryption key|pgsodium.*key/i.test(text)?'VAULT_KEY':'UNCLASSIFIED';
-      console.error('T11_PIPELINE_FAILURE',JSON.stringify({exitCodes:statuses,diagnostic:code}));
-      fail('REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
+      const diagnostic=classifyRestoreFailure(text);
+      console.error('T11_PIPELINE_FAILURE',JSON.stringify({exitCodes:statuses,...diagnostic}));
+      throw Object.assign(new Error('REHEARSAL_DECRYPT_OR_RESTORE_FAILED'),
+        {code:'REHEARSAL_DECRYPT_OR_RESTORE_FAILED',diagnostic});
     }
     return Buffer.concat(chunks);
   } finally {clearTimeout(timer);for(const c of children)if(c.exitCode===null)c.kill();}
@@ -74,7 +106,7 @@ function tree(root,relative='') {
     else fail('REHEARSAL_STORAGE_FILE_TYPE_INVALID');
   }visit(relative);return h.digest('hex');
 }
-try {
+export async function main(){try {
   if(process.getuid()!==0)fail('REHEARSAL_ROOT_REQUIRED');
   run('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0']);
   const available=Number(fs.readFileSync('/proc/meminfo','utf8').match(/^MemAvailable:\s+(\d+) kB$/m)?.[1]);
@@ -82,7 +114,8 @@ try {
   const ips=run('/usr/sbin/ip',['-4','-o','addr','show','scope','global']);
   if(!ips.split('\n').some(line=>line.split(/\s+/)[3]?.split('/')[0]==='152.228.115.115'))fail('REHEARSAL_WRONG_VPS');
   const manifestPath=process.argv[2];
-  if(process.argv.length!==3||!/^\/var\/backups\/bron-franchise\/target-\d{8}T\d{6}Z-[a-f0-9]{8}\/manifest\.json$/.test(manifestPath??''))
+  const diagnose=process.argv[3]==='--diagnose-globals';
+  if(process.argv.length!==(diagnose?4:3)||!/^\/var\/backups\/bron-franchise\/target-\d{8}T\d{6}Z-[a-f0-9]{8}\/manifest\.json$/.test(manifestPath??''))
     fail('REHEARSAL_EXPLICIT_TARGET_MANIFEST_REQUIRED');
   privatePath(path.dirname(manifestPath),true);privatePath(manifestPath);privatePath(identity);
   const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
@@ -171,9 +204,28 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     'cron.launch_active_jobs = off','pg_net.batch_size = 0','log_min_messages = fatal'].join('\n')+'\n';
   d(['exec','-i','--user','postgres',ownId,'/bin/sh','-c','cat > /restore-data/postgresql.auto.conf'],{input:config});
   d(['exec','--user','postgres',ownId,'pg_ctl','-D','/restore-data','-l','/restore-data/server.log','-w','-t','45','start'],{timeout:60000});
-  const psql=['psql','-h','/restore-socket','-U',bootstrap,'-d','postgres','-X','-q','-v','ON_ERROR_STOP=1'];
+  const psql=['psql','-h','/restore-socket','-U',bootstrap,'-d','postgres','-X','-q','-v','ON_ERROR_STOP=1',
+    '-v','VERBOSITY=verbose','-v','SHOW_CONTEXT=never'];
   phase='restore-globals';
-  await decode(artifact('roles.sql'),owned(psql));
+  const actor=JSON.parse(d(['exec',ownId,...psql,'-A','-t','--command',`SELECT json_build_object(
+    'session_is_bootstrap',session_user=${sqlLiteral(bootstrap)},'current_is_session',current_user=session_user,
+    'role_superuser',(SELECT rolsuper FROM pg_roles WHERE rolname=current_user),
+    'setting_superuser',current_setting('is_superuser')='on',
+    'reserved_roles_configured',coalesce(current_setting('supautils.reserved_roles',true),'')<>'',
+    'configured_superuser_is_bootstrap',coalesce(current_setting('supautils.superuser',true),'')=session_user);`]));
+  try{await decode(artifact('roles.sql'),owned([...psql,'--single-transaction']));}
+  catch(error){
+    if(!diagnose)throw error;
+    const script=(await decode(artifact('roles.sql'),['/usr/bin/cat',[]],true)).toString('utf8');
+    console.log('T13_GLOBALS_DIAGNOSTIC',JSON.stringify({actor,...error.diagnostic,
+      statementClass:globalsStatementClass(script,error.diagnostic?.statementLine),
+      standardRoles:globalsStandardRoles(script,error.diagnostic?.statementLine),restorePassed:false}));
+    if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
+    console.log('T13_DIAGNOSTICS_COMPLETE_NO_FULL_RESTORE');return;
+  }
+  if(diagnose){if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
+    console.log('T13_GLOBALS_DIAGNOSTIC',JSON.stringify({actor,diagnostic:'GLOBALS_RESTORED',
+    restorePassed:false}));console.log('T13_DIAGNOSTICS_COMPLETE_NO_FULL_RESTORE');return;}
   const toc=(await decode(artifact('database.dump'),owned(['pg_restore','--list']),true)).toString('utf8');
   const lines=toc.split('\n');
   const dbCreate=lines.filter(l=>/^\d+;\s+\d+\s+\d+\s+DATABASE\s+-\s+postgres\s/.test(l));
@@ -280,4 +332,5 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     if(!['.s.PGSQL.5432','.s.PGSQL.5432.lock'].includes(name))fail('REHEARSAL_UNEXPECTED_SOCKET_FILE');
     fs.unlinkSync(path.join(socket,name));
   }fs.rmdirSync(socket);}catch{console.error('T11_TEMPORARY_SOCKET_CLEANUP_REQUIRED');process.exitCode=2;}}
-}
+}}
+if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)await main();

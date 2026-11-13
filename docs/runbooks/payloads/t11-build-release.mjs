@@ -107,6 +107,10 @@ export function transformLanding(original, origin, key) {
 async function main() {
   process.umask(0o077);
   const config=privateConfig();
+  const rollbackOnly=process.env.BRON_RELEASE_ONLY_ROLLBACK==='1';
+  if (process.env.BRON_RELEASE_ONLY_ROLLBACK!==undefined && !rollbackOnly)
+    fail('RELEASE_MODE_INVALID');
+  if (rollbackOnly && !config.sourceAnonKey) fail('RELEASE_ROLLBACK_KEY_REQUIRED');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'bron-release-artifacts-'));
   const source=path.join(root,'app-source');
   archive(config.appRepo,config.appCommit,source);
@@ -133,8 +137,10 @@ async function main() {
     if (base!=='/') { fs.copyFileSync(path.join(out,'index.html'),path.join(out,'404.html'));fs.writeFileSync(path.join(out,'.nojekyll'),''); }
     summaries.push(manifest(out,{kind:'app',sourceCommit:config.appCommit,base,apiOrigin:origin,buildTime:version.build,...versions}));
   }
-  app('app-root','/',TARGET,config.anonKey);
-  app('app-legacy','/bron-franchise/',TARGET,config.anonKey);
+  if (!rollbackOnly) {
+    app('app-root','/',TARGET,config.anonKey);
+    app('app-legacy','/bron-franchise/',TARGET,config.anonKey);
+  }
   const landingSource=path.join(root,'landing-source');
   archive(config.landingRepo,config.landingCommit,landingSource);
   function landing(name,origin,key) {
@@ -146,14 +152,14 @@ async function main() {
     summaries.push(manifest(out,{kind:'landing',sourceCommit:config.landingCommit,base:'/',apiOrigin:origin,
       transforms:['public_api_key','consent_unchecked','og_image_origin']}));
   }
-  landing('landing-root',TARGET,config.anonKey);
+  if (!rollbackOnly) landing('landing-root',TARGET,config.anonKey);
   if (config.sourceAnonKey) {
     app('app-source-rollback','/bron-franchise/',SOURCE,config.sourceAnonKey);
     landing('landing-source-rollback',SOURCE,config.sourceAnonKey);
   }
   fs.rmSync(source,{recursive:true});
   fs.rmSync(landingSource,{recursive:true});
-  fs.writeFileSync(path.join(root,'build-summary.json'),JSON.stringify({appCommit:config.appCommit,
+  fs.writeFileSync(path.join(root,'build-summary.json'),JSON.stringify({mode:rollbackOnly?'rollback-only':'release',appCommit:config.appCommit,
     landingCommit:config.landingCommit,bundles:summaries},null,2)+'\n',{mode:0o600,flag:'wx'});
   console.log('RELEASE_ARTIFACTS_READY',JSON.stringify({directory:root,bundles:summaries}));
 }

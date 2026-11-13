@@ -3,6 +3,44 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## Фактический результат T12 и уточнения — 13.11.2026
+
+Настоящие GoTrue-сессии четырёх существующих пользователей, все семь DB/RLS-групп,
+HTTP роли/своя-чужая область и отзыв JWT/refresh — PASS. Trial sessions удалены,
+Auth beforeimages восстановлены, target snapshot неизменён. Последующая полная
+source/target сверка **exit 0**. Эти проверки повторять не требуется.
+
+Новая копия `/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json`
+создана штатным сервисом, S3 upload/read-back SHA PASS. Isolated restore остановился
+на restore-globals: producer/decrypt exit 0/0, psql exit 3, классификация PERMISSION.
+Причина ещё не установлена; guards не отключались. Временный контейнер/socket
+удалены. Доставка, версия расширений, Vault и данные из этой копии пока НЕ
+считаются восстановленными. Backup/watchdog timer и freshness/health PASS.
+
+Addendum исправляет первоначальный build BLOCKED: найден существующий точный
+dependency tree с правильным package-lock/npm ls, без установки. Builder exit 0.
+App source commit `e487ec88120056a54078c3ff1d9ff13d9245ac36`, landing base
+`fb5210c6de3ac6df93bad2ddf0306a1856e98b73`; три готовых приватных архива:
+
+| Bundle | Manifest SHA256 | Archive SHA256 |
+| --- | --- | --- |
+| app-root | e7e9acc8c54631d54b095dd6448130d38266491ab3f810f7bb6affe046efc1c4 | 5cbb2f61ff84f758efe35fac0be5ecb1e0332d706a36599804b9d5e6d5c4d61a |
+| app-legacy | 19e937cfb67f0fbf408cff88d9777403b1f0ab63ab486a1e0e1362ddcdaa38e0 | 377ddac6b7eb210cad2af6007048430088e289c13d66a19ca7bbad3da066d4ab |
+| landing-root | 4c3f2b8efd9be02ecc089a1b44a5d86d7cb830e5c685c9f3246c38c494e081b8 | 29c62cd56dd6d802feee6e0c2901dae90b91dea2e63e6e226879bb81d3c05abe |
+
+Source rollback пока не собран: локального Supabase connector нет, background
+dashboard отклонён инструментом `Capability is not available: visibility`.
+Это не отказ аккаунта. Облачный Supabase connector подтвердил действующий legacy
+anon. Его публичная настройка передана в `payloads/source-rollback-client.public.json`
+для rollback-клиента; это НЕ service_role/secret key. Временная Actions Variable
+не создавалась: облачный GitHub integration вернул 403 на Variables API.
+В builder добавлен rollback-only режим: три российских архива сохраняются.
+
+api.github.com с VPS HTTPS200; глобального IPv6 нет. Telegram credential, PAT и
+Actions secrets не созданы/не перемещены. Согласие на новый credential scope
+GitHub relay ещё не получено. Все новые домены/API остаются maintenance503;
+source keys сохраняются активными до проверенного отката и финального окна.
+
 ## Результат T09; T10/T11 и граница credential scope — 13.11.2026
 
 T09 подтвердил: ровно три target Auth timestamps изменены guarded-транзакцией,
