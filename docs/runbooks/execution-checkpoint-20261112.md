@@ -3,6 +3,33 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T23 BLOCKED; T24 исправляет driver coverage и безопасную диагностику — 13.11.2026
+
+T23 bundle/pins/SSH/preflight PASS; один readonly запуск exit2 на
+source-readonly-snapshot с DELTA_FAILED. Inventory/strictMatch/diff ещё не получены.
+Source/target writes=0, процессы и соединения завершены, cleanup PASS.
+Закрытые VPS helper/state/log/receipt сохранены, локальный receipt
+`/tmp/bron-release-executor-20261113/T23-state.json`. Повтор T23 запрещён.
+Причина этого конкретного source-отказа пока UNKNOWN; token/пароль не обвиняем.
+
+Независимо воспроизведён другой дефект: array_agg(attname) даёт name[];
+pg8.23.1 получает строку, в отличие от psql→JSON bridge. Это ломало последующий
+PK-diff, но не объясняет прежний этап отказа. T24 явно приводит attname::text,
+проверяет массив и сообщает только fixed error class/SQLSTATE, side, query ordinal,
+operation/object и elapsedMs. Исходный SQL, error message/detail/hint/stack не выводятся.
+Первый failed query context сохраняется после rollback.
+
+Native PG17.12 через настоящий pg8.23.1 wire protocol PASS:11 synthetic tables,
+NOSUPER source role/READ ONLY REPEATABLE READ, exact обычный auditor capture,
+PK/multiset diff без потери точности, настоящий code-less query timeout и redaction;
+fixture удалён. Focused ops7 PASS. Manifest `payloads/t24-sha256.json`.
+T24 ещё НЕ исполнен; он только читает и не меняет runtime auditor или данные.
+
+T21 full cold restore PASS и T19 owner-confirmed Telegram delivery переиспользуются.
+T22 новый schedule пока PENDING_OBSERVATION; наблюдение не тормозит T24.
+Обратимое закрытие новых source-соединений и дренирование старых изучается отдельно;
+никакой freeze, ACL mutation, перенос или preview до отдельного пакета не разрешён.
+
 ## T22 завершён; T23 только readonly-инвентаризация дельты — 13.11.2026
 
 T22 bundle/PR head/base/diff/CI PASS. PR14 squash merged в main

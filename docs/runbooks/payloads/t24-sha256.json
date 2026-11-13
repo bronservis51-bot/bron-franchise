@@ -1,0 +1,137 @@
+{
+  "acceptance": {
+    "finalFreezeAudit": false,
+    "inventoryComplete": true,
+    "inventory_exit": 0,
+    "output": "technical object/column names, counts, equality booleans and UTC windows only; no values/ids/hashes/SQL/credentials",
+    "strictMatch": "report actual value; false does not fail inventory",
+    "transactions": "read-only and ended"
+  },
+  "delivery": {
+    "destination": "/root/bron-secrets/t24-delta-readonly.mjs",
+    "mode": "0600",
+    "owner": "root:root",
+    "replace_existing": false,
+    "source": "docs/runbooks/payloads/t23-delta-readonly.mjs"
+  },
+  "failure_acceptance": {
+    "exit": 2,
+    "forbidden": [
+      "error.message",
+      "error.detail",
+      "error.hint",
+      "stack",
+      "SQL",
+      "row_values",
+      "credentials"
+    ],
+    "no_blind_retry": true,
+    "optional_safe_fields": [
+      "query.object",
+      "query.elapsedMs"
+    ],
+    "required_safe_fields": [
+      "phase",
+      "code",
+      "query.side",
+      "query.ordinal",
+      "query.operation"
+    ]
+  },
+  "files": {
+    "docs/runbooks/payloads/t23-delta-readonly.mjs": "4845de06046c61a1fadebd4c387dd179cd71fbf742aa2ffe68937c5b385ba021",
+    "tests/ops/delta-driver-native.mjs": "aecc0264b9dff9b7085d19d2fa8c56c41dfe76af3b19516d9d5c9a71ae48078c",
+    "tests/ops/delta-driver-native.py": "7034a494e749e6e738cbb0edd9d5b8846d2bbd65f16f71898115c3b20d524692",
+    "tests/ops/delta-readonly.test.mjs": "5d28ba22b61eebebf847cb505b8cc2b5bc81eb6b09f1d169434b442da7d389ca",
+    "tests/ops/restore-native-pg17.py": "c07227281d3ac2f9ba17c6237baf1d49cac0062702a5d079987e57896d04b653"
+  },
+  "format": 1,
+  "native_preflight": {
+    "actual_nonsuper_source_role": true,
+    "actual_readonly_repeatable_read": true,
+    "driver": "pg 8.23.1, actual wire protocol and type OIDs",
+    "duplicate_aware_no_pk": true,
+    "engine": "PostgreSQL 17.12",
+    "fixed_text_array_is_array": true,
+    "fixture": "tests/ops/delta-driver-native.py",
+    "fixture_container_removed": true,
+    "lossless_uuid_bigint_decimal_microseconds": true,
+    "output_redaction": true,
+    "raw_name_array_is_string": true,
+    "real_codeless_query_timeout_classified": true,
+    "result": "PASS",
+    "rollback_retains_failed_query_context": true,
+    "tables": 11,
+    "unchanged_auditor_capture_exact": true,
+    "unit_tests": 7
+  },
+  "not_authorized": [
+    "source_write_or_freeze",
+    "source_locks",
+    "target_mutation",
+    "DDL",
+    "restore_retry",
+    "backup_reinstallation",
+    "dependency_installation",
+    "build_repetition",
+    "key_change",
+    "Telegram_message",
+    "cron_change",
+    "workflow_dispatch",
+    "PR_merge",
+    "preview_apply",
+    "public_publish"
+  ],
+  "one_run": {
+    "action_id": "T24.delta_inventory",
+    "capture_bytes": 67108864,
+    "max_attempts": 1,
+    "per_table_rows": 25000,
+    "total_rows": 100000,
+    "wall_seconds": 240
+  },
+  "prior_failure": {
+    "cause": "UNKNOWN; name[] bug proven independently but occurs later and is not the proven T23 failure cause",
+    "code": "DELTA_FAILED",
+    "exit": 2,
+    "phase": "source-readonly-snapshot",
+    "retry_prior_task": false,
+    "task": "T23"
+  },
+  "restore_evidence": {
+    "manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+    "receipt": "/root/bron-secrets/t21-restore-5684c16-receipt.json",
+    "repeat_restore": false
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release bundles on VPS",
+    "T18 backup/status installation",
+    "T19 confirmed private Telegram delivery and enabled monitor",
+    "T21 full cold restore PASS",
+    "T22 PR14 merge and cron readback",
+    "T23 delivered historical helper/log/receipt preserved; no writes and cleanup PASS"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "dependency_realpath": "/opt/bron/rehearsal-audit.exfSfv9a/node_modules",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "schedule_observation": {
+    "event": "schedule",
+    "minimum_main_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+    "pending_does_not_block": true,
+    "repository": "bronservis51-bot/bron-franchise",
+    "workflow": "availability.yml"
+  },
+  "scope": "correct pg name[] decoding and run one read-only inventory with redacted query/error context; no freeze or data mutation",
+  "task": "T24",
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b"
+  }
+}

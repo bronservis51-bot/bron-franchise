@@ -1,4 +1,4 @@
-// Read-only planning inventory. Separate live snapshots are NOT the final freeze audit.
+// T24 corrected read-only planner. Separate live snapshots are NOT the final freeze audit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ const safeName=name=>/^[a-z_][a-z0-9_]{0,62}$/.test(name)?name:'OTHER';
 const safeObject=name=>name.split('.').map(safeName).join('.');
 const safeGroup=group=>/^(data|sequence):[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$|^schema:[a-z_][a-z0-9_]*$/.test(group)?group:'OTHER_GROUP';
 const pkSql=`SELECT n.nspname AS schema,c.relname AS name,
- array_agg(a.attname ORDER BY k.position) AS columns
+ array_agg(a.attname::text ORDER BY k.position) AS columns
  FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid
  JOIN pg_namespace n ON n.oid=c.relnamespace
  CROSS JOIN LATERAL unnest(i.indkey::smallint[]) WITH ORDINALITY k(attnum,position)
@@ -25,6 +25,41 @@ const pkSql=`SELECT n.nspname AS schema,c.relname AS name,
  AND n.nspname IN ('public','app_private','auth','storage')
  GROUP BY n.nspname,c.relname`;
 
+// Return fixed classifications, never the server message, detail, hint, SQL or stack.
+export function safeFailure(error){
+  const fixed={
+    'Query read timeout':'PG_QUERY_READ_TIMEOUT',
+    'Connection terminated unexpectedly':'PG_CONNECTION_TERMINATED',
+    'Client has encountered a connection error and is not queryable':'PG_CONNECTION_NOT_QUERYABLE',
+    'Client was closed and is not queryable':'PG_CLIENT_CLOSED',
+  };
+  const code=typeof error?.code==='string'?error.code:'';
+  if(/^(?:[0-9A-Z]{5}|DELTA_[A-Z0-9_]{1,50}|SOURCE_[A-Z0-9_]{1,50}|MIGRATION_[A-Z0-9_]{1,50})$/.test(code))return {code};
+  if(['ECONNRESET','ECONNREFUSED','EPIPE','ETIMEDOUT','ENETUNREACH','EHOSTUNREACH','EAI_AGAIN'].includes(code))return {code};
+  if(Object.hasOwn(fixed,error?.message??''))return {code:fixed[error.message]};
+  if(/^Missing required table: (?:auth\.(?:users|identities)|public\.(?:partner|location|role_assignment|daily_revenue|franchise_lead|article_revision)|storage\.(?:buckets|objects))$/.test(error?.message??''))
+    return {code:'AUDIT_REQUIRED_TABLE_MISSING',object:error.message.slice('Missing required table: '.length)};
+  return {code:['TypeError','SyntaxError','RangeError'].includes(error?.name)?'JS_'+error.name.toUpperCase():'UNCLASSIFIED_FAILURE'};
+}
+
+export function observeQueries(db,side,context){
+  let ordinal=0;
+  return {query:async(sql,...args)=>{
+    const text=typeof sql==='string'?sql:'';
+    const table=text.match(/from "([a-z_][a-z0-9_]*)"\."([a-z_][a-z0-9_]*)" t order by/);
+    const sequence=text.match(/^select last_value::text,is_called from "([a-z_][a-z0-9_]*)"\."([a-z_][a-z0-9_]*)"$/);
+    const operation=sql===pkSql?'primary_key_metadata':table?'table_rows':sequence?'sequence_state':
+      /^begin /i.test(text)?'begin_readonly':/^(?:commit|rollback)$/i.test(text)?text.toLowerCase():
+      text.includes('current_database()')?'database_identity':text.includes("current_setting('transaction_read_only')")?'readonly_assertion':
+      /^set local /i.test(text)?'local_settings':text.startsWith('select to_jsonb(x)')?'schema_catalog':
+      text.includes('from pg_class c join pg_namespace')?'table_list':text.includes('from pg_sequences')?'sequence_list':'metadata';
+    const step={side,ordinal:++ordinal,operation,...(table?{object:table[1]+'.'+table[2]}:sequence?{object:sequence[1]+'.'+sequence[2]}:{})};
+    const start=Date.now();context.last=step;
+    try{return await db.query(sql,...args);}
+    catch(error){if(!context.failure)context.failure={...step,elapsedMs:Date.now()-start,...safeFailure(error)};throw error;}
+  }};
+}
+
 export async function captureInventory(db,audit,verify=async()=>{},limits={rows:25000,totalRows:100000,bytes:64*1024*1024}){
   const tables=new Map();let keys,totalRows=0,totalBytes=0;
   const adapter={query:async(sql,...args)=>{
@@ -32,7 +67,10 @@ export async function captureInventory(db,audit,verify=async()=>{},limits={rows:
     if(!table)return db.query(sql,...args);
     if(!keys){
       await verify(db);
-      keys=new Map((await db.query(pkSql)).rows.map(r=>[r.schema+'.'+r.name,r.columns]));
+      keys=new Map((await db.query(pkSql)).rows.map(r=>{
+        if(!Array.isArray(r.columns)||r.columns.some(c=>typeof c!=='string'))fail('DELTA_PK_METADATA_TYPE');
+        return [r.schema+'.'+r.name,r.columns];
+      }));
     }
     const object=table[1]+'.'+table[2];if(tables.has(object))fail('DELTA_DUPLICATE_TABLE_CAPTURE');
     // PostgreSQL serializes EVERY column value to text before the outer JSON.
@@ -104,8 +142,8 @@ export function inventoryReport(source,target,audit){
         calledEqual:source.snapshot[group]?.is_called===target.snapshot[group]?.is_called}))};
 }
 
-async function main(){let source,target,phase='runtime';
-  const deadline=setTimeout(()=>{console.error('T23_BLOCKED DEADLINE_EXCEEDED');process.exit(2);},240000);deadline.unref();
+async function main(){let source,target,phase='runtime';const context={};
+  const deadline=setTimeout(()=>{console.error('T24_BLOCKED',JSON.stringify({phase,code:'DEADLINE_EXCEEDED',query:context.failure??context.last??null}));process.exit(2);},240000);deadline.unref();
   try{
     if(process.argv.length!==2)fail('DELTA_NO_ARGUMENTS_EXPECTED');
     execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
@@ -141,10 +179,10 @@ async function main(){let source,target,phase='runtime';
       current_setting('pg_net.batch_size') AS net`:''))).rows[0];
       if(row.db!=='postgres'||row.role!==(side==='target'?'supabase_admin':'postgres')||row.mode!=='on')fail('DELTA_DATABASE_IDENTITY');
       if(side==='target'&&(!addresses.includes(row.address)||row.port!==5432||row.cron!=='off'||row.net!=='0'))fail('DELTA_TARGET_ISOLATION');};
-    phase='source-readonly-snapshot';const a=await captureInventory(source,audit,verify('source'));
-    phase='target-readonly-snapshot';const b=await captureInventory(target,audit,verify('target'));
-    phase='safe-difference-counts';console.log('T23_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
-  }catch(error){console.error('T23_BLOCKED',phase,/^[A-Z0-9_]{3,60}$/.test(error.code??'')?error.code:'DELTA_FAILED');process.exitCode=2;}
+    phase='source-readonly-snapshot';const a=await captureInventory(observeQueries(source,'source',context),audit,verify('source'));
+    phase='target-readonly-snapshot';const b=await captureInventory(observeQueries(target,'target',context),audit,verify('target'));
+    phase='safe-difference-counts';console.log('T24_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
+  }catch(error){console.error('T24_BLOCKED',JSON.stringify({phase,...safeFailure(error),query:context.failure??context.last??null}));process.exitCode=2;}
   finally{await Promise.allSettled([source?.end(),target?.end()]);clearTimeout(deadline);}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();
