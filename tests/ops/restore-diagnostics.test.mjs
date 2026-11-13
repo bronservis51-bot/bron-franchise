@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -116,4 +116,24 @@ test('consumer failure aborts blocked upstream producers promptly',async t=>{
   await assert.rejects(runDecodePipeline([largeProducer(),passthrough(),child('process.exit(3)')],
     {timeoutMs:5000}),error=>error.code==='REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
   assert.ok(Date.now()-start<2000);
+});
+test('native PG17 TOC partitions all DB metadata into the single creation pass without dropping application entries',()=>{
+  const database=['3460; 1262 5 DATABASE - postgres qa_owner','3461; 0 0 COMMENT - DATABASE postgres qa_owner',
+    '3462; 0 0 ACL - DATABASE postgres qa_owner','3463; 0 0 DATABASE PROPERTIES - postgres qa_owner',
+    '3464; 0 0 SECURITY LABEL - DATABASE postgres qa_owner'];
+  const admin=['6; 2615 2200 SCHEMA - public pg_database_owner','2; 3079 16385 EXTENSION - uuid-ossp '];
+  const application=['9; 1259 16390 TABLE public customer qa_owner',
+    '3470; 0 0 ACL public TABLE customer qa_owner','3450; 0 16390 TABLE DATA public customer qa_owner',
+    '3500; 0 0 COMMENT - EXTENSION uuid-ossp '];
+  const selected=partitionArchiveToc([...database,...admin,...application].join('\n'));
+  assert.deepEqual(selected.database.map(e=>e.kind),['DATABASE','COMMENT','ACL','DATABASE PROPERTIES','SECURITY LABEL']);
+  assert.deepEqual(selected.database.map(e=>e.line),database);
+  assert.deepEqual(selected.administrativeCreates.map(e=>e.kind),['SCHEMA','EXTENSION']);
+  assert.deepEqual(selected.remaining,application);
+  assert.equal(selected.remaining.some(l=>/DATABASE/.test(l)),false);
+});
+test('missing or duplicate native DATABASE definition fails instead of attempting a second creation pass',()=>{
+  assert.throws(()=>partitionArchiveToc('3463; 0 0 DATABASE PROPERTIES - postgres qa_owner'),/CREATE_DATABASE_ARCHIVE_REQUIRED/);
+  assert.throws(()=>partitionArchiveToc('1; 1262 5 DATABASE - postgres qa_owner\n2; 1262 5 DATABASE - postgres qa_owner'),
+    /CREATE_DATABASE_ARCHIVE_REQUIRED/);
 });

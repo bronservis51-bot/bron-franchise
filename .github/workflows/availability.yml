@@ -8,6 +8,10 @@ on:
         description: Probe Telegram HTTPS without sending an alert
         type: boolean
         default: false
+      token_check_only:
+        description: Validate the Telegram bot token without accessing a recipient
+        type: boolean
+        default: false
   push:
     branches: [main]
 permissions:
@@ -54,8 +58,46 @@ jobs:
               print('TELEGRAM_HTTPS_UNREACHABLE')
               raise SystemExit(1)
           PY
+      - name: Validate Telegram bot token without a recipient
+        if: github.event.inputs.token_check_only == 'true'
+        env:
+          BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json, os, re, ssl, urllib.request
+          try:
+              token = os.environ.get('BRON_TELEGRAM_BOT_TOKEN', '')
+              if not token:
+                  print('TELEGRAM_BOT_TOKEN_NOT_CONFIGURED')
+                  raise SystemExit(1)
+              if not re.fullmatch(r'[0-9]{5,15}:[A-Za-z0-9_-]{20,100}', token):
+                  raise ValueError()
+              spec = importlib.util.spec_from_file_location('telegram_alert', 'deploy/timeweb/backup-alert-telegram.py')
+              alert = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(alert)
+              opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                  urllib.request.HTTPSHandler(context=ssl.create_default_context()), alert.NoRedirect())
+              request = urllib.request.Request('https://api.telegram.org/bot' + token + '/getMe',
+                  headers={'Accept': 'application/json'}, method='GET')
+              with opener.open(request, timeout=15) as response:
+                  if response.getcode() != 200:
+                      raise ValueError()
+                  raw = response.read(65537)
+              if len(raw) > 65536:
+                  raise ValueError()
+              result = json.loads(raw)
+              bot = result.get('result') if isinstance(result, dict) else None
+              if (result.get('ok') is not True or not isinstance(bot, dict)
+                      or bot.get('is_bot') is not True or not isinstance(bot.get('username'), str)
+                      or not bot['username']):
+                  raise ValueError()
+              print('TELEGRAM_BOT_TOKEN_VALID')
+          except Exception:
+              print('TELEGRAM_BOT_TOKEN_FAILED')
+              raise SystemExit(1)
+          PY
       - name: Send operational Telegram alert
-        if: github.event.inputs.probe_only != 'true'
+        if: github.event.inputs.probe_only != 'true' && github.event.inputs.token_check_only != 'true'
         env:
           BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
           BRON_TELEGRAM_CHAT_ID: ${{ secrets.BRON_TELEGRAM_CHAT_ID }}

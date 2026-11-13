@@ -2,6 +2,14 @@
 
 ## 13.11.2026 — начальная роль и чтение custom-архива PostgreSQL
 
+- `pg_restore --list` показывает выбранные TOC entries: DATABASE и DATABASE
+  PROPERTIES скрыты без `--create`. Не объявлять их отсутствующими в архиве по
+  отфильтрованному списку. В custom-формате DATABASE архивируется независимо от -C.
+- DATABASE/PROPERTIES при --create обрабатываются независимо от use-list:
+  поздний properties-only проход попытается создать БД повторно. Восстанавливать
+  definition, settings, ACL/comment/security label одним начальным native pass,
+  затем импортировать остальные объекты без --create. Проверять этот порядок
+  на настоящем PostgreSQL с заполненными DB/role settings и ACL до серверного запуска.
 - При холодном восстановлении сохранить исходное имя bootstrap-роли OID 10.
   В PostgreSQL 17 явный `GRANTED BY` для обычной роли без ADMIN option может
   завершаться 42501 даже при SUPERUSER. Не исправлять это переписыванием grantor

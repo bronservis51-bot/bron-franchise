@@ -117,6 +117,43 @@ export async function globalRoleState(db) {
     await db.query('ROLLBACK');return {attributes,memberships};
   }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error;}
 }
+export function partitionArchiveToc(toc) {
+  const database=[],administrativeCreates=[],remaining=[];
+  for(const line of toc.split('\n')){
+    const admin=line.match(/^\d+;\s+\d+\s+\d+\s+(DATABASE PROPERTIES|DATABASE|SCHEMA|EXTENSION)\s+-\s+(\S+)(?:\s+(\S+))?\s*$/);
+    const dependent=line.match(/^\d+;\s+\d+\s+\d+\s+(ACL|COMMENT|SECURITY LABEL)\s+-\s+DATABASE\s+(\S+)(?:\s+(\S+))?\s*$/);
+    if(dependent||(admin&&['DATABASE','DATABASE PROPERTIES'].includes(admin[1]))){
+      const match=dependent??admin;
+      if(match[2]!=='postgres')fail('REHEARSAL_TOC_DATABASE_UNKNOWN');
+      database.push({kind:match[1],name:match[2],owner:match[3]??null,line});
+    }else if(admin)administrativeCreates.push({kind:admin[1],name:admin[2],owner:admin[3]??null,line});
+    else remaining.push(line);
+  }
+  if(database.filter(e=>e.kind==='DATABASE').length!==1)fail('REHEARSAL_CREATE_DATABASE_ARCHIVE_REQUIRED');
+  return {database,administrativeCreates,remaining};
+}
+export async function databaseState(db) {
+  await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  try {
+    const metadata=(await db.query(`SELECT jsonb_build_object('owner',pg_get_userbyid(d.datdba),
+      'encoding',pg_encoding_to_char(d.encoding),'locale_provider',d.datlocprovider,'collate',d.datcollate,
+      'ctype',d.datctype,'locale',coalesce(to_jsonb(d)->>'datlocale',to_jsonb(d)->>'daticulocale'),
+      'icu_rules',to_jsonb(d)->>'daticurules','collation_version',d.datcollversion,
+      'connection_limit',d.datconnlimit,'allow_connections',d.datallowconn,'is_template',d.datistemplate,
+      'tablespace',(SELECT spcname FROM pg_tablespace WHERE oid=d.dattablespace),
+      'comment',shobj_description(d.oid,'pg_database')) AS value
+      FROM pg_database d WHERE datname=current_database()`)).rows[0].value;
+    const acl=(await db.query(`SELECT * FROM (SELECT CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END AS grantee,
+      pg_get_userbyid(x.grantor) AS grantor,x.privilege_type,
+      (x.is_grantable OR x.grantee=d.datdba) AS grantable
+      FROM pg_database d CROSS JOIN LATERAL aclexplode(coalesce(d.datacl,acldefault('d',d.datdba))) x
+      WHERE d.datname=current_database()) acl ORDER BY grantee COLLATE "C",grantor COLLATE "C",privilege_type COLLATE "C",grantable`)).rows;
+    const labels=(await db.query(`SELECT provider,label FROM pg_shseclabel
+      WHERE classoid='pg_database'::regclass AND objoid=(SELECT oid FROM pg_database WHERE datname=current_database())
+      ORDER BY provider COLLATE "C",label COLLATE "C"`)).rows;
+    await db.query('ROLLBACK');return {metadata,acl,labels};
+  }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error;}
+}
 function run(binary,args,{input,timeout=30000,diagnose=false}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
     stdio:[input===undefined?'ignore':'pipe','pipe',diagnose?'pipe':'ignore']});
@@ -231,6 +268,7 @@ export async function main(){try {
   phase='capture-baseline';
   const baseline=await snapshotDatabase(primary);
   const baselineRoles=await globalRoleState(primary);
+  const baselineDatabase=await databaseState(primary);
   const initialRole=(await primary.query('SELECT rolname,rolsuper FROM pg_roles WHERE oid=10')).rows[0];
   const settings=(await primary.query(`SELECT name,setting FROM pg_settings WHERE lower(name) IN
     ('shared_preload_libraries','session_preload_libraries','pgsodium.getkey_script','vault.getkey_script','timezone','datestyle')`)).rows;
@@ -337,11 +375,11 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   const archiveFile='/restore-data/input.dump';
   await decode(artifact('database.dump'),owned(['/bin/sh','-c','umask 077; cat > /restore-data/input.dump']));
   phase='read-database-archive-toc';
-  const toc=d(['exec',ownId,'pg_restore','--list',archiveFile],{timeout:300000,diagnose:true});
-  const lines=toc.split('\n');
-  const dbCreate=lines.filter(l=>/^\d+;\s+\d+\s+\d+\s+DATABASE\s+-\s+postgres\s/.test(l));
-  if(dbCreate.length!==1)fail('REHEARSAL_CREATE_DATABASE_ARCHIVE_REQUIRED');
-  d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/database.list'],{input:dbCreate.join('\n')+'\n'});
+  // --list follows restore selection: --create is necessary to expose DB metadata.
+  const toc=d(['exec',ownId,'pg_restore','--list','--create',archiveFile],{timeout:300000,diagnose:true});
+  const selected=partitionArchiveToc(toc);
+  d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/database.list'],
+    {input:selected.database.map(e=>e.line).join('\n')+'\n'});
   // Only the disposable cluster's initial empty postgres database is replaced.
   d(['exec',ownId,...psql.map(x=>x==='postgres'?'template1':x),'--command',
     "ALTER DATABASE postgres ALLOW_CONNECTIONS false; SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='postgres';"]);
@@ -352,9 +390,8 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   restored=new pg.Client({host:socket,user:bootstrap,database:'postgres',ssl:false,query_timeout:60000});
   await restored.connect();
   phase='bootstrap-exact-schema-and-extension-metadata';
-  const prepared=new Set(),kept=[],propertyEntries=[],archiveSchemas=new Map();let skipped=0;
-  for(const line of lines){const m=line.match(/^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+(\S+)\s+(\S+)\s*$/);
-    if(m)archiveSchemas.set(m[1],m[2]);}
+  const prepared=new Set(),kept=selected.remaining,archiveSchemas=new Map(
+    selected.administrativeCreates.filter(e=>e.kind==='SCHEMA').map(e=>[e.name,e.owner]));
   async function schema(name){
     if(prepared.has(name))return;
     const ns=namespaces.find(n=>n.name===name);if(!ns)fail('REHEARSAL_SCHEMA_METADATA_MISSING');
@@ -362,14 +399,9 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     await restored.query('CREATE SCHEMA IF NOT EXISTS '+sqlIdent(name)+' AUTHORIZATION '+sqlIdent(ns.owner));
     await restored.query('ALTER SCHEMA '+sqlIdent(name)+' OWNER TO '+sqlIdent(ns.owner));prepared.add(name);
   }
-  for(const line of lines){
-    if(/^\d+;\s+\d+\s+\d+\s+DATABASE PROPERTIES\s+-\s+postgres\s/.test(line))propertyEntries.push(line);
-    const item=line.match(/^\d+;\s+\d+\s+\d+\s+(SCHEMA|EXTENSION|DATABASE)\s+-\s+(\S+)(?:\s+(\S+))?\s*$/);
-    if(!item){kept.push(line);continue;}
-    if(item[1]==='SCHEMA')await schema(item[2]);
-    else if(item[1]==='EXTENSION'&&!extensions.some(e=>e.name===item[2]))fail('REHEARSAL_TOC_EXTENSION_UNKNOWN');
-    else if(item[1]==='DATABASE'&&item[2]!=='postgres')fail('REHEARSAL_TOC_DATABASE_UNKNOWN');
-    skipped++;
+  for(const entry of selected.administrativeCreates){
+    if(entry.kind==='SCHEMA')await schema(entry.name);
+    else if(!extensions.some(e=>e.name===entry.name))fail('REHEARSAL_TOC_EXTENSION_UNKNOWN');
   }
   // Only duplicate administrative CREATE entries are omitted. Every data,
   // routine, trigger, policy, constraint, owner/ACL and sequence entry remains.
@@ -391,22 +423,19 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   }
   d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/restore.list'],{input:kept.join('\n')});
   console.log('T11_ADMINISTRATIVE_BOOTSTRAP',JSON.stringify({schemas:prepared.size,extensions:created.size,
-    duplicateCreateEntries:skipped,archivedExtensionMetadata:!!manifest.metadata.extensions}));
+    duplicateCreateEntries:selected.administrativeCreates.length,databaseMetadataEntries:selected.database.length,
+    archivedExtensionMetadata:!!manifest.metadata.extensions}));
   phase='restore-full-database';
   const restore=['exec','-e','PGOPTIONS=-c session_replication_role=replica',ownId,
     'pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin','--dbname=postgres',
     '--use-list=/restore-data/restore.list','--single-transaction','--exit-on-error',archiveFile];
   d(restore,{timeout:300000,diagnose:true});
-  if(propertyEntries.length){
-    phase='restore-database-runtime-settings';
-    d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/properties.list'],{input:propertyEntries.join('\n')+'\n'});
-    d(['exec',ownId,'pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin',
-      '--dbname=postgres','--create','--exit-on-error','--use-list=/restore-data/properties.list',archiveFile],
-      {timeout:300000,diagnose:true});
-  }
   phase='verify-database-runtime-settings';
   if(normalizedSettings(dbSettings)!==normalizedSettings((await restored.query(dbSettingsSql)).rows))
     fail('REHEARSAL_DATABASE_SETTING_MISMATCH');
+  if(JSON.stringify(baselineDatabase)!==JSON.stringify(await databaseState(restored)))
+    fail('REHEARSAL_DATABASE_METADATA_ACL_OR_LABEL_MISMATCH');
+  console.log('T17_DATABASE_METADATA_MATCH',JSON.stringify({metadata:true,acl:true,labels:true,dbRoleSettingsMatch:true}));
   const safe=(await restored.query(`SELECT current_setting('cron.launch_active_jobs') AS cron,
     current_setting('pg_net.batch_size') AS net,current_setting('listen_addresses') AS listen`)).rows[0];
   if(safe.cron!=='off'||safe.net!=='0'||safe.listen!=='')fail('REHEARSAL_SCHEDULER_ISOLATION_FAILED');
@@ -434,6 +463,7 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     fail('REHEARSAL_STORAGE_TREE_MISMATCH');
   if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
   if(JSON.stringify(baselineRoles)!==JSON.stringify(await globalRoleState(primary)))fail('REHEARSAL_PRIMARY_ROLES_CHANGED_DURING_RUN');
+  if(JSON.stringify(baselineDatabase)!==JSON.stringify(await databaseState(primary)))fail('REHEARSAL_PRIMARY_DATABASE_METADATA_CHANGED');
   console.log('T11_TARGET_RESTORE_PASS',JSON.stringify({strictGroups:Object.keys(baseline).length,
     storageObjects:0,storageTreeMatches:true,vaultLogicalMatches:true,keyRecoveredFromEncryptedConfig:true,extensionOwnersMatch:true,
     sourceAccessed:false,productionWrites:false}));

@@ -3,6 +3,38 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T16: архив прочитан; исправляется выбранное оглавление — 13.11.2026
+
+Один full run завершился exit 2 за 10 секунд. Globals, точные preloads, полная
+расшифровка в tmpfs и чтение оглавления PASS; зависания T15 больше нет. Остановка
+`read-database-archive-toc / REHEARSAL_CREATE_DATABASE_ARCHIVE_REQUIRED` до импорта
+данных. Исходный manifest T12 SHA256
+`a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9`.
+
+Исходники PostgreSQL 17 и отдельный настоящий PostgreSQL 17.12 показали: обычный
+`pg_restore --list` выводит выбранные записи и скрывает DATABASE/PROPERTIES без
+`--create`. В custom-архиве DATABASE присутствует независимо от producer -C;
+пересоздание backup не нужно. Также properties-only повтор с --create пытается
+снова создать DATABASE независимо от use-list. Правильный порядок проверен на
+изолированном fixture: один начальный --create pass для DATABASE, PROPERTIES,
+database ACL/comment/security label, затем полный import БЕЗ --create. Owner,
+ACL, comment, connection limit, DB/role settings и данные fixture совпали.
+Это ещё не full restore цели Supabase 17.11; соответствующий gate остаётся открыт.
+
+Исправленный helper проверен 17 ops-тестами; нативный fixture сохранён в
+`tests/ops/restore-native-pg17.py` и прошёл на PostgreSQL17.12. Он использует
+только synthetic data, cached image, local Docker socket и tmpfs без портов;
+контейнер удалён. Проверяется также семантический database ACL (defaults только
+для NULL), owner/locale/connection limit, shared database comment/security labels
+и настройки БД/ролей; после run рабочие метаданные должны остаться неизменными.
+
+Контейнер/socket T16 удалены; timers/freshness/watchdog PASS, публичные домены
+HTTPS503/TLS0. Source, preview и production не менялись. Исполнитель подтвердил:
+BRON_TELEGRAM_BOT_TOKEN уже сохранён разрешённым owner hidden input, имя секрета
+прочитано обратно; повторный ввод не нужен. Chat ID secret/PAT не разрешены и не
+созданы. Подготавливается token-only getMe в Actions без получателя/сообщений;
+доставку этим не считать подтверждённой.
+
 ## T15: роли восстановлены; зависание чтения оглавления — 13.11.2026
 
 Один full run на прежнем manifest T12 завершился exit 2 за 310 секунд.
