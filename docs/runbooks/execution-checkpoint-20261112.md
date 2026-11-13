@@ -3,6 +3,37 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T18: HTTPS-контроль установлен; найден искусственный DROP plpgsql — 13.11.2026
+
+Один full restore exit2/10s дошёл до pg_cron1.6.4 (pg_catalog/supabase_admin),
+затем SQLSTATE42704. Причина воспроизведена на native PG17: helper предварительно
+удалял plpgsql; первый DO в официальном pg_cron install script требует этот язык,
+хотя control не объявляет builtin dependency. T19 сохраняет свежий plpgsql ТОЛЬКО
+при точном совпадении name/version/schema/owner с архивом и учитывает его в
+dependency order. DROP/recreate/переписывание владельца не нужны. 23 restore tests
+и native DO-after-DROP proof PASS; полный actual restore всё ещё НЕ PASS.
+
+HTTPS_BACKUP_STATUS PASS: pinned helper/unit/maintenance Caddy/RO mount установлены,
+watchdog/freshness/timers PASS; пересоздан только web, ID всех шести backend и
+Compose model сохранены, default internal, host DB bindings loopback. Public health
+endpoint HTTPS503 выдаёт ровно три поля с healthy=true. Координатор независимо
+прочитал его через HTTPS: возраст проверки399s, копии3100s. Root-only beforeimages
+T18 сохранены. Source/preview/product не менялись.
+
+Telegram secret chat ID отсутствует. В истории есть owner /start15:35, но executor
+НОВЫЙ /start не отправлял; getUpdates не хранит уже подтверждённые сообщения.
+T19 явно разрешает одну свежую команду тому же боту, даже если старая есть в
+истории, затем существующий helper с проверкой private owner identity. Дополнительный
+инструмент чтения auth storage/новый token/guess ID не нужен без фактического
+блокера этого пути. Секреты bot/chat разрешены только в repository Secrets; PAT нет.
+
+Подготовлен отдельно [monitor-only PR13](https://github.com/bronservis51-bot/bron-franchise/pull/13),
+head e68bcc7bf1f13f399f2392d63a6e46fed56c67ac, base main6bfdf52. Все семь изменённых
+путей входят в Pages paths-ignore; frontend/package/SQL не меняются. CI и
+независимый review PASS. BRON_BACKUP_STATUS_URL позволяет проверять RF status,
+сохранив source APP_URL/VITE_* до финального окна. Merge/vars/доставка/расписание
+пока не выполнены. Ops PR12 не сливать до допуска релиза.
+
 ## T17: создание БД пройдено; reserved schema и подготовка мониторинга — 13.11.2026
 
 Full run завершился exit 2 за 10 секунд: globals/preloads и native DB creation

@@ -82,6 +82,34 @@ test('malformed, oversized and unexpected HTTP status responses fail without pub
  }
 });
 
+test('the Russian backup override keeps frontend and API checks on the existing source',async()=>{
+ const {requests,fetchImpl}=fakeFetch();
+ const source={...env,APP_URL:'https://bronservis51-bot.github.io/bron-franchise/',
+  VITE_SUPABASE_URL:'https://source.example.test',
+  BRON_BACKUP_STATUS_URL:'https://api.bronservis.ru/.well-known/bron-health.json'};
+ const result=await checkAvailability(source,fetchImpl);
+ assert.equal(Object.values(result.checks).every(value=>value.ok),true);
+ const backup=requests.find(value=>value.url.pathname==='/.well-known/bron-health.json');
+ assert.equal(backup.url.origin,'https://api.bronservis.ru');
+ assert.equal(backup.init.headers,undefined);
+ assert.equal(requests.find(value=>value.url.pathname.endsWith('app-version.json')).url.origin,
+  'https://bronservis51-bot.github.io');
+ for(const request of requests.filter(value=>value.url.pathname.startsWith('/auth/')||value.url.pathname.startsWith('/rest/')))
+  assert.equal(request.url.origin,'https://source.example.test');
+});
+
+test('backup override rejects credentials, non-HTTPS and other paths or hosts before any request',async()=>{
+ for(const value of ['http://api.bronservis.ru/.well-known/bron-health.json',
+  'https://user:password@api.bronservis.ru/.well-known/bron-health.json',
+  'https://api.bronservis.ru/private.json','https://other.example.test/.well-known/bron-health.json',
+  'https://api.bronservis.ru/.well-known/bron-health.json?token=private',
+  'https://api.bronservis.ru/.well-known/bron-health.json#private']){
+  const {requests,fetchImpl}=fakeFetch();
+  await assert.rejects(checkAvailability({...env,BRON_BACKUP_STATUS_URL:value},fetchImpl));
+  assert.equal(requests.length,0);
+ }
+});
+
 test('landings retain the non-inserting honeypot and private keys remain rejected',async()=>{
  const {requests,fetchImpl}=fakeFetch();
  await checkAvailability(env,fetchImpl);

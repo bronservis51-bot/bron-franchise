@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata,preservedBuiltinExtensions,safeBootstrapError} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -160,4 +160,27 @@ test('missing builtin namespace fails before any CREATE and unknown diagnostic n
   assert.equal(calls.some(sql=>sql.startsWith('CREATE')),false);
   assert.deepEqual(safeExtensionMetadata({name:'private_customer_name',version:'private-secret',
     schema:'private_customer_schema',owner:'private_person'}),{name:'OTHER',version:'OTHER',schema:'OTHER',owner:'OTHER'});
+});
+test('exact existing plpgsql stays available before pg_cron instead of being dropped or recreated',()=>{
+  const plpgsql={name:'plpgsql',version:'1.0',schema:'pg_catalog',owner:'supabase_admin'};
+  const expected=[{name:'pg_cron',version:'1.6.4',schema:'pg_catalog',owner:'supabase_admin'},plpgsql];
+  const created=preservedBuiltinExtensions([plpgsql],expected);
+  assert.equal(created.has('plpgsql'),true);
+  assert.deepEqual(expected.filter(e=>!created.has(e.name)).map(e=>e.name),['pg_cron']);
+});
+test('preinstalled extension metadata differences or unexpected objects are rejected unchanged',()=>{
+  const original={name:'plpgsql',version:'1.0',schema:'pg_catalog',owner:'supabase_admin'};
+  for(const field of ['version','schema','owner'])assert.throws(()=>
+    preservedBuiltinExtensions([{...original,[field]:'different'}],[original]),/PREEXISTING_EXTENSION_METADATA_MISMATCH/);
+  assert.throws(()=>preservedBuiltinExtensions([],[original]),/BUILTIN_PLPGSQL_MISSING/);
+  assert.throws(()=>preservedBuiltinExtensions([original,{name:'pgcrypto'}],[original]),/UNEXPECTED_PREEXISTING_EXTENSION/);
+});
+test('bootstrap errors report only fixed classes and standard object names',()=>{
+  assert.deepEqual(safeBootstrapError({code:'42704',message:'language "plpgsql" does not exist'}),
+    {sqlstate:'42704',messageClass:'MISSING_LANGUAGE',standardObject:'plpgsql'});
+  assert.deepEqual(safeBootstrapError({code:'42704',message:'unrecognized configuration parameter "cron.database_name"'}),
+    {sqlstate:'42704',messageClass:'MISSING_SETTING',standardObject:'cron.database_name'});
+  const result=safeBootstrapError({code:'42704',message:'role "PRIVATE_CUSTOMER_SECRET" does not exist'});
+  assert.equal(result.standardObject,'OTHER');
+  assert.equal(JSON.stringify(result).includes('PRIVATE_CUSTOMER_SECRET'),false);
 });

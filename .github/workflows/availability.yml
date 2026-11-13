@@ -34,6 +34,7 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          BRON_BACKUP_STATUS_URL: ${{ vars.BRON_BACKUP_STATUS_URL }}
   notify:
     needs: check
     if: always() && (github.event_name == 'workflow_dispatch' || (needs.check.result == 'failure' && vars.BRON_MONITORING_ENABLED == 'true'))

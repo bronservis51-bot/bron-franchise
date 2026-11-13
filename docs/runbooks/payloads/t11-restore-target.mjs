@@ -22,6 +22,29 @@ const extensionLabel=name=>standardExtensions.has(name)?name:'OTHER';
 export function safeExtensionMetadata(e){return {name:extensionLabel(e.name),
   version:/^\d+(?:[.-]\d+)*(?:[a-z]+\d*)?$/.test(e.version)?e.version:'OTHER',
   schema:schemaLabel(e.schema),owner:standardOwners.has(e.owner)?e.owner:'OTHER'};}
+export function preservedBuiltinExtensions(existing,expected) {
+  const created=new Set();
+  for(const e of existing){
+    if(e.name!=='plpgsql')fail('REHEARSAL_UNEXPECTED_PREEXISTING_EXTENSION');
+    const saved=expected.find(x=>x.name===e.name);
+    if(!saved||['name','version','schema','owner'].some(key=>e[key]!==saved[key]))
+      fail('REHEARSAL_PREEXISTING_EXTENSION_METADATA_MISMATCH');
+    created.add(e.name);
+  }
+  if(!created.has('plpgsql'))fail('REHEARSAL_BUILTIN_PLPGSQL_MISSING');
+  return created;
+}
+export function safeBootstrapError(error) {
+  const message=String(error.message??''),sqlstate=/^[0-9A-Z]{5}$/.test(error.code??'')?error.code:null;
+  const language=message.match(/language "([^"]+)" does not exist/i);
+  if(language)return {sqlstate,messageClass:'MISSING_LANGUAGE',standardObject:language[1]==='plpgsql'?'plpgsql':'OTHER'};
+  const setting=message.match(/unrecognized configuration parameter "([^"]+)"/i);
+  if(setting)return {sqlstate,messageClass:'MISSING_SETTING',standardObject:
+    ['cron.database_name','cron.launch_active_jobs','pg_net.batch_size','pgsodium.getkey_script','vault.getkey_script'].includes(setting[1])?setting[1]:'OTHER'};
+  const role=message.match(/role "([^"]+)" does not exist/i);
+  if(role)return {sqlstate,messageClass:'MISSING_ROLE',standardObject:standardOwners.has(role[1])?role[1]:'OTHER'};
+  return {sqlstate,messageClass:classifyRestoreFailure('ERROR: '+message).diagnostic,standardObject:'OTHER'};
+}
 export function classifyRestoreFailure(text) {
   const headline=text.match(/ERROR:\s+(?:([0-9A-Z]{5}):\s*)?([^\r\n]*)/i);
   const message=headline?.[2]??'';
@@ -429,14 +452,20 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   }
   // Only duplicate administrative CREATE entries are omitted. Every data,
   // routine, trigger, policy, constraint, owner/ACL and sequence entry remains.
-  phase='drop-builtin-extension-plpgsql';
-  await restored.query('DROP EXTENSION IF EXISTS plpgsql');
+  // Extension install scripts can contain DO blocks without declaring the
+  // builtin plpgsql dependency. Preserve its exact initdb state before any CREATE.
+  phase='verify-preinstalled-builtin-extensions';
+  const existingExtensions=(await restored.query(`SELECT e.extname AS name,e.extversion AS version,
+    n.nspname AS schema,pg_get_userbyid(e.extowner) AS owner FROM pg_extension e
+    JOIN pg_namespace n ON n.oid=e.extnamespace`)).rows;
+  const created=preservedBuiltinExtensions(existingExtensions,manifest.metadata.extensions);
+  console.log('T19_BUILTIN_PLPGSQL_PRESERVED',JSON.stringify({exactMetadataMatch:true,dropExecuted:false}));
   const dependencies=[];
   for(const e of manifest.metadata.extensions){phase='inspect-extension-version-'+extensionLabel(e.name);const row=(await restored.query(
     'SELECT requires FROM pg_available_extension_versions WHERE name=$1 AND version=$2',[e.name,e.version])).rows[0];
     if(!row)fail('REHEARSAL_EXTENSION_VERSION_UNAVAILABLE');
     for(const required of row.requires??[])dependencies.push({name:e.name,required});}
-  const pending=[...manifest.metadata.extensions],created=new Set();
+  const pending=manifest.metadata.extensions.filter(e=>!created.has(e.name));
   while(pending.length){
     const i=pending.findIndex(e=>dependencies.filter(d=>d.name===e.name).every(d=>created.has(d.required)));
     if(i<0)fail('REHEARSAL_EXTENSION_DEPENDENCY_CYCLE');
@@ -496,6 +525,7 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     storageObjects:0,storageTreeMatches:true,vaultLogicalMatches:true,keyRecoveredFromEncryptedConfig:true,extensionOwnersMatch:true,
     sourceAccessed:false,productionWrites:false}));
 } catch(error){
+  if(phase.includes('extension')||phase.includes('schema'))console.error('T19_BOOTSTRAP_FAILURE',JSON.stringify({phase,...safeBootstrapError(error)}));
   console.error('T11_TARGET_RESTORE_BLOCKED',phase,/^[A-Z0-9_]{3,80}$/.test(error.code??'')?error.code:'REHEARSAL_FAILED');
   process.exitCode=2;
 } finally {

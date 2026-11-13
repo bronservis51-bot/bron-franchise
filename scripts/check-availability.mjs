@@ -39,6 +39,9 @@ export async function checkAvailability(env=process.env,fetchImpl=fetch){
  if(appUrl.protocol!=='https:'||appUrl.username||appUrl.password||appUrl.search||appUrl.hash)throw Error('APP_URL must be a public HTTPS application base URL');
  if(!appUrl.pathname.endsWith('/'))appUrl.pathname+='/';
  if(!url?.startsWith('https://')||!key||key.startsWith('sb_secret_'))throw Error('Public connection variables are missing or invalid');
+ const backupUrl=new URL(env.BRON_BACKUP_STATUS_URL||'/.well-known/bron-health.json',url);
+ if(env.BRON_BACKUP_STATUS_URL&&backupUrl.href!=='https://api.bronservis.ru/.well-known/bron-health.json')
+  throw Error('BRON_BACKUP_STATUS_URL must be the fixed Russian public health endpoint');
  async function check(target,init,valid,statuses){
   const start=Date.now();
   try{
@@ -53,7 +56,7 @@ export async function checkAvailability(env=process.env,fetchImpl=fetch){
   check(`${url}/auth/v1/health`,{headers},b=>b?.name==='GoTrue'),
   check(`${url}/rest/v1/rpc/ping`,{method:'POST',headers,body:'{}'},b=>b==='ok'),
   check(`${url}/rest/v1/rpc/lead_submit`,{method:'POST',headers,body:JSON.stringify({p_lead:{website:'availability-check'}})},b=>b?.ok===true),
-  check(new URL('/.well-known/bron-health.json',url),{},validBackupStatus,[200,503]),
+  check(backupUrl,{},validBackupStatus,[200,503]),
  ]);
  return {checked_at:new Date().toISOString(),checks:{frontend,auth,data,landing,backup}};
 }

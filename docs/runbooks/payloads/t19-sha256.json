@@ -1,0 +1,37 @@
+{
+  "files": {
+    ".github/workflows/availability.yml": "25ecc684ed2e58bd9676b9545caab941ee966b876953827d31487075d4916874",
+    ".github/workflows/ci.yml": "25405f720ebc76ef14a45df66c5b4e0eef06fea63d5e70018a9b5c68b9d736db",
+    ".github/workflows/pages.yml": "5a1966c216d12e734a0ee3a608808b0cca7d344d1b7cb9d9ef86f1f7954d088c",
+    "docs/runbooks/payloads/t11-restore-target.mjs": "6bf160f8e4d41f6024bc3dd1254ec17e92b61da577cf5defb241ddcaeb09b1e5",
+    "scripts/check-availability.mjs": "4c1d8c00d2f79559d05cda7b28ea740da6c04f3f21544c3f0a486915c9010d7c"
+  },
+  "format": 1,
+  "monitor_pr": {
+    "base_before": "6bfdf52d018fa4faf1d758866be07603483667be",
+    "changed_files": [
+      ".github/workflows/availability.yml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/pages.yml",
+      "deploy/timeweb/backup-alert-telegram.py",
+      "scripts/check-availability.mjs",
+      "tests/ops/availability-status.test.mjs",
+      "tests/ops/test_backup_alert_telegram.py"
+    ],
+    "head_sha": "e68bcc7bf1f13f399f2392d63a6e46fed56c67ac",
+    "number": 13
+  },
+  "target_backup_manifest": {
+    "path": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "task": "T19",
+  "verify_only_vps": {
+    "/etc/systemd/system/bron-target-watchdog.service": "5bd7dcc580656fa57d6445d8139a16dea1495e91f3adf6c1f5296f4274c91940",
+    "/opt/bron/backup/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/opt/bron/backup/source-backup.py": "94c4a9411db6085ac18daae0fd18e7a5f14f2c9a82adb256e39f73039121f75d",
+    "/opt/bron/backup/target-backup.py": "0b4c6e9ef03f7d97dde50b097fb64b5729779b1f16f1304716090361ab6d8d57",
+    "/opt/bron/supabase/docker/bron/Caddyfile.maintenance": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "/opt/bron/supabase/docker/bron/compose.maintenance.override.yml": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424"
+  }
+}

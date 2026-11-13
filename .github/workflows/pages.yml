@@ -1,10 +1,19 @@
-# Публикация на GitHub Pages из публичного репозитория (ADR-0002, решение Q-01): при каждом изменении main.
+# Публикация клиентских изменений main на GitHub Pages (ADR-0002, решение Q-01).
+# Отдельный выпуск мониторинга сохраняет опубликованную клиентскую сборку.
 # Настройте Settings → Secrets and variables → Actions → Variables:
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY (публичные значения), а Pages: Source = GitHub Actions.
 name: pages
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/availability.yml'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/ci.yml'
+      - 'scripts/check-availability.mjs'
+      - 'deploy/timeweb/backup-alert-telegram.py'
+      - 'tests/ops/availability-status.test.mjs'
+      - 'tests/ops/test_backup_alert_telegram.py'
   workflow_dispatch:
 permissions:
   contents: read
