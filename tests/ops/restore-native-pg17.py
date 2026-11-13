@@ -143,6 +143,55 @@ def exercise(fixture):
         'superuser',rolsuper) FROM pg_roles WHERE oid=10"""))
     require(bootstrap == {'role': 'supabase_admin', 'oid': 10, 'superuser': True},
             'BOOTSTRAP_IDENTITY_MISMATCH')
+
+    def rejected(statement, sqlstate, message_fragment, code):
+        result = fixture.execute([
+            'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-q',
+            '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', '--command', statement,
+        ], check=False)
+        require(result.returncode != 0 and re.search(r'ERROR:\s+' + sqlstate + r':', result.stderr)
+                and message_fragment in result.stderr, code)
+
+    # IF NOT EXISTS does not bypass PG17's reserved-name check, even for an existing schema.
+    catalog_owner = fixture.sql("SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='pg_catalog'").strip()
+    rejected('CREATE SCHEMA IF NOT EXISTS pg_catalog AUTHORIZATION supabase_admin', '42939',
+             'unacceptable schema name', 'RESERVED_SCHEMA_FAILURE_NOT_REPRODUCED')
+    require(fixture.sql("SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='pg_catalog'").strip()
+            == catalog_owner == 'supabase_admin', 'RESERVED_SCHEMA_OWNER_CHANGED')
+
+    # pg_cron and other extension scripts use DO without declaring builtin plpgsql in requires.
+    plpgsql_sql = """SELECT json_build_object('name',e.extname,'version',e.extversion,
+        'schema',n.nspname,'owner',pg_get_userbyid(e.extowner))
+        FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='plpgsql'"""
+    builtin = json.loads(fixture.sql(plpgsql_sql))
+    require(builtin == {'name': 'plpgsql', 'version': '1.0', 'schema': 'pg_catalog',
+                        'owner': 'supabase_admin'}, 'BUILTIN_PLPGSQL_METADATA_MISMATCH')
+    fixture.sql('DO $$ BEGIN PERFORM 1; END $$')
+    fixture.sql('DROP EXTENSION plpgsql')
+    rejected('DO $$ BEGIN PERFORM 1; END $$', '42704', 'language "plpgsql" does not exist',
+             'BUILTIN_LANGUAGE_FAILURE_NOT_REPRODUCED')
+    fixture.sql("CREATE EXTENSION plpgsql WITH SCHEMA pg_catalog VERSION '1.0'")
+    require(json.loads(fixture.sql(plpgsql_sql)) == builtin, 'BUILTIN_PLPGSQL_NOT_RESTORED_EXACTLY')
+    fixture.sql('DO $$ BEGIN PERFORM 1; END $$')
+
+    # The explicit grantor needs ADMIN OPTION unless it is the original bootstrap OID 10.
+    # Making another role SUPERUSER does not make it equivalent to the bootstrap identity.
+    fixture.sql("""CREATE ROLE qa_anon NOLOGIN NOINHERIT;
+        CREATE ROLE qa_authenticator LOGIN NOINHERIT;
+        CREATE ROLE qa_grantor SUPERUSER LOGIN;""")
+    rejected('GRANT qa_anon TO qa_authenticator GRANTED BY qa_grantor', '42501',
+             'The grantor must have the ADMIN option', 'NONBOOTSTRAP_GRANTOR_FAILURE_NOT_REPRODUCED')
+    fixture.sql('GRANT qa_anon TO qa_authenticator GRANTED BY supabase_admin')
+    membership = json.loads(fixture.sql("""SELECT json_build_object(
+        'grantor',pg_get_userbyid(grantor),'grantor_oid',grantor::integer,
+        'admin',admin_option,'inherit',inherit_option,'set',set_option)
+        FROM pg_auth_members WHERE roleid='qa_anon'::regrole AND member='qa_authenticator'::regrole"""))
+    require(membership == {'grantor': 'supabase_admin', 'grantor_oid': 10,
+                           'admin': False, 'inherit': False, 'set': True},
+            'BOOTSTRAP_GRANTOR_OR_OPTIONS_CHANGED')
+    require(fixture.sql("SELECT count(*) FROM pg_auth_members WHERE roleid='qa_anon'::regrole").strip() == '1',
+            'ARTIFICIAL_GRANTOR_MEMBERSHIP_ADDED')
+
     fixture.sql("""CREATE ROLE qa_reader LOGIN;
         CREATE ROLE qa_owner NOLOGIN;
         CREATE TABLE public.t16_marker(id int PRIMARY KEY);
@@ -203,6 +252,11 @@ def exercise(fixture):
         'properties_only_create_bug_reproduced': True, 'single_metadata_pass_exact': True,
         'full_data_restore_exact': True, 'final_metadata_exact': True,
         'bootstrap_identity_preserved': True, 'no_final_create_pass': True,
+        'reserved_schema_42939_reproduced': True, 'reserved_schema_owner_unchanged': True,
+        'builtin_plpgsql_metadata_exact': True, 'missing_language_42704_reproduced': True,
+        'do_before_drop_and_after_exact_recreation': True,
+        'nonbootstrap_super_grantor_42501_reproduced': True,
+        'bootstrap_grantor_and_membership_options_exact': True,
     }
 
 

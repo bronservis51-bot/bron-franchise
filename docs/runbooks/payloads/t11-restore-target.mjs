@@ -202,6 +202,59 @@ export async function ensureRestoreSchema(db,name,owner) {
   phase='verify-schema-owner-'+label;
   if((await inspect())?.owner!==owner)fail('REHEARSAL_SCHEMA_OWNER_MISMATCH');
 }
+export async function snapshotWithRelationCapture(db,snapshotDatabase,fingerprintRows) {
+  let values=null;
+  const adapter={query:async(...args)=>{
+    const result=await db.query(...args),sql=args[0];
+    if(typeof sql==='string'&&sql.includes('c.relpersistence')&&sql.includes('c.relforcerowsecurity')&&
+      sql.includes('pg_get_viewdef(c.oid,true)')){
+      if(values!==null)fail('REHEARSAL_RELATION_CAPTURE_MULTIPLE');
+      values=result.rows.map(row=>row.value);
+    }
+    return result;
+  }};
+  const snapshot=await snapshotDatabase(adapter),expected=snapshot['schema:relations'];
+  if(values===null||!expected||values.length!==expected.count||fingerprintRows(values)!==expected.hash)
+    fail('REHEARSAL_RELATION_CAPTURE_FINGERPRINT_MISMATCH');
+  return {snapshot,relations:values.map(value=>JSON.parse(value))};
+}
+const canonicalJSON=value=>Array.isArray(value)?'['+value.map(canonicalJSON).join(',')+']':
+  value!==null&&typeof value==='object'?'{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonicalJSON(value[k])).join(',')+'}':JSON.stringify(value);
+export function safeRelationDiff(source,restored) {
+  const key=row=>row.nspname+'\0'+row.relname;
+  const label=row=>['public','app_private'].includes(row.nspname)&&/^[a-z_][a-z0-9_]{0,62}$/.test(row.relname)?
+    row.nspname+'.'+row.relname:'OTHER_RELATION';
+  const a=new Map(source.map(row=>[key(row),row])),b=new Map(restored.map(row=>[key(row),row]));
+  if(a.size!==source.length||b.size!==restored.length)fail('REHEARSAL_DUPLICATE_RELATION_METADATA');
+  const result={sourceRows:a.size,restoredRows:b.size,sourceOnlyObjects:[],restoredOnlyObjects:[],changed:[]};
+  const counts=edges=>{const m=new Map();for(const edge of edges){const k=canonicalJSON(edge);m.set(k,(m.get(k)??0)+1);}return m;};
+  const difference=(left,right)=>[...left].reduce((n,[k,v])=>n+Math.max(0,v-(right.get(k)??0)),0);
+  for(const [id,row] of a){
+    const other=b.get(id);if(!other){result.sourceOnlyObjects.push(label(row));continue;}
+    const fields=['relkind','relpersistence','owner','relrowsecurity','relforcerowsecurity','relacl','view_definition']
+      .filter(field=>canonicalJSON(row[field])!==canonicalJSON(other[field]));
+    if(!fields.length)continue;
+    const changed={object:label(row),fields};
+    if(fields.includes('relacl')){const left=counts(row.relacl??[]),right=counts(other.relacl??[]);
+      changed.acl={sourceEntries:(row.relacl??[]).length,restoredEntries:(other.relacl??[]).length,
+        addedEdges:difference(right,left),removedEdges:difference(left,right)};}
+    result.changed.push(changed);
+  }
+  for(const [id,row] of b)if(!a.has(id))result.restoredOnlyObjects.push(label(row));
+  result.sourceOnlyObjects.sort();result.restoredOnlyObjects.sort();result.changed.sort((x,y)=>x.object.localeCompare(y.object));
+  return result;
+}
+export async function readOnlyPostchecks(checks,strictMismatches=[]) {
+  const results=[];
+  for(const [gate,check] of checks){
+    try{await check();results.push({gate,status:'PASS'});}
+    catch(error){
+      if(!strictMismatches.length)throw error;
+      results.push({gate,status:'FAIL',code:/^[A-Z0-9_]{3,80}$/.test(error?.code??'')?error.code:'READONLY_POSTCHECK_FAILED'});
+    }
+  }
+  return {passed:strictMismatches.length===0&&results.every(r=>r.status==='PASS'),strictMismatches,results};
+}
 function run(binary,args,{input,timeout=30000,diagnose=false}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
     stdio:[input===undefined?'ignore':'pipe','pipe',diagnose?'pipe':'ignore']});
@@ -303,7 +356,7 @@ export async function main(){try {
   if(await hashFile(runtime+'/scripts/migration-audit.mjs')!=='d63fbef0ab6fbed0bb3d09ed6d067ca5f7753d47a981bdb4c4bc8a4719468931')
     fail('REHEARSAL_AUDITOR_SHA_MISMATCH');
   const {default:pg}=await import(runtime+'/node_modules/pg/lib/index.js');
-  const {snapshotDatabase,compareSnapshots}=await import(runtime+'/scripts/migration-audit.mjs');
+  const {snapshotDatabase,compareSnapshots,fingerprintRows}=await import(runtime+'/scripts/migration-audit.mjs');
   const [live]=JSON.parse(d(['inspect','supabase-db']));
   if(live.Name!=='/supabase-db'||!live.State.Running||live.Image!==manifest.metadata.database_image)
     fail('REHEARSAL_IMAGE_OR_TARGET_MISMATCH');
@@ -314,7 +367,8 @@ export async function main(){try {
     password:values.POSTGRES_PASSWORD,ssl:false,query_timeout:60000});
   await primary.connect();
   phase='capture-baseline';
-  const baseline=await snapshotDatabase(primary);
+  const baselineCapture=await snapshotWithRelationCapture(primary,snapshotDatabase,fingerprintRows);
+  const baseline=baselineCapture.snapshot;
   const baselineRoles=await globalRoleState(primary);
   const baselineDatabase=await databaseState(primary);
   const initialRole=(await primary.query('SELECT rolname,rolsuper FROM pg_roles WHERE oid=10')).rows[0];
@@ -497,30 +551,60 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     current_setting('pg_net.batch_size') AS net,current_setting('listen_addresses') AS listen`)).rows[0];
   if(safe.cron!=='off'||safe.net!=='0'||safe.listen!=='')fail('REHEARSAL_SCHEDULER_ISOLATION_FAILED');
   phase='strict-restore-comparison';
-  const mismatch=compareSnapshots(baseline,await snapshotDatabase(restored));
+  const restoredCapture=await snapshotWithRelationCapture(restored,snapshotDatabase,fingerprintRows);
+  const mismatch=compareSnapshots(baseline,restoredCapture.snapshot);
   console.log('T11_RESTORE_MISMATCH_GROUPS',JSON.stringify(mismatch));
-  if(mismatch.length)fail('REHEARSAL_STRICT_RESTORE_MISMATCH');
-  const restoredRoles=await globalRoleState(restored);
-  if(JSON.stringify(baselineRoles.attributes)!==JSON.stringify(restoredRoles.attributes))fail('REHEARSAL_GLOBAL_ROLE_ATTRIBUTES_MISMATCH');
-  if(JSON.stringify(baselineRoles.memberships)!==JSON.stringify(restoredRoles.memberships))fail('REHEARSAL_GLOBAL_MEMBERSHIPS_OR_GRANTORS_MISMATCH');
-  console.log('T15_ALL_GLOBAL_ROLES_MATCH',JSON.stringify({roles:baselineRoles.attributes.length,
-    memberships:baselineRoles.memberships.length,attributesMatch:true,grantorsAndAllOptionsMatch:true,excludedRoles:0}));
-  const extRestored=(await restored.query(`SELECT e.extname AS name,e.extversion AS version,n.nspname AS schema,
-    pg_get_userbyid(e.extowner) AS owner FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace`)).rows;
-  if(sorted(extensions)!==sorted(extRestored))fail('REHEARSAL_EXTENSION_OWNER_OR_VERSION_MISMATCH');
-  phase='verify-vault-and-storage';
-  const copy=`SET TIME ZONE ${sqlLiteral(settings.find(s=>s.name.toLowerCase()==='timezone').setting)};
-    COPY (SELECT id,name,description,decrypted_secret,created_at,updated_at FROM vault.decrypted_secrets ORDER BY id)
-    TO STDOUT WITH (FORMAT CSV,HEADER true);`;
-  const copied=Buffer.from(d(['exec',ownId,...psql,'-A','-t','--command',copy]));
-  const archived=await decode(artifact('vault-logical.csv'),['/usr/bin/cat',[]],true);
-  if(!copied.equals(archived))fail('REHEARSAL_VAULT_LOGICAL_MISMATCH');
-  await decode(artifact('storage.tar'),owned(['tar','-x','-f','-','-C','/restore-storage']));
-  if(tree('/proc/'+own.State.Pid+'/root/restore-storage')!==storageTree||tree(storageRoot)!==storageTree)
-    fail('REHEARSAL_STORAGE_TREE_MISMATCH');
-  if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
-  if(JSON.stringify(baselineRoles)!==JSON.stringify(await globalRoleState(primary)))fail('REHEARSAL_PRIMARY_ROLES_CHANGED_DURING_RUN');
-  if(JSON.stringify(baselineDatabase)!==JSON.stringify(await databaseState(primary)))fail('REHEARSAL_PRIMARY_DATABASE_METADATA_CHANGED');
+  if(mismatch.includes('schema:relations'))console.log('T20_RELATION_METADATA_DIFF',
+    JSON.stringify(safeRelationDiff(baselineCapture.relations,restoredCapture.relations)));
+  const postchecks=await readOnlyPostchecks([
+    ['global_roles',async()=>{
+      phase='verify-all-global-role-metadata';
+      const restoredRoles=await globalRoleState(restored);
+      const attributesMatch=JSON.stringify(baselineRoles.attributes)===JSON.stringify(restoredRoles.attributes);
+      const membershipsMatch=JSON.stringify(baselineRoles.memberships)===JSON.stringify(restoredRoles.memberships);
+      console.log('T20_GLOBAL_ROLE_CHECKS',JSON.stringify({attributesMatch,membershipsMatch,excludedRoles:0}));
+      if(!attributesMatch)fail('REHEARSAL_GLOBAL_ROLE_ATTRIBUTES_MISMATCH');
+      if(!membershipsMatch)fail('REHEARSAL_GLOBAL_MEMBERSHIPS_OR_GRANTORS_MISMATCH');
+      console.log('T15_ALL_GLOBAL_ROLES_MATCH',JSON.stringify({roles:baselineRoles.attributes.length,
+        memberships:baselineRoles.memberships.length,attributesMatch:true,grantorsAndAllOptionsMatch:true,excludedRoles:0}));
+    }],
+    ['extension_metadata',async()=>{
+      phase='verify-extension-owner-and-version';
+      const extRestored=(await restored.query(`SELECT e.extname AS name,e.extversion AS version,n.nspname AS schema,
+        pg_get_userbyid(e.extowner) AS owner FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace`)).rows;
+      if(sorted(extensions)!==sorted(extRestored))fail('REHEARSAL_EXTENSION_OWNER_OR_VERSION_MISMATCH');
+    }],
+    ['vault_logical',async()=>{
+      phase='verify-vault-logical';
+      const copy=`SET TIME ZONE ${sqlLiteral(settings.find(s=>s.name.toLowerCase()==='timezone').setting)};
+        COPY (SELECT id,name,description,decrypted_secret,created_at,updated_at FROM vault.decrypted_secrets ORDER BY id)
+        TO STDOUT WITH (FORMAT CSV,HEADER true);`;
+      const copied=Buffer.from(d(['exec',ownId,...psql,'-A','-t','--command',copy]));
+      const archived=await decode(artifact('vault-logical.csv'),['/usr/bin/cat',[]],true);
+      if(!copied.equals(archived))fail('REHEARSAL_VAULT_LOGICAL_MISMATCH');
+    }],
+    ['storage_tree',async()=>{
+      phase='verify-storage-tree';
+      await decode(artifact('storage.tar'),owned(['tar','-x','-f','-','-C','/restore-storage']));
+      if(tree('/proc/'+own.State.Pid+'/root/restore-storage')!==storageTree||tree(storageRoot)!==storageTree)
+        fail('REHEARSAL_STORAGE_TREE_MISMATCH');
+    }],
+    ['primary_data_unchanged',async()=>{
+      phase='verify-primary-data-unchanged';
+      if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
+    }],
+    ['primary_roles_unchanged',async()=>{
+      phase='verify-primary-roles-unchanged';
+      if(JSON.stringify(baselineRoles)!==JSON.stringify(await globalRoleState(primary)))fail('REHEARSAL_PRIMARY_ROLES_CHANGED_DURING_RUN');
+    }],
+    ['primary_database_unchanged',async()=>{
+      phase='verify-primary-database-unchanged';
+      if(JSON.stringify(baselineDatabase)!==JSON.stringify(await databaseState(primary)))fail('REHEARSAL_PRIMARY_DATABASE_METADATA_CHANGED');
+    }],
+  ],mismatch);
+  phase='readonly-postchecks-complete';
+  console.log('T20_READONLY_POSTCHECKS',JSON.stringify(postchecks));
+  if(!postchecks.passed)fail(mismatch.length?'REHEARSAL_STRICT_RESTORE_MISMATCH':'REHEARSAL_RESTORE_POSTCHECKS_FAILED');
   console.log('T11_TARGET_RESTORE_PASS',JSON.stringify({strictGroups:Object.keys(baseline).length,
     storageObjects:0,storageTreeMatches:true,vaultLogicalMatches:true,keyRecoveredFromEncryptedConfig:true,extensionOwnersMatch:true,
     sourceAccessed:false,productionWrites:false}));

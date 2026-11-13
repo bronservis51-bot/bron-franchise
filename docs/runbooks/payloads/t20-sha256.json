@@ -1,0 +1,57 @@
+{
+  "files": {
+    "docs/runbooks/local-access-handoff.md": "f594693ab61649e6e8946c80a465cf423cfa8fde3aeefedcc041f8e8e3d46291",
+    "docs/runbooks/payloads/t11-restore-target.mjs": "92630e3dce49a2241e5647ff9485889ce954b692b9f009bded54bbcdf583b628",
+    "tests/ops/restore-diagnostics.test.mjs": "fd7ca12268599e7929c5d254e55a84ed38097e22248b1383be6e5f56b76e2289",
+    "tests/ops/restore-native-capture.mjs": "66a5f8053b959c43bd15aab98fc3f3231b0eb6097dd433ea6b73bdd718df684b",
+    "tests/ops/restore-native-capture.py": "4d891fbb56cdfbde2d857780cfe2e6693ba09696144a729fd081549ab93f7731",
+    "tests/ops/restore-native-pg17.py": "162e0a04abb61627b2f34f9cd2071b0760c419c03d1ab8ac9d1e4d96796af9f4"
+  },
+  "format": 1,
+  "native_preflight": {
+    "engine": "PostgreSQL 17.12",
+    "exact_supabase_restore": "NOT_PASS",
+    "fixture": "tests/ops/restore-native-capture.py",
+    "result": "PASS",
+    "scope": [
+      "actual unchanged auditor capture count/hash",
+      "ACL/RLS/FORCE/view definition diff redaction"
+    ]
+  },
+  "one_run": {
+    "action_id": "T20.restore_diagnostic",
+    "max_attempts": 1
+  },
+  "pending_observation": {
+    "event": "schedule",
+    "main_revision": "d61105e0d90213bec22492de278c8125c3b2b886",
+    "workflow": "availability.yml"
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release packages",
+    "T18 HTTPS backup status installation",
+    "T19 recipient/private-chat alert/monitor enabled/PR13"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "restore_network": "none",
+    "target_image": "supabase/postgres:17.11.0.019"
+  },
+  "target_backup_manifest": {
+    "path": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "task": "T20",
+  "verify_only_vps": {
+    "/etc/systemd/system/bron-target-watchdog.service": "5bd7dcc580656fa57d6445d8139a16dea1495e91f3adf6c1f5296f4274c91940",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "d63fbef0ab6fbed0bb3d09ed6d067ca5f7753d47a981bdb4c4bc8a4719468931",
+    "/opt/bron/backup/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/opt/bron/backup/source-backup.py": "94c4a9411db6085ac18daae0fd18e7a5f14f2c9a82adb256e39f73039121f75d",
+    "/opt/bron/backup/target-backup.py": "0b4c6e9ef03f7d97dde50b097fb64b5729779b1f16f1304716090361ab6d8d57",
+    "/opt/bron/supabase/docker/bron/Caddyfile.maintenance": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "/opt/bron/supabase/docker/bron/compose.maintenance.override.yml": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424"
+  }
+}

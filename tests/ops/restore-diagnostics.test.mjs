@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata,preservedBuiltinExtensions,safeBootstrapError} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata,preservedBuiltinExtensions,safeBootstrapError,snapshotWithRelationCapture,safeRelationDiff,readOnlyPostchecks} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {fingerprintRows} from '../../scripts/migration-audit.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -183,4 +184,57 @@ test('bootstrap errors report only fixed classes and standard object names',()=>
   const result=safeBootstrapError({code:'42704',message:'role "PRIVATE_CUSTOMER_SECRET" does not exist'});
   assert.equal(result.standardObject,'OTHER');
   assert.equal(JSON.stringify(result).includes('PRIVATE_CUSTOMER_SECRET'),false);
+});
+test('query adapter captures exact auditor results and validates its existing fingerprint',async()=>{
+  const value=JSON.stringify({nspname:'public',relname:'capture_view',view_definition:'PRIVATE_VIEW_SECRET'});
+  const result={rows:[{value}]},calls=[];
+  const db={async query(...args){calls.push(args);return result;}};
+  const sql='select c.relpersistence,c.relforcerowsecurity,pg_get_viewdef(c.oid,true)';
+  const expected={'schema:relations':{count:1,hash:fingerprintRows([value])}};
+  const snapshot=async adapter=>{assert.equal(await adapter.query(sql),result);return expected;};
+  const captured=await snapshotWithRelationCapture(db,snapshot,fingerprintRows);
+  assert.equal(captured.snapshot,expected);
+  assert.deepEqual(captured.relations,[JSON.parse(value)]);
+  assert.deepEqual(calls,[[sql]]);
+  await assert.rejects(snapshotWithRelationCapture(db,async adapter=>{
+    await adapter.query(sql);return {'schema:relations':{count:1,hash:'wrong'}};
+  },fingerprintRows),/RELATION_CAPTURE_FINGERPRINT_MISMATCH/);
+});
+test('relation differences expose field names and ACL counts without private definitions, roles or hashes',()=>{
+  const row={nspname:'public',relname:'partner',owner:'PRIVATE_OWNER',relkind:'r',relpersistence:'p',
+    relrowsecurity:true,relforcerowsecurity:false,view_definition:'PRIVATE_VIEW_TOKEN',
+    relacl:[{grantee:'PRIVATE_PERSON',grantor:'PRIVATE_GRANTOR',privilege:'SELECT',grantable:false}]};
+  const other={...row,owner:'PRIVATE_OTHER_OWNER',view_definition:'PRIVATE_OTHER_VIEW_TOKEN',
+    relacl:[{grantee:'PRIVATE_PERSON',grantor:'PRIVATE_OTHER_GRANTOR',privilege:'SELECT',grantable:false}]};
+  const diff=safeRelationDiff([row],[other]);
+  assert.deepEqual(diff.changed,[{object:'public.partner',fields:['owner','relacl','view_definition'],
+    acl:{sourceEntries:1,restoredEntries:1,addedEdges:1,removedEdges:1}}]);
+  assert.equal(JSON.stringify(diff).includes('PRIVATE_'),false);
+  const reordered={...row,relacl:[...row.relacl,{grantee:'another',grantor:'grantor',privilege:'UPDATE',grantable:false}]};
+  const orderDiff=safeRelationDiff([reordered],[{...reordered,relacl:[...reordered.relacl].reverse()}]);
+  assert.deepEqual(orderDiff.changed[0].fields,['relacl']);
+  assert.equal(orderDiff.changed[0].acl.addedEdges,0);
+  assert.equal(orderDiff.changed[0].acl.removedEdges,0);
+});
+test('strict mismatch continues every read-only check and cannot become a successful restore',async()=>{
+  const calls=[];
+  const result=await readOnlyPostchecks([
+    ['global_roles',async()=>{calls.push('roles');throw Object.assign(new Error('PRIVATE_PASSWORD_HASH'),{code:'42501'});}],
+    ['vault_logical',async()=>{calls.push('vault');}],['storage_tree',async()=>{calls.push('storage');}],
+    ['primary_data_unchanged',async()=>{calls.push('primary');}],
+  ],['schema:relations']);
+  assert.deepEqual(calls,['roles','vault','storage','primary']);
+  assert.equal(result.passed,false);
+  assert.deepEqual(result.results[0],{gate:'global_roles',status:'FAIL',code:'42501'});
+  assert.equal(JSON.stringify(result).includes('PRIVATE_'),false);
+  const allPass=await readOnlyPostchecks([['vault_logical',async()=>{}]],['schema:relations']);
+  assert.equal(allPass.passed,false);
+});
+test('normal strict-pass path still stops at a failing read-only postcheck',async()=>{
+  let laterRan=false;
+  await assert.rejects(readOnlyPostchecks([
+    ['global_roles',async()=>{throw new Error('fixture failure');}],
+    ['storage_tree',async()=>{laterRan=true;}],
+  ]),/fixture failure/);
+  assert.equal(laterRan,false);
 });

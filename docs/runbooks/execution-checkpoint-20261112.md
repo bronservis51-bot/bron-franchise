@@ -3,6 +3,46 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T19 закрыт; уточнение протокола без повторного исполнения — 13.11.2026
+
+Один разрешённый cold restore завершился FAIL на строгой сверке:
+только `schema:relations`. Builtin plpgsql exact/dropExecuted=false, native globals,
+preloads и database metadata/ACL/labels/role settings PASS. Temporary container,
+socket и Node process удалены. Остальные postchecks после strict throw ещё не
+считаются подтверждёнными. Лог хранит лишь группу hash mismatch; per-object diff
+не сохранён, уничтоженная временная БД не доступна для дальнейшего чтения.
+Следующий distinct package нужен для контролируемой диагностики; T19 не повторять.
+
+TELEGRAM_RECIPIENT/DELIVERY PASS: имя chat secret проверено, один fresh /start
+отправлен, hidden helper завершён; один test alert принят Telegram и виден на
+скриншоте владельца. Повторный secret entry/message/start не нужны.
+MONITOR_MAIN PASS: PR13 squash merged в main
+`d61105e0d90213bec22492de278c8125c3b2b886`, public variables проверены, APP_URL/VITE_*
+сохранены, Pages не запускался. Availability run
+[43476279439](https://github.com/bronservis51-bot/bron-franchise/actions/runs/43476279439)
+дал пять PASS, HTTPS/Send PASS. Это текущие source frontend/API и RF backup status;
+российский кабинет/API пока maintenance. Monitoring flag включён/read-back true.
+Scheduled run merged revision ещё не наблюдался; прежний source schedule не
+закрывает эту проверку. Состояние PENDING_OBSERVATION не блокирует независимую
+диагностику restore и не превращается в PASS. Уже выполненные T18/19 действия
+сохраняются по квитанциям; ожидание schedule не требует повторного test dispatch.
+
+Владелец потребовал один preflight bundle/checklist на пакет, native PostgreSQL
+proof до PG-sensitive задач, per-action receipt и продолжение независимых веток.
+Draft обновления `local-access-handoff.md` помечает T01 и старую точку продолжения
+архивом, определяет PASS/FAIL/BLOCKED/UNKNOWN/REUSED, prerequisites и безопасное
+возобновление. Никакие runtime pins/one-run/scope T19 не менялись.
+Разбор handoff: явное «ждать следующего пакета» объясняет остановки после отчётов;
+технический следующий шаг готовит координатор. Старый /start не равен свежему
+update; просмотр доступного чата выполняет executor, owner нужен для реального
+hidden input/MFA/личной приёмки. Pending schedule допускает финальный отчёт с
+отдельным незакрытым статусом. Действия и гейты этим не расширяются/не ослабляются.
+
+До следующего пакета в одном local cached PG17.12 fixture проверены прежние
+ошибки reserved schema42939, missing plpgsql42704 и bootstrap grantor42501,
+а также исходный DB metadata restore. Только synthetic data/network none/tmpfs;
+owned container удалён. Это native preflight, не полное восстановление Supabase.
+
 ## T18: HTTPS-контроль установлен; найден искусственный DROP plpgsql — 13.11.2026
 
 Один full restore exit2/10s дошёл до pg_cron1.6.4 (pg_catalog/supabase_admin),
