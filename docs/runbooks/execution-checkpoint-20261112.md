@@ -3,6 +3,33 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T21: полное восстановление PASS; следующий T22 только для расписания — 13.11.2026
+
+RESTORE_GATE PASS: ровно один запуск11.513s/exit0, STRICT_MISMATCH_GROUPS=[];
+все семь postchecks и aggregate passed=true. Native globals/preloads, builtin
+plpgsql exact/no DROP, database metadata/ACL/labels/role settings совпали;
+T11_TARGET_RESTORE_PASS получен. Container/socket/process cleanup PASS.
+Canonical runtime auditor атомарно заменён на
+`a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea` root0600,
+beforeimage `/root/bron-secrets/t21-migration-audit-before.mjs`.
+Закрытые receipt/log: `/root/bron-secrets/t21-restore-5684c16-receipt.json` и
+`/root/bron-secrets/t21-restore-5684c16.log`, root0600. Повторять эту репетицию не нужно.
+Права БД, входной manifest, encrypted artifacts и source не менялись.
+
+Schedule остаётся PENDING_OBSERVATION. Отдельный cron-only PR14 OPEN с head
+`9115bdc0a0a0ec695d073006a91cb018c1d08d88`, base main
+`d61105e0d90213bec22492de278c8125c3b2b886`, CI43484294098 SUCCESS.
+Единственный diff: availability.yml `*/5` → `2-59/5`, те же12тиков/час,
+никаких изменений frontend/variables/secrets/permissions. Main ещё не менялся.
+T22 получает собственный manifest/authorization; до него merge/cron mutation
+не разрешены. Успех — настоящий schedule event после merge, не manual dispatch.
+Два–три тика наблюдаются параллельно дальнейшему preflight, без повторных toggles.
+
+Остались фактическая дельта, подтверждённая остановка всех путей source-записи,
+финальный строгий audit исправленным auditor, закрытая приёмка и public switch.
+Независимые ключи/аварийный доступ и реальный телефон/PWA остаются в обязательной
+приёмке. Готовые T12/T14/T18/T19/T21 результаты переиспользуются.
+
 ## T20: точный sequence ACL diff; T21 исправляет тип объекта в аудиторе — 13.11.2026
 
 Один controlled restore exit2/12s: 63/63 relations, отсутствующих объектов нет.
@@ -48,6 +75,9 @@ socket и Node process удалены. Остальные postchecks после 
 TELEGRAM_RECIPIENT/DELIVERY PASS: имя chat secret проверено, один fresh /start
 отправлен, hidden helper завершён; один test alert принят Telegram и виден на
 скриншоте владельца. Повторный secret entry/message/start не нужны.
+Владелец отдельно подтвердил в этом чате видимость новой тестовой тревоги в
+новом приватном чате бота и получение скриншота. Это прямое owner confirmation
+для T19 delivery, дополнительно к accepted Send и отчёту исполнителя.
 MONITOR_MAIN PASS: PR13 squash merged в main
 `d61105e0d90213bec22492de278c8125c3b2b886`, public variables проверены, APP_URL/VITE_*
 сохранены, Pages не запускался. Availability run
