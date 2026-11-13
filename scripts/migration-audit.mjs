@@ -46,6 +46,7 @@ export async function snapshotDatabase(db) {
     if (mode !== 'on') throw Object.assign(new Error('Migration audit requires an actual read-only transaction.'),
       { code: 'MIGRATION_TRANSACTION_NOT_READ_ONLY' });
     await db.query("set local timezone = 'UTC'");
+    await db.query('set local search_path = pg_catalog');
     const tables = (await db.query(`select n.nspname as schema, c.relname as name
       from pg_class c join pg_namespace n on n.oid=c.relnamespace
       where c.relkind in ('r','p') and (

@@ -56,6 +56,29 @@ describe('полнота сверки переноса', () => {
       select setval('public.document_number',42,true);`);
     expect(compareSnapshots(before, await snapshotDatabase(db))).toEqual(['schema:policies','schema:routines','sequence:public.document_number']);
   });
+  it('нормализует search_path, сохраняет путь вызывающего и видит реальные изменения FK/RLS', async () => {
+    await db.exec(`create function auth.uid() returns int language sql as 'select null::int';
+      alter table public.partner add column auth_user_id int,
+        add constraint partner_auth_user_fk foreign key (auth_user_id) references auth.users(id);
+      alter policy partner_read on public.partner using (auth.uid() is not null);
+      set search_path = public, auth, pg_catalog;`);
+    const path = async () => (await db.query<{ search_path: string }>('show search_path')).rows[0].search_path;
+    const withAuth = await path();
+    const first = await snapshotDatabase(db);
+    expect(await path()).toBe(withAuth);
+
+    await db.exec('set search_path = public, pg_catalog');
+    const withoutAuth = await path();
+    expect(withoutAuth).not.toBe(withAuth);
+    expect(compareSnapshots(first, await snapshotDatabase(db))).toEqual([]);
+    expect(await path()).toBe(withoutAuth);
+
+    await db.exec(`alter table public.partner drop constraint partner_auth_user_fk,
+        add constraint partner_auth_user_fk foreign key (auth_user_id) references public.location(id);
+      alter policy partner_read on public.partner using (auth.uid() is null);`);
+    expect(compareSnapshots(first, await snapshotDatabase(db))).toEqual(['schema:constraints','schema:policies']);
+    expect(await path()).toBe(withoutAuth);
+  });
   it('сравнивает права владельца по смыслу, но видит лишний доступ роли', async () => {
     const before = await snapshotDatabase(db);
     await db.exec(`grant all privileges on table public.partner to postgres with grant option;
