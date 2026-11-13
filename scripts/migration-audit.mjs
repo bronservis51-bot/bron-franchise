@@ -11,7 +11,7 @@ const canonicalAcl = (acl, owner, kindExpression) => `coalesce((
   ) order by coalesce(pg_get_userbyid(x.grantee), 'PUBLIC'),
     pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable)
   from pg_catalog.aclexplode(case
-    when ${acl} is null or cardinality(${acl}) = 0
+    when ${acl} is null
       then pg_catalog.acldefault(${kindExpression}, ${owner})
     else ${acl}
   end) x

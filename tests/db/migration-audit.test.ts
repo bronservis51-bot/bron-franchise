@@ -65,6 +65,38 @@ describe('полнота сверки переноса', () => {
     await db.exec('create role anon; grant select on table public.partner to anon');
     expect(compareSnapshots(before, await snapshotDatabase(db))).toContain('schema:relations');
   });
+  it('отличает default PUBLIC EXECUTE от пустого ACL функции в обоих направлениях', async () => {
+    await db.exec(`create role anon; create role acl_owner;
+      alter function public.audit_probe() owner to acl_owner;`);
+    expect((await db.query(`select proacl::text as acl,
+      has_function_privilege('anon','public.audit_probe()','EXECUTE') as allowed
+      from pg_proc where oid='public.audit_probe()'::regprocedure`)).rows).toEqual([{ acl: null, allowed: true }]);
+    const defaultAcl = await snapshotDatabase(db);
+
+    await db.exec(`revoke all privileges on function public.audit_probe() from public;
+      revoke all privileges on function public.audit_probe() from acl_owner;`);
+    expect((await db.query(`select proacl::text as acl,
+      has_function_privilege('anon','public.audit_probe()','EXECUTE') as allowed
+      from pg_proc where oid='public.audit_probe()'::regprocedure`)).rows).toEqual([{ acl: '{}', allowed: false }]);
+    const emptyAcl = await snapshotDatabase(db);
+    expect(compareSnapshots(defaultAcl, emptyAcl)).toEqual(['schema:routines']);
+    expect(compareSnapshots(emptyAcl, defaultAcl)).toEqual(['schema:routines']);
+  });
+  it('отличает default права обычного владельца таблицы от явного revoke', async () => {
+    await db.exec(`create role acl_owner; alter table public.partner owner to acl_owner;`);
+    expect((await db.query(`select relacl::text as acl,
+      has_table_privilege('acl_owner','public.partner','SELECT') as allowed
+      from pg_class where oid='public.partner'::regclass`)).rows).toEqual([{ acl: null, allowed: true }]);
+    const defaultAcl = await snapshotDatabase(db);
+
+    await db.exec('revoke all privileges on table public.partner from acl_owner');
+    expect((await db.query(`select relacl::text as acl,
+      has_table_privilege('acl_owner','public.partner','SELECT') as allowed
+      from pg_class where oid='public.partner'::regclass`)).rows).toEqual([{ acl: '{}', allowed: false }]);
+    const emptyAcl = await snapshotDatabase(db);
+    expect(compareSnapshots(defaultAcl, emptyAcl)).toEqual(['schema:relations']);
+    expect(compareSnapshots(emptyAcl, defaultAcl)).toEqual(['schema:relations']);
+  });
   it('останавливается на неполной схеме и видит лишние/пропущенные объекты', async () => {
     expect(compareSnapshots({one:1},{one:1,extra:2})).toEqual(['extra']);
     await db.exec('drop table public.article_revision');
