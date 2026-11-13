@@ -1,4 +1,4 @@
-// T25 source route probe and read-only planner. Never treat live snapshots as a freeze audit.
+// T26 repaired source transport and read-only planner. Never treat live snapshots as a freeze audit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -153,15 +153,19 @@ export function inventoryReport(source,target,audit){
 }
 
 async function main(){let source,target,phase='runtime';const context={};
-  const deadline=setTimeout(()=>{console.error('T25_BLOCKED',JSON.stringify({phase,code:'DEADLINE_EXCEEDED',query:context.failure??context.last??null}));process.exit(2);},240000);deadline.unref();
+  const deadline=setTimeout(()=>{console.error('T26_BLOCKED',JSON.stringify({phase,code:'DEADLINE_EXCEEDED',query:context.failure??context.last??null}));process.exit(2);},240000);deadline.unref();
   try{
-    if(process.argv.length!==2)fail('DELTA_NO_ARGUMENTS_EXPECTED');
+    if(!(process.argv.length===2||(process.argv.length===3&&process.argv[2]==='--direct-session')))fail('DELTA_ARGUMENTS_INVALID');
     execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
     for(const [name,sha] of Object.entries(PINS))if(createHash('sha256').update(fs.readFileSync(RUNTIME+'/scripts/'+name)).digest('hex')!==sha)
       fail('DELTA_RUNTIME_SHA_MISMATCH');
     if(JSON.parse(fs.readFileSync(RUNTIME+'/node_modules/pg/package.json','utf8')).version!=='8.23.1')fail('DELTA_PG_VERSION');
     const {sourceServiceConfig,assertMigrationTarget}=await import(RUNTIME+'/scripts/migration-source.mjs');
     const sourceConfig=sourceServiceConfig();
+    if(process.argv[2]==='--direct-session'){
+      // Same approved source, password callback and canonical verified TLS; no file changes.
+      sourceConfig.host='aws-1-us-west-2.pooler.supabase.com';sourceConfig.port=5432;
+    }
     const {databaseConfig}=await import(RUNTIME+'/scripts/database-config.mjs');
     const audit=await import(RUNTIME+'/scripts/migration-audit.mjs');
     const {default:pg}=await import(RUNTIME+'/node_modules/pg/lib/index.js');
@@ -179,12 +183,12 @@ async function main(){let source,target,phase='runtime';const context={};
     url.password=encodeURIComponent(values.POSTGRES_PASSWORD);assertMigrationTarget(url.href);
     target=new pg.Client({...databaseConfig(url.href,{BRON_DB_ALLOW_LOCAL_PLAIN:'1'}),
       options:'-c default_transaction_read_only=on -c statement_timeout=30000',query_timeout:60000});
-    phase='source-route-probe';
-    const {chooseSourceRoute}=await import(new URL('./t25-source-route.mjs',import.meta.url));
-    const route=await chooseSourceRoute({sourceConfig,Client:pg.Client});
-    console.log('T25_SOURCE_ROUTES',JSON.stringify({selectedRoute:route.selectedRoute,diagnostics:route.diagnostics}));
-    if(!route.config)fail('DELTA_NO_VERIFIED_SOURCE_ROUTE');
-    source=new pg.Client({...route.config,query_timeout:60000});
+    phase='source-transport-probe';
+    const {probeExistingSource}=await import(new URL('./t26-transport-probe.mjs',import.meta.url));
+    const probe=await probeExistingSource({sourceConfig,Client:pg.Client});
+    console.log('T26_SOURCE_TRANSPORT',JSON.stringify({route:sourceConfig.host==='127.0.0.1'?'existing-reverse':'canonical-session',...probe}));
+    if(!probe.passed)fail('DELTA_SOURCE_TRANSPORT_NOT_READY');
+    source=new pg.Client(sourceConfig);
     // Never let an idle network error print an unredacted pg error object.
     source.on('error',()=>{});target.on('error',()=>{});
     await source.connect();await target.connect();
@@ -196,8 +200,8 @@ async function main(){let source,target,phase='runtime';const context={};
       if(side==='target'&&(!addresses.includes(row.address)||row.port!==5432||row.cron!=='off'||row.net!=='0'))fail('DELTA_TARGET_ISOLATION');};
     phase='source-readonly-snapshot';const a=await captureInventory(observeQueries(source,'source',context),audit,verify('source'));
     phase='target-readonly-snapshot';const b=await captureInventory(observeQueries(target,'target',context),audit,verify('target'));
-    phase='safe-difference-counts';console.log('T25_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
-  }catch(error){console.error('T25_BLOCKED',JSON.stringify({phase,...safeFailure(error),query:context.failure??context.last??null}));process.exitCode=2;}
+    phase='safe-difference-counts';console.log('T26_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
+  }catch(error){console.error('T26_BLOCKED',JSON.stringify({phase,...safeFailure(error),query:context.failure??context.last??null}));process.exitCode=2;}
   finally{await Promise.allSettled([source?.end(),target?.end()]);clearTimeout(deadline);}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

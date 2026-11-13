@@ -3,6 +3,32 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T25 маршруты BLOCKED; T26 — однократный ремонт временного канала — 14.11.2026
+
+T25 один запуск exit2/25s, 00:18:05–00:18:30 МСК. Canonical session FAIL5007ms
+SOURCE_ROUTE_FAILED; canonical transaction FAIL10002ms; existing reverse FAIL10001ms.
+Ни один путь не прошёл общий10s probe; full inventory НЕ запускался.
+Стадия отказа внутри connect/queries/bulk в T25 ещё неизвестна. Это не доказывает
+отказ TLS или отсутствие сетевого доступа, поскольку deadline охватывал всё.
+Helper/state/log/receipt сохранены root0600; cleanup PASS, source/target writes0.
+T25 повторять нельзя. Дедлайн13ноября пропущен, релиз НЕ выполнен.
+
+T26 подготовлен, ещё НЕ исполнен: прочитать существующий AdminVPS ticket482050
+параллельно; проверить Mac→source TCP и Mac→VPS1MiB dummy без DB-secret;
+один раз stop/start только выделенного ~/.ssh/bron-source-tunnel после проверки
+отсутствия audit/freeze и границ wrapper. Не менять его код/SSH keys/прочие tunnels.
+Затем отдельные deadlines connect/BEGIN/identity/small/bulk/rollback.1MiB bulk
+должен занять<=10s отдельно от connect. При PASS один inventory; при FAIL
+точная безопасная стадия, full inventory NOT_RUN. Секреты остаются только VPS.
+Если уже полученный ответ провайдера и VPS TCP probe подтвердили открытие5432,
+допустим --direct-session с тем же verified TLS/callback без изменения config-файлов.
+
+Manifest `payloads/t26-sha256.json`.12 focused tests и native PG17.12/pg8.23.1
+seven-stage/1MiB probe PASS, container удалён; это не PASS реального канала.
+Freeze/admission draft не входит в пакет и не активируется. T21 restore/T19
+delivery/T14 builds сохраняют PASS; новых scheduled runs T22 пока не наблюдалось.
+Source freeze/final delta/audit/приёмка/publication остаются отдельными gates.
+
 ## T24: точный source timeout; T25 проверяет маршрут до полного чтения — 13.11.2026
 
 T24 bundle/runtime/SSH PASS. Один запуск 225s/exit2, 23:36:46–23:40:31 МСК.
