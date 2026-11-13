@@ -18,6 +18,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: node --test gateway/server.test.mjs
+      - run: node --test tests/ops/availability-status.test.mjs
+      - run: python3 -m unittest discover -s tests/ops -p 'test_backup_alert_telegram.py'
       - run: npm run build
         env:
           VITE_BASE_PATH: /
