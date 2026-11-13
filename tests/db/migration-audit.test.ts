@@ -88,6 +88,45 @@ describe('полнота сверки переноса', () => {
     await db.exec('create role anon; grant select on table public.partner to anon');
     expect(compareSnapshots(before, await snapshotDatabase(db))).toContain('schema:relations');
   });
+  it('считает NULL и явные default ACL последовательностей равными, включая identity и serial', async () => {
+    await db.exec(`create role acl_owner; create role anon;
+      alter sequence public.document_number owner to acl_owner;
+      create table app_private.acl_identity(id bigint generated always as identity);
+      create table app_private.acl_serial(id bigserial);
+      alter table app_private.acl_identity owner to acl_owner;
+      alter table app_private.acl_serial owner to acl_owner;`);
+    const sequences = `'public.document_number'::regclass,
+      'app_private.acl_identity_id_seq'::regclass,'app_private.acl_serial_id_seq'::regclass`;
+    expect((await db.query(`select bool_and(relacl is null) as implicit
+      from pg_class where oid in (${sequences})`)).rows).toEqual([{ implicit: true }]);
+    const implicitAcl = await snapshotDatabase(db);
+
+    await db.exec(`revoke all privileges on sequence public.document_number,
+      app_private.acl_identity_id_seq,app_private.acl_serial_id_seq from public,anon;`);
+    expect((await db.query(`select bool_and(relacl is not null) as explicit,
+      bool_and(cardinality(relacl)=1) as owner_only from pg_class where oid in (${sequences})`)).rows)
+      .toEqual([{ explicit: true, owner_only: true }]);
+    const explicitAcl = await snapshotDatabase(db);
+    expect(compareSnapshots(implicitAcl, explicitAcl)).toEqual([]);
+    expect(compareSnapshots(explicitAcl, implicitAcl)).toEqual([]);
+  });
+  it('видит настоящий GRANT, REVOKE и пустой ACL последовательности', async () => {
+    await db.exec('create role acl_owner; create role acl_reader; alter sequence public.document_number owner to acl_owner');
+    const initial = await snapshotDatabase(db);
+    await db.exec('grant usage on sequence public.document_number to acl_reader');
+    expect(compareSnapshots(initial, await snapshotDatabase(db))).toEqual(['schema:relations']);
+    await db.exec('revoke usage on sequence public.document_number from acl_reader');
+    expect(compareSnapshots(initial, await snapshotDatabase(db))).toEqual([]);
+    await db.exec('revoke select on sequence public.document_number from acl_owner');
+    expect(compareSnapshots(initial, await snapshotDatabase(db))).toEqual(['schema:relations']);
+    await db.exec('revoke all privileges on sequence public.document_number from acl_owner');
+    expect((await db.query(`select relacl::text as acl,
+      has_sequence_privilege('acl_owner','public.document_number','USAGE') as allowed
+      from pg_class where oid='public.document_number'::regclass`)).rows).toEqual([{ acl: '{}', allowed: false }]);
+    const emptyAcl = await snapshotDatabase(db);
+    expect(compareSnapshots(initial, emptyAcl)).toEqual(['schema:relations']);
+    expect(compareSnapshots(emptyAcl, initial)).toEqual(['schema:relations']);
+  });
   it('отличает default PUBLIC EXECUTE от пустого ACL функции в обоих направлениях', async () => {
     await db.exec(`create role anon; create role acl_owner;
       alter function public.audit_probe() owner to acl_owner;`);

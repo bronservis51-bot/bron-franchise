@@ -353,7 +353,7 @@ export async function main(){try {
     if(fs.statSync(file).size!==e.bytes||await hashFile(file)!==e.sha256)fail('REHEARSAL_ARTIFACT_SHA_MISMATCH');
   }
   const artifact=name=>path.join(path.dirname(manifestPath),name+'.zst.age');
-  if(await hashFile(runtime+'/scripts/migration-audit.mjs')!=='d63fbef0ab6fbed0bb3d09ed6d067ca5f7753d47a981bdb4c4bc8a4719468931')
+  if(await hashFile(runtime+'/scripts/migration-audit.mjs')!=='a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea')
     fail('REHEARSAL_AUDITOR_SHA_MISMATCH');
   const {default:pg}=await import(runtime+'/node_modules/pg/lib/index.js');
   const {snapshotDatabase,compareSnapshots,fingerprintRows}=await import(runtime+'/scripts/migration-audit.mjs');

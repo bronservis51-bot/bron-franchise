@@ -196,6 +196,15 @@ def exercise(fixture):
         CREATE ROLE qa_owner NOLOGIN;
         CREATE TABLE public.t16_marker(id int PRIMARY KEY);
         INSERT INTO public.t16_marker VALUES(42);
+        CREATE SCHEMA qa_sequences AUTHORIZATION qa_owner;
+        SET ROLE qa_owner;
+        CREATE TABLE qa_sequences.identity_default(id bigint GENERATED ALWAYS AS IDENTITY);
+        CREATE TABLE qa_sequences.serial_default(id bigserial);
+        RESET ROLE;
+        GRANT USAGE ON SEQUENCE qa_sequences.identity_default_id_seq,
+            qa_sequences.serial_default_id_seq TO qa_reader;
+        REVOKE ALL ON SEQUENCE qa_sequences.identity_default_id_seq,
+            qa_sequences.serial_default_id_seq FROM PUBLIC,qa_reader;
         ALTER DATABASE postgres OWNER TO qa_owner;
         REVOKE ALL ON DATABASE postgres FROM PUBLIC;
         GRANT CONNECT,TEMPORARY ON DATABASE postgres TO qa_reader;
@@ -203,6 +212,29 @@ def exercise(fixture):
         ALTER DATABASE postgres CONNECTION LIMIT 12;
         ALTER DATABASE postgres SET statement_timeout='123s';
         ALTER ROLE qa_reader IN DATABASE postgres SET search_path=public,pg_catalog;""")
+    # Native pg_dump omits explicit ACLs equal to defaults and restores them as NULL.
+    # PG17 acldefault uses lowercase s for sequences; uppercase S means FOREIGN SERVER.
+    sequence_sql = """SELECT jsonb_agg(to_jsonb(s) ORDER BY s.name) FROM (
+        SELECT c.relname AS name,c.relacl IS NULL AS acl_is_null,
+          (SELECT count(*) FROM aclexplode(acldefault('S'::\"char\",c.relowner))) AS upper_default,
+          (SELECT count(*) FROM aclexplode(acldefault('s'::\"char\",c.relowner))) AS lower_default,
+          (SELECT count(*) FROM aclexplode(coalesce(c.relacl,
+            acldefault('S'::\"char\",c.relowner)))) AS upper_edges,
+          (SELECT count(*) FROM aclexplode(coalesce(c.relacl,
+            acldefault('s'::\"char\",c.relowner)))) AS lower_edges,
+          has_sequence_privilege('qa_owner',c.oid,'SELECT') AS owner_select,
+          has_sequence_privilege('qa_owner',c.oid,'UPDATE') AS owner_update,
+          has_sequence_privilege('qa_owner',c.oid,'USAGE') AS owner_usage,
+          has_sequence_privilege('qa_reader',c.oid,'USAGE') AS reader_usage
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='qa_sequences' AND c.relkind='S') s"""
+    sequence_before = json.loads(fixture.sql(sequence_sql))
+    require(len(sequence_before) == 2 and all(
+        row['acl_is_null'] is False and row['upper_default'] == 1
+        and row['lower_default'] == row['upper_edges'] == row['lower_edges'] == 3
+        and row['owner_select'] and row['owner_update'] and row['owner_usage']
+        and not row['reader_usage'] for row in sequence_before),
+        'EXPLICIT_SEQUENCE_DEFAULT_ACL_NOT_ESTABLISHED')
     before = json.loads(fixture.sql(METADATA_SQL))
     fixture.execute([
         'pg_dump', '-U', 'supabase_admin', '-d', 'postgres', '--format=custom',
@@ -246,6 +278,16 @@ def exercise(fixture):
     require(json.loads(fixture.sql(METADATA_SQL)) == before, 'FINAL_DATABASE_METADATA_MISMATCH')
     require(fixture.sql('SELECT id FROM public.t16_marker').strip() == '42',
             'APPLICATION_DATA_NOT_RESTORED')
+    sequence_after = json.loads(fixture.sql(sequence_sql))
+    require(len(sequence_after) == len(sequence_before), 'RESTORED_SEQUENCE_COUNT_MISMATCH')
+    for source, restored in zip(sequence_before, sequence_after):
+        require(source['name'] == restored['name'] and restored['acl_is_null'] is True
+                and restored['upper_default'] == restored['upper_edges'] == 1
+                and restored['lower_default'] == restored['lower_edges'] == 3,
+                'NATIVE_SEQUENCE_DEFAULT_ACL_ROUNDTRIP_MISMATCH')
+        require(all(source[field] == restored[field] for field in (
+            'owner_select', 'owner_update', 'owner_usage', 'reader_usage')),
+            'NATIVE_SEQUENCE_EFFECTIVE_PRIVILEGES_CHANGED')
     return {
         'status': 'PASS', 'postgres_version_num': version, 'runtime_image_id': fixture.image,
         'plain_list_hides_database_metadata': True, 'create_list_includes_database_metadata': True,
@@ -257,6 +299,9 @@ def exercise(fixture):
         'do_before_drop_and_after_exact_recreation': True,
         'nonbootstrap_super_grantor_42501_reproduced': True,
         'bootstrap_grantor_and_membership_options_exact': True,
+        'identity_and_serial_default_acl_roundtrip_exact': True,
+        'sequence_acldefault_lowercase_s_required': True,
+        'sequence_effective_privileges_preserved': True,
     }
 
 

@@ -74,7 +74,7 @@ export async function snapshotDatabase(db) {
         left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v') and a.attnum>0 and not a.attisdropped`,
       relations: `select n.nspname,c.relname,c.relkind,c.relpersistence,pg_get_userbyid(c.relowner) as owner,c.relrowsecurity,c.relforcerowsecurity,
-        ${canonicalAcl('c.relacl', 'c.relowner', "case when c.relkind='S' then 'S'::\"char\" else 'r'::\"char\" end")} as relacl,
+        ${canonicalAcl('c.relacl', 'c.relowner', "case when c.relkind='S' then 's'::\"char\" else 'r'::\"char\" end")} as relacl,
         case when c.relkind='v' then pg_get_viewdef(c.oid,true) end as view_definition
         from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname in ('public','app_private') and c.relkind in ('r','p','v','S')`,

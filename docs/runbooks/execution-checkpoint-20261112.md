@@ -3,6 +3,38 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T20: точный sequence ACL diff; T21 исправляет тип объекта в аудиторе — 13.11.2026
+
+Один controlled restore exit2/12s: 63/63 relations, отсутствующих объектов нет.
+Только app_private.procurement_event_id_seq и procurement_request_number_seq
+различались по relacl: 3 canonical source edges против 1 restored, по 2 removed.
+Все семь readonly postchecks PASS: global roles, extension metadata, Vault logical,
+Storage tree, primary data/roles/database unchanged. Cleanup PASS; лог/receipt
+`/root/bron-secrets/t20-restore-08254d9.log` и
+`/root/bron-secrets/t20-restore-08254d9-receipt.json`, root0600. Никаких ACL-правок
+и повторов T20 не было.
+
+Причина доказана native PG17.12: canonicalAcl передавал acldefault uppercase `S`
+для sequence, но это код FOREIGN SERVER (default owner USAGE, один edge).
+Корректный sequence code — lowercase `s` (SELECT/UPDATE/USAGE, три edges).
+Source явный default ACL и restored NULL имеют одинаковые реальные права;
+pg_dump законно сохраняет default как NULL. Native identity/serial roundtrip,
+реальные GRANT/REVOKE/empty ACL и lowercase normalization PASS. Auditor меняется
+на один символ; c.relkind='S' остаётся прежним, ни одно поле не исключается.
+Новая копия/supplement или изменения реальных прав не нужны.
+
+Regression tests сначала RED на старом коде; после исправления focused13/13,
+полный DB suite158 и ops27 PASS. Helper repinned к новому auditor SHA. T21 должен
+атомарно заменить только canonical runtime auditor с beforeimage и выполнить
+одну новую проверку копии. До её результата restore gate остаётся FAIL.
+Исходный manifest/зашифрованные артефакты/S3 policy не менять.
+
+Schedule новой main не наблюдался к 21:26 МСК. Active/default main и большие
+пропуски до PR13 подтверждены; причина merge-registration не установлена.
+Готовится отдельное предложение сместить пяти-минутные тики вне начала часа;
+активное расписание T20/T21 не меняют. Любое изменение требует отдельного T22
+с собственным manifest; manual/synthetic event не считается schedule.
+
 ## T19 закрыт; уточнение протокола без повторного исполнения — 13.11.2026
 
 Один разрешённый cold restore завершился FAIL на строгой сверке:
