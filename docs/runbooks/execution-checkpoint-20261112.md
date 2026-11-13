@@ -3,6 +3,70 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T29 подготовлен: узкая Auth-диагностика и VPS-only key readiness — 14.11.2026
+
+Владелец требует краткий сквозной статус в каждом сообщении: этап/подтверждено/
+остаток/блокер/следующий шаг, без искусственных процентов. Правило закреплено AGENTS.
+Среда координатора ready; startup error нет. T29 ещё НЕ выдавался/не исполнялся.
+
+Новая явная граница владельца: не копировать roles.sql.zst.age или любые backup
+данные на Mac без отдельного согласия. Такой copy был только в черновике T29;
+не выполнялся. Выбран безопасный путь без запроса этого согласия: ciphertext
+остаётся на VPS, helper --check на VPS, будущий независимый ключ вводится лично
+в скрытый TTY через телефонную AdminVPS-консоль. Не читается серверный private key,
+ключ/plaintext не пишутся в файлы или логи. T29 не разрешает --verify/owner prompt.
+
+T28 реально использовал старый TLS reverse через Mac; его PASS сохраняется как
+историческое доказательство. T29 данные через этот путь НЕ читает: только
+canonical source6543 напрямую с VPS, прежние CA/SNI/password callback. При отказе
+Auth BLOCKED, без Mac fallback; ключ/preview-metadata ветки продолжаются.
+
+Auth helper6unit + nativePG17.12/realpg8.23.1 capture PASS: точные микросекунды
+BigInt, остальные поля canonical PGJSONtext, missing/null/target-newer отдельные
+counts, без UUID/парольных хешей/значений в output. No apply/finalFreezeAudit=false.
+Key helper8unit + realage1.1.1/zstd synthetic correct/wrong-key PASS; реальный
+owner custody proof не заменён синтетикой. Production admission core/runner
+подготовлены отдельно и не входят в разрешённые эффекты T29.
+
+Проверен путь публикации: appPages=workflow/main-only environment, landing=legacy/main;
+существующий pages.yml всегда собирает. Минимум всего выпуска — после DB gates
+один штатный publication build при закреплённом PR12 merge, вместо нового publisher.
+Продуктовые src/public/vite/package/index inputs после e487ec не менялись; build
+публикации имеет новую provenance/run и не выдается за прежние T14 file SHA.
+Старая PWA требует transition static на прежнем origin ДО личной приёмки, пока
+RF API IP-gated. Это должно быть явно включено в будущий пакет; T29 публикации нет.
+
+## T28 завершён: канал PASS, осталась одна Auth-метка — 14.11.2026
+
+T28 принят с commit4f13111 и canonical receipt
+`/root/bron-secrets/t28-release-receipt.json`; mirror
+`/tmp/bron-release-executor-20261113/T28-state.json`, оба0600/SHA-identical.
+T26 SUPERSEDED_NO_EXECUTION_EVIDENCE, T27 SUPERSEDED_INTO_T28. Checkout/pins PASS.
+
+Один управляемый restart source tunnel PASS, listener только127.0.0.1:15432.
+Actual PG transport: connect5664ms, BEGIN523, server-deadline482, identity429,
+1KiB448,1MiB1898,ROLLBACK637. Туннель оставлен для миграции, не новая постоянная
+зависимость российского приложения. Вспомогательный SSHdummy упал на quoting
+SyntaxError и не повторялся; actual PG bulk PASS закрывает нужный transport gate.
+
+Inventory один exit0:62tables/4020rows с обеих сторон; только data:auth.users,
+16/16users,1matchedrow отличается updated_at, missing rows0. Source window
+22:34:24.228–22:35:19.411Z,target22:35:19.411–22:35:20.801Z. Это LIVE, не freeze.
+Не исправлять timestamp ради промежуточного PASS: источник ещё принимает запись.
+T29 установит направление и lossless равенство остальных Auth fields только чтением.
+
+Backup status healthy=true, свежесть в пределах, TLS verified; HTTP503 для этого
+maintenance endpoint ожидаем и не является backup failure. Ticket482050 недоступен
+без owner session; не блокирует уже исправленный канал. Mac ghapi недоступен;
+coordinator passive query всё ещё видит старый schedule43485875805, не новый T22.
+Owner handoff T28 подготовлен: независимый key-proof требует code review;
+второе устройство/AdminVPS/MFA требует владельца; phone/PWA ждёт private preview.
+
+T21 full restore/T12 AuthRLS/T14 artifacts/T18 installation/T19 delivery REUSED.
+Остались source admission+последняя дельта+final audit+Pause, подготовленная личная
+приёмка/независимый ключ/аварийный доступ, затем public switch. Source/target writes0.
+Production admission runner готовится отдельно; T29 не разрешает freeze/применение.
+
 ## T26 не подтверждён как запущенный; T28 снимает зависимость очереди — 14.11.2026
 
 Исполнитель принял T27 в очередь, checkout не менял. По его read-only проверке

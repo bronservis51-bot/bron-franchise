@@ -1,0 +1,166 @@
+{
+  "acceptance": {
+    "auth": "exit0 diagnosticComplete=true applyAuthorized=false finalFreezeAudit=false; report actual sourceNewer/targetNewer/null/other/missing counts; ifunsupported do not repair",
+    "branches": "failure stops only dependents; final report required with all independent outcomes",
+    "key": "VPS-only READY without identity request, or precise independent BLOCKED; no artifact leaves VPS",
+    "maintenance": "all public product/API routes remain maintenance",
+    "preview": "only targeted real inputs, no deployment"
+  },
+  "actions": {
+    "T29.auth_plan": {
+      "Mac_transit_allowed": false,
+      "actual_transactions": "READ ONLY REPEATABLE READ, UTC, server deadline5s",
+      "apply_authorized": false,
+      "expected_source_rows": 16,
+      "expected_target_rows": 16,
+      "finalFreezeAudit": false,
+      "full_inventory_authorized": false,
+      "if_direct_route_fails": "Auth BLOCKED with safe phase/code; do not fall back to15432 or restart tunnel; independent branches continue",
+      "max_launches": 1,
+      "node_argv": [
+        "/root/bron-secrets/t29-auth-plan.mjs"
+      ],
+      "output": "counts/direction only, no private row IDs/timestamps/bodies/hashes",
+      "source_target": "source ONLY DIRECT canonical pooler:6543 with unchanged TLS/CA/SNI/password callback, no startup options; target verified loopback15433",
+      "tables": [
+        "auth.users"
+      ]
+    },
+    "T29.key_proof_prepare": {
+      "allowed_helper_mode": "python3 /root/bron-secrets/t29-owner-key-proof.py --check --ciphertext <same VPS file> --sha256 <exact artifact SHA>",
+      "artifact_file": "roles.sql.zst.age",
+      "ciphertext": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/roles.sql.zst.age",
+      "copy_artifact_or_key_to_Mac": false,
+      "future_verify": "owner personally enters independent key via hidden TTY in AdminVPS webconsole on SECOND DEVICE/PHONE; decrypt-to-zstd-test entirely on VPS, no identity/plaintext stored",
+      "identity_requested": false,
+      "if_blocked": "precise independent BLOCKED, no installation/owner secret prompt",
+      "manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+      "manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+      "select": "exact manifest.artifacts file entry; validate size/SHA and regular root-owned private source in place",
+      "verify_forbidden": true
+    },
+    "T29.owner_handoff": {
+      "no_Supabase_dashboard_login_preflight": true,
+      "no_owner_secret_prompt": true,
+      "reuse": "existing T28-owner-handoff.md",
+      "update_with": "VPS --check result and exact future PHONE/AdminVPS-console secure helper command/path; no Mac crypto/data workflow; second-device/PWA prerequisites remain pending"
+    },
+    "T29.preview_inputs": {
+      "do_not_apply_preview": true,
+      "do_not_return": [
+        "environment",
+        "rendered Compose config",
+        "secret file contents",
+        "owner IP",
+        "private key",
+        "password hashes"
+      ],
+      "no_broad_audit_or_rehash_all_five_packages": true,
+      "read_only": true,
+      "return": [
+        "actual web Compose project/working_dir/ordered config_files labels only",
+        "current web and six backend container IDs",
+        "cached caddy2.11.8 Config.User and imageID",
+        "exact staged app-root/landing-root extracted directories and public manifest path/sourceCommit/base/file-count",
+        "UID/GID/mode of /root,/root/bron-secrets,/opt,/opt/bron,/opt/bron/audit-runtime-c128f9b,/opt/bron/rehearsal-audit.exfSfv9a and its node_modules/pg paths"
+      ]
+    },
+    "T29.receipt_digest": {
+      "input": "/root/bron-secrets/t28-release-receipt.json",
+      "purpose": "pin real evidence for future reviewed admission manifest",
+      "return": "full64-char SHA256 of receipt only; no raw private contents"
+    },
+    "T29.schedule": {
+      "does_not_block_report": true,
+      "no_Mac_gh_retry_or_dispatch": true,
+      "reuse": "coordinator passive query still sees only pre-PR14 schedule43485875805 at18:46:32Z; new event pending"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t29-auth-plan.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t29-auth-plan.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t29-owner-key-proof.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t29-owner-key-proof.py"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t29-auth-plan.mjs": "f31ecfd875dc2eb06670c6111018968f66c5e7321cc16271af434cc4d4b25f4a",
+    "docs/runbooks/payloads/t29-owner-key-proof.py": "5b67358a605d8280a5477ea1d335d28a5bf9ecf6798d6b5328dd60483a1b4c7f",
+    "tests/ops/auth-plan-native.mjs": "75de62eb828c3607ba24fae898520bbe9ccfdcbffd9db347be3ec4b892ae08d9",
+    "tests/ops/auth-plan-native.py": "504b04c3c0f65d6f48568d19ef1295b8a321e42f951c46ea84f423ff2d9ab1a1",
+    "tests/ops/auth-plan.test.mjs": "2cd592f6befc20a78c9c6e9d984f87f0fb938aba24afdad35f4abac7bc88ba89",
+    "tests/ops/restore-native-pg17.py": "c07227281d3ac2f9ba17c6237baf1d49cac0062702a5d079987e57896d04b653",
+    "tests/ops/test_owner_key_proof.py": "1567d1ba7c6d897763fd06d4cec880efde244012f5fa17c7ce1fe7b13f40e136"
+  },
+  "format": 1,
+  "not_authorized": [
+    "source_or_target_writes",
+    "timestamp_update",
+    "source_freeze_or_admission",
+    "source_admission_runner_activation",
+    "Supabase_Pause_or_Restore",
+    "full_inventory_retry",
+    "tunnel_restart_or_dummy_retry",
+    "owner_helper_verify_or_secret_prompt",
+    "copy_VPS_private_identity_to_Mac",
+    "new_key_or_account",
+    "new_purchase_or_install",
+    "full_restore_or_build_repeat",
+    "Telegram_message",
+    "workflow_dispatch_or_cron_change",
+    "PR_merge_or_publication",
+    "preview_apply",
+    "any_backup_artifact_copy_to_Mac_even_encrypted",
+    "source_data_transit_via_Mac",
+    "Mac_key_decryption",
+    "fallback_to_reverse15432_for_Auth_plan"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T29 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "ACCEPTED and per-action guards; atomic updates",
+    "canonical_vps": "/root/bron-secrets/t29-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T29-state.json",
+    "log_vps": "/root/bron-secrets/t29-release.log",
+    "mode": "0600"
+  },
+  "reuse_evidence": [
+    "T28 actual transport PASS and live62tables/4020rows each; one updated_at diff16/16users",
+    "T12 Auth/RLS",
+    "T14 five artifacts",
+    "T18 backup/status installation",
+    "T19 owner-visible Telegram delivery",
+    "T21 full cold restore",
+    "T22 cron-only merge"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "one narrow read-only Auth plan over DIRECT VPS-to-Supabase only; VPS-only key proof preparation and final-window metadata; no backup/data export to Mac",
+  "task": "T29",
+  "verification": {
+    "auth_native": "PASS PostgreSQL17.12/realpg8.23.1, actualRO/RR/5s; \u00b5sBigInt, lossless other JSON numeric, target-newer/null blocked, redaction; fixture removed",
+    "auth_route": "direct source config policy/callback/CA preservation unit PASS; actual canonical6543 acceptance PENDING_T29; no Mac fallback",
+    "auth_unit_tests": 6,
+    "key_native": "PASS actualage1.1.1/zstd unchanged FD crypto correct/wrong synthetic identity; VPS-only root/path guards unit PASS; not real owner custody",
+    "key_unit_tests": 8,
+    "product_build": "REUSED T14; no product inputs changed"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b"
+  }
+}

@@ -90,6 +90,26 @@ native PostgreSQL proofs с фактической версией в один pr
 task ID сам по себе не разрешает повтор уже закрытого действия: смотреть его
 scope и квитанцию. T18 HTTPS-status и сборки T14 повторно не устанавливать/не собирать.
 
+### Текущая граница после T28
+
+T28 завершён, transport/live inventory PASS. Единственный diff —1auth.users.updated_at,
+16/16users,62tables/4020rows с каждой стороны. Не повторять source restart, SSHdummy,
+1MiBprobe или full inventory. Узкое чтение T29 нужно для направления timestamp,
+не для промежуточного перезаписывания clone при живом source.
+HTTP503 трёхполевого backup-status ожидаем в maintenance при fresh/healthy=true.
+Следующий server window после подготовки объединит admission/минимальную дельту/
+final strict/Pause/закрытый preview; личная приёмка и public opening сохраняют gates.
+В каждом сообщении — короткий сквозной статус по просьбе владельца.
+
+### T29: личная граница данных
+
+Никакие backup-артефакты, даже encrypted, не доставлять на Mac. T29 Auth-чтение
+только напрямую VPS→canonical6543 с проверенным TLS, без reverse15432 fallback.
+Ciphertext key-proof остаётся в исходном VPS backup directory. На VPS допустим
+лишь --check; личный --verify будет отдельным готовым owner batch через телефон/
+второе устройство, скрытый TTY AdminVPS-консоли. Не читать серверную private identity,
+не запрашивать ключ в чат/argv/environment и не подменять внешнее владение этим ключом.
+
 ### Принятие пакета и восстановление потерянной передачи
 
 ISSUED не означает ACCEPTED, RUNNING или CLOSED. Координатор не ставит
