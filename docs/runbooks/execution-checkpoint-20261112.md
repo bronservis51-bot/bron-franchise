@@ -3,6 +3,37 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T24: точный source timeout; T25 проверяет маршрут до полного чтения — 13.11.2026
+
+T24 bundle/runtime/SSH PASS. Один запуск 225s/exit2, 23:36:46–23:40:31 МСК.
+Безопасный failure context: source-readonly-snapshot, PG_QUERY_READ_TIMEOUT,
+public.daily_revenue table_rows, ordinal43, elapsed60003ms. Inventory/diff ещё нет.
+Source/target writes0, процесс/соединения закрыты, cleanup PASS; root-only receipt
+`/root/bron-secrets/t24-delta-inventory-receipt.json` и одноимённый log сохранены.
+Сами 225s не доказывают медленную БД: client deadline не отменяет backend query,
+а очередной rollback мог дополнительно ждать. T24 повторять нельзя.
+
+Координатор выполнил ТОЧНУЮ augmented projection + ORDER BY/LIMIT на настоящем
+source через Supabase MCP в READ ONLY с SET LOCAL statement_timeout=8000.
+Получены только агрегаты:2975 rows, value_bytes1828780, field_bytes1971596.
+Запрос прошёл; текущих audit sessions/блокировщиков нет. Это не измерение VPS wire.
+Отсутствующие FK indexes/RLS performance advisories не объясняют этот full scan;
+schema/index changes для устранения данного отказа не выполнялись.
+
+T25 подготовлен, НЕ исполнен: один bounded probe канонического source TLS
+через5432,6543, затем существующий reverse15432. Каждый путь максимум10s,
+реальный READ ONLY/identity и1MiB dummy-response; вывод только status/bytes/time.
+Полный inventory разрешён только после PASS пути. Секрет/CA callback прежний,
+защищённые файлы и factory не меняются.6543 только для read-only транзакции,
+не для freeze/control. В audit BEGIN теперь SET LOCAL statement_timeout=30000;
+при client timeout собственный stream закрывается, новый rollback не зависает.
+Native PG17.12/real pg8.23.1 PASS,12 focused tests PASS, fixture удалён.
+Manifest `payloads/t25-sha256.json`; source-freeze/публикация не разрешены.
+
+T21 restore и T19 owner-confirmed delivery сохраняют PASS. T22 новый schedule
+ещё PENDING_OBSERVATION. Оставшиеся freeze/final audit/телефон не позволяют
+достоверно обещать public release до полуночи по Москве; проверки не ослабляются.
+
 ## T23 BLOCKED; T24 исправляет driver coverage и безопасную диагностику — 13.11.2026
 
 T23 bundle/pins/SSH/preflight PASS; один readonly запуск exit2 на

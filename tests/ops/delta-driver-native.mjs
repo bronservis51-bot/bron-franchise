@@ -57,8 +57,9 @@ async function main(){
     const verify=async db=>{
       const actual=(await db.query(`SELECT current_database() AS db,current_user AS role,
         current_setting('transaction_read_only') AS mode,current_setting('transaction_isolation') AS isolation,
+        current_setting('statement_timeout') AS statement_timeout,
         host(inet_server_addr()) AS address,inet_server_port() AS port`)).rows[0];
-      assert.deepEqual(actual,{db:'postgres',role:'postgres',mode:'on',isolation:'repeatable read',address:'127.0.0.1',port:5432});
+      assert.deepEqual(actual,{db:'postgres',role:'postgres',mode:'on',isolation:'repeatable read',statement_timeout:'30s',address:'127.0.0.1',port:5432});
       identityChecks++;
     };
     const sourceContext={},targetContext={};
@@ -102,16 +103,16 @@ async function main(){
     });
     const failedOrdinal=failureContext.failure.ordinal;
     await new Promise(resolve=>setTimeout(resolve,200));
-    await observedTimeout.query('ROLLBACK');
+    await assert.rejects(observedTimeout.query('ROLLBACK'),error=>['PG_CONNECTION_NOT_QUERYABLE','PG_CLIENT_CLOSED'].includes(safeFailure(error).code));
     assert.equal(failureContext.last.operation,'rollback');
     assert.equal(failureContext.failure.ordinal,failedOrdinal);
     assert.equal(failureContext.failure.operation,'metadata');
     assert.equal(failureContext.failure.code,'PG_QUERY_READ_TIMEOUT');
     assert.equal(Object.hasOwn(failureContext.failure,'message'),false);
-    console.log(JSON.stringify({status:'PASS',scope:'REAL_PG_DRIVER_T24_SYNTHETIC_ONLY',serverVersion:version,driver:'pg 8.23.1',
+    console.log(JSON.stringify({status:'PASS',scope:'REAL_PG_DRIVER_T25_SYNTHETIC_ONLY',serverVersion:version,driver:'pg 8.23.1',
       tables:source.tables.size,rawNameArrayIsString:true,fixedTextArrayIsArray:true,unchangedAuditorCaptureExact:true,
       actualReadOnlyRepeatableReadIdentityVerified:true,losslessDifferenceVerified:true,duplicateAwareMultisetVerified:true,
-      realDriverCodelessTimeoutClassified:true,rollbackPreservesFailureContext:true,noRowValuesOrFingerprintsPrinted:true,
+      realDriverCodelessTimeoutClassified:true,failedClientDisconnected:true,localServerDeadlineVerified:true,rollbackPreservesFailureContext:true,noRowValuesOrFingerprintsPrinted:true,
       inventoryComplete:true,finalFreezeAudit:false}));
   }finally{await Promise.allSettled([reader.end(),writer.end(),timeoutReader.end()]);}
 }

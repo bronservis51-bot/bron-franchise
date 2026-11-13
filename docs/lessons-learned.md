@@ -1,5 +1,17 @@
 # Ошибки и правила против их повторения
 
+## 13.11.2026 — client timeout не доказывает медленный PostgreSQL
+
+- pg query_timeout ограничивает ожидание клиента, но не отменяет запрос сервера.
+  Rollback за зависшим запросом может ждать ещё один такой интервал. Сохранить
+  первый безопасный context и закрыть только собственный failed stream.
+- PGOPTIONS через pooler не считать доказанным statement_timeout: устанавливать
+  SET LOCAL внутри фактической read-only транзакции и проверять нативно.
+- Сначала отделить серверную работу от передачи большого ответа: точная projection
+  с агрегатом bytes/count на source, затем bounded known dummy bulk через VPS.
+  Канонический прямой TLS6543 пригоден для одного readonly transaction snapshot,
+  но не становится автоматически подходящим для session-bound freeze/control.
+
 ## 13.11.2026 — PostgreSQL native proof должен включать рабочий драйвер
 
 - Psql→JSON bridge подтверждает SQL, но меняет типизацию ответа: name[] становится

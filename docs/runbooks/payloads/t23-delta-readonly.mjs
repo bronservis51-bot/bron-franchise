@@ -1,4 +1,4 @@
-// T24 corrected read-only planner. Separate live snapshots are NOT the final freeze audit.
+// T25 source route probe and read-only planner. Never treat live snapshots as a freeze audit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,8 +55,18 @@ export function observeQueries(db,side,context){
       text.includes('from pg_class c join pg_namespace')?'table_list':text.includes('from pg_sequences')?'sequence_list':'metadata';
     const step={side,ordinal:++ordinal,operation,...(table?{object:table[1]+'.'+table[2]}:sequence?{object:sequence[1]+'.'+sequence[2]}:{})};
     const start=Date.now();context.last=step;
-    try{return await db.query(sql,...args);}
-    catch(error){if(!context.failure)context.failure={...step,elapsedMs:Date.now()-start,...safeFailure(error)};throw error;}
+    try{
+      const result=await db.query(sql,...args);
+      // Enforce on the selected backend; a transaction pooler may ignore startup PGOPTIONS.
+      if(operation==='begin_readonly')await db.query("SET LOCAL statement_timeout='30000'");
+      return result;
+    }catch(error){
+      if(!context.failure)context.failure={...step,elapsedMs:Date.now()-start,...safeFailure(error)};
+      // Client deadlines do not cancel PostgreSQL work. Disconnect our own client so
+      // the auditor cannot queue another timed-out rollback behind the stalled read.
+      if(safeFailure(error).code==='PG_QUERY_READ_TIMEOUT')db.connection?.stream?.destroy();
+      throw error;
+    }
   }};
 }
 
@@ -143,7 +153,7 @@ export function inventoryReport(source,target,audit){
 }
 
 async function main(){let source,target,phase='runtime';const context={};
-  const deadline=setTimeout(()=>{console.error('T24_BLOCKED',JSON.stringify({phase,code:'DEADLINE_EXCEEDED',query:context.failure??context.last??null}));process.exit(2);},240000);deadline.unref();
+  const deadline=setTimeout(()=>{console.error('T25_BLOCKED',JSON.stringify({phase,code:'DEADLINE_EXCEEDED',query:context.failure??context.last??null}));process.exit(2);},240000);deadline.unref();
   try{
     if(process.argv.length!==2)fail('DELTA_NO_ARGUMENTS_EXPECTED');
     execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
@@ -169,7 +179,12 @@ async function main(){let source,target,phase='runtime';const context={};
     url.password=encodeURIComponent(values.POSTGRES_PASSWORD);assertMigrationTarget(url.href);
     target=new pg.Client({...databaseConfig(url.href,{BRON_DB_ALLOW_LOCAL_PLAIN:'1'}),
       options:'-c default_transaction_read_only=on -c statement_timeout=30000',query_timeout:60000});
-    source=new pg.Client(sourceConfig);
+    phase='source-route-probe';
+    const {chooseSourceRoute}=await import(new URL('./t25-source-route.mjs',import.meta.url));
+    const route=await chooseSourceRoute({sourceConfig,Client:pg.Client});
+    console.log('T25_SOURCE_ROUTES',JSON.stringify({selectedRoute:route.selectedRoute,diagnostics:route.diagnostics}));
+    if(!route.config)fail('DELTA_NO_VERIFIED_SOURCE_ROUTE');
+    source=new pg.Client({...route.config,query_timeout:60000});
     // Never let an idle network error print an unredacted pg error object.
     source.on('error',()=>{});target.on('error',()=>{});
     await source.connect();await target.connect();
@@ -181,8 +196,8 @@ async function main(){let source,target,phase='runtime';const context={};
       if(side==='target'&&(!addresses.includes(row.address)||row.port!==5432||row.cron!=='off'||row.net!=='0'))fail('DELTA_TARGET_ISOLATION');};
     phase='source-readonly-snapshot';const a=await captureInventory(observeQueries(source,'source',context),audit,verify('source'));
     phase='target-readonly-snapshot';const b=await captureInventory(observeQueries(target,'target',context),audit,verify('target'));
-    phase='safe-difference-counts';console.log('T24_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
-  }catch(error){console.error('T24_BLOCKED',JSON.stringify({phase,...safeFailure(error),query:context.failure??context.last??null}));process.exitCode=2;}
+    phase='safe-difference-counts';console.log('T25_DELTA_INVENTORY',JSON.stringify(inventoryReport(a,b,audit)));
+  }catch(error){console.error('T25_BLOCKED',JSON.stringify({phase,...safeFailure(error),query:context.failure??context.last??null}));process.exitCode=2;}
   finally{await Promise.allSettled([source?.end(),target?.end()]);clearTimeout(deadline);}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

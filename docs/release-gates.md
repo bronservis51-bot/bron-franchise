@@ -1,6 +1,6 @@
 # Допуск к рабочему релизу
 
-Актуально на **13.11.2026: T21 restore PASS, T22 merged, T23 readonly inventory BLOCKED**. Прежнее приложение работает,
+Актуально на **13.11.2026: T21 restore PASS, T22 merged, T24 source timeout, T25 подготовлен**. Прежнее приложение работает,
 российский релиз **ещё не допущен**. Целевая база восстановлена и изолирована;
 на трёх новых доменах работают DNS и доверенный HTTPS со страницей обслуживания
 503. Это не публикация приложения или API.
@@ -34,9 +34,9 @@
 Полные T12 audit/Auth/RLS, пять комплектов T14, HTTPS/status T18,
 owner-confirmed Telegram delivery T19 и cold restore T21 уже PASS.
 T22 cron-only PR14 merged; новый scheduled run остаётся PENDING_OBSERVATION.
-T23 readonly inventory завершился exit2 до получения дельты; причина source-отказа
-не установлена. T24 исправляет подтверждённый отдельный driver bug и безопасную
-диагностику. Нельзя повторять закрытые builds/restore/Telegram setup.
+T24 установил client timeout при чтении public.daily_revenue; дельта пока не
+получена. Точная source projection под серверным лимитом8s проходит; T25
+проверяет защищённый маршрут и объём передачи перед одним полным чтением. Нельзя повторять закрытые builds/restore/Telegram setup.
 Остались фактическая дельта, устойчивое закрытие source-записи с проверенным
 возвратом, финальный audit, закрытая приёмка и public switch. Источник пока
 не изменён; preview не применён; российские сайты/API остаются maintenance503.
