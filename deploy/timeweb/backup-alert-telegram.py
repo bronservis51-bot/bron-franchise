@@ -51,10 +51,11 @@ def read_config(path):
     return config['token'], str(int(config['chat_id']))
 
 
-def send(token, chat_id):
+def send(token, chat_id, *, test=False):
     now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-    text = ('Тревога «Бронь Сервис»: проверка сервера или резервной копии завершилась ошибкой. '
-            'Требуется проверить состояние сервера.\nВремя: ' + now)
+    text = (('«Бронь Сервис»: тестовое уведомление через GitHub Actions.\nВремя: ' if test else
+             'Тревога «Бронь Сервис»: проверка сервера или резервной копии завершилась ошибкой. '
+             'Требуется проверить состояние сервера.\nВремя: ') + now)
     request = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage',
         data=json.dumps({'chat_id': chat_id, 'text': text}, ensure_ascii=False).encode('utf-8'),
         headers={'Content-Type': 'application/json', 'Accept': 'application/json'}, method='POST')

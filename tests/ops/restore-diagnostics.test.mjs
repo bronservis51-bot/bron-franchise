@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -136,4 +136,28 @@ test('missing or duplicate native DATABASE definition fails instead of attemptin
   assert.throws(()=>partitionArchiveToc('3463; 0 0 DATABASE PROPERTIES - postgres qa_owner'),/CREATE_DATABASE_ARCHIVE_REQUIRED/);
   assert.throws(()=>partitionArchiveToc('1; 1262 5 DATABASE - postgres qa_owner\n2; 1262 5 DATABASE - postgres qa_owner'),
     /CREATE_DATABASE_ARCHIVE_REQUIRED/);
+});
+test('existing pg_catalog is validated without triggering reserved-name CREATE or redundant ALTER',async()=>{
+  const calls=[];
+  const db={async query(sql){calls.push(sql);if(!sql.startsWith('SELECT'))throw new Error('unexpected DDL');
+    return {rows:[{owner:'supabase_admin'}]};}};
+  await ensureRestoreSchema(db,'pg_catalog','supabase_admin');
+  assert.equal(calls.length,2);
+  assert.equal(calls.every(sql=>sql.startsWith('SELECT')),true);
+});
+test('existing namespace ownership is corrected only when needed and then verified',async()=>{
+  let owner='postgres';const calls=[];
+  const db={async query(sql){calls.push(sql);if(sql.startsWith('ALTER SCHEMA'))owner='supabase_admin';
+    return {rows:sql.startsWith('SELECT')?[{owner}]:[]};}};
+  await ensureRestoreSchema(db,'extensions','supabase_admin');
+  assert.equal(owner,'supabase_admin');
+  assert.equal(calls.filter(sql=>sql.startsWith('ALTER SCHEMA')).length,1);
+  assert.equal(calls.some(sql=>sql.startsWith('CREATE SCHEMA')),false);
+});
+test('missing builtin namespace fails before any CREATE and unknown diagnostic names stay private',async()=>{
+  const calls=[];const db={async query(sql){calls.push(sql);return{rows:[]};}};
+  await assert.rejects(ensureRestoreSchema(db,'pg_catalog','supabase_admin'),/BUILTIN_SCHEMA_MISSING/);
+  assert.equal(calls.some(sql=>sql.startsWith('CREATE')),false);
+  assert.deepEqual(safeExtensionMetadata({name:'private_customer_name',version:'private-secret',
+    schema:'private_customer_schema',owner:'private_person'}),{name:'OTHER',version:'OTHER',schema:'OTHER',owner:'OTHER'});
 });

@@ -16,4 +16,5 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/root/bron-secrets
+ReadWritePaths=/opt/bron/supabase/docker/bron/site/status
 

@@ -227,6 +227,18 @@ init/roles. Архив сохраняет фактические Compose files, 
 DB/Auth/REST/Storage/Envoy и работающий web. Он обнаруживает остановку backup
 timer даже без нового запуска копирования; его собственную остановку — нет.
 
+Для независимой HTTPS-проверки watchdog атомарно публикует только `checked_at`,
+`last_backup_utc` и `healthy` в `bron/site/status/bron-health.json`; ошибка проверки
+записывает `healthy=false`. Перед установкой обновлённого watchdog создать каталог
+`/opt/bron/supabase/docker/bron/site/status` с владельцем root и режимом 0700.
+Единственный внешний путь — `https://api.bronservis.ru/.well-known/bron-health.json`:
+maintenance и закрытый preview отвечают JSON с HTTP503, production — HTTP200.
+Все остальные ограничения maintenance/preview сохраняются. `check-availability.mjs`
+принимает 503 только для этого JSON, требует свежесть проверки ≤25 минут и копии
+≤70 минут, допускает рассогласование часов не более минуты. Остальные проверки
+приложения при maintenance по-прежнему проваливаются. Подключение workflow и его
+расписания выполняется отдельно; наличие этого кода не подтверждает доставку тревог.
+
 Транспорт тревоги задаётся отдельным root-owned executable 0700
 `/root/bron-secrets/backup-alert`: получает один фиксированный аргумент
 `BRON_TARGET_BACKUP_OR_HEALTH_FAILURE`, секреты доставки хранит отдельно и не
@@ -239,10 +251,9 @@ Telegram: установить `backup-alert-telegram.py` как `/root/bron-sec
 (root0700), конфигурацию `{token,chat_id}` — в `telegram-alert.json` рядом (root0600).
 После создания бота и `/start` выполнить `target-backup.py --alert` и подтвердить получение.
 
-Альтернатива при недоступности Telegram с VPS — подготовленный `backup-alert-github.py`:
-он ставит фиксированный `availability.yml` в очередь; HTTP204 ещё не подтверждает доставку.
-Включение требует отдельного согласования PAT выбранного repo с Actions read/write,
-GitHub secrets и реального Telegram-получения; подготовка кода ничего не активирует.
+Ранее подготовленный `backup-alert-github.py` отправляет workflow dispatch и требует
+отдельного PAT. Для HTTPS-проверки публичного статуса этот relay и PAT не нужны;
+ни HTTP204 dispatch, ни успешная проверка статуса не подтверждают Telegram-доставку.
 
 ## Переключение и старые адреса
 

@@ -13,6 +13,15 @@ const fail=code=>{throw Object.assign(new Error(code),{code});};
 const env={PATH:'/usr/bin:/bin',HOME:'/root',LANG:'C.UTF-8',LC_ALL:'C.UTF-8'};
 let phase='guards', ownId, socket, primary, restored;
 const marker=randomUUID().replaceAll('-','');
+const standardSchemas=new Set(['pg_catalog','pg_toast','information_schema','public','extensions','vault',
+  'cron','net','auth','storage','app_private','realtime','supabase_functions','graphql','graphql_public']);
+const standardExtensions=new Set(['pg_cron','pg_net','pg_stat_statements','pg_trgm','pgcrypto','plpgsql','supabase_vault','uuid-ossp']);
+const standardOwners=new Set(['supabase_admin','postgres','pg_database_owner']);
+const schemaLabel=name=>standardSchemas.has(name)?name:'OTHER';
+const extensionLabel=name=>standardExtensions.has(name)?name:'OTHER';
+export function safeExtensionMetadata(e){return {name:extensionLabel(e.name),
+  version:/^\d+(?:[.-]\d+)*(?:[a-z]+\d*)?$/.test(e.version)?e.version:'OTHER',
+  schema:schemaLabel(e.schema),owner:standardOwners.has(e.owner)?e.owner:'OTHER'};}
 export function classifyRestoreFailure(text) {
   const headline=text.match(/ERROR:\s+(?:([0-9A-Z]{5}):\s*)?([^\r\n]*)/i);
   const message=headline?.[2]??'';
@@ -153,6 +162,22 @@ export async function databaseState(db) {
       ORDER BY provider COLLATE "C",label COLLATE "C"`)).rows;
     await db.query('ROLLBACK');return {metadata,acl,labels};
   }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error;}
+}
+export async function ensureRestoreSchema(db,name,owner) {
+  const label=schemaLabel(name);
+  const inspect=async()=>(await db.query('SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=$1',[name])).rows[0];
+  phase='inspect-schema-'+label;
+  const existing=await inspect();
+  if(!existing){
+    if(name.startsWith('pg_')||name==='information_schema')fail('REHEARSAL_BUILTIN_SCHEMA_MISSING');
+    phase='create-schema-'+label;
+    await db.query('CREATE SCHEMA '+sqlIdent(name)+' AUTHORIZATION '+sqlIdent(owner));
+  }else if(existing.owner!==owner){
+    phase='restore-schema-owner-'+label;
+    await db.query('ALTER SCHEMA '+sqlIdent(name)+' OWNER TO '+sqlIdent(owner));
+  }
+  phase='verify-schema-owner-'+label;
+  if((await inspect())?.owner!==owner)fail('REHEARSAL_SCHEMA_OWNER_MISMATCH');
 }
 function run(binary,args,{input,timeout=30000,diagnose=false}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
@@ -396,8 +421,7 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     if(prepared.has(name))return;
     const ns=namespaces.find(n=>n.name===name);if(!ns)fail('REHEARSAL_SCHEMA_METADATA_MISSING');
     if(archiveSchemas.has(name)&&archiveSchemas.get(name)!==ns.owner)fail('REHEARSAL_ARCHIVED_SCHEMA_OWNER_MISMATCH');
-    await restored.query('CREATE SCHEMA IF NOT EXISTS '+sqlIdent(name)+' AUTHORIZATION '+sqlIdent(ns.owner));
-    await restored.query('ALTER SCHEMA '+sqlIdent(name)+' OWNER TO '+sqlIdent(ns.owner));prepared.add(name);
+    await ensureRestoreSchema(restored,name,ns.owner);prepared.add(name);
   }
   for(const entry of selected.administrativeCreates){
     if(entry.kind==='SCHEMA')await schema(entry.name);
@@ -405,9 +429,10 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   }
   // Only duplicate administrative CREATE entries are omitted. Every data,
   // routine, trigger, policy, constraint, owner/ACL and sequence entry remains.
+  phase='drop-builtin-extension-plpgsql';
   await restored.query('DROP EXTENSION IF EXISTS plpgsql');
   const dependencies=[];
-  for(const e of manifest.metadata.extensions){const row=(await restored.query(
+  for(const e of manifest.metadata.extensions){phase='inspect-extension-version-'+extensionLabel(e.name);const row=(await restored.query(
     'SELECT requires FROM pg_available_extension_versions WHERE name=$1 AND version=$2',[e.name,e.version])).rows[0];
     if(!row)fail('REHEARSAL_EXTENSION_VERSION_UNAVAILABLE');
     for(const required of row.requires??[])dependencies.push({name:e.name,required});}
@@ -416,8 +441,11 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     const i=pending.findIndex(e=>dependencies.filter(d=>d.name===e.name).every(d=>created.has(d.required)));
     if(i<0)fail('REHEARSAL_EXTENSION_DEPENDENCY_CYCLE');
     const [e]=pending.splice(i,1);await schema(e.schema);
+    console.log('T18_EXTENSION_BOOTSTRAP',JSON.stringify(safeExtensionMetadata(e)));
+    phase='activate-extension-owner-'+extensionLabel(e.name);
     await restored.query('SET ROLE '+sqlIdent(e.owner));
-    try{await restored.query('CREATE EXTENSION '+sqlIdent(e.name)+' WITH SCHEMA '+sqlIdent(e.schema)+' VERSION '+sqlLiteral(e.version));}
+    try{phase='create-extension-'+extensionLabel(e.name);
+      await restored.query('CREATE EXTENSION '+sqlIdent(e.name)+' WITH SCHEMA '+sqlIdent(e.schema)+' VERSION '+sqlLiteral(e.version));}
     finally{await restored.query('RESET ROLE');}
     created.add(e.name);
   }

@@ -1,9 +1,30 @@
-# TLS preparation only. No site files or backend endpoints are served.
+# TLS preparation only. Only the sanitized watchdog JSON is readable.
 bronservis.ru, app.bronservis.ru, api.bronservis.ru {
+	@health {
+		host api.bronservis.ru
+		path /.well-known/bron-health.json
+		method GET HEAD
+	}
 	header {
 		Cache-Control "no-store"
 		Retry-After "600"
 		X-Content-Type-Options "nosniff"
 	}
-	respond "Техническое обслуживание. Попробуйте позже." 503
+	route {
+		handle @health {
+			route {
+				root * /srv/status
+				rewrite * /bron-health.json
+				header Content-Type application/json
+				file_server {
+					status 503
+					pass_thru
+				}
+				respond 503
+			}
+		}
+		handle {
+			respond "Техническое обслуживание. Попробуйте позже." 503
+		}
+	}
 }

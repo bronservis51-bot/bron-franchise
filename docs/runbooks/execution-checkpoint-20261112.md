@@ -3,6 +3,36 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T17: создание БД пройдено; reserved schema и подготовка мониторинга — 13.11.2026
+
+Full run завершился exit 2 за 10 секунд: globals/preloads и native DB creation
+пройдены; bootstrap схем/расширений остановлен SQLSTATE42939. На настоящем PG17
+воспроизведён точный отказ `CREATE SCHEMA IF NOT EXISTS pg_catalog`, хотя схема
+существует. T18 сначала читает pg_namespace, создаёт лишь отсутствующие обычные
+схемы, меняет owner только при расхождении и проверяет результат. Добавлены
+точные whitelisted фазы и технические extension metadata. 20 ops tests PASS.
+Полный Supabase17.11 fixture в облаке НЕ выполнен: Docker VFS не распаковал образ
+по лимиту места; повторных pull/prune не делали. Проверка полного восстановления
+остаётся на уже имеющемся exact VPS image; gate пока НЕ PASS.
+
+Source/production без изменений, контейнер/socket репетиции удалены, timers и
+freshness/watchdog PASS, три hostname HTTPS503/TLS0. Токен проверен отдельно:
+[43458395170](https://github.com/bronservis51-bot/bron-franchise/actions/runs/43458395170)
+дал TELEGRAM_BOT_TOKEN_VALID, Send SKIPPED. Владелец разрешил также
+BRON_TELEGRAM_CHAT_ID; secret ещё отсутствует. AUX helper подтвердил бота, но
+получил ноль уникальных private /start. При действующей Telegram-сессии исполнитель
+может отправить /start тому же @BronServisBackupHealthBot и продолжить настройку;
+пустой getUpdates не доказывает необходимость личного входа/MFA.
+
+Подготовлен pull-monitor без PAT/SSH-secret на VPS: watchdog пишет только
+checked_at/last_backup_utc/healthy, Caddy отдаёт один точный HTTPS path с HTTP503
+в maintenance/preview и HTTP200 в production. Остальные app/API остаются закрыты.
+18 Python + 6 Node tests, real Caddy2.11.8 validate/32 loopback checks и Compose
+isolation PASS. Это подготовка, ещё не установка/доставка/активное расписание
+GitHub main. Сам `--backup` не обновляет heartbeat watchdog. Изменения не требуют
+переноса bot token на VPS или нового GitHub PAT. Manual alert имеет явный текст
+тестового уведомления; отсутствие credentials считается ошибкой отправки.
+
 ## T16: архив прочитан; исправляется выбранное оглавление — 13.11.2026
 
 Один full run завершился exit 2 за 10 секунд. Globals, точные preloads, полная

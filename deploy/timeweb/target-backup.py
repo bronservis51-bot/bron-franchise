@@ -25,6 +25,7 @@ HERE = Path(__file__).resolve().parent
 WORKDIR = Path('/opt/bron/supabase/docker')
 STORAGE = WORKDIR / 'volumes/storage'
 STATE = Path('/root/bron-secrets/target-backup.state.json')
+PUBLIC_STATUS = WORKDIR / 'bron/site/status/bron-health.json'
 ALERT = Path('/root/bron-secrets/backup-alert')
 DOCKER = ['/usr/bin/docker', '--host', 'unix:///var/run/docker.sock']
 ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8'}
@@ -324,7 +325,36 @@ def check_age():
     print(json.dumps({'status': 'TARGET_BACKUP_FRESH', 'maximum_age_seconds': 4200}))
 
 
-def check_health():
+def publish_health_status(healthy):
+    directory = PUBLIC_STATUS.parent
+    info = directory.lstat()
+    if (directory.resolve() != directory or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid() or info.st_mode & 0o077):
+        raise BackupError('TARGET_PUBLIC_STATUS_DIRECTORY_UNSAFE')
+    last = None
+    try:
+        parsed = datetime.datetime.fromisoformat(s3.read_private_json(STATE)['last_success_utc'])
+        if parsed.tzinfo is None:
+            raise ValueError()
+        last = parsed.astimezone(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
+    except (OSError, ValueError, TypeError, KeyError, BackupError):
+        healthy = False
+    record = {'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z'),
+              'last_backup_utc': last, 'healthy': bool(healthy)}
+    temporary = directory / ('.bron-health.' + uuid.uuid4().hex)
+    try:
+        source.private_file(temporary, (json.dumps(record, separators=(',', ':')) + '\n').encode())
+        os.replace(temporary, PUBLIC_STATUS)
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _health_checks():
     check_age()
     if shutil.disk_usage(s3.BACKUP_ROOT).free < 2 * 1024 ** 3:
         raise BackupError('TARGET_DISK_HEADROOM_REQUIRED')
@@ -345,6 +375,16 @@ def check_health():
     if len(names) != 1 or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,100}', names[0]):
         raise BackupError('TARGET_WEB_SERVICE_MISSING_OR_AMBIGUOUS')
     inspect(names[0])
+
+
+def check_health():
+    healthy = False
+    try:
+        _health_checks()
+        healthy = True
+    finally:
+        # Only a completed watchdog check publishes a heartbeat; backups never do.
+        publish_health_status(healthy)
     print(json.dumps({'status': 'TARGET_HEALTH_CHECK_PASSED'}))
 
 

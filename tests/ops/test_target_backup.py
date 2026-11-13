@@ -170,6 +170,7 @@ class TargetBackupSafetyTests(unittest.TestCase):
         with mock.patch.object(backup.sys, 'argv', ['target-backup.py', '--check-health']), \
              mock.patch.object(backup.s3, 'runtime_guard'), \
              mock.patch.object(backup, 'check_age', side_effect=backup.BackupError('TARGET_BACKUP_STALE')), \
+             mock.patch.object(backup, 'publish_health_status'), \
              mock.patch.object(backup, 'backup') as run:
             with self.assertRaisesRegex(backup.BackupError, 'STALE'):
                 backup.main()
@@ -177,6 +178,7 @@ class TargetBackupSafetyTests(unittest.TestCase):
 
     def test_watchdog_detects_low_memory_before_container_queries(self):
         with mock.patch.object(backup, 'check_age'), \
+             mock.patch.object(backup, 'publish_health_status'), \
              mock.patch.object(backup.shutil, 'disk_usage', return_value=mock.Mock(free=3 * 1024 ** 3)), \
              mock.patch.object(backup.Path, 'read_text', return_value='MemAvailable: 1000 kB\n'), \
              mock.patch.object(backup, 'inspect') as inspect:
@@ -186,11 +188,73 @@ class TargetBackupSafetyTests(unittest.TestCase):
 
     def test_watchdog_detects_unhealthy_service(self):
         with mock.patch.object(backup, 'check_age'), \
+             mock.patch.object(backup, 'publish_health_status'), \
              mock.patch.object(backup.shutil, 'disk_usage', return_value=mock.Mock(free=3 * 1024 ** 3)), \
              mock.patch.object(backup.Path, 'read_text', return_value='MemAvailable: 1000000 kB\n'), \
              mock.patch.object(backup, 'inspect', return_value={'State': {'Health': {'Status': 'unhealthy'}}}):
             with self.assertRaisesRegex(backup.BackupError, 'SERVICE_UNHEALTHY'):
                 backup.check_health()
+
+
+class PublicHealthStatusTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.path = Path(self.temporary.name) / 'bron-health.json'
+        patch = mock.patch.object(backup, 'PUBLIC_STATUS', self.path)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.last = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        patch = mock.patch.object(backup.s3, 'read_private_json', return_value={
+            'last_success_utc': self.last, 'private_path': '/must-not-escape', 'token': 'PRIVATE_SENTINEL'})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_only_three_public_fields_are_atomically_published(self):
+        backup.publish_health_status(True)
+        body = json.loads(self.path.read_text())
+        self.assertEqual(set(body), {'checked_at', 'last_backup_utc', 'healthy'})
+        self.assertIs(body['healthy'], True)
+        self.assertEqual(body['last_backup_utc'], self.last.replace('+00:00', 'Z'))
+        self.assertNotIn('PRIVATE', self.path.read_text())
+        self.assertNotIn('/must-not-escape', self.path.read_text())
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
+    def test_failed_watchdog_replaces_previous_success_without_hiding_failure(self):
+        backup.publish_health_status(True)
+        with mock.patch.object(backup, '_health_checks', side_effect=backup.BackupError('SYNTHETIC_FAILURE')):
+            with self.assertRaisesRegex(backup.BackupError, 'SYNTHETIC_FAILURE'):
+                backup.check_health()
+        body = json.loads(self.path.read_text())
+        self.assertIs(body['healthy'], False)
+        self.assertNotIn('SYNTHETIC', self.path.read_text())
+        with mock.patch.object(backup, '_health_checks'), mock.patch('sys.stdout', new_callable=io.StringIO):
+            backup.check_health()
+        self.assertIs(json.loads(self.path.read_text())['healthy'], True)
+
+    def test_unreadable_or_invalid_backup_timestamp_cannot_publish_healthy(self):
+        for state in ({'last_success_utc': 'PRIVATE_SENTINEL'}, {'last_success_utc': '2026-11-13'}, {}):
+            with self.subTest(state=state), mock.patch.object(backup.s3, 'read_private_json', return_value=state):
+                backup.publish_health_status(True)
+                self.assertEqual(json.loads(self.path.read_text())['last_backup_utc'], None)
+                self.assertIs(json.loads(self.path.read_text())['healthy'], False)
+                self.assertNotIn('PRIVATE', self.path.read_text())
+
+    def test_interrupted_publish_keeps_previous_complete_file_and_unsafe_directory_is_rejected(self):
+        backup.publish_health_status(True)
+        previous = self.path.read_bytes()
+        def fail(path, _data):
+            path.write_bytes(b'partial')
+            raise backup.BackupError('SYNTHETIC_WRITE_FAILURE')
+        with mock.patch.object(backup.source, 'private_file', side_effect=fail):
+            with self.assertRaisesRegex(backup.BackupError, 'SYNTHETIC_WRITE_FAILURE'):
+                backup.publish_health_status(False)
+        self.assertEqual(self.path.read_bytes(), previous)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+        self.path.parent.chmod(0o755)
+        with self.assertRaisesRegex(backup.BackupError, 'DIRECTORY_UNSAFE'):
+            backup.publish_health_status(True)
 
 
 if __name__ == '__main__':

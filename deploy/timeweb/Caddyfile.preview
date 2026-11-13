@@ -47,8 +47,27 @@ bronservis.ru {
 
 api.bronservis.ru {
 	@outsidePreview expression `!remote_ip({$BRON_PREVIEW_ALLOWED_IPS})`
+	@health {
+		path /.well-known/bron-health.json
+		method GET HEAD
+	}
 	@clientAPI path /auth/v1/* /rest/v1/* /storage/v1/*
 	route {
+		handle @health {
+			route {
+				root * /srv/status
+				rewrite * /bron-health.json
+				header {
+					Cache-Control no-store
+					Content-Type application/json
+				}
+				file_server {
+					status 503
+					pass_thru
+				}
+				respond 503
+			}
+		}
 		import preview_gate
 		handle @clientAPI {
 			reverse_proxy api-gw:8000

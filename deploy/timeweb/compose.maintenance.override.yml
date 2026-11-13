@@ -9,6 +9,7 @@ services:
       - "443:443/udp"
     volumes: !override
       - ./bron/Caddyfile.maintenance:/etc/caddy/Caddyfile:ro
+      - ./bron/site/status:/srv/status:ro
       - bron-caddy-data:/data
       - bron-caddy-config:/config
     networks: !override
