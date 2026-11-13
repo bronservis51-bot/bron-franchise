@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Limited-key setup, explicit throwaway probe and migration-only S3 upload.
+"""Limited-key setup, throwaway probe and encrypted migration/target S3 upload.
 
-Only existing encrypted source/supplement artifacts and their metadata manifest
-are uploaded. No scheduler, bucket/ACL operations, multipart or backup deletion.
+Only validated encrypted artifacts and their metadata manifest are uploaded.
+No scheduler, bucket/ACL operations, multipart or backup deletion.
 """
 import argparse
 import contextlib
@@ -42,6 +42,11 @@ SOURCE_FILES = frozenset(name + ".zst.age" for name in (
     "roles.sql", "schema.sql", "data.sql", "raw-schema-archive.sql",
     "vault-ciphertext.sql", "managed-migration-versions.sql", "vault-logical.csv"))
 SUPPLEMENT_FILES = frozenset({"managed-metadata.json.zst.age"})
+TARGET_FILES = frozenset({"database.dump.zst.age", "roles.sql.zst.age",
+    "vault-logical.csv.zst.age", "config.tar.zst.age", "storage.tar.zst.age"})
+TARGET_PERIODS = frozenset({"hourly", "daily", "monthly"})
+TARGET_MISSING = frozenset({"isolated_target_restore_not_verified",
+    "independent_key_custody_not_verified", "concurrent_storage_overwrite_not_verified"})
 PROBE_PATTERN = r"migration/probe-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{32}/permission-probe\.txt"
 
 
@@ -165,7 +170,7 @@ def operation_lock():
         yield
 
 
-def guard_request(request, allow_probe_delete=False):
+def guard_request(request, allow_probe_delete=False, allow_target=False):
     try:
         url = urlsplit(request.url)
         path = unquote(url.path)
@@ -174,7 +179,11 @@ def guard_request(request, allow_probe_delete=False):
                  and url.port in (None, 443) and url.username is None and url.password is None
                  and not url.fragment and path in (f"/{BUCKET}", f"/{BUCKET}/")
                  and method == "GET")
-        if path.startswith(f"/{BUCKET}/migration/"):
+        migration = path.startswith(f"/{BUCKET}/migration/")
+        target = allow_target and re.fullmatch(
+            rf"/{BUCKET}/(?:hourly|daily|monthly)/target-[0-9]{{8}}T[0-9]{{6}}Z-[0-9a-f]{{32}}/"
+            r"(?:database\.dump\.zst\.age|roles\.sql\.zst\.age|vault-logical\.csv\.zst\.age|config\.tar\.zst\.age|storage\.tar\.zst\.age|manifest\.json)", path)
+        if migration or target:
             key = path[len(BUCKET) + 2:]
             valid = (url.scheme == "https" and url.hostname == "s3.twcstorage.ru"
                      and url.port in (None, 443) and not url.username and not url.password
@@ -182,7 +191,7 @@ def guard_request(request, allow_probe_delete=False):
             if method == "DELETE":
                 valid = (url.scheme == "https" and url.hostname == "s3.twcstorage.ru"
                          and url.port in (None, 443) and not url.username and not url.password
-                         and not url.fragment and allow_probe_delete
+                         and not url.fragment and allow_probe_delete and migration
                          and re.fullmatch(PROBE_PATTERN, key) is not None)
     except (ValueError, TypeError, AttributeError):
         valid = False
@@ -211,7 +220,7 @@ def sdk_modules():
     return boto3, Config
 
 
-def s3_client(value, allow_probe_delete=False):
+def s3_client(value, allow_probe_delete=False, allow_target=False):
     boto3, Config = sdk_modules()
     for name in list(os.environ):
         if name.startswith("AWS_"):
@@ -225,7 +234,7 @@ def s3_client(value, allow_probe_delete=False):
                                           retries={"total_max_attempts": 1, "mode": "standard"},
                                           s3={"addressing_style": "path"}, proxies={}))
     client.meta.events.register_first("before-send.s3",
-        lambda request, **_kwargs: guard_request(request, allow_probe_delete))
+        lambda request, **_kwargs: guard_request(request, allow_probe_delete, allow_target))
     client.meta.events.register_first("needs-retry.s3", no_redirect)
     client.meta.events.register_first("before-sign.s3.PutObject", conditional_put_header)
     return client
@@ -368,13 +377,17 @@ def probe(value, client):
             "backup_deleted": False}
 
 
-def upload(manifest_path, value, client):
+def require_probe(value):
     receipt = read_private_json(PROBE_RECEIPT)
     if (receipt.get("credential_sha256") != credential_fingerprint(value)
             or receipt.get("policy_sha256") != POLICY_SHA256
             or receipt.get("put_get_sha256_verified") is not True
             or receipt.get("delete_denied_403") is not True):
         raise BackupError("MATCHING_LIMITED_CREDENTIAL_PROBE_REQUIRED")
+
+
+def upload(manifest_path, value, client):
+    require_probe(value)
     if (not manifest_path.is_absolute() or manifest_path.name != "manifest.json"
             or manifest_path.parent.parent != BACKUP_ROOT
             or not re.fullmatch(r"(source|supplement)-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", manifest_path.parent.name)):
@@ -387,6 +400,60 @@ def upload(manifest_path, value, client):
     if (expected is None or manifest.get("format") != 1 or manifest.get("complete") is not False
             or manifest.get("source_project") != "vkkqffvmztpzgygzfxhq"):
         raise BackupError("SUPPORTED_INCOMPLETE_MIGRATION_MANIFEST_REQUIRED")
+    return upload_artifacts(manifest_path, manifest, expected, client,
+        run_prefix("source" if expected == SOURCE_FILES else "supplement"),
+        "MIGRATION_UPLOAD_READBACK_VERIFIED")
+
+
+def upload_target(manifest_path, value, client, period="hourly"):
+    require_probe(value)
+    if period not in TARGET_PERIODS:
+        raise BackupError("TARGET_BACKUP_PERIOD_INVALID")
+    if (not manifest_path.is_absolute() or manifest_path.name != "manifest.json"
+            or manifest_path.parent.parent != BACKUP_ROOT
+            or not re.fullmatch(r"target-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", manifest_path.parent.name)):
+        raise BackupError("EXPLICIT_TARGET_BACKUP_MANIFEST_REQUIRED")
+    private_directory(manifest_path.parent)
+    manifest = read_private_json(manifest_path)
+    required = {"format", "status", "complete", "target", "created_utc", "artifacts", "storage_objects"}
+    if (set(manifest) not in (required, required | {"metadata", "missing"})
+            or type(manifest.get("format")) is not int or manifest["format"] != 1
+            or manifest.get("status") != "target_backup_saved_restore_unverified"
+            or manifest.get("complete") is not False
+            or manifest.get("target") != "bron-franchise-russia"
+            or type(manifest.get("storage_objects")) is not int or manifest["storage_objects"] < 0
+            or manifest.get("created_utc") != manifest_path.parent.name[7:23]):
+        raise BackupError("SUPPORTED_TARGET_MANIFEST_REQUIRED")
+    if "metadata" in manifest:
+        metadata = manifest["metadata"]
+        patterns = {"database_image": r"sha256:[0-9a-f]{64}",
+                    "snapshot": r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+",
+                    "encryption_recipient": r"age1[0-9a-z]{40,100}"}
+        missing = manifest["missing"]
+        if (not isinstance(metadata, dict)
+                or set(metadata) != set(patterns) | {"postgres_version_num", "db_config_included", "storage_consistency"}
+                or type(metadata.get("postgres_version_num")) is not int or metadata["postgres_version_num"] != 170011
+                or metadata.get("db_config_included") is not True
+                or metadata.get("storage_consistency") != "stable_before_after"
+                or any(not isinstance(metadata.get(key), str)
+                       or re.fullmatch(pattern, metadata[key]) is None for key,pattern in patterns.items())
+                or not isinstance(missing, list) or len(missing) != len(TARGET_MISSING)
+                or any(not isinstance(item, str) for item in missing) or set(missing) != TARGET_MISSING):
+            raise BackupError("TARGET_METADATA_WHITELIST_REQUIRED")
+    try:
+        datetime.datetime.strptime(manifest["created_utc"], "%Y%m%dT%H%M%SZ")
+    except (ValueError, TypeError):
+        raise BackupError("TARGET_MANIFEST_TIME_INVALID") from None
+    entries = manifest.get("artifacts")
+    if (not isinstance(entries, list) or any(not isinstance(entry, dict)
+            or set(entry) != {"file", "bytes", "sha256"} for entry in entries)):
+        raise BackupError("TARGET_ARTIFACT_METADATA_INVALID")
+    prefix = f"{period}/target-{manifest['created_utc']}-{uuid.uuid4().hex}/"
+    return upload_artifacts(manifest_path, manifest, TARGET_FILES, client, prefix,
+                            "TARGET_UPLOAD_READBACK_VERIFIED", unversioned=True)
+
+
+def upload_artifacts(manifest_path, manifest, expected, client, prefix, status, unversioned=False):
     entries = manifest.get("artifacts")
     if (not isinstance(entries, list) or len(entries) != len(expected)
             or any(not isinstance(e, dict) or not isinstance(e.get("file"), str) for e in entries)
@@ -420,15 +487,16 @@ def upload(manifest_path, value, client):
         plan.append(("manifest.json", io.BytesIO(manifest_bytes), len(manifest_bytes),
                      hashlib.sha256(manifest_bytes).hexdigest()))  # Commit marker last.
         size = sum(item[2] for item in plan)
+        if unversioned and client.get_bucket_versioning(Bucket=BUCKET).get("Status") not in (None, ""):
+            raise BackupError("UNVERSIONED_TARGET_BUCKET_REQUIRED")
         used, _count = bucket_usage(client)
         if size > RUN_BUDGET or used + size > BUCKET_BUDGET:
             raise BackupError("FIXED_BUCKET_OR_RUN_BUDGET_EXCEEDED")
-        prefix = run_prefix("source" if expected == SOURCE_FILES else "supplement")
         for name, _stream, _size, _sha in plan:
             absent(client, prefix + name)
         for name, stream, object_size, sha in plan:
             put_once(client, prefix + name, stream, object_size, sha)
-    return {"status": "MIGRATION_UPLOAD_READBACK_VERIFIED", "prefix": prefix,
+    return {"status": status, "prefix": prefix,
             "objects": len(plan), "encrypted_artifact_bytes": size - len(manifest_bytes),
             "bucket_bytes_before": used, "complete": False, "restore_performed": False}
 
@@ -443,10 +511,14 @@ def main():
     modes.add_argument("--setup", action="store_true")
     modes.add_argument("--probe", action="store_true")
     modes.add_argument("--upload", action="store_true")
+    modes.add_argument("--upload-target", action="store_true")
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--hex-input", action="store_true")
+    parser.add_argument("--period", choices=sorted(TARGET_PERIODS))
     args = parser.parse_args()
-    if (args.hex_input and not args.setup) or bool(args.manifest) != args.upload:
+    if ((args.hex_input and not args.setup)
+            or bool(args.manifest) != bool(args.upload or args.upload_target)
+            or (args.period is not None and not args.upload_target)):
         raise BackupError("INVALID_MODE_ARGUMENTS")
     if args.manifest == Path("manifest.json"):
         args.manifest = Path.cwd() / args.manifest
@@ -461,9 +533,14 @@ def main():
             print(json.dumps(setup(args.hex_input), sort_keys=True))
             return
         value = credentials()
-        client = s3_client(value, allow_probe_delete=args.probe)
+        client = s3_client(value, allow_probe_delete=args.probe, allow_target=args.upload_target)
         try:
-            result = probe(value, client) if args.probe else upload(args.manifest, value, client)
+            if args.probe:
+                result = probe(value, client)
+            elif args.upload_target:
+                result = upload_target(args.manifest, value, client, args.period or "hourly")
+            else:
+                result = upload(args.manifest, value, client)
             print(json.dumps(result, sort_keys=True))
         finally:
             client.close()

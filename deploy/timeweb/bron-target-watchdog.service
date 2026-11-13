@@ -1,0 +1,19 @@
+[Unit]
+Description=Independent Bron backup age and target health check
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/bron/backup/target-backup.py --check-health
+ExecStopPost=/usr/bin/python3 /opt/bron/backup/target-backup.py --alert-on-failure
+TimeoutStartSec=5min
+TimeoutStopSec=45s
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/root/bron-secrets
+
