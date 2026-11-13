@@ -117,10 +117,14 @@ export async function globalRoleState(db) {
     await db.query('ROLLBACK');return {attributes,memberships};
   }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error;}
 }
-function run(binary,args,{input,timeout=30000}={}) {
+function run(binary,args,{input,timeout=30000,diagnose=false}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
-    stdio:[input===undefined?'ignore':'pipe','pipe','ignore']});
-  if(result.error||result.status!==0)fail('REHEARSAL_COMMAND_FAILED');
+    stdio:[input===undefined?'ignore':'pipe','pipe',diagnose?'pipe':'ignore']});
+  if(result.error||result.status!==0){
+    if(diagnose)console.error('T16_FILE_RESTORE_FAILURE',JSON.stringify({exitStatus:result.status,
+      signal:result.signal??null,...classifyRestoreFailure(result.stderr??'')}));
+    fail('REHEARSAL_COMMAND_FAILED');
+  }
   return result.stdout;
 }
 const d=(args,opts)=>run('/usr/bin/docker',[...docker,...args],opts);
@@ -136,19 +140,26 @@ async function hashFile(file) {
   for await(const chunk of fs.createReadStream(null,{fd,autoClose:true}))h.update(chunk);
   return h.digest('hex');
 }
-async function decode(file,consumer,capture=false) {
-  const commands=[['/usr/bin/age',['-d','-i',identity,file]],['/usr/bin/zstd',['-d','-c']],consumer];
+export async function runDecodePipeline(commands,{capture=false,timeoutMs=300000}={}) {
   const children=commands.map(([binary,args])=>spawn(binary,args,{env,
     stdio:['pipe','pipe','pipe']}));
   const diagnostics=[];let diagnosticBytes=0;
   for(const c of children)c.stderr.on('data',b=>{if(diagnosticBytes<65536){
     const part=b.subarray(0,65536-diagnosticBytes);diagnostics.push(part);diagnosticBytes+=part.length;}});
   children[0].stdin.end();
-  for(const c of children){c.stdin.on('error',()=>{});c.stdout.on('error',()=>{});}
-  children[0].stdout.pipe(children[1].stdin);children[1].stdout.pipe(children[2].stdin);
+  for(const c of children){c.stdin.on('error',()=>{});c.stdout.on('error',()=>{});
+    c.once('exit',status=>{if(status!==0)for(const other of children)if(other!==c&&other.exitCode===null)other.kill();});}
+  for(let i=0;i<children.length-1;i++){
+    const source=children[i].stdout,destination=children[i+1].stdin;
+    // An early successful consumer still requires complete producer draining:
+    // age must authenticate its final chunk and zstd must reach its real EOF.
+    const drain=()=>{source.unpipe(destination);source.resume();};
+    destination.once('close',drain);destination.once('error',drain);children[i+1].once('exit',drain);
+    source.pipe(destination);
+  }
   const chunks=[];let bytes=0,overflow=false;
   children[2].stdout.on('data',b=>{if(capture){bytes+=b.length;if(bytes>4*1024*1024){overflow=true;children.forEach(c=>c.kill());}else chunks.push(b);}});
-  const timer=setTimeout(()=>children.forEach(c=>c.kill()),300000);
+  const timer=setTimeout(()=>children.forEach(c=>c.kill()),timeoutMs);
   try {
     const statuses=await Promise.all(children.map(c=>new Promise((resolve,reject)=>{
       c.once('error',()=>reject(new Error('pipeline')));c.once('close',(status)=>resolve(status));})));
@@ -162,6 +173,8 @@ async function decode(file,consumer,capture=false) {
     return Buffer.concat(chunks);
   } finally {clearTimeout(timer);for(const c of children)if(c.exitCode===null)c.kill();}
 }
+const decode=(file,consumer,capture=false)=>runDecodePipeline([
+  ['/usr/bin/age',['-d','-i',identity,file]],['/usr/bin/zstd',['-d','-c']],consumer],{capture});
 const owned=(args)=>['/usr/bin/docker',[...docker,'exec','-i',ownId,...args]];
 const sqlIdent=s=>'"'+s.replaceAll('"','""')+'"';
 const sqlLiteral=s=>"'"+s.replaceAll("'","''")+"'";
@@ -320,7 +333,11 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   if(actualPreloads['cron.launch_active_jobs']!=='off'||actualPreloads['pg_net.batch_size']!=='0')
     fail('REHEARSAL_SCHEDULER_ISOLATION_FAILED');
   console.log('T14_EXACT_SECURITY_PRELOADS_RESTORED');
-  const toc=(await decode(artifact('database.dump'),owned(['pg_restore','--list']),true)).toString('utf8');
+  phase='decrypt-complete-database-archive';
+  const archiveFile='/restore-data/input.dump';
+  await decode(artifact('database.dump'),owned(['/bin/sh','-c','umask 077; cat > /restore-data/input.dump']));
+  phase='read-database-archive-toc';
+  const toc=d(['exec',ownId,'pg_restore','--list',archiveFile],{timeout:300000,diagnose:true});
   const lines=toc.split('\n');
   const dbCreate=lines.filter(l=>/^\d+;\s+\d+\s+\d+\s+DATABASE\s+-\s+postgres\s/.test(l));
   if(dbCreate.length!==1)fail('REHEARSAL_CREATE_DATABASE_ARCHIVE_REQUIRED');
@@ -329,8 +346,9 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   d(['exec',ownId,...psql.map(x=>x==='postgres'?'template1':x),'--command',
     "ALTER DATABASE postgres ALLOW_CONNECTIONS false; SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='postgres';"]);
   phase='restore-archived-database-definition';
-  await decode(artifact('database.dump'),owned(['pg_restore','-h','/restore-socket','-U',bootstrap,
-    '--dbname=template1','--create','--clean','--if-exists','--exit-on-error','--use-list=/restore-data/database.list']));
+  d(['exec',ownId,'pg_restore','-h','/restore-socket','-U',bootstrap,
+    '--dbname=template1','--create','--clean','--if-exists','--exit-on-error','--use-list=/restore-data/database.list',archiveFile],
+    {timeout:300000,diagnose:true});
   restored=new pg.Client({host:socket,user:bootstrap,database:'postgres',ssl:false,query_timeout:60000});
   await restored.connect();
   phase='bootstrap-exact-schema-and-extension-metadata';
@@ -375,16 +393,18 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   console.log('T11_ADMINISTRATIVE_BOOTSTRAP',JSON.stringify({schemas:prepared.size,extensions:created.size,
     duplicateCreateEntries:skipped,archivedExtensionMetadata:!!manifest.metadata.extensions}));
   phase='restore-full-database';
-  const restore=['/usr/bin/docker',[...docker,'exec','-i','-e','PGOPTIONS=-c session_replication_role=replica',ownId,
+  const restore=['exec','-e','PGOPTIONS=-c session_replication_role=replica',ownId,
     'pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin','--dbname=postgres',
-    '--use-list=/restore-data/restore.list','--single-transaction','--exit-on-error']];
-  await decode(artifact('database.dump'),restore);
-  phase='verify-database-runtime-settings';
+    '--use-list=/restore-data/restore.list','--single-transaction','--exit-on-error',archiveFile];
+  d(restore,{timeout:300000,diagnose:true});
   if(propertyEntries.length){
+    phase='restore-database-runtime-settings';
     d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/properties.list'],{input:propertyEntries.join('\n')+'\n'});
-    await decode(artifact('database.dump'),owned(['pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin',
-      '--dbname=postgres','--create','--exit-on-error','--use-list=/restore-data/properties.list']));
+    d(['exec',ownId,'pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin',
+      '--dbname=postgres','--create','--exit-on-error','--use-list=/restore-data/properties.list',archiveFile],
+      {timeout:300000,diagnose:true});
   }
+  phase='verify-database-runtime-settings';
   if(normalizedSettings(dbSettings)!==normalizedSettings((await restored.query(dbSettingsSql)).rows))
     fail('REHEARSAL_DATABASE_SETTING_MISMATCH');
   const safe=(await restored.query(`SELECT current_setting('cron.launch_active_jobs') AS cron,

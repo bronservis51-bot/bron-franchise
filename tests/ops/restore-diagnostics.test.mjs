@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -94,4 +94,26 @@ test('missing bootstrap declaration or impossible PG17 bootstrap demotion is rej
   assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE anon;\n','supabase_admin'),/ARCHIVED_BOOTSTRAP_ROLE_INVALID/);
   assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE supabase_admin;\nALTER ROLE supabase_admin WITH NOSUPERUSER;\n',
     'supabase_admin'),/BOOTSTRAP_CANNOT_BE_NONSUPERUSER/);
+});
+const child=code=>[process.execPath,['-e',code]];
+const passthrough=()=>child('process.stdin.pipe(process.stdout)');
+const largeProducer=(status=0)=>child(`process.stdout.write(Buffer.alloc(4*1024*1024,120));process.exitCode=${status};`);
+test('a successful early consumer drains all producers instead of blocking at pipe capacity',async()=>{
+  const output=await runDecodePipeline([largeProducer(),passthrough(),
+    child("process.stdin.once('data',()=>{process.stdout.write('TOC_OK');process.exit(0);});")],
+    {capture:true,timeoutMs:3000});
+  assert.equal(output.toString(),'TOC_OK');
+});
+test('producer failure after data still rejects when the early consumer succeeded',async t=>{
+  t.mock.method(console,'error',()=>{});
+  await assert.rejects(runDecodePipeline([largeProducer(7),passthrough(),
+    child("process.stdin.once('data',()=>process.exit(0));")],{timeoutMs:3000}),
+    error=>error.code==='REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
+});
+test('consumer failure aborts blocked upstream producers promptly',async t=>{
+  t.mock.method(console,'error',()=>{});
+  const start=Date.now();
+  await assert.rejects(runDecodePipeline([largeProducer(),passthrough(),child('process.exit(3)')],
+    {timeoutMs:5000}),error=>error.code==='REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
+  assert.ok(Date.now()-start<2000);
 });

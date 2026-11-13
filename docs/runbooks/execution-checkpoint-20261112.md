@@ -3,6 +3,38 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T15: роли восстановлены; зависание чтения оглавления — 13.11.2026
+
+Один full run на прежнем manifest T12 завершился exit 2 за 310 секунд.
+`T14_NATIVE_GLOBALS_RESULT`: exitStatus=0, GLOBALS_RESTORED,
+bootstrapCreateSkipped=1; точные security preloads восстановлены. Исправление
+OID10 подтверждено настоящим запуском. До full import/strict comparison дело
+не дошло: следующий `pg_restore --list` завершился 0, zstd остался без читателя
+до таймаута; pipeline [0,null,0]. Это воспроизведено синтетическими процессами.
+Прежний phase label оставался preloads и неверно обозначал место отказа.
+
+Для T16 готовится полная расшифровка database.dump в закрытый tmpfs временного
+контейнера с проверкой всех producer exit codes; все pg_restore-проходы будут
+читать один seekable-файл. Plaintext на диск хоста не пишется, memberships и
+строгие критерии не ослабляются. Полное восстановление пока НЕ PASS.
+
+Подготовленный T16 helper использует один tmpfs-файл для всех четырёх проходов;
+ошибки файлового pg_restore сохраняют только безопасные exit/status/SQLSTATE/class.
+15 tests PASS, включая реальные процессы с ранним consumer exit0, последующим
+producer exit7 и немедленным consumer exit3. Предыдущие проверки OID10 и утечки
+private SQL сохранены. Это проверка исправления, не actual restore PASS.
+
+Временный контейнер/socket T15 удалены; backup/watchdog enabled/active,
+freshness/health PASS, все три публичных hostname HTTPS503/TLS0. Пять ранее
+проверенных пакетов не пересобираются. Source/freeze/preview/publication без изменений.
+
+Anonymous GitHub Actions probe [43451655777](https://github.com/bronservis51-bot/bron-franchise/actions/runs/43451655777)
+успешно проверил HTTPS Telegram; Send step SKIPPED, credentials не использовались.
+Владелец отдельно разрешил ТОЛЬКО bot token как repository secret
+BRON_TELEGRAM_BOT_TOKEN. Токен пока не введён. Разрешения хранить chat ID как
+secret и создавать/хранить GitHub PAT нет; relay не активировать. Для разрешённого
+токена готовится локальный hidden-input helper без записи токена в файл/argv/логи.
+
 ## T14: точный отказ GRANTED BY; подготовлена коррекция OID10 — 13.11.2026
 
 Full restore за 9 секунд остановился до импорта данных: native globals psql exit3,
