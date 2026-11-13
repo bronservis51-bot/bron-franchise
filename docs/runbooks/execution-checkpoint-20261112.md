@@ -3,6 +3,35 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T14: точный отказ GRANTED BY; подготовлена коррекция OID10 — 13.11.2026
+
+Full restore за 9 секунд остановился до импорта данных: native globals psql exit3,
+SQLSTATE42501, GRANT_ROLE, исходная строка117, роли anon/authenticator/supabase_admin,
+marker0050. Bootstrap был настоящим superuser, оба preload пустые. Версия о
+достаточности отключения Supautils не подтвердилась; временный контейнер/socket
+удалены, source/рабочая цель не менялись.
+
+На настоящем PostgreSQL17.5 воспроизведено правило: явный GRANTED BY для обычного
+grantor без ADMIN option не проходит даже с SUPERUSER; тот же supabase_admin
+с bootstrap OID10 проходит без дополнительных memberships. Случайное имя initdb
+пользователя в нашем стенде занимало OID10 и ломало воспроизведение исходного
+grantor. Это ошибка стенда, а не доказательство повреждения копии.
+
+T15 сохраняет исходное bootstrap-имя из архивной конфигурации/immutable image,
+проверяя имя/SUPER у primary OID10. Пропускается только уже выполненный initdb
+bare CREATE этой роли; все ALTER/password/GRANTED BY сохраняются. Дополнительно
+проверяются все атрибуты/пароли ролей в RAM и полный pg_auth_members с grantor и
+ADMIN/INHERIT/SET, без исключений. 12 offline tests и интеграция helper на PG17.5
+PASS; полный actual restore17.11 пока НЕ PASS.
+
+Все пять архивов доставлены в закрытый `/opt/bron/stage/release-e487ec8/`, SHA и
+manifest/files проверены. AppleDouble metadata валидирована и не распакована;
+только manifest-listed static files. Preview Caddy2.11.8 actual validate:
+тестовый IP exit0, пустой allowlist exit1; preview не применён. Mac system DNS и
+1.1.1.1 теперь согласны по всем трём A; HTTPS503/TLS0, backup/watchdog PASS.
+Согласие на Telegram→GitHub credential scope ещё не получено. Для независимой
+проверки маршрута подготовлен workflow probe_only=true: без secret env и отправки.
+
 ## T13: откат подготовлен, причина globals ещё уточняется — 13.11.2026
 
 Диагностика завершилась exit 0 как диагностика, НЕ restore pass. Внутренний psql

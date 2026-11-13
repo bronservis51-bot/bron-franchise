@@ -86,6 +86,37 @@ export function globalsRunSummary(result,steps) {
     marker:step?.marker??null};
 }
 export const nativeGlobalsConfig=exact=>exact+"shared_preload_libraries = ''\nsession_preload_libraries = ''\n";
+export function prepareBootstrapGlobals(script,bootstrap) {
+  const lines=script.split('\n'),steps=instrumentGlobals(script).steps;
+  const identifier='("(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_$]*)';
+  const name=token=>token.startsWith('"')?token.slice(1,-1).replaceAll('""','"'):token.toLowerCase();
+  let creates=0,superuserDeclared=false;
+  for(const step of steps){const i=step.statementLine-1,line=lines[i];
+    const create=line.match(new RegExp('^\\s*CREATE ROLE\\s+'+identifier+'\\s*;\\s*$','i'));
+    if(create&&name(create[1])===bootstrap){creates++;lines[i]='-- BRON_INITIAL_BOOTSTRAP_ROLE_ALREADY_EXISTS';continue;}
+    const alter=line.match(new RegExp('^\\s*ALTER ROLE\\s+'+identifier+'\\s+WITH\\s+','i'));
+    if(alter&&name(alter[1])===bootstrap){
+      const options=line.slice(alter[0].length).replace(/'(?:[^']|'')*'/g,"''");
+      if(/\bNOSUPERUSER\b/i.test(options))fail('REHEARSAL_BOOTSTRAP_CANNOT_BE_NONSUPERUSER');
+      if(/\bSUPERUSER\b/i.test(options))superuserDeclared=true;
+    }
+  }
+  if(creates!==1||!superuserDeclared)fail('REHEARSAL_ARCHIVED_BOOTSTRAP_ROLE_INVALID');
+  return {sql:lines.join('\n'),bootstrapCreateSkipped:creates};
+}
+export async function globalRoleState(db) {
+  await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  try {
+    await db.query("SET LOCAL timezone='UTC'");
+    const attributes=(await db.query(`SELECT (to_jsonb(r)-'oid'-'rolpassword')||
+      jsonb_build_object('password_hash',a.rolpassword) AS record
+      FROM pg_roles r JOIN pg_authid a ON a.oid=r.oid ORDER BY r.rolname COLLATE "C"`)).rows.map(r=>r.record);
+    const memberships=(await db.query(`SELECT pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,
+      pg_get_userbyid(grantor) AS grantor,admin_option,inherit_option,set_option FROM pg_auth_members
+      ORDER BY pg_get_userbyid(roleid) COLLATE "C",pg_get_userbyid(member) COLLATE "C",pg_get_userbyid(grantor) COLLATE "C"`)).rows;
+    await db.query('ROLLBACK');return {attributes,memberships};
+  }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error;}
+}
 function run(binary,args,{input,timeout=30000}={}) {
   const result=spawnSync(binary,args,{env,input,encoding:'utf8',timeout,maxBuffer:4*1024*1024,
     stdio:[input===undefined?'ignore':'pipe','pipe','ignore']});
@@ -186,6 +217,8 @@ export async function main(){try {
   await primary.connect();
   phase='capture-baseline';
   const baseline=await snapshotDatabase(primary);
+  const baselineRoles=await globalRoleState(primary);
+  const initialRole=(await primary.query('SELECT rolname,rolsuper FROM pg_roles WHERE oid=10')).rows[0];
   const settings=(await primary.query(`SELECT name,setting FROM pg_settings WHERE lower(name) IN
     ('shared_preload_libraries','session_preload_libraries','pgsodium.getkey_script','vault.getkey_script','timezone','datestyle')`)).rows;
   const database=(await primary.query(`SELECT to_jsonb(d) AS value,pg_get_userbyid(d.datdba) AS owner
@@ -231,7 +264,14 @@ cp -a "$1"/. /etc/postgresql-custom/
 test -s /etc/postgresql-custom/pgsodium_root.key
 chown -R postgres:postgres /etc/postgresql-custom`]);
   phase='initialize-isolated-postgres';
-  const bootstrap='bron_restore_'+marker.slice(0,16);
+  const [pinnedImage]=JSON.parse(d(['image','inspect',manifest.metadata.database_image]));
+  const imageEnv=Object.fromEntries((pinnedImage.Config.Env??[]).map(e=>{const i=e.indexOf('=');return[e.slice(0,i),e.slice(i+1)];}));
+  const archivedCompose=d(['exec',ownId,'cat','/restore-config/opt/bron/supabase/docker/docker-compose.yml']);
+  const declaredDefault=/^\s*POSTGRES_USER:\s*["']?supabase_admin["']?\s*(?:#.*)?$/m.test(archivedCompose)?'supabase_admin':null;
+  const bootstrap=manifest.metadata.bootstrap_role??declaredDefault??imageEnv.POSTGRES_USER;
+  if(!bootstrap||bootstrap!==initialRole?.rolname||!initialRole.rolsuper)fail('REHEARSAL_BOOTSTRAP_IDENTITY_MISMATCH');
+  const archivedRoles=(await decode(artifact('roles.sql'),['/usr/bin/cat',[]],true)).toString('utf8');
+  const preparedRoles=prepareBootstrapGlobals(archivedRoles,bootstrap);
   const db=database.value, locale=db.datlocale??db.daticulocale;
   const init=['exec','--user','postgres',ownId,'initdb','-D','/restore-data','--username='+bootstrap,
     '--auth-local=trust','--auth-host=reject','--encoding=UTF8'];
@@ -260,12 +300,11 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     'configured_superuser_is_bootstrap',coalesce(current_setting('supautils.superuser',true),'')=session_user);`]));
   if(!actor.role_superuser||!actor.setting_superuser||!actor.shared_preload_empty||!actor.session_preload_empty)
     fail('REHEARSAL_NATIVE_GLOBALS_BOOTSTRAP_GUARD_FAILED');
-  const script=(await decode(artifact('roles.sql'),['/usr/bin/cat',[]],true)).toString('utf8');
-  const marked=instrumentGlobals(script);
+  const marked=instrumentGlobals(preparedRoles.sql);
   const result=spawnSync('/usr/bin/docker',[...docker,'exec','-i',ownId,...psql,'-A','-t','--single-transaction'],{
     env,input:marked.sql,encoding:'utf8',timeout:300000,maxBuffer:1024*1024,stdio:['pipe','pipe','pipe']});
   const summary=globalsRunSummary(result,marked.steps);
-  console.log('T14_NATIVE_GLOBALS_RESULT',JSON.stringify({actor,...summary}));
+  console.log('T14_NATIVE_GLOBALS_RESULT',JSON.stringify({actor,bootstrapCreateSkipped:preparedRoles.bootstrapCreateSkipped,...summary}));
   if(result.error||result.status!==0)fail('REHEARSAL_NATIVE_GLOBALS_FAILED');
   if(diagnose){if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
     console.log('T13_GLOBALS_DIAGNOSTIC',JSON.stringify({actor,diagnostic:'GLOBALS_RESTORED',
@@ -340,7 +379,6 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
     'pg_restore','-h','/restore-socket','-U',bootstrap,'--role=supabase_admin','--dbname=postgres',
     '--use-list=/restore-data/restore.list','--single-transaction','--exit-on-error']];
   await decode(artifact('database.dump'),restore);
-  await restored.query('REASSIGN OWNED BY '+sqlIdent(bootstrap)+' TO '+sqlIdent(namespaces.find(n=>n.name==='pg_catalog').owner));
   phase='verify-database-runtime-settings';
   if(propertyEntries.length){
     d(['exec','-i',ownId,'/bin/sh','-c','cat > /restore-data/properties.list'],{input:propertyEntries.join('\n')+'\n'});
@@ -356,6 +394,11 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   const mismatch=compareSnapshots(baseline,await snapshotDatabase(restored));
   console.log('T11_RESTORE_MISMATCH_GROUPS',JSON.stringify(mismatch));
   if(mismatch.length)fail('REHEARSAL_STRICT_RESTORE_MISMATCH');
+  const restoredRoles=await globalRoleState(restored);
+  if(JSON.stringify(baselineRoles.attributes)!==JSON.stringify(restoredRoles.attributes))fail('REHEARSAL_GLOBAL_ROLE_ATTRIBUTES_MISMATCH');
+  if(JSON.stringify(baselineRoles.memberships)!==JSON.stringify(restoredRoles.memberships))fail('REHEARSAL_GLOBAL_MEMBERSHIPS_OR_GRANTORS_MISMATCH');
+  console.log('T15_ALL_GLOBAL_ROLES_MATCH',JSON.stringify({roles:baselineRoles.attributes.length,
+    memberships:baselineRoles.memberships.length,attributesMatch:true,grantorsAndAllOptionsMatch:true,excludedRoles:0}));
   const extRestored=(await restored.query(`SELECT e.extname AS name,e.extversion AS version,n.nspname AS schema,
     pg_get_userbyid(e.extowner) AS owner FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace`)).rows;
   if(sorted(extensions)!==sorted(extRestored))fail('REHEARSAL_EXTENSION_OWNER_OR_VERSION_MISMATCH');
@@ -370,6 +413,7 @@ chown -R postgres:postgres /etc/postgresql-custom`]);
   if(tree('/proc/'+own.State.Pid+'/root/restore-storage')!==storageTree||tree(storageRoot)!==storageTree)
     fail('REHEARSAL_STORAGE_TREE_MISMATCH');
   if(compareSnapshots(baseline,await snapshotDatabase(primary)).length)fail('REHEARSAL_PRIMARY_CHANGED_DURING_RUN');
+  if(JSON.stringify(baselineRoles)!==JSON.stringify(await globalRoleState(primary)))fail('REHEARSAL_PRIMARY_ROLES_CHANGED_DURING_RUN');
   console.log('T11_TARGET_RESTORE_PASS',JSON.stringify({strictGroups:Object.keys(baseline).length,
     storageObjects:0,storageTreeMatches:true,vaultLogicalMatches:true,keyRecoveredFromEncryptedConfig:true,extensionOwnersMatch:true,
     sourceAccessed:false,productionWrites:false}));

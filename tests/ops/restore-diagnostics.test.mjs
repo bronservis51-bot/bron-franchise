@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
 
 test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
   const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
@@ -72,4 +72,26 @@ test('native bootstrap overrides only preloads while exact final security config
   assert.equal(native['pg_net.batch_size'],'0');
   assert.equal(before.shared_preload_libraries,"'pg_cron, pg_net, supautils'");
   assert.equal(before.session_preload_libraries,"'supautils'");
+});
+test('original bootstrap identity omits only its already executed bare CREATE and preserves every ALTER and GRANTED BY',()=>{
+  const script="CREATE ROLE anon;\nCREATE ROLE \"supabase_admin\";\n"
+    +"ALTER ROLE supabase_admin WITH SUPERUSER LOGIN PASSWORD 'SCRAM-private';\n"
+    +"GRANT anon TO authenticator WITH INHERIT FALSE GRANTED BY supabase_admin;\n";
+  const result=prepareBootstrapGlobals(script,'supabase_admin');
+  assert.equal(result.bootstrapCreateSkipped,1);
+  assert.equal(result.sql,script.replace('CREATE ROLE "supabase_admin";','-- BRON_INITIAL_BOOTSTRAP_ROLE_ALREADY_EXISTS'));
+  assert.equal(result.sql.includes("PASSWORD 'SCRAM-private'"),true);
+  assert.equal(result.sql.includes('GRANTED BY supabase_admin;'),true);
+});
+test('bootstrap role matching never edits string content or similarly named roles',()=>{
+  const script="CREATE ROLE supabase_admin;\nALTER ROLE supabase_admin WITH SUPERUSER;\n"
+    +"CREATE ROLE supabase_admin_helper;\nALTER ROLE anon PASSWORD 'CREATE ROLE supabase_admin;';\n";
+  const result=prepareBootstrapGlobals(script,'supabase_admin');
+  assert.equal(result.sql.includes('CREATE ROLE supabase_admin_helper;'),true);
+  assert.equal(result.sql.includes("PASSWORD 'CREATE ROLE supabase_admin;'"),true);
+});
+test('missing bootstrap declaration or impossible PG17 bootstrap demotion is rejected',()=>{
+  assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE anon;\n','supabase_admin'),/ARCHIVED_BOOTSTRAP_ROLE_INVALID/);
+  assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE supabase_admin;\nALTER ROLE supabase_admin WITH NOSUPERUSER;\n',
+    'supabase_admin'),/BOOTSTRAP_CANNOT_BE_NONSUPERUSER/);
 });

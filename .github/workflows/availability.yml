@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      probe_only:
+        description: Probe Telegram HTTPS without sending an alert
+        type: boolean
+        default: false
   push:
     branches: [main]
 permissions:
@@ -30,9 +35,6 @@ jobs:
     if: always() && (github.event_name == 'workflow_dispatch' || (needs.check.result == 'failure' && vars.BRON_MONITORING_ENABLED == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    env:
-      BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
-      BRON_TELEGRAM_CHAT_ID: ${{ secrets.BRON_TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
       - name: Probe Telegram HTTPS without credentials
@@ -53,13 +55,19 @@ jobs:
               raise SystemExit(1)
           PY
       - name: Send operational Telegram alert
-        if: env.BRON_TELEGRAM_BOT_TOKEN != '' && env.BRON_TELEGRAM_CHAT_ID != ''
+        if: github.event.inputs.probe_only != 'true'
+        env:
+          BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
+          BRON_TELEGRAM_CHAT_ID: ${{ secrets.BRON_TELEGRAM_CHAT_ID }}
         run: |
           python3 - <<'PY'
           import importlib.util, os, re
           try:
               token = os.environ['BRON_TELEGRAM_BOT_TOKEN']
               chat = os.environ['BRON_TELEGRAM_CHAT_ID']
+              if not token or not chat:
+                  print('TELEGRAM_ALERT_NOT_CONFIGURED')
+                  raise SystemExit(0)
               if not re.fullmatch(r'[0-9]{5,15}:[A-Za-z0-9_-]{20,100}', token):
                   raise ValueError()
               if not re.fullmatch(r'-?[1-9][0-9]{0,19}', chat):
