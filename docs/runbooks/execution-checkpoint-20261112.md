@@ -3,6 +3,30 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T22 завершён; T23 только readonly-инвентаризация дельты — 13.11.2026
+
+T22 bundle/PR head/base/diff/CI PASS. PR14 squash merged в main
+`9815f74d055f746f419bb103b8459f03738c73e6` в 19:00:08 UTC (22:00:08 МСК).
+Cron `2-59/5 * * * *` прочитан обратно, 12 тиков/час сохранены.
+PR CI43484294098 и post-merge push43487999015 SUCCESS; Pages не публиковался.
+Variables/secrets/client settings/VPS не менялись. Local receipt
+`/tmp/bron-release-executor-20261113/T22-state.json`, mode0600.
+Настоящий schedule43485875805 на прежнем main d61105e был успешным, но не
+подтверждает новый cron. Новая ревизия остаётся PENDING_OBSERVATION; это не
+блокирует readonly T23. Не dispatch/toggle/change cron повторно.
+
+T23 подготовлен, ещё НЕ исполнен: один ограниченный проход через исправленный
+обычный auditor, отдельные READ ONLY REPEATABLE READ snapshots source/target.
+Только counts/имена столбцов/sequence equality, без строк, UUID, хешей и секретов.
+Exit0 означает завершённую инвентаризацию, strictMatch=false честно отражает
+дельту, а finalFreezeAudit всегда false. Это не snapshot одновременной остановки.
+Native PG17.12:11 synthetic tables, exact unchanged auditor capture, UUID composite
+PK, adjacent bigint, 20-place numeric, microsecond timestamps, duplicate-aware
+multiset и redaction PASS; container удалён. Focused ops tests5 PASS.
+Manifest `payloads/t23-sha256.json` задаёт один readonly запуск и runtime pins.
+Не повторять T21 restore, T14 builds, T18 install или T19 Telegram input/message.
+Freeze, перенос дельты, private acceptance и public switch ещё не выполнены.
+
 ## T21: полное восстановление PASS; следующий T22 только для расписания — 13.11.2026
 
 RESTORE_GATE PASS: ровно один запуск11.513s/exit0, STRICT_MISMATCH_GROUPS=[];
