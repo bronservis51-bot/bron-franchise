@@ -53,7 +53,7 @@ export async function runTargetAccessChecks(db) {
             WHERE z.user_id=u.id AND z.revoked_at IS NULL AND z.scope_type='company'))
           AND ($1<>'franchisee_staff' OR (EXISTS(SELECT 1 FROM public.staff_member sm WHERE sm.user_id=u.id AND sm.active)
             AND NOT EXISTS(SELECT 1 FROM public.role_assignment z JOIN public.role_permission rp ON rp.role=z.role
-              WHERE z.user_id=u.id AND z.revoked_at IS NULL AND rp.permission='revenue.read')))
+              WHERE z.user_id=u.id AND z.revoked_at IS NULL AND rp.permission IN ('revenue.read','staff.manage','org.manage'))))
         ORDER BY u.id,s.id LIMIT 1`,[role]);
     }
     const adminCounts = await one(`SELECT count(*)::int AS partners FROM public.partner`);

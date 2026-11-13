@@ -1,6 +1,7 @@
 """Target backup safety/failure checks; no real container, secrets or network."""
 import datetime
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -99,6 +100,7 @@ class TargetBackupSafetyTests(unittest.TestCase):
             keeper = mock.Mock()
             keeper.start.return_value = {'snapshot': '00000004-00000048-1', 'objects': 0,
                                         'server_version_num': 170011}
+            keeper._read_json.return_value = {'extension_owners': {'plpgsql':'postgres'}}
             with mock.patch.object(backup.s3, 'BACKUP_ROOT', directory), \
                  mock.patch.object(backup.source, 'secure_path'), \
                  mock.patch.object(backup, 'existing_recipient', return_value='age1' + 'a' * 58), \
@@ -113,6 +115,36 @@ class TargetBackupSafetyTests(unittest.TestCase):
             self.assertFalse(list(directory.glob('target-*/manifest.json')))
             upload.assert_not_called()
             keeper.stop.assert_called_once()
+
+    def test_manifest_records_extension_owners_from_the_same_snapshot_keeper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            keeper = mock.Mock()
+            keeper.start.return_value = {'snapshot':'00000004-00000048-1', 'objects':0,
+                'server_version_num':170011,
+                'extensions':[{'name':'pg_net','version':'0.20.4','schema':'extensions'}]}
+            keeper._read_json.return_value = {'extension_owners':{'pg_net':'postgres'}}
+            with mock.patch.object(backup.s3, 'BACKUP_ROOT', directory), \
+                 mock.patch.object(backup.source, 'secure_path'), \
+                 mock.patch.object(backup, 'existing_recipient', return_value='age1'+'a'*58), \
+                 mock.patch.object(backup, 'TargetSnapshot', return_value=keeper), \
+                 mock.patch.object(backup, 'storage_signature', return_value='same'), \
+                 mock.patch.object(backup, 'tree_signature', return_value=b'same'), \
+                 mock.patch.object(backup.source, 'encrypted_artifact', return_value={}) as encrypt, \
+                 mock.patch.object(backup, 'upload'), mock.patch('sys.stdout', new_callable=io.StringIO):
+                backup.backup({'Id':'a'*64,'Image':'sha256:'+'b'*64}, [Path('/safe/config')])
+            manifest_path, = directory.glob('target-*/manifest.json')
+            manifest = json.loads(manifest_path.read_text())
+            self.assertEqual(manifest['metadata']['extensions'], [
+                {'name':'pg_net','version':'0.20.4','schema':'extensions','owner':'postgres'}])
+            keeper._send.assert_called_once()
+            self.assertIn(b'FROM pg_catalog.pg_extension', keeper._send.call_args.args[0])
+            keeper._read_json.assert_called_once_with(30, 'extension_owner_guard')
+            database_commands = [call.args[2] for call in encrypt.call_args_list
+                                 if call.args[1] == 'database.dump']
+            self.assertEqual(len(database_commands), 1)
+            self.assertIn('--create', database_commands[0])
+            self.assertIn('--format=custom', database_commands[0])
 
     def test_missing_recovery_key_is_never_automatically_replaced(self):
         with mock.patch.object(backup.source, 'secure_path', side_effect=FileNotFoundError), \

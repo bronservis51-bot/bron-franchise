@@ -3,6 +3,37 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## Результат T09; T10/T11 и граница credential scope — 13.11.2026
+
+T09 подтвердил: ровно три target Auth timestamps изменены guarded-транзакцией,
+закрытая beforeimage fsynced; полный post-audit **exit 0**. Проверки DB/RLS
+BLOCKED из-за отсутствия подходящих существующих сессий/групп на цели, anonymous
+grant/read-denial PASS. Внутренний gateway PASS: Auth health/settings, запрет
+анонимного чтения, валидация RPC и неизменность row counts. Вход не проверен.
+
+Первый target-backup через systemd **exit 0**, S3 upload/read-back SHA и watchdog
+PASS, оба timer enabled/active. Репетиция холодного восстановления этой новой
+формы копии ещё не выполнена. Для неё подготовлены точные versions/owners
+расширений в manifest и native pg_dump --create с DATABASE PROPERTIES;
+нужна новая копия и фактический запуск isolated restore, а не повтор старой копии.
+Staging-кандидаты 5d134b5/fb5210c6 не имеют независимого provenance; подготовлен
+изолированный builder из закреплённых git commits с SHA manifests.
+
+T10: владелец выполнил /start; hidden-input wrapper вернул TELEGRAM_SETUP_FAILED,
+VPS config не создан. api.telegram.org resolves, IPv4 TCP443 timeout; github.com
+HTTPS200, OUTPUT ACCEPT. Ошибка не доказывает неправильность token; повторный
+ввод до проверки маршрута не нужен. T11: SSH и таймеры работают; owner-login
+handoff отсутствует, phone/VNC и внешнее хранение recovery key не подтверждены.
+
+Предложен GitHub Actions relay на существующем availability workflow. Это
+**изменяет согласованный T10 scope хранения**: bot token/chat ID будут в Actions
+secrets, VPS получит отдельный fine-grained GitHub token с Actions read/write
+только для bron-franchise. Эта permission шире одного dispatch endpoint;
+клиент ограничивает фактически вызываемый endpoint. До явного подтверждения
+владельца НЕ создавать PAT, НЕ загружать Telegram credentials в GitHub и
+НЕ активировать relay. Код и workflow готовятся для review; независимые
+Auth/build/restore проверки продолжаются, публичные сайты/API остаются 503.
+
 ## Уточнение владельца после поручения T09 — 13.11.2026
 
 Для тревог выбран Telegram; существующего бота нет, его создание и настройка

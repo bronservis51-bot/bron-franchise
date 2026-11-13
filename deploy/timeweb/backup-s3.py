@@ -429,9 +429,10 @@ def upload_target(manifest_path, value, client, period="hourly"):
         patterns = {"database_image": r"sha256:[0-9a-f]{64}",
                     "snapshot": r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+",
                     "encryption_recipient": r"age1[0-9a-z]{40,100}"}
+        required_metadata = set(patterns) | {"postgres_version_num", "db_config_included", "storage_consistency"}
         missing = manifest["missing"]
         if (not isinstance(metadata, dict)
-                or set(metadata) != set(patterns) | {"postgres_version_num", "db_config_included", "storage_consistency"}
+                or set(metadata) not in (required_metadata, required_metadata | {"extensions"})
                 or type(metadata.get("postgres_version_num")) is not int or metadata["postgres_version_num"] != 170011
                 or metadata.get("db_config_included") is not True
                 or metadata.get("storage_consistency") != "stable_before_after"
@@ -440,6 +441,19 @@ def upload_target(manifest_path, value, client, period="hourly"):
                 or not isinstance(missing, list) or len(missing) != len(TARGET_MISSING)
                 or any(not isinstance(item, str) for item in missing) or set(missing) != TARGET_MISSING):
             raise BackupError("TARGET_METADATA_WHITELIST_REQUIRED")
+        if "extensions" in metadata:
+            extensions = metadata["extensions"]
+            fields = {"name": r"[a-z_][a-z0-9_-]*", "schema": r"[a-z_][a-z0-9_]*",
+                      "version": r"[0-9A-Za-z._-]{1,64}"}
+            if (not isinstance(extensions, list)
+                    or any(not isinstance(entry, dict) or set(entry) not in (set(fields), set(fields) | {"owner"})
+                        or any(not isinstance(entry.get(key), str)
+                            or re.fullmatch(pattern, entry[key]) is None for key,pattern in fields.items())
+                        or ("owner" in entry and (not isinstance(entry["owner"], str)
+                            or re.fullmatch(r"[a-z_][a-z0-9_-]*", entry["owner"]) is None))
+                        for entry in extensions)
+                    or len({entry["name"] for entry in extensions}) != len(extensions)):
+                raise BackupError("TARGET_EXTENSION_METADATA_INVALID")
     try:
         datetime.datetime.strptime(manifest["created_utc"], "%Y%m%dT%H%M%SZ")
     except (ValueError, TypeError):

@@ -162,6 +162,15 @@ REST и Storage. Содержимое Studio извне недоступно.
 internal-сеть не изменились; образ Caddy уже есть. Запускать только `web` с
 `--no-deps --pull never`, после сверки DNS; это не рабочее переключение.
 
+Для рабочего открытия добавить [compose.production.override.yml](compose.production.override.yml)
+последним после фактических Compose files и maintenance override. Он меняет только
+`web`: подключает внутреннюю сеть для `api-gw`, сохраняет `bron-edge` и TLS volumes,
+монтирует проверенные `Caddyfile` и `bron/site/`. Перед запуском проверить Caddyfile
+и сравнить merged-модели в памяти с `--profile publish-only`: все остальные сервисы
+и `default.internal=true` должны остаться прежними, включая остановленные cron/pg_net.
+После допуска и проверки сборок запускать только `web` с `--no-deps --pull never`;
+restore override не удалять, backend не пересоздавать.
+
 ## Регулярная копия российской цели
 
 `target-backup.py` использует имеющиеся `source-backup.py` (только механизм
@@ -215,6 +224,11 @@ timer даже без нового запуска копирования; его
 Telegram: установить `backup-alert-telegram.py` как `/root/bron-secrets/backup-alert`
 (root0700), конфигурацию `{token,chat_id}` — в `telegram-alert.json` рядом (root0600).
 После создания бота и `/start` выполнить `target-backup.py --alert` и подтвердить получение.
+
+Альтернатива при недоступности Telegram с VPS — подготовленный `backup-alert-github.py`:
+он ставит фиксированный `availability.yml` в очередь; HTTP204 ещё не подтверждает доставку.
+Включение требует отдельного согласования PAT выбранного repo с Actions read/write,
+GitHub secrets и реального Telegram-получения; подготовка кода ничего не активирует.
 
 ## Переключение и старые адреса
 

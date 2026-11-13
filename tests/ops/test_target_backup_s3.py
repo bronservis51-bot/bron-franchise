@@ -153,6 +153,30 @@ class TargetUploadTests(unittest.TestCase):
             s3.upload_target(self.path, {}, self.client)
         self.assertEqual(self.client.calls, [])
 
+    def test_extension_metadata_is_optional_exact_and_unique_before_network(self):
+        self.manifest.update(metadata={'postgres_version_num':170011,
+            'database_image':'sha256:'+'a'*64, 'snapshot':'00000003-0000001A-1',
+            'encryption_recipient':'age1'+'a'*58, 'db_config_included':True,
+            'storage_consistency':'stable_before_after', 'extensions':[
+                {'name':'uuid-ossp','version':'1.1','schema':'extensions','owner':'supabase_admin'},
+                {'name':'pg_net','version':'0.20.4','schema':'extensions'}]},
+            missing=sorted(s3.TARGET_MISSING))
+        self.save_manifest()
+        self.assertEqual(s3.upload_target(self.path, {}, self.client)['status'],
+                         'TARGET_UPLOAD_READBACK_VERIFIED')
+        entry = {'name':'pg_net','version':'0.20.4','schema':'extensions'}
+        for extensions in ([{**entry,'unexpected':'synthetic'}], [entry,dict(entry)],
+                [{**entry,'name':'bad name'}], [{**entry,'schema':'unsafe-schema'}],
+                [{**entry,'version':'0.20.4;sql'}], [{**entry,'owner':'unsafe role'}],
+                [{**entry,'owner':123}], None):
+            with self.subTest(extensions=extensions):
+                self.client = FakeS3()
+                self.manifest['metadata']['extensions'] = extensions
+                self.save_manifest()
+                with self.assertRaisesRegex(s3.BackupError, 'EXTENSION_METADATA_INVALID'):
+                    s3.upload_target(self.path, {}, self.client)
+                self.assertEqual(self.client.calls, [])
+
     def test_rejects_unsafe_permissions_and_symlinks(self):
         path = self.directory/'roles.sql.zst.age'
         path.chmod(0o644)

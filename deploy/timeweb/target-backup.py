@@ -263,6 +263,10 @@ def backup(db, config):
         keeper = TargetSnapshot(db)
         try:
             metadata = keeper.start()
+            keeper._send(b"SELECT json_build_object('extension_owners', "
+                b"json_object_agg(e.extname,pg_get_userbyid(e.extowner))) "
+                b"FROM pg_catalog.pg_extension e;\n")
+            owners = keeper._read_json(30, 'extension_owner_guard')['extension_owners']
             schema_signature = storage_signature(db, keeper)
             before = tree_signature([STORAGE, *config])
             snapshot = metadata['snapshot']
@@ -272,7 +276,7 @@ COPY (SELECT id,name,description,decrypted_secret,created_at,updated_at
 FROM vault.decrypted_secrets ORDER BY id) TO STDOUT WITH (FORMAT CSV, HEADER true);
 ROLLBACK;"""
             commands = [
-                ('database.dump', db_command(db, 'pg_dump', '--dbname=postgres', '--format=custom',
+                ('database.dump', db_command(db, 'pg_dump', '--dbname=postgres', '--format=custom', '--create',
                     '--compress=0', '--lock-wait-timeout=5s', '--snapshot=' + snapshot)),
                 ('roles.sql', db_command(db, 'pg_dumpall', '--globals-only', '--database=postgres')),
                 ('vault-logical.csv', db_command(db, 'psql', '--dbname=postgres', '-X', '-q', '-A', '-t',
@@ -288,11 +292,16 @@ ROLLBACK;"""
             keeper.finish()
             if schema_signature != storage_signature(db):
                 raise BackupError('TARGET_STORAGE_METADATA_CHANGED_DURING_BACKUP')
+            if (not isinstance(owners, dict)
+                    or set(owners) != {entry['name'] for entry in metadata['extensions']}):
+                raise BackupError('TARGET_EXTENSION_OWNER_METADATA_INVALID')
             manifest = {'format': 1, 'status': 'target_backup_saved_restore_unverified',
                 'complete': False, 'target': 'bron-franchise-russia', 'created_utc': stamp,
                 'storage_objects': metadata['objects'], 'artifacts': artifacts,
                 'metadata': {'postgres_version_num': metadata['server_version_num'],
                     'database_image': db['Image'], 'snapshot': snapshot,
+                    'extensions': [{**entry, 'owner': owners[entry['name']]}
+                                   for entry in metadata['extensions']],
                     'encryption_recipient': recipient, 'db_config_included': True,
                     'storage_consistency': 'stable_before_after'},
                 'missing': ['isolated_target_restore_not_verified', 'independent_key_custody_not_verified',

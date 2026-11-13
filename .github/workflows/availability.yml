@@ -25,3 +25,51 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  notify:
+    needs: check
+    if: always() && (github.event_name == 'workflow_dispatch' || (needs.check.result == 'failure' && vars.BRON_MONITORING_ENABLED == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
+      BRON_TELEGRAM_CHAT_ID: ${{ secrets.BRON_TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe Telegram HTTPS without credentials
+        run: |
+          python3 - <<'PY'
+          import ssl, urllib.error, urllib.request
+          try:
+              opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                  urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+              try:
+                  with opener.open('https://api.telegram.org/', timeout=15) as response:
+                      response.read(1)
+              except urllib.error.HTTPError:
+                  pass
+              print('TELEGRAM_HTTPS_REACHABLE')
+          except Exception:
+              print('TELEGRAM_HTTPS_UNREACHABLE')
+              raise SystemExit(1)
+          PY
+      - name: Send operational Telegram alert
+        if: env.BRON_TELEGRAM_BOT_TOKEN != '' && env.BRON_TELEGRAM_CHAT_ID != ''
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, re
+          try:
+              token = os.environ['BRON_TELEGRAM_BOT_TOKEN']
+              chat = os.environ['BRON_TELEGRAM_CHAT_ID']
+              if not re.fullmatch(r'[0-9]{5,15}:[A-Za-z0-9_-]{20,100}', token):
+                  raise ValueError()
+              if not re.fullmatch(r'-?[1-9][0-9]{0,19}', chat):
+                  raise ValueError()
+              spec = importlib.util.spec_from_file_location('telegram_alert', 'deploy/timeweb/backup-alert-telegram.py')
+              alert = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(alert)
+              alert.send(token, chat)
+              print('TELEGRAM_ALERT_ACCEPTED')
+          except Exception:
+              print('TELEGRAM_ALERT_FAILED')
+              raise SystemExit(1)
+          PY
