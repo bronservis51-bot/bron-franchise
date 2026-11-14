@@ -2,6 +2,16 @@
 
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
+- T34 независимый libpq тоже не получил FIRST512 при успешных TLS/identity/RO.
+  Перебирать тот же TCP подход дальше без нового основания неэффективно. HTTPS
+  существующей платформы — другой путь; metadata probe не называть уже миграцией.
+- Hosted Edge Node TLS API имеет отличия: checkServerIdentity/getPeerCertificate
+  могут быть stub. Проверять фактическую identity negative, а не эти флаги; pg
+  перезаписывает servername для FQDN host, поэтому negative должен использовать
+  один resolvedIP и явно другойSNI. Общий nativeNode proof не покрывает hostedEdge.
+- Private endpoint требует абсолютного expiry, фиксированных операций/READONLY,
+  secret толькоVPS и actuallog-leak проверки до userdata. Не подменять безопасность
+  публичным anonJWT и не создавать произвольный SQL-over-HTTP API.
 - T33 дал тот же128PASS/512timeout на двух других canonical peers. Не делать ещё
   один такой Node probe: независимый клиент и порядок ответов снимают другую
   неизвестность. Libpq PASS сам по себе не доказывает конкретный дефект Node или

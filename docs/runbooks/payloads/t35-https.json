@@ -1,0 +1,114 @@
+{
+  "actions": {
+    "T35.closed_gates": {
+      "reuse": "T12/T14/T18/T19/T21/T22; no restore/build/Telegram/schedule work"
+    },
+    "T35.https_metadata_and_prepare": {
+      "PASS": "bothHTTP200 with expectedconfig/OpenAPI shape, at leastonebody>=512bytes; expectedcleanup andprivate result",
+      "TLS": "HTTPS443, strict certificate+canonical SNI, no redirects/no insecure override; existing PUBLIC anon JWT only, no private sourcekey lookup",
+      "body": "max4MiB inVPSRAM only; return status/bytecount/shape, never bodies/headers/token values; no actualtable endpoints",
+      "capability_on_PASS": "generate once random256bit hex64ASCII, exclusivelysave root0600 /root/bron-secrets/t35-https-capability andfsyncparent; emit ONLYSHA256(tokenASCII) andfixedexpiry2h; no tokeninargv/env/log/chat/Mac",
+      "capability_purpose": "prepare authenticated private read-only migrationchannel withinEXISTINGsourceSupabaseEdge service; deployment/dataread requirelaterreviewedpackage",
+      "command_prefix": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t35-https-prepare.mjs",
+        "--manifest",
+        "/root/bron-secrets/t35-https.json",
+        "--sha256"
+      ],
+      "failure": "safe phase/code andpartialHTTPmetadata; no repeatedNode/libpq/TCP/MTU/DNS retry, no capabilityrotation",
+      "guard": "/root/bron-secrets/t35-https.guard",
+      "last_argument": "exact SHA256 of THIS authoritative manifest",
+      "max_launches": 1,
+      "public_CA": "ONLY source-ca-bundle SHA/certificatecount afterrejectingprivatekey material; no secret/key orwholeCA output",
+      "requests": [
+        "GET fixedsource/auth/v1/settings JSONCONFIGONLY",
+        "GET fixedsource/rest/v1/ OpenAPI SCHEMAONLY"
+      ],
+      "result": "/root/bron-secrets/t35-https-result.json",
+      "wall_seconds": 35
+    },
+    "T35.owner_branch": {
+      "does_not_hold_report": true,
+      "no_new_secret_prompt": true,
+      "reuse": "T30 existing personally operated phonekeyproof andindependentcustody/second-deviceattestation"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t35-https-prepare.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t35-https-prepare.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t35-https.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t35-https.json"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t35-https-prepare.mjs": "3fee3eed5fcd0d72fb114dc503333db5a4b3ebb6bc567b482e0564152041db30",
+    "tests/ops/t35-https-prepare.test.mjs": "0393a9c2244450c90f9805dd37b2f7f46eb7a5d5151e75ca6f1fcf1bc427f21b"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T34_result": "/root/bron-secrets/source-libpq-probe-result.json",
+    "required": "BLOCKED first512 LIBPQ_PHASE_TIMEOUT, owned client/temporary credentials removed; no T34 rerun",
+    "sha256": "e71ff0679c268ce00d1f0575423676d5a469760b29044b02b36f2a165596d867"
+  },
+  "not_authorized": [
+    "Edgefunction_deploy_or_DBconnect",
+    "Auth_user_or_table_or_snapshot_read",
+    "source_target_DML_DDL_admission_freeze_PauseRestore",
+    "sourceprivatekey_or_serviceRole_or_PAT_retrieval",
+    "capability_value_toMac_chat_logs_argv_env",
+    "any_workingdata_orbackup_toMac_evenencrypted",
+    "routes_MTU_MSS_DNSsettings_firewall_tunnelchange",
+    "newservice_image_install_purchase",
+    "newownerinput_Telegrammessage_workflowdispatch_cronchange",
+    "PRmerge_preview_publication"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T35 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "canonical_vps": "/root/bron-secrets/t35-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T35-state.json",
+    "log_vps": "/root/bron-secrets/t35-release.log",
+    "mode": "0600",
+    "output": [
+      "HTTP status/bytes/shape byendpoint",
+      "httpsAboveBlockedTcp flag",
+      "ONLY capabilitySHA256 andabsoluteexpiryUTC, never value/filebody",
+      "publicCA SHA/certcount ifavailable",
+      "full result/receipt/logSHA",
+      "cleanup/changedprivatepaths/ownerpending"
+    ],
+    "report_without_owner_wait": true
+  },
+  "runtime": {
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "version": "22.23.5"
+  },
+  "scope": "one HTTPS443 public-metadata probe and VPS-only capability preparation; no Edge deployment or working data",
+  "source": {
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "publicAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZra3FmZnZtenRwemd5Z3pmeGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzkyNDQsImV4cCI6MjEwNzc1NTI0NH0.b-mcYCfISv19jNyPmzRYrQoz2M5faUc9SLl150O1Xlw"
+  },
+  "task": "T35",
+  "verification": {
+    "focused_unit": "8 PASS metadata shape/TLS policy/no redirect/bodybound/JWTrole/no-sideeffects/capabilityexclusivewrite+redaction",
+    "limit": "localtestsNode24.22.1; exactNode22 productionHTTPS acceptance remainsT35; no SQL therefore no newPGfixture required",
+    "source_Edge_feasibility": "currentdocs confirm automaticSUPABASE_DB_URL and existingJWTgateway; no deploymentoruserdata proof yet; newprivatecapabilityhash+absoluteexpiry willgatefutureprobe"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

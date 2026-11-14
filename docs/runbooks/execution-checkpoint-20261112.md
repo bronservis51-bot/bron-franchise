@@ -3,6 +3,38 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T34 libpq тоже BLOCKED; T35 — HTTPS443 metadata и приватная подготовка — 14.11.2026
+
+T34 на5ae797e: отдельный cached psql image
+`sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc`
+подтвердил frontendTLS verify-full, identity/RR/READONLY/deadlines. Уже FIRST512
+не пришёл: LIBPQ_PHASE_TIMEOUT7002ms,total9323ms,0rows. Следующие размеры и
+Auth NOT_RUN. Owned client и временные credentials удалены, route/backend unchanged.
+Activation SHA `da1da4ec184817da571fd6bfef26f7ecc5d30bbc4a17636444d64e9bd629ba69`;
+result SHA `e71ff0679c268ce00d1f0575423676d5a469760b29044b02b36f2a165596d867`;
+receipt SHA `20bd408bb97c7e5fc4f87e4e414b91f975d4e453091f02cf7f868db5ed439b7e`.
+Повторять этот TCP тест и приписывать сбой только Node нельзя.
+
+T35 меняет исследуемый транспорт: только существующие HTTPS443 source settings
+и OpenAPI (конфигурация/схема, без рабочих rows), strictTLS/no redirects,2GET,
+15s/request,4MiB boundedRAM. После двух200/shapePASS и>=512bytes создаёт ровно
+один privateVPS token256bit; наружу ТОЛЬКО SHA256 егоASCIIhex и fixed2h expiry.
+Никакого токена через Mac/argv/env/log, никаких sourceDBchanges или Edge deploy.
+Используется существующий PUBLIC legacyanon, disabled=false проверен плагином;
+он не является service-role credential и не меняется.
+
+Проверен другой возможный путь: временный Source Edge reader поHTTPS, с внутренним
+SUPABASE_DB_URL, фиксированными READONLYSQL/TTL и privatecapability. Currentdocs
+подтвердили defaultDBURL и наличие deployment-инструмента. Это ещё НЕ рабочий
+transport: нужны native/deployed TLS proof, реальные dummy, cleanup и log-leak
+проверки ДО user-data. DBschema не меняется, исходные auditgroups не исключаются,
+новая постоянная инфраструктура/оплата/PAT не нужны. Sourcefence должен учитывать
+этот намеренный privileged read exception; ownerkey gate сохраняется.
+
+Только после T35 готовятся конкретный probe code/absoluteexpiry/hash и отдельный
+закреплённый operational task. Сейчас Edge не развёрнут, source freeze/финальная
+сверка/preview/publication не выполнялись; T30 личная ветка остаётся pending.
+
 ## T33 все peers BLOCKED; T34 — независимый libpq, без рабочих данных — 14.11.2026
 
 T33 наe34a87b: два других canonicalIPv4,44.225.139.66 и44.252.246.120, каждый
