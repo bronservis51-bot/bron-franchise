@@ -1,0 +1,187 @@
+{
+  "acceptance": {
+    "finalFreezeAudit": false,
+    "inventoryComplete": true,
+    "inventory_exit": 0,
+    "output": "technical object/column names, counts, equality booleans and UTC windows only; no values/ids/hashes/SQL/credentials",
+    "route_required": "selectedRoute and 1MiB/readOnly/identity PASS before any full inventory",
+    "strictMatch": "report actual value; false does not fail inventory",
+    "transactions": "read-only and ended"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t25-delta-readonly.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t23-delta-readonly.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t25-source-route.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t25-source-route.mjs"
+    }
+  ],
+  "failure_acceptance": {
+    "exit": 2,
+    "forbidden": [
+      "error.message",
+      "error.detail",
+      "error.hint",
+      "stack",
+      "SQL",
+      "row_values",
+      "credentials"
+    ],
+    "no_blind_retry": true,
+    "optional_safe_fields": [
+      "query.object",
+      "query.elapsedMs"
+    ],
+    "query_context": "required after an audited query; null is expected if every route failed before inventory",
+    "required_safe_fields": [
+      "phase",
+      "code"
+    ]
+  },
+  "files": {
+    "docs/runbooks/payloads/t23-delta-readonly.mjs": "161bf349c80a202a773732a448f62a493da158843bacca2c8e68b73e252fc3f8",
+    "docs/runbooks/payloads/t25-source-route.mjs": "4f269859b95522e4da89817792cb829d8ce7a3b3f0bdb80da67357322101c7ee",
+    "tests/ops/delta-driver-native.mjs": "04fe94e80ecb465209f41de3120f4d13d525dd8634d1c9a05420211169ba1a3f",
+    "tests/ops/delta-driver-native.py": "7034a494e749e6e738cbb0edd9d5b8846d2bbd65f16f71898115c3b20d524692",
+    "tests/ops/delta-readonly.test.mjs": "5d28ba22b61eebebf847cb505b8cc2b5bc81eb6b09f1d169434b442da7d389ca",
+    "tests/ops/restore-native-pg17.py": "c07227281d3ac2f9ba17c6237baf1d49cac0062702a5d079987e57896d04b653",
+    "tests/ops/source-route.test.mjs": "13cc7d54d64a69bebd513ba25e5ce55396d2532f30dbeb7dbe6057cd346de022"
+  },
+  "format": 1,
+  "native_preflight": {
+    "actual_nonsuper_source_role": true,
+    "actual_readonly_repeatable_read": true,
+    "driver": "pg 8.23.1, actual wire protocol and type OIDs",
+    "duplicate_aware_no_pk": true,
+    "engine": "PostgreSQL 17.12",
+    "fixed_text_array_is_array": true,
+    "fixture": "tests/ops/delta-driver-native.py",
+    "fixture_container_removed": true,
+    "local_server_deadline_verified": true,
+    "lossless_uuid_bigint_decimal_microseconds": true,
+    "output_redaction": true,
+    "raw_name_array_is_string": true,
+    "real_codeless_query_timeout_classified": true,
+    "real_vps_route_acceptance": "PENDING_T25",
+    "result": "PASS",
+    "rollback_retains_failed_query_context": true,
+    "route_policy_tests": 5,
+    "tables": 11,
+    "timeout_disconnects_failed_client": true,
+    "unchanged_auditor_capture_exact": true,
+    "unit_tests": 12
+  },
+  "not_authorized": [
+    "source_write_or_freeze",
+    "source_locks",
+    "target_mutation",
+    "DDL",
+    "restore_retry",
+    "backup_reinstallation",
+    "dependency_installation",
+    "build_repetition",
+    "key_change",
+    "Telegram_message",
+    "cron_change",
+    "workflow_dispatch",
+    "PR_merge",
+    "preview_apply",
+    "public_publish"
+  ],
+  "one_run": {
+    "action_id": "T25.route_then_inventory",
+    "capture_bytes": 67108864,
+    "max_attempts": 1,
+    "per_table_rows": 25000,
+    "total_rows": 100000,
+    "wall_seconds": 240
+  },
+  "prior_failure": {
+    "code": "PG_QUERY_READ_TIMEOUT",
+    "duration_seconds": 225,
+    "exit": 2,
+    "object": "public.daily_revenue",
+    "operation": "table_rows",
+    "ordinal": 43,
+    "phase": "source-readonly-snapshot",
+    "query_elapsed_ms": 60003,
+    "retry_prior_task": false,
+    "task": "T24"
+  },
+  "restore_evidence": {
+    "manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+    "receipt": "/root/bron-secrets/t21-restore-5684c16-receipt.json",
+    "repeat_restore": false
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release bundles on VPS",
+    "T18 backup/status installation",
+    "T19 confirmed private Telegram delivery and enabled monitor",
+    "T21 full cold restore PASS",
+    "T22 PR14 merge and cron readback",
+    "T23 delivered historical helper/log/receipt preserved; no writes and cleanup PASS",
+    "T24 read-only failure context, cleanup PASS, no source/target writes"
+  ],
+  "route_boundary": {
+    "attempts_per_route": 1,
+    "canonical_verified_tls_and_existing_password_callback": true,
+    "dummy_bytes": 1048576,
+    "never_print": [
+      "config",
+      "password",
+      "CA",
+      "dummy_payload",
+      "row_values"
+    ],
+    "no_full_inventory_unless_probe_passes": true,
+    "order": [
+      "canonical-session:5432",
+      "canonical-transaction:6543",
+      "existing-reverse:127.0.0.1:15432"
+    ],
+    "protected_config_files_unchanged": true,
+    "seconds_per_route": 10,
+    "source_host": "aws-1-us-west-2.pooler.supabase.com",
+    "transaction_pooler_scope": "read-only inventory inside explicit transaction only; not freeze/control"
+  },
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "dependency_realpath": "/opt/bron/rehearsal-audit.exfSfv9a/node_modules",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "schedule_observation": {
+    "event": "schedule",
+    "minimum_main_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+    "pending_does_not_block": true,
+    "repository": "bronservis51-bot/bron-franchise",
+    "workflow": "availability.yml"
+  },
+  "scope": "bounded canonical source transport selection, then one read-only inventory only if actual TLS/readonly/1MiB probe passes",
+  "source_sql_evidence": {
+    "field_bytes": 1971596,
+    "interpretation": "server completes inside 8s; does not prove current VPS route bulk throughput",
+    "method": "Supabase execute_sql, actual source READ ONLY, statement_timeout 8000ms",
+    "query": "exact augmented daily_revenue projection + ORDER BY + LIMIT25001, returning only aggregated counts/bytes",
+    "result": "PASS",
+    "rows": 2975,
+    "value_bytes": 1828780
+  },
+  "task": "T25",
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b"
+  }
+}

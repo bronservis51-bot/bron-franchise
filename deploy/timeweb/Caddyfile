@@ -1,5 +1,5 @@
 # Production DNS must point to the verified Russian server before TLS issuance.
-bsfranchise.site {
+app.bronservis.ru {
 	root * /srv/app
 	encode zstd gzip
 	header {
@@ -15,7 +15,7 @@ bsfranchise.site {
 	file_server
 }
 
-bsfranchise.ru {
+bronservis.ru {
 	root * /srv/landing
 	encode zstd gzip
 	header {
@@ -26,7 +26,25 @@ bsfranchise.ru {
 	file_server
 }
 
-api.bsfranchise.site {
+api.bronservis.ru {
+	@health {
+		path /.well-known/bron-health.json
+		method GET HEAD
+	}
+	handle @health {
+		route {
+			root * /srv/status
+			rewrite * /bron-health.json
+			header {
+				Cache-Control no-store
+				Content-Type application/json
+			}
+			file_server {
+				pass_thru
+			}
+			respond 503
+		}
+	}
 	@clientAPI path /auth/v1/* /rest/v1/* /storage/v1/*
 	handle @clientAPI {
 		reverse_proxy api-gw:8000

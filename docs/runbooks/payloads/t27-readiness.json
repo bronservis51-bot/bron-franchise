@@ -1,0 +1,126 @@
+{
+  "acceptance": [
+    "T26 not interrupted or repeated",
+    "one concrete private owner handoff; every required owner item READY/OWNER_ACTION_PENDING or precise BLOCKED; no speculative secret prompt",
+    "closed PASS evidence REUSED",
+    "no product/source/API publication or data changes",
+    "independent branches finish despite source blocker; schedule pending does not hold report"
+  ],
+  "actions": {
+    "T27.context": {
+      "no_source_probe_or_tunnel_action": true,
+      "read": "existing T26 final state/report once; preserve PASS/FAIL/NOT_RUN and consumed guards",
+      "result": "actual current blocker, no inferred PASS"
+    },
+    "T27.owner_handoff": {
+      "destination": "/tmp/bron-release-executor-20261113/T27-owner-handoff.md",
+      "directory_mode": "0700",
+      "do_not_collect_owner_login_json": true,
+      "each_item": [
+        "gate",
+        "exact existing service/URL/helper path",
+        "READY or BLOCKED or OWNER_ACTION_PENDING or REUSED",
+        "why personally owner-only",
+        "secure input location with no secret requested in chat",
+        "expected verified result",
+        "prerequisites"
+      ],
+      "existing_helper_rule": "locate from existing T11/recovery receipts; inspect code/known digest without running it; no broad secret search; if missing/unreviewed mark NEEDS_COORDINATOR_CODE and do not ask owner to enter a secret",
+      "file_mode": "0600",
+      "gate_items": [
+        "independent backup key custody/decryption outside sole Mac/VPS/git",
+        "second device AdminVPS/MFA/emergency console access",
+        "password UI and old PWA/local queue + main existing sections on real phone/mobile and WiFi after reviewed private preview"
+      ],
+      "no_new_storage_account_or_secret_copy": true,
+      "no_phone_actions_before_preview": true,
+      "secret_input": "existing password directly in target HTTPS UI only after preview; recovery key only through already verified private helper/existing secure owner storage, never args/log/chat"
+    },
+    "T27.report": {
+      "next_transition": "coordinator prepares one reviewed freeze/delta/final-audit/private-preview package; this task authorizes none of those effects",
+      "private_receipt": "/tmp/bron-release-executor-20261113/T27-state.json",
+      "safe_summary": "T26 outcome, owner items readiness/blocked reason, time-sensitive backup evidence, scheduled evidence/pending, no secrets/PII"
+    },
+    "T27.schedule": {
+      "descendant_requires_ancestry_proof": true,
+      "if_absent": "PENDING_OBSERVATION, no waiting or dispatch",
+      "minimum_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+      "required_event": "schedule",
+      "reuse": "T26 observation if current; otherwise one passive gh query"
+    },
+    "T27.time_sensitive_evidence": {
+      "backup_max_minutes": 70,
+      "backup_status_url": "https://api.bronservis.ru/.well-known/bron-health.json",
+      "checked_max_minutes": 25,
+      "exact_json_keys": [
+        "checked_at",
+        "last_backup_utc",
+        "healthy"
+      ],
+      "expected_http": 503,
+      "method": "one normal DNS/TLS GET, timeout15s",
+      "no_service_restart_or_new_backup": true,
+      "reuse_recent_equivalent_evidence": true
+    }
+  },
+  "activation": {
+    "does_not_authorize_T26_retry": true,
+    "if_running": "QUEUE T27; do not interrupt process or fast-forward active checkout",
+    "prior_failure_does_not_block_independent_owner_preparation": true,
+    "prior_task": "T26",
+    "start_after": "final T26 receipt for all authorized branches"
+  },
+  "coordinator_capability": {
+    "get_project_actual_status": "ACTIVE_HEALTHY",
+    "no_owner_dashboard_login_preflight": "use connector after proper gates; ask only on actual access failure",
+    "pause_restore_tools": "available, not invoked and effects not tested",
+    "supabase_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "files": {
+    "AGENTS.md": "1afaf51731694f362c467d971430d98cf97b790c9397a3355d6be105f1d8934b",
+    "docs/lessons-learned.md": "86d33434e0ac61bde5797b9966bd63eaeff518c65b195461548ca4c854a647a2",
+    "docs/release-gates.md": "af5431f8c0761ab540db54bf411dee87b393b38b17d4481f19aa9be346c0662e",
+    "docs/rollout-plan.md": "196b21cdebe1de5d4eca2990f5d31a9880c46fdf52eb6f4b16a232a43dc361e8",
+    "docs/runbooks/execution-checkpoint-20261112.md": "5b2b2a44ea49290086474f6c3d60430d947cafe1cf43a1b632f3aa1e1ed10a80",
+    "docs/runbooks/local-access-handoff.md": "3379eb235b989a2dd688a1d2fced20c2a7c672acf5595f86272edf827c94b92e"
+  },
+  "format": 1,
+  "not_authorized": [
+    "source_freeze",
+    "source_or_target_writes",
+    "source_admission_draft_activation",
+    "Supabase_Pause_or_Restore",
+    "tunnel_retry",
+    "full_inventory_retry",
+    "restore_or_build_repeat",
+    "new_Telegram_message_or_secret_input",
+    "account_or_key_creation",
+    "credential_relocation",
+    "new_purchase_or_service",
+    "preview_apply",
+    "public_publish",
+    "PR_merge",
+    "cron_change",
+    "workflow_dispatch"
+  ],
+  "reuse_evidence": [
+    "T12 real Auth/RLS and revoked-session checks",
+    "T14 five pinned target/rollback packages",
+    "T18 backup/status installation",
+    "T19 visible Telegram alert, approved repo secrets, enabled monitor",
+    "T21 full cold restore",
+    "T22 cron merge"
+  ],
+  "scope": "persist Pareto operating rules and prepare one exact owner acceptance/recovery handoff; read-only independent readiness after T26 closes",
+  "task": "T27",
+  "verification": {
+    "change_type": "repository instructions/documentation only",
+    "checks": [
+      "git diff --check",
+      "all referenced local files exist",
+      "manifest digests valid"
+    ],
+    "frontend_build_repeated": false,
+    "native_pg_required_for_this_task": false
+  }
+}

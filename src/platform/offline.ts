@@ -10,9 +10,11 @@ export interface QueuedOperation {
   createdAt: string;
   attempts: number;
   lastError?: string;
+  /** Missing on old records: an unknown old error must never be retried automatically. */
+  lastErrorCode?: string;
 }
 
-interface DraftRow {
+export interface DraftRow {
   userId: string;
   key: string;
   value: unknown;
@@ -62,23 +64,83 @@ export const drafts = {
 
 export const opQueue = {
   add: async (op: QueuedOperation) => { await (await db()).put('queue', op); },
-  list: (userId: string) => guarded(async () => (await db()).getAllFromIndex('queue', 'byUser', userId), [] as QueuedOperation[]),
-  remove: (userId: string, clientOpId: string) => guarded(async () => void (await (await db()).delete('queue', [userId, clientOpId])), undefined),
+  // A storage failure is not an empty queue or a successful removal.
+  list: async (userId: string) => (await db()).getAllFromIndex('queue', 'byUser', userId),
+  remove: async (userId: string, clientOpId: string) => { await (await db()).delete('queue', [userId, clientOpId]); },
 };
 
-/** Clear only after the caller has verified that the outgoing queue is empty. */
-export async function clearUserData(userId: string) {
-  {
-    const d = await db();
-    const tx = d.transaction(['drafts', 'queue'], 'readwrite');
-    for (const store of ['drafts', 'queue'] as const) {
-      let cursor = await tx.objectStore(store).index('byUser').openCursor(userId);
-      while (cursor) {
-        await cursor.delete();
-        cursor = await cursor.continue();
+/** A consistent copy of one account only. Other accounts on a shared device are never read. */
+export async function readLocalWork(userId: string) {
+  const tx = (await db()).transaction(['drafts', 'queue'], 'readonly');
+  const [operations, savedDrafts] = await Promise.all([
+    tx.objectStore('queue').index('byUser').getAll(userId),
+    tx.objectStore('drafts').index('byUser').getAll(userId),
+    tx.done,
+  ]);
+  if (operations.some(row => row.userId !== userId) || savedDrafts.some(row => row.userId !== userId)) {
+    throw new Error('Локальные записи принадлежат другой учётной записи.');
+  }
+  return { operations, drafts: savedDrafts };
+}
+
+/** All-or-nothing merge: never overwrite an existing operation or draft with different data. */
+export async function mergeLocalWork(userId: string, work: { operations: QueuedOperation[]; drafts: DraftRow[] }) {
+  const tx = (await db()).transaction(['drafts', 'queue'], 'readwrite');
+  let added = 0;
+  try {
+    for (const row of work.operations) {
+      if (row.userId !== userId) throw new Error('Копия принадлежит другой учётной записи.');
+      const store = tx.objectStore('queue');
+      const old = await store.get([userId, row.clientOpId]);
+      // Attempts/errors may have advanced locally. Preserve the local state, and never clear a conflict.
+      if (old && (old.kind !== row.kind || !sameJson(old.payload, row.payload))) {
+        throw new Error('На устройстве уже есть операция с этим UUID и другими данными. Импорт отменён.');
       }
+      if (!old) { await store.add(row); added++; }
+    }
+    for (const row of work.drafts) {
+      if (row.userId !== userId) throw new Error('Копия принадлежит другой учётной записи.');
+      const store = tx.objectStore('drafts');
+      const old = await store.get([userId, row.key]);
+      if (old && !sameJson(old.value, row.value)) {
+        throw new Error('На устройстве уже есть другой черновик. Импорт отменён; обе копии сохранены.');
+      }
+      if (!old) { await store.add(row); added++; }
     }
     await tx.done;
+    return added;
+  } catch (error) {
+    try { tx.abort(); } catch { /* already aborted */ }
+    await tx.done.catch(() => undefined);
+    throw error;
+  }
+}
+
+/** JSON data only; object-key order is not a change to a financial operation. */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = Object.keys(a).sort(); const right = Object.keys(b).sort();
+  return left.length === right.length && left.every((key, i) => key === right[i] && sameJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+
+/** Sign-out checks the queue and clears drafts atomically; it never deletes queued operations. */
+export async function clearUserData(userId: string) {
+  const tx = (await db()).transaction(['drafts', 'queue'], 'readwrite');
+  try {
+    if (await tx.objectStore('queue').index('byUser').count(userId)) {
+      throw new Error('Есть неотправленные записи. Сначала отправьте их или сохраните копию из списка очереди.');
+    }
+    let cursor = await tx.objectStore('drafts').index('byUser').openCursor(userId);
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } catch (error) {
+    try { tx.abort(); } catch { /* The failed transaction may already have aborted. */ }
+    await tx.done.catch(() => undefined);
+    throw error;
   }
 }
 

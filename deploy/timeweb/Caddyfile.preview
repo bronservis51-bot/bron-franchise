@@ -1,0 +1,79 @@
+# Private preview only, after cold restore, source freeze and final strict audit.
+# BRON_PREVIEW_ALLOWED_IPS contains comma-separated JSON string literals, not CIDRs.
+# An empty/missing value makes remote_ip() invalid at Caddy validation time.
+(preview_gate) {
+	header @outsidePreview {
+		Cache-Control "no-store"
+		Retry-After "600"
+		X-Content-Type-Options nosniff
+	}
+	respond @outsidePreview "Техническое обслуживание. Попробуйте позже." 503
+}
+
+app.bronservis.ru {
+	@outsidePreview expression `!remote_ip({$BRON_PREVIEW_ALLOWED_IPS})`
+	@fresh path / /index.html /app-version.json /sw.js /manifest.webmanifest
+	@assets path /assets/*
+	route {
+		import preview_gate
+		root * /srv/app
+		encode zstd gzip
+		header {
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+			X-Frame-Options DENY
+			Cache-Control "no-cache"
+		}
+		header @fresh Cache-Control "no-store"
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+}
+
+bronservis.ru {
+	@outsidePreview expression `!remote_ip({$BRON_PREVIEW_ALLOWED_IPS})`
+	route {
+		import preview_gate
+		root * /srv/landing
+		encode zstd gzip
+		header {
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+			Cache-Control "no-cache"
+		}
+		file_server
+	}
+}
+
+api.bronservis.ru {
+	@outsidePreview expression `!remote_ip({$BRON_PREVIEW_ALLOWED_IPS})`
+	@health {
+		path /.well-known/bron-health.json
+		method GET HEAD
+	}
+	@clientAPI path /auth/v1/* /rest/v1/* /storage/v1/*
+	route {
+		handle @health {
+			route {
+				root * /srv/status
+				rewrite * /bron-health.json
+				header {
+					Cache-Control no-store
+					Content-Type application/json
+				}
+				file_server {
+					status 503
+					pass_thru
+				}
+				respond 503
+			}
+		}
+		import preview_gate
+		handle @clientAPI {
+			reverse_proxy api-gw:8000
+		}
+		handle {
+			respond 404
+		}
+	}
+}

@@ -1,0 +1,240 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {classifyRestoreFailure,globalsStatementClass,globalsStandardRoles,instrumentGlobals,globalsRunSummary,nativeGlobalsConfig,prepareBootstrapGlobals,runDecodePipeline,partitionArchiveToc,ensureRestoreSchema,safeExtensionMetadata,preservedBuiltinExtensions,safeBootstrapError,snapshotWithRelationCapture,safeRelationDiff,readOnlyPostchecks} from '../../docs/runbooks/payloads/t11-restore-target.mjs';
+import {fingerprintRows} from '../../scripts/migration-audit.mjs';
+
+test('diagnostics expose SQLSTATE and fixed class, never private SQL or password material',()=>{
+  const secret='SCRAM-SHA-256$PRIVATE_HASH_MUST_NOT_ESCAPE';
+  const raw='psql:<stdin>:18: ERROR: 42501: "supabase_auth_admin" is a reserved role, only superusers can modify it\n'
+    +'STATEMENT: ALTER ROLE supabase_auth_admin PASSWORD '+secret+';';
+  const result=classifyRestoreFailure(raw);
+  assert.deepEqual(result,{diagnostic:'RESERVED_ROLE',sqlstate:'42501',statementLine:18});
+  assert.equal(JSON.stringify(result).includes(secret),false);
+  assert.equal(JSON.stringify(result).includes('supabase_auth_admin'),false);
+});
+test('native role and parameter permissions are distinguished from reserved-role enforcement',()=>{
+  assert.equal(classifyRestoreFailure('ERROR: 42501: permission denied to alter role').diagnostic,'ROLE_PERMISSION');
+  assert.equal(classifyRestoreFailure('ERROR: 42501: permission denied to set parameter "secret"').diagnostic,'PARAMETER_PERMISSION');
+  assert.equal(classifyRestoreFailure('ERROR: 42501: must be superuser to alter superuser roles').diagnostic,'SUPERUSER_REQUIRED');
+});
+test('private SQL context cannot change the error classification',()=>{
+  assert.deepEqual(classifyRestoreFailure('ERROR: 42501: permission denied\nSTATEMENT: SELECT \'reserved role\';'),
+    {diagnostic:'PERMISSION',sqlstate:'42501',statementLine:null});
+});
+test('failed globals statement classification never returns identifiers or password values',()=>{
+  const script='CREATE ROLE internal_user;\nALTER ROLE internal_user PASSWORD \'private-secret\';\nSET ROLE internal_user;';
+  assert.equal(globalsStatementClass(script,1),'CREATE_ROLE');
+  assert.equal(globalsStatementClass(script,2),'ALTER_ROLE');
+  assert.equal(globalsStatementClass(script,3),'SET_ROLE');
+  assert.equal(globalsStatementClass(script,null),'UNAVAILABLE');
+});
+test('failed line exposes only fixed standard role tokens and ignores password string contents',()=>{
+  const script='GRANT supabase_admin TO "private_customer_role" GRANTED BY postgres;\n'
+    +"ALTER ROLE authenticator PASSWORD 'anon service_role PRIVATE_SECRET';";
+  assert.deepEqual(globalsStandardRoles(script,1),['postgres','supabase_admin']);
+  assert.deepEqual(globalsStandardRoles(script,2),['authenticator']);
+  assert.deepEqual(globalsStandardRoles('ALTER ROLE private_name LOGIN;',1),['OTHER']);
+});
+test('native globals markers preserve source and work inside psql restricted mode',()=>{
+  const script="\\restrict private_key\nCREATE ROLE anon;\nALTER ROLE anon PASSWORD 'SCRAM-private';\n\\unrestrict private_key\n";
+  const marked=instrumentGlobals(script);
+  assert.equal(marked.steps.length,2);
+  assert.equal(marked.sql.includes('\\echo'),false);
+  assert.equal(marked.sql.split('\n').filter(l=>!/^SELECT 'BRON_GLOBAL_STEP_\d+';$/.test(l)).join('\n'),script);
+  assert.deepEqual(marked.steps[1],{marker:'BRON_GLOBAL_STEP_0002',statementLine:3,
+    statementClass:'ALTER_ROLE',standardRoles:['anon']});
+});
+test('markers are never inserted into multiline strings, comments or dollar bodies',()=>{
+  const script="SET custom.value = 'private\nCREATE ROLE hidden;\n';\n/*\nALTER ROLE hidden LOGIN;\n*/\n"
+    +"SELECT $$\nCREATE ROLE another_secret;\n$$;\nCREATE ROLE authenticator;\n";
+  const marked=instrumentGlobals(script);
+  assert.equal(marked.steps.length,2);
+  assert.equal(marked.steps[1].statementClass,'CREATE_ROLE');
+  assert.deepEqual(marked.steps[1].standardRoles,['authenticator']);
+});
+test('native failure without psql line numbers identifies last reached statement without secrets',()=>{
+  const marked=instrumentGlobals("CREATE ROLE anon;\nALTER ROLE anon PASSWORD 'PRIVATE_HASH';\n");
+  const summary=globalsRunSummary({status:3,stdout:'BRON_GLOBAL_STEP_0001\nBRON_GLOBAL_STEP_0002\n',
+    stderr:'ERROR: 42501: permission denied to alter role\nSTATEMENT: PRIVATE_HASH'},marked.steps);
+  assert.equal(summary.statementLine,2);
+  assert.equal(summary.statementClass,'ALTER_ROLE');
+  assert.deepEqual(summary.standardRoles,['anon']);
+  assert.equal(summary.sqlstate,'42501');
+  assert.equal(JSON.stringify(summary).includes('PRIVATE_HASH'),false);
+});
+test('native bootstrap overrides only preloads while exact final security configuration stays intact',()=>{
+  const exact="shared_preload_libraries = 'pg_cron, pg_net, supautils'\nsession_preload_libraries = 'supautils'\n"
+    +"cron.launch_active_jobs = off\npg_net.batch_size = 0\n";
+  const effective=text=>Object.fromEntries(text.trim().split('\n').map(line=>line.split(/\s*=\s*/)));
+  const before=effective(exact),native=effective(nativeGlobalsConfig(exact));
+  assert.equal(native.shared_preload_libraries,"''");
+  assert.equal(native.session_preload_libraries,"''");
+  assert.equal(native['cron.launch_active_jobs'],'off');
+  assert.equal(native['pg_net.batch_size'],'0');
+  assert.equal(before.shared_preload_libraries,"'pg_cron, pg_net, supautils'");
+  assert.equal(before.session_preload_libraries,"'supautils'");
+});
+test('original bootstrap identity omits only its already executed bare CREATE and preserves every ALTER and GRANTED BY',()=>{
+  const script="CREATE ROLE anon;\nCREATE ROLE \"supabase_admin\";\n"
+    +"ALTER ROLE supabase_admin WITH SUPERUSER LOGIN PASSWORD 'SCRAM-private';\n"
+    +"GRANT anon TO authenticator WITH INHERIT FALSE GRANTED BY supabase_admin;\n";
+  const result=prepareBootstrapGlobals(script,'supabase_admin');
+  assert.equal(result.bootstrapCreateSkipped,1);
+  assert.equal(result.sql,script.replace('CREATE ROLE "supabase_admin";','-- BRON_INITIAL_BOOTSTRAP_ROLE_ALREADY_EXISTS'));
+  assert.equal(result.sql.includes("PASSWORD 'SCRAM-private'"),true);
+  assert.equal(result.sql.includes('GRANTED BY supabase_admin;'),true);
+});
+test('bootstrap role matching never edits string content or similarly named roles',()=>{
+  const script="CREATE ROLE supabase_admin;\nALTER ROLE supabase_admin WITH SUPERUSER;\n"
+    +"CREATE ROLE supabase_admin_helper;\nALTER ROLE anon PASSWORD 'CREATE ROLE supabase_admin;';\n";
+  const result=prepareBootstrapGlobals(script,'supabase_admin');
+  assert.equal(result.sql.includes('CREATE ROLE supabase_admin_helper;'),true);
+  assert.equal(result.sql.includes("PASSWORD 'CREATE ROLE supabase_admin;'"),true);
+});
+test('missing bootstrap declaration or impossible PG17 bootstrap demotion is rejected',()=>{
+  assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE anon;\n','supabase_admin'),/ARCHIVED_BOOTSTRAP_ROLE_INVALID/);
+  assert.throws(()=>prepareBootstrapGlobals('CREATE ROLE supabase_admin;\nALTER ROLE supabase_admin WITH NOSUPERUSER;\n',
+    'supabase_admin'),/BOOTSTRAP_CANNOT_BE_NONSUPERUSER/);
+});
+const child=code=>[process.execPath,['-e',code]];
+const passthrough=()=>child('process.stdin.pipe(process.stdout)');
+const largeProducer=(status=0)=>child(`process.stdout.write(Buffer.alloc(4*1024*1024,120));process.exitCode=${status};`);
+test('a successful early consumer drains all producers instead of blocking at pipe capacity',async()=>{
+  const output=await runDecodePipeline([largeProducer(),passthrough(),
+    child("process.stdin.once('data',()=>{process.stdout.write('TOC_OK');process.exit(0);});")],
+    {capture:true,timeoutMs:3000});
+  assert.equal(output.toString(),'TOC_OK');
+});
+test('producer failure after data still rejects when the early consumer succeeded',async t=>{
+  t.mock.method(console,'error',()=>{});
+  await assert.rejects(runDecodePipeline([largeProducer(7),passthrough(),
+    child("process.stdin.once('data',()=>process.exit(0));")],{timeoutMs:3000}),
+    error=>error.code==='REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
+});
+test('consumer failure aborts blocked upstream producers promptly',async t=>{
+  t.mock.method(console,'error',()=>{});
+  const start=Date.now();
+  await assert.rejects(runDecodePipeline([largeProducer(),passthrough(),child('process.exit(3)')],
+    {timeoutMs:5000}),error=>error.code==='REHEARSAL_DECRYPT_OR_RESTORE_FAILED');
+  assert.ok(Date.now()-start<2000);
+});
+test('native PG17 TOC partitions all DB metadata into the single creation pass without dropping application entries',()=>{
+  const database=['3460; 1262 5 DATABASE - postgres qa_owner','3461; 0 0 COMMENT - DATABASE postgres qa_owner',
+    '3462; 0 0 ACL - DATABASE postgres qa_owner','3463; 0 0 DATABASE PROPERTIES - postgres qa_owner',
+    '3464; 0 0 SECURITY LABEL - DATABASE postgres qa_owner'];
+  const admin=['6; 2615 2200 SCHEMA - public pg_database_owner','2; 3079 16385 EXTENSION - uuid-ossp '];
+  const application=['9; 1259 16390 TABLE public customer qa_owner',
+    '3470; 0 0 ACL public TABLE customer qa_owner','3450; 0 16390 TABLE DATA public customer qa_owner',
+    '3500; 0 0 COMMENT - EXTENSION uuid-ossp '];
+  const selected=partitionArchiveToc([...database,...admin,...application].join('\n'));
+  assert.deepEqual(selected.database.map(e=>e.kind),['DATABASE','COMMENT','ACL','DATABASE PROPERTIES','SECURITY LABEL']);
+  assert.deepEqual(selected.database.map(e=>e.line),database);
+  assert.deepEqual(selected.administrativeCreates.map(e=>e.kind),['SCHEMA','EXTENSION']);
+  assert.deepEqual(selected.remaining,application);
+  assert.equal(selected.remaining.some(l=>/DATABASE/.test(l)),false);
+});
+test('missing or duplicate native DATABASE definition fails instead of attempting a second creation pass',()=>{
+  assert.throws(()=>partitionArchiveToc('3463; 0 0 DATABASE PROPERTIES - postgres qa_owner'),/CREATE_DATABASE_ARCHIVE_REQUIRED/);
+  assert.throws(()=>partitionArchiveToc('1; 1262 5 DATABASE - postgres qa_owner\n2; 1262 5 DATABASE - postgres qa_owner'),
+    /CREATE_DATABASE_ARCHIVE_REQUIRED/);
+});
+test('existing pg_catalog is validated without triggering reserved-name CREATE or redundant ALTER',async()=>{
+  const calls=[];
+  const db={async query(sql){calls.push(sql);if(!sql.startsWith('SELECT'))throw new Error('unexpected DDL');
+    return {rows:[{owner:'supabase_admin'}]};}};
+  await ensureRestoreSchema(db,'pg_catalog','supabase_admin');
+  assert.equal(calls.length,2);
+  assert.equal(calls.every(sql=>sql.startsWith('SELECT')),true);
+});
+test('existing namespace ownership is corrected only when needed and then verified',async()=>{
+  let owner='postgres';const calls=[];
+  const db={async query(sql){calls.push(sql);if(sql.startsWith('ALTER SCHEMA'))owner='supabase_admin';
+    return {rows:sql.startsWith('SELECT')?[{owner}]:[]};}};
+  await ensureRestoreSchema(db,'extensions','supabase_admin');
+  assert.equal(owner,'supabase_admin');
+  assert.equal(calls.filter(sql=>sql.startsWith('ALTER SCHEMA')).length,1);
+  assert.equal(calls.some(sql=>sql.startsWith('CREATE SCHEMA')),false);
+});
+test('missing builtin namespace fails before any CREATE and unknown diagnostic names stay private',async()=>{
+  const calls=[];const db={async query(sql){calls.push(sql);return{rows:[]};}};
+  await assert.rejects(ensureRestoreSchema(db,'pg_catalog','supabase_admin'),/BUILTIN_SCHEMA_MISSING/);
+  assert.equal(calls.some(sql=>sql.startsWith('CREATE')),false);
+  assert.deepEqual(safeExtensionMetadata({name:'private_customer_name',version:'private-secret',
+    schema:'private_customer_schema',owner:'private_person'}),{name:'OTHER',version:'OTHER',schema:'OTHER',owner:'OTHER'});
+});
+test('exact existing plpgsql stays available before pg_cron instead of being dropped or recreated',()=>{
+  const plpgsql={name:'plpgsql',version:'1.0',schema:'pg_catalog',owner:'supabase_admin'};
+  const expected=[{name:'pg_cron',version:'1.6.4',schema:'pg_catalog',owner:'supabase_admin'},plpgsql];
+  const created=preservedBuiltinExtensions([plpgsql],expected);
+  assert.equal(created.has('plpgsql'),true);
+  assert.deepEqual(expected.filter(e=>!created.has(e.name)).map(e=>e.name),['pg_cron']);
+});
+test('preinstalled extension metadata differences or unexpected objects are rejected unchanged',()=>{
+  const original={name:'plpgsql',version:'1.0',schema:'pg_catalog',owner:'supabase_admin'};
+  for(const field of ['version','schema','owner'])assert.throws(()=>
+    preservedBuiltinExtensions([{...original,[field]:'different'}],[original]),/PREEXISTING_EXTENSION_METADATA_MISMATCH/);
+  assert.throws(()=>preservedBuiltinExtensions([],[original]),/BUILTIN_PLPGSQL_MISSING/);
+  assert.throws(()=>preservedBuiltinExtensions([original,{name:'pgcrypto'}],[original]),/UNEXPECTED_PREEXISTING_EXTENSION/);
+});
+test('bootstrap errors report only fixed classes and standard object names',()=>{
+  assert.deepEqual(safeBootstrapError({code:'42704',message:'language "plpgsql" does not exist'}),
+    {sqlstate:'42704',messageClass:'MISSING_LANGUAGE',standardObject:'plpgsql'});
+  assert.deepEqual(safeBootstrapError({code:'42704',message:'unrecognized configuration parameter "cron.database_name"'}),
+    {sqlstate:'42704',messageClass:'MISSING_SETTING',standardObject:'cron.database_name'});
+  const result=safeBootstrapError({code:'42704',message:'role "PRIVATE_CUSTOMER_SECRET" does not exist'});
+  assert.equal(result.standardObject,'OTHER');
+  assert.equal(JSON.stringify(result).includes('PRIVATE_CUSTOMER_SECRET'),false);
+});
+test('query adapter captures exact auditor results and validates its existing fingerprint',async()=>{
+  const value=JSON.stringify({nspname:'public',relname:'capture_view',view_definition:'PRIVATE_VIEW_SECRET'});
+  const result={rows:[{value}]},calls=[];
+  const db={async query(...args){calls.push(args);return result;}};
+  const sql='select c.relpersistence,c.relforcerowsecurity,pg_get_viewdef(c.oid,true)';
+  const expected={'schema:relations':{count:1,hash:fingerprintRows([value])}};
+  const snapshot=async adapter=>{assert.equal(await adapter.query(sql),result);return expected;};
+  const captured=await snapshotWithRelationCapture(db,snapshot,fingerprintRows);
+  assert.equal(captured.snapshot,expected);
+  assert.deepEqual(captured.relations,[JSON.parse(value)]);
+  assert.deepEqual(calls,[[sql]]);
+  await assert.rejects(snapshotWithRelationCapture(db,async adapter=>{
+    await adapter.query(sql);return {'schema:relations':{count:1,hash:'wrong'}};
+  },fingerprintRows),/RELATION_CAPTURE_FINGERPRINT_MISMATCH/);
+});
+test('relation differences expose field names and ACL counts without private definitions, roles or hashes',()=>{
+  const row={nspname:'public',relname:'partner',owner:'PRIVATE_OWNER',relkind:'r',relpersistence:'p',
+    relrowsecurity:true,relforcerowsecurity:false,view_definition:'PRIVATE_VIEW_TOKEN',
+    relacl:[{grantee:'PRIVATE_PERSON',grantor:'PRIVATE_GRANTOR',privilege:'SELECT',grantable:false}]};
+  const other={...row,owner:'PRIVATE_OTHER_OWNER',view_definition:'PRIVATE_OTHER_VIEW_TOKEN',
+    relacl:[{grantee:'PRIVATE_PERSON',grantor:'PRIVATE_OTHER_GRANTOR',privilege:'SELECT',grantable:false}]};
+  const diff=safeRelationDiff([row],[other]);
+  assert.deepEqual(diff.changed,[{object:'public.partner',fields:['owner','relacl','view_definition'],
+    acl:{sourceEntries:1,restoredEntries:1,addedEdges:1,removedEdges:1}}]);
+  assert.equal(JSON.stringify(diff).includes('PRIVATE_'),false);
+  const reordered={...row,relacl:[...row.relacl,{grantee:'another',grantor:'grantor',privilege:'UPDATE',grantable:false}]};
+  const orderDiff=safeRelationDiff([reordered],[{...reordered,relacl:[...reordered.relacl].reverse()}]);
+  assert.deepEqual(orderDiff.changed[0].fields,['relacl']);
+  assert.equal(orderDiff.changed[0].acl.addedEdges,0);
+  assert.equal(orderDiff.changed[0].acl.removedEdges,0);
+});
+test('strict mismatch continues every read-only check and cannot become a successful restore',async()=>{
+  const calls=[];
+  const result=await readOnlyPostchecks([
+    ['global_roles',async()=>{calls.push('roles');throw Object.assign(new Error('PRIVATE_PASSWORD_HASH'),{code:'42501'});}],
+    ['vault_logical',async()=>{calls.push('vault');}],['storage_tree',async()=>{calls.push('storage');}],
+    ['primary_data_unchanged',async()=>{calls.push('primary');}],
+  ],['schema:relations']);
+  assert.deepEqual(calls,['roles','vault','storage','primary']);
+  assert.equal(result.passed,false);
+  assert.deepEqual(result.results[0],{gate:'global_roles',status:'FAIL',code:'42501'});
+  assert.equal(JSON.stringify(result).includes('PRIVATE_'),false);
+  const allPass=await readOnlyPostchecks([['vault_logical',async()=>{}]],['schema:relations']);
+  assert.equal(allPass.passed,false);
+});
+test('normal strict-pass path still stops at a failing read-only postcheck',async()=>{
+  let laterRan=false;
+  await assert.rejects(readOnlyPostchecks([
+    ['global_roles',async()=>{throw new Error('fixture failure');}],
+    ['storage_tree',async()=>{laterRan=true;}],
+  ]),/fixture failure/);
+  assert.equal(laterRan,false);
+});

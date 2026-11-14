@@ -1,0 +1,195 @@
+{
+  "actionId": "T40.http_source_admission",
+  "browser": {
+    "max_navigation_paths": 1,
+    "official_login_origin": "https://my.adminvps.ru",
+    "report": "safe domain/button labels and supported phone steps; login/MFA challenge is owner-only; phone blank unauthorized page does not prove Linux/root failure",
+    "scope": "read existing service/account navigation; locate supported console route; no revealing stored credentials, passwords, signed URLs or tokens; no purchases/reset/reinstall/reboot/security changes",
+    "service": "AdminVPS",
+    "service_id": "386078",
+    "vps_ip": "152.228.115.115"
+  },
+  "checklist": "docs/runbooks/t40-metadata-custody.md",
+  "commands": {
+    "capture": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t40-metadata-custody.mjs",
+      "--capture",
+      "--manifest",
+      "/root/bron-secrets/t40-metadata-custody/manifest.json",
+      "--sha256",
+      "<manifest SHA from EXECUTOR_TASK>"
+    ],
+    "prepare": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t40-metadata-custody.mjs",
+      "--prepare",
+      "--manifest",
+      "/root/bron-secrets/t40-metadata-custody/manifest.json",
+      "--sha256",
+      "<manifest SHA from EXECUTOR_TASK>"
+    ]
+  },
+  "custody": {
+    "beforeImagePath": "/root/bron-secrets/t40-admission-before-c40a2026.json",
+    "controlReceiptPath": "/root/bron-secrets/t40-admission-control-c40a2026.json",
+    "inversePath": "/root/bron-secrets/t40-admission-inverse-c40a2026.sql",
+    "metadataReceiptPath": "/root/bron-secrets/t40-admission-metadata-c40a2026.json"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t40-metadata-custody.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t40-metadata-custody.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/admission-metadata-custody.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/admission-metadata-custody.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/admission-custody-fs.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/admission-custody-fs.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/http-source-admission.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/http-source-admission.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t26-source-admission.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t26-source-admission.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/source-transfer-budget.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-transfer-budget.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t40-metadata-custody/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t40-metadata-custody.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/owner-phone-recovery-check.md": "4d086e330e24a47287637dae90baa2f46389e45b2271735167f27157e1531066",
+    "docs/runbooks/owner-source-transport-approval.md": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "docs/runbooks/payloads/admission-custody-fs.mjs": "ede7fac49ff60258e9fcaae48138fac38bcd2532cb1c0328e7d4cf6b17ccd08f",
+    "docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "docs/runbooks/payloads/source-admission-https/encrypt-metadata.d.mts": "7359464413b0d8909e53dfb77aaf678515d42cf12c14fb2bfe06759cb834d7a2",
+    "docs/runbooks/payloads/source-admission-https/encrypt-metadata.mjs": "7edc7f03506c95a7d2047d8a280b8cb038d7a01e2019abbf2b0f86a1316e1ed4",
+    "docs/runbooks/payloads/source-admission-https/index.ts": "02236fd8191a1133a3d628ff3140a5ec6434f8691e1a160a51117c2b78edd6cd",
+    "docs/runbooks/payloads/source-admission-https/metadata-sql.mjs": "b3069de2bff00aa519d29b02872d6d8abac17128ed2b9965042e061a9eeab058",
+    "docs/runbooks/payloads/source-admission-https/metadata-state.mjs": "3490edf9df7f8452507b8869e8b349f613c40caad9b94c7009c70b231c15f189",
+    "docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "docs/runbooks/payloads/t40-metadata-custody.mjs": "a8ad92f379230673145974b6e4de65c3458815a3c3ca2b588405208a2994332f",
+    "docs/runbooks/t40-metadata-custody.md": "8cca7aa60dd207e1f61698e71080bc8ccf3120891e12b7e6d3f287e76f99b4cc",
+    "tests/ops/admission-custody-fs.test.mjs": "139ecddb103be6cbb617ce49c836916d65b745622714610dbaa173505b3ea233",
+    "tests/ops/admission-metadata-custody.test.mjs": "7b5053af992e5819bef288ea4b141b7ca7165391696a07190bde04d0ce09aaeb",
+    "tests/ops/http-source-admission.test.mjs": "3b9831316bebd970d697f80d4d3da21d39505da6d842a8357f3ece3f9fbc26c2",
+    "tests/ops/source-admission-https.test.mjs": "667cde4f3ac2319e10de7b1d4a5518983ae84b6bd14c4444317b3f2e82081700",
+    "tests/ops/t40-metadata-custody.test.mjs": "e62407bfbb89217476af3cc697dbe11ca861c6e3deebd3d2d3f1bea7197d142a"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T37_claim_sha256": "42a49f50542d15fdfe5a7a6ded5dee139abcfff41cc3d112da81afcb098a5f59",
+    "T37_closed": "coordinator v2 exact tombstone readback; HTTPS410; availablelogs2edge+4function;cap/private/body count0",
+    "T37_coordinator_receipt_sha256": "5f16c9c928559871ca5c44d4e8ba9293c5699b275a88cc426c80d34f1153c12a",
+    "T37_receipt_sha256": "3ceb55c73d5f900965cb741c967cb95dd67f77449bdf1ff7bd83af0eeee37928",
+    "T37_result_sha256": "0d52331ca933776d0e4db055b58a2dfeadbccb35da17c91e3f876baf4017ac25"
+  },
+  "not_authorized": [
+    "Auth/business row reads or Auth budget consumption",
+    "source freeze/Pause/grants/role changes/control SQL/inverse execution",
+    "CONTROL_READY without new explicit final operator task",
+    "source/target data writes",
+    "key/backup/identity reads/export",
+    "Mac data or encrypted metadata transit",
+    "capability export/TTL extension/retry/resume",
+    "preview/API opening/PRmerge/Pages/publication",
+    "dependency install/new services/Telegram or schedule changes"
+  ],
+  "owner": {
+    "T30": "pending personal key+independent custody/device proof; not a blocker for metadata capture; never execute --verify for owner",
+    "phone_instructions": "docs/runbooks/owner-phone-recovery-check.md"
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t40-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T40-state.json",
+    "log_vps": "/root/bron-secrets/t40-metadata-custody/capture.log",
+    "mode": "0600",
+    "output": "safe binding/counts/path/SHA/status only; no technical before-image/ACL/roles/backends or ciphertext/secret bytes"
+  },
+  "runtime": {
+    "credential_directory": "/root/bron-secrets/t40-metadata-custody",
+    "directory": "/root/bron-secrets/t40-runtime",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "version": "22.23.5"
+  },
+  "runtime_files": {
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/admission-custody-fs.mjs": "ede7fac49ff60258e9fcaae48138fac38bcd2532cb1c0328e7d4cf6b17ccd08f",
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "/root/bron-secrets/t40-runtime/docs/runbooks/payloads/t40-metadata-custody.mjs": "a8ad92f379230673145974b6e4de65c3458815a3c3ca2b588405208a2994332f"
+  },
+  "scope": "Readonly encrypted technical Source metadata custody and supported AdminVPS access-route observation; no freeze/control/apply/Auth snapshot",
+  "source": {
+    "Auth_or_business_row_reads": false,
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "database_writes": false,
+    "max_actual_POST": 1,
+    "max_plaintext_bytes": 1048576,
+    "max_wire_bytes": 1572864,
+    "metadataQuerySha256": "bbc39ecf691997f99363ed167741a5a4935273e6cadc4d07f7f4523fb3a43685",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_ADMISSION_METADATA_V1",
+    "template_name_prefix": "bron-admission-metadata-",
+    "ttl_seconds": 7200,
+    "wall_seconds": 40
+  },
+  "task": "T40",
+  "transfer_budget": {
+    "consume_or_reset_authorized": false,
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "max_attempts": 3,
+    "required_used": 1,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "verification": {
+    "actual_Source_preflight": "readonly distinct backend_type query returned client backend / pg_cron launcher / pg_net 0.20.4 worker; dot-label regression PASS; no Auth/business data read",
+    "focused_exact_Node22": "80 tests PASS across metadata transport/core/filesystem/admission/source reader",
+    "limit": "full metadata Source→VPS capture and actual root custody pending executor; no freeze/CONTROL_READY proof",
+    "source_bundle": "rendered5file Deno2.9.8 strict cached-only check PASS",
+    "typecheck": "PASS; product/build inputs unchanged, no rebuild"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

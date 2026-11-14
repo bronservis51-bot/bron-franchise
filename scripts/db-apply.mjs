@@ -8,11 +8,12 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { migrationFiles, root } from './db-lib.mjs';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 
 loadEnv();
 const url = need('DATABASE_URL', 'Supabase → Project Settings → Database → Connection string (Session pooler). Пароль БД — секрет: только в .env.local.');
 const withSeed = process.argv.includes('--seed');
-const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+const client = new pg.Client(databaseConfig(url));
 await client.connect();
 await client.query(`create schema if not exists app_private;
   create table if not exists app_private.schema_migration(name text primary key, checksum text not null, applied_at timestamptz not null default now())`);

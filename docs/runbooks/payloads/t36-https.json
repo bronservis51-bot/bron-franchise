@@ -1,0 +1,139 @@
+{
+  "actions": {
+    "closed_gates": {
+      "reuse": "T12 Auth/RLS, T14 bundles, T18 backup/status, T19 Telegram, T21 cold restore, T22 actual schedule; no rerun"
+    },
+    "owner": {
+      "no_secret_prompt": true,
+      "report_without_owner_wait": true,
+      "reuse": "T30 existing personal phone proof and independent-custody/second-device attestation"
+    },
+    "prepare": {
+      "capability": "/root/bron-secrets/t36-https-capability",
+      "emit": "only hash/expiry/functionName/origin/protocol",
+      "guard": "/root/bron-secrets/t36-https-prepare.guard",
+      "max_launches": 1,
+      "prepared": "/root/bron-secrets/t36-https-prepared.json"
+    },
+    "probe": {
+      "PASS": "wrongcap403, actual wrongDBhostname rejected, correct DBTLS accepted, RR/READONLY/owner/session postgres/deadlines, exact512KiB dummy and rollback; strictHTTPS/no redirects",
+      "guard": "/root/bron-secrets/t36-https-probe.guard",
+      "max_readiness_windows": 2,
+      "max_response_bytes": 1048576,
+      "on_failure": "persist safe fields, stop dependent branch; no retry/repair",
+      "post_wall_seconds": 35,
+      "readiness_per_window": "<=24 GET, <=120s; second only after WAIT then coordinator DEPLOYED; same capability/expiry",
+      "result": "/root/bron-secrets/t36-https-probe-result.json",
+      "valid_capability_posts": 1,
+      "wrong_capability_posts": 1
+    }
+  },
+  "checklist": "docs/runbooks/t36-https-probe.md",
+  "commands": {
+    "prepare": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t36-https-probe.mjs",
+      "--prepare",
+      "--manifest",
+      "/root/bron-secrets/t36-https.json",
+      "--sha256",
+      "<exact SHA256 of this manifest>"
+    ],
+    "probe": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t36-https-probe.mjs",
+      "--probe",
+      "--manifest",
+      "/root/bron-secrets/t36-https.json",
+      "--sha256",
+      "<exact SHA256 of this manifest>"
+    ]
+  },
+  "coordinator_followup": "readback deployed exact template, count-only logleak scan before any user data; expire/tombstone temporary probe; do not label overall source transport ready merely from dummy or grant REST permissions",
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t36-https-probe.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t36-https-probe.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t36-https.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t36-https.json"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/source-https-probe/index.ts": "fd240052d02d12a97ac214c6279e0d22e5a523dcf94aa392dc257ca2e0d0756a",
+    "docs/runbooks/payloads/t36-https-probe.mjs": "6f18cfbe16111ae6699ab6862b037fe9df72eb47a3d8c44204b785968574da14",
+    "docs/runbooks/t36-https-probe.md": "7119204f7a65f6b82eb1786fe0e6807342ddcc506fbb456c999bbde14acd1d3e",
+    "tests/ops/source-https-probe-native.py": "a0ff937b313712cd8e06e36d06824837eb3c67ff863c882c6fbd7247a25e3bc2",
+    "tests/ops/source-https-probe-native.ts": "0809fe02f104fb5276e84d48ef7234be3553fb16402f68644fda2722e96ed5c0",
+    "tests/ops/source-https-probe.test.mjs": "13efd7a7a22a98ec9ee411951826341514955d5b789f615e31368eec075ca262",
+    "tests/ops/t36-https-probe.test.mjs": "97347cb17da02abf06859625f36abba25008e762e59df76b13f9154260009d01"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T35_result": "/root/bron-secrets/t35-https-result.json",
+    "required": "overall BLOCKED, settings200 >=512 bytes expected config shape, OpenAPI401, no capability; not a DB proof",
+    "sha256": "e69b851567e0ba3b674ef1eb81940e6f075ca382fe71a61651316755f25fc7bb"
+  },
+  "not_authorized": [
+    "source_Auth_or_business_rows",
+    "arbitrary_SQL_or_DBURL",
+    "source_target_DML_DDL_freeze_PauseRestore",
+    "actual_data_or_backup_Mac_transit_even_encrypted",
+    "capability_value_to_chat_Mac_logs_argv_env",
+    "source_private_credentials_retrieval",
+    "routes_DNS_MTU_MSS_firewall_tunnel_changes",
+    "dependency_image_installs_or_purchases",
+    "JWT_REST_permission_changes_or_shop_worker_replacement",
+    "Telegram_message_workflowdispatch_cronchanges",
+    "PR_merge_preview_publication"
+  ],
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t36-release-receipt.json",
+    "continue_without_reply": true,
+    "final": "safe counts/invariants/stages/SHA/cleanup only, no raw response or capability",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T36-state.json",
+    "log_vps": "/root/bron-secrets/t36-release.log",
+    "mode": "0600",
+    "ready_handoff": "EXECUTOR_READY T36 COMMIT=... MANIFEST_SHA=... CAPABILITY_SHA256=... EXPIRES_UTC=... FUNCTION_NAME=..."
+  },
+  "runtime": {
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "version": "22.23.5"
+  },
+  "scope": "VPS-only private capability and fixed synthetic HTTPS Edge-to-source-DB probe; no working rows",
+  "source": {
+    "authentication": "mandatory private256bit capability raw64ASCII POSTbody; SHA-only template; reject before env/DNS/DB; existing Auth/REST unchanged",
+    "capability_ttl_seconds": 7200,
+    "function_deploy_actor": "coordinator only after EXECUTOR_READY; exact pinned template with exactly two placeholder substitutions",
+    "function_name": "bron-https-probe-<capabilitySha256 first12hex>",
+    "known_functions_before": [
+      "shop-worker"
+    ],
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_HTTPS_PROBE_V1",
+    "source_data_read_authorized": false,
+    "verify_jwt": false
+  },
+  "task": "T36",
+  "verification": {
+    "edge_handler": "23 focused PASS; Deno2.9.8 strict check PASS",
+    "independent_reviews": "localhelper+Edge PASS",
+    "limit": "actual hosted DB/TLS/read-only acceptance remains T36; no real source read/deploy yet",
+    "local_helper": "11 focused PASS on exact Node22.23.5",
+    "native_Deno_TLS": "loopback synthetic PostgreSQL wire: correctSNI512KiB PASS, wrongCA/name rejected before startup, ownclients cleaned; not actual hosted Edge"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

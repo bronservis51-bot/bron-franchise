@@ -8,6 +8,7 @@ import {createShiftFixture} from './shift-fixture';
 import {learningFixture} from './learning-fixture';
 import { knowledgeFixture } from './knowledge-fixture';
 import {createLeadFixture} from './lead-fixture';
+import { opQueue } from '../../src/platform/offline';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
@@ -111,11 +112,22 @@ if (textScale === '200') {
   sizes.forEach(([key, value]) => root.style.setProperty(key, `${value}px`));
 }
 startViewport();
+if(qaParams.get('scene')==='queue') {
+  await opQueue.add({userId:uid,clientOpId:'00000000-0000-4000-8000-000000000020',kind:'revenue_total_set',
+    payload:{operation:'00000000-0000-4000-8000-000000000020',location:'00000000-0000-4000-8000-000000000030',day:'2026-11-11',total:'12300',expected_version:'empty',comment:null},
+    createdAt:'2026-11-12T10:00:00Z',attempts:1,lastError:'Сверьте суммы с актуальным днём перед повторным вводом.',lastErrorCode:'version-conflict'});
+}
 createRoot(document.getElementById('root')!).render(<App />);
 
 // Open real controls for responsive form measurements; no production data is used.
 if(qaParams.get('scene')){
- if(qaParams.get('scene')!.startsWith('lead-')){
+ if(qaParams.get('scene')==='queue'){
+  let stage=0;
+  const timer=setInterval(()=>{
+   const button=stage===0?document.querySelector<HTMLButtonElement>('[aria-label="Профиль"]'):[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()==='Локальные записи');
+   if(button){button.click();if(stage++===1)clearInterval(timer);}
+  },50);setTimeout(()=>clearInterval(timer),10_000);
+ }else if(qaParams.get('scene')!.startsWith('lead-')){
   const scene=qaParams.get('scene');let stage=0;
   const timer=setInterval(()=>{
    const buttons=[...document.querySelectorAll('button')];

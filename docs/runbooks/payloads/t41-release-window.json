@@ -1,0 +1,545 @@
+{
+  "actionId": "T41.release_window",
+  "adopts": {
+    "actionId": "T40.http_source_admission",
+    "custody": {
+      "beforeImagePath": "/root/bron-secrets/t40-admission-before-c40a2026.json",
+      "controlReceiptPath": "/root/bron-secrets/t40-admission-control-c40a2026.json",
+      "inversePath": "/root/bron-secrets/t40-admission-inverse-c40a2026.sql",
+      "metadataReceiptPath": "/root/bron-secrets/t40-admission-metadata-c40a2026.json"
+    },
+    "manifestSha256": "a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8"
+  },
+  "approval": {
+    "document_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "status": "APPROVED"
+  },
+  "approval_marker": {
+    "content": "Exact EXECUTOR_TASK manifest SHA lowercase plus LF",
+    "exclusive": true,
+    "file_and_directory_fsync": true,
+    "mode": "0600",
+    "path": "/root/bron-secrets/t41-owner-recovery/approved-manifest.sha256"
+  },
+  "checklist": "docs/runbooks/t41-release-window.md",
+  "commands": {
+    "owner_attest": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t41-owner-console.py",
+      "attest"
+    ],
+    "owner_check": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t41-owner-console.py",
+      "check"
+    ],
+    "owner_recover": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t41-owner-console.py",
+      "recover"
+    ],
+    "prepare_control": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-control-ready.mjs",
+      "--prepare-control",
+      "--manifest",
+      "/root/bron-secrets/t41-release/manifest.json",
+      "--sha256",
+      "<EXECUTOR_TASK manifest SHA>",
+      "--owner-proof-input-sha256",
+      "<actual coordinator-approved owner input SHA>"
+    ],
+    "prepare_final": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-final-window.mjs",
+      "--prepare-final",
+      "--manifest",
+      "/root/bron-secrets/t41-release/manifest.json",
+      "--sha256",
+      "<EXECUTOR_TASK manifest SHA>",
+      "--owner-proof-input-sha256",
+      "<actual coordinator-approved owner input SHA>"
+    ],
+    "prepare_witness": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-bind-fence.mjs",
+      "--prepare-witness",
+      "--manifest",
+      "/root/bron-secrets/t41-release/manifest.json",
+      "--sha256",
+      "<EXECUTOR_TASK manifest SHA>",
+      "--input-sha256",
+      "<actual coordinator-approved source-fence input SHA>",
+      "--owner-proof-input-sha256",
+      "<actual coordinator-approved owner input SHA>"
+    ],
+    "run_final": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-final-window.mjs",
+      "--run-final",
+      "--manifest",
+      "/root/bron-secrets/t41-release/manifest.json",
+      "--sha256",
+      "<EXECUTOR_TASK manifest SHA>",
+      "--fence-input-sha256",
+      "<actual coordinator-approved fence-input SHA>",
+      "--owner-proof-input-sha256",
+      "<actual coordinator-approved owner input SHA>"
+    ],
+    "verify_witness": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-bind-fence.mjs",
+      "--verify-witness",
+      "--manifest",
+      "/root/bron-secrets/t41-release/manifest.json",
+      "--sha256",
+      "<EXECUTOR_TASK manifest SHA>",
+      "--input-sha256",
+      "<actual coordinator-approved source-fence input SHA>",
+      "--owner-proof-input-sha256",
+      "<actual coordinator-approved owner input SHA>"
+    ]
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-custody-fs.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/admission-custody-fs.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-metadata-custody.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/admission-metadata-custody.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/coordinator-fence-ack.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/coordinator-fence-ack.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/exact-query-fingerprint.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/exact-query-fingerprint.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-auth-window.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/final-auth-window.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-transport.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/final-https-transport.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-window.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/final-https-window.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/http-source-admission.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/http-source-admission.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/owner-proof-binding.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/owner-proof-binding.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-fence-witness/fence-witness.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-fence-witness/fence-witness.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-transfer-budget.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-transfer-budget.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t26-source-admission.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t26-source-admission.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t30-auth-compact.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t30-auth-compact.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t37-https-inventory.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t37-https-inventory.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-bind-fence.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-bind-fence.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-control-ready.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-control-ready.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-final-window.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-final-window.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/scripts/database-config.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "scripts/database-config.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-runtime/scripts/migration-audit.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "scripts/migration-audit.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/t41-owner-key-recovery.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-owner-key-recovery.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/owner-key-escrow-crypto.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/owner-key-escrow-crypto.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-recovery-runtime/deploy/timeweb/backup-s3.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "deploy/timeweb/backup-s3.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-owner-console.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-owner-console.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-release/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-release-window.json"
+    },
+    {
+      "destination": "/root/bron-secrets/t41-owner-recovery/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t41-release-window.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "deploy/timeweb/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "docs/runbooks/owner-key-recovery-proposal.md": "dc714a9f88a5c2b453a73ce1474d13a39be13872f7251fa06f99223d90e962d8",
+    "docs/runbooks/payloads/admission-custody-fs.mjs": "838b03e0de0756f1bb66635e5178507757bbfaaf4c959f21622bf5eef796ef06",
+    "docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "docs/runbooks/payloads/coordinator-fence-ack.mjs": "45fc58a1309c80293abaf3c7ac9c652182215cad7cd66728bbaa31b660965a5f",
+    "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "docs/runbooks/payloads/final-https-transport.mjs": "531450fe463131e6589c83af51953a281117cc30e5c4e7c8bc1055d65c7dc1a9",
+    "docs/runbooks/payloads/final-https-window.mjs": "2a3fd81375429a767d4b376aa17299ea4dfb4e9124042a795bec01575e03e9d8",
+    "docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "docs/runbooks/payloads/owner-key-escrow-crypto.py": "f5fdc144a6640d06d4c07b3782f775ced9256c1b0b941fa27449d1f96c1a04d5",
+    "docs/runbooks/payloads/owner-proof-binding.mjs": "edc876cfdc5cc1f64affb57b62896c4ef760072fe08b9bfd5aefb80fc6918c39",
+    "docs/runbooks/payloads/source-fence-witness/encrypt-witness.d.mts": "a583b1f365fa126618da5632bdb4aed4171cba3eb15547e7f46acdcf61e782ac",
+    "docs/runbooks/payloads/source-fence-witness/encrypt-witness.mjs": "7ec1ad252fa5c9981b2667cfe92e4b93fbfac76aebfa8e89c0038edcbe8c4a2c",
+    "docs/runbooks/payloads/source-fence-witness/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/source-fence-witness/index.ts": "e3405257e33dbdc1ef48461cbe6c329fddeea5b603ef3cd0181e7c756b2d94a5",
+    "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/source-final-https-reader/index.ts": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0",
+    "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
+    "docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "docs/runbooks/payloads/t41-bind-fence.mjs": "4461c3aaa935485c930bcc2e2baa9368841a9e3be59116344952d9d804e00d31",
+    "docs/runbooks/payloads/t41-control-ready.mjs": "57779429693d2cdffd285c8fd1465f57189b4c5dcf6de346f8acf913bcb6a2eb",
+    "docs/runbooks/payloads/t41-final-window.mjs": "9d515f258e8fbec96b7e5a66c0d9b355f3d601e682842e44e52305274ad37f81",
+    "docs/runbooks/payloads/t41-owner-console.py": "a341b39f5740ee294f3928dee97ab3fa15b1f8afcb5a2a8374ff30f3ff1b222e",
+    "docs/runbooks/payloads/t41-owner-key-recovery.py": "5d34425751fab224e63129103ac2da5f5b2bcd2098faa28dbe70cdbce32d6ce2",
+    "docs/runbooks/t41-owner-phone-handoff.md": "0937c0d8b49f232292570b0c00d88c7720552d8e97ed91be52512a9f16f73909",
+    "docs/runbooks/t41-owner-recovery-approval.md": "24456f2caa2887687ff818f5f2baaa5fd2ffc0b2b40080e23866f8e3f4fd7835",
+    "docs/runbooks/t41-release-window.md": "fb6cc7403f4f39824e40ff6f623ec82b2474fd3565458a2e1060bd570917f73a",
+    "scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
+    "tests/ops/admission-custody-fs.test.mjs": "04042d6c8348e56952e8362db7f70533b55a03b00a9282f3b6ed83335ff2a9fc",
+    "tests/ops/coordinator-fence-ack.test.mjs": "b9d226960e224c6bf7a9e2029c4a22872aa60beb30053967d362c4c56da308d9",
+    "tests/ops/final-auth-window-native.mjs": "a103c9f10c986f0939340aee1ae80f7b8110100b6754b29cce0eb09b3ef100c8",
+    "tests/ops/final-auth-window-native.py": "8875598fde709083500238359ddb8cfef80ed09759e88ce5596d05671613f6ad",
+    "tests/ops/final-https-transport.test.mjs": "6200dd29168564dcf5a3816000ba1a53ffda0bff63ce2a851da531b3e6e6fa41",
+    "tests/ops/final-https-window-native.mjs": "6d5258293ef061559c2ee22cb53f3de0d0c0ad931382af9c635e3256a91bf267",
+    "tests/ops/final-https-window-native.py": "4372d6731f51c4099415a947bca6e8ae0aa0df5e50a0673b55a84370327953a1",
+    "tests/ops/final-https-window.test.mjs": "084697e8eaf02af1395d58e01a8d1de3e3940b09bf242f7d5084c48a294c670d",
+    "tests/ops/http-source-admission-native.mjs": "3b96067c2e3d7c1c4267ab49e951e137bfd1abbc2684ee053ef0fc3fc03b55fa",
+    "tests/ops/http-source-admission-native.py": "44e98f6560ee3da5dc970c33fb01b26146f9d16f679fdf44026ca2a2b28602f6",
+    "tests/ops/owner-proof-binding.test.mjs": "8d30bf58ece3ed5a39c885c72891ea62ec0d9a44d42fac378b906ab204785694",
+    "tests/ops/source-fence-witness.test.mjs": "6035a9be95e41bbf685dc2a9de580921069cbc450be049c4d69674a8a4722958",
+    "tests/ops/source-final-https-reader.test.mjs": "8455ed6d7812bbfe25e2addd81c44b753a30eb55e0706b8fbf1f3c178135691a",
+    "tests/ops/t41-bind-fence.test.mjs": "738c0c5d4afedeaaf947fb02b0902c3d11b4f7154e2e968662652e071ef03c86",
+    "tests/ops/t41-control-ready.test.mjs": "75fff2cc3c257f2f2df1ba12d90a43ec1f704d44cfb910087b1d496512646ef5",
+    "tests/ops/t41-final-window.test.mjs": "c6908c587b28c68fd6a46550736e50e8bf3922099f10f978bf9ffe9631fffb94",
+    "tests/ops/test_owner_console_launcher.py": "f19e16adf2fbcc7a5ea68c50c8ff87ce5e0134dcff218cf26138048c685ea089",
+    "tests/ops/test_owner_key_escrow_crypto.py": "7f774606a025acd7f695b5bd7ff730ad8750863d693d4c9e3eb0d6fb25cec950",
+    "tests/ops/test_owner_key_recovery.py": "2eb80e45a82bc2a66a6a683c94ab4a645675aa34a862992ccb3999193582c630"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T40_before_image_sha256": "2e6dcdd2807371d8020991b8b0c9b3b119b98bc7865ebbb312b5bf555af8a307",
+    "T40_coordinator_closure_receipt_sha256": "39823945e8f5f3a764782e8d3b21099cd3fe198d942b7c7f031cd7e5eb9e9241",
+    "T40_metadata_receipt_sha256": "6445b087e824ec43ccec09ca9067d43954daa066a5ad06cf6658647c5ea06ff2",
+    "T40_receipt_sha256": "e6e66b56f613901a4d9141b09bd9e2c1de10146d749a2f4ce16d911192782e48",
+    "T40_result_sha256": "e3e123dcaeeab3f72cb7721ef14a5b2c2bec7d6df9afcd6396276ffc2a2bd362"
+  },
+  "not_authorized": [
+    "Any helper execution before working owner phone root console",
+    "Mac key/backup/plaintext/ciphertext or real Source data transit",
+    "DMG opening or T30 raw-identity verifier",
+    "Copying any passphrase/key to command line, environment, log, chat or shared clipboard",
+    "Key rotation/replacement; uploader allowlist/policy/lifecycle expansion; deleting/overwriting S3 objects",
+    "Source business writes; generic delta transfer; ignoring non-timestamp mismatch",
+    "Preview, API opening, Pages merge/deploy or public release",
+    "Automatic retry after one-shot guard or unknown COMMIT; automatic Source reopen after target writes",
+    "Repeated closed builds/restore/Telegram/schedule or TCP-route experiments; dependency installation/new services"
+  ],
+  "ownerRecovery": {
+    "backupManifestPath": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "backupManifestSha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+    "doNotOpenDmg": true,
+    "doNotUseT30Verifier": true,
+    "executionAuthorized": true,
+    "macDataTransit": false,
+    "maxGetAttempts": 1,
+    "maxPutAttempts": 1,
+    "method": "BRON_OWNER_KEY_ESCROW_V1",
+    "ownerPhoneConsoleRequired": true,
+    "rawIdentityMustRemainOnVps": true,
+    "runtimeFiles": {
+      "/root/bron-secrets/t41-recovery-runtime/deploy/timeweb/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+      "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/owner-key-escrow-crypto.py": "f5fdc144a6640d06d4c07b3782f775ced9256c1b0b941fa27449d1f96c1a04d5",
+      "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/t41-owner-key-recovery.py": "5d34425751fab224e63129103ac2da5f5b2bcd2098faa28dbe70cdbce32d6ce2"
+    },
+    "runtimeRoot": "/root/bron-secrets/t41-recovery-runtime",
+    "stateRoot": "/root/bron-secrets/t41-owner-recovery"
+  },
+  "owner_proof": {
+    "method": "BRON_OWNER_KEY_ESCROW_V1",
+    "proposalSha256": "dc714a9f88a5c2b453a73ce1474d13a39be13872f7251fa06f99223d90e962d8",
+    "recoveryCipherBinding": {
+      "artifact": "roles.sql.zst.age",
+      "from_pinned_backup_manifest": true,
+      "manifestSha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+    },
+    "root_approved_input_required": true
+  },
+  "owner_recovery_approval": {
+    "decision_path": "docs/runbooks/t41-owner-recovery-approval.md",
+    "decision_sha256": "24456f2caa2887687ff818f5f2baaa5fd2ffc0b2b40080e23866f8e3f4fd7835",
+    "execution_requires_fresh_pinned_task": true,
+    "execution_requires_working_owner_phone_root_console": true,
+    "proposal_path": "docs/runbooks/owner-key-recovery-proposal.md",
+    "proposal_sha256": "dc714a9f88a5c2b453a73ce1474d13a39be13872f7251fa06f99223d90e962d8",
+    "status": "APPROVED"
+  },
+  "phase_authorizations": {
+    "coordinator_fence": {
+      "actor": "coordinator_via_connected_mcp_only",
+      "actualOwnerProofRequired": true,
+      "durableInverseBeforeSourceEffects": true,
+      "exactControlSqlHashMatchRequired": true,
+      "pauseOnlyAfterFinalPassAndEndpointClosure": true
+    },
+    "owner_recovery": {
+      "actionId": "T41.owner-key-recovery",
+      "phone_root_before_any_helper_execution": true,
+      "source_effects": false,
+      "target_database_writes": false
+    },
+    "prepare_control_ready": {
+      "actionId": "T41.prepare_control_ready",
+      "control_ready_only": true,
+      "provider_boundary_reviewed": true,
+      "rollback_before_target_writes": true,
+      "source_sql_authorized": false
+    },
+    "prepare_final": {
+      "actionId": "T41.prepare_final",
+      "capability_ttl_seconds": 7200,
+      "source_data_reads": 0,
+      "target_metadata_probe": 1
+    },
+    "prepare_witness": {
+      "actionId": "T41.prepare_witness",
+      "max_source_POST": 0,
+      "metadata_only": true,
+      "source_sql_authorized": false
+    },
+    "preview": {
+      "authorized": false
+    },
+    "publication": {
+      "authorized": false
+    },
+    "run_final": {
+      "actionId": "T41.final_https_window",
+      "applyTimestampOnly": true,
+      "beforeImagePath": "/root/bron-secrets/t41-auth-before-c41a2026.json",
+      "maxTimestampUpdates": 1,
+      "priorSourceAuthSnapshotAttempts": 1,
+      "sourceFrameBudget": 2,
+      "targetAdmitted": false,
+      "wall_seconds": 480
+    },
+    "verify_witness": {
+      "actionId": "T41.verify_witness",
+      "max_source_POST": 1,
+      "metadata_only": true,
+      "source_sql_authorized": false
+    }
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t41-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T41-state.json",
+    "matching_sha256_required": true,
+    "mode": "0600",
+    "safe_metadata_only": true
+  },
+  "runtime": {
+    "dependency_lock_path": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
+    "dependency_lock_sha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69",
+    "directory": "/root/bron-secrets/t41-runtime",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "pg": "8.23.1",
+    "version": "22.23.5"
+  },
+  "runtime_files": {
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-custody-fs.mjs": "838b03e0de0756f1bb66635e5178507757bbfaaf4c959f21622bf5eef796ef06",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/coordinator-fence-ack.mjs": "45fc58a1309c80293abaf3c7ac9c652182215cad7cd66728bbaa31b660965a5f",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-transport.mjs": "531450fe463131e6589c83af51953a281117cc30e5c4e7c8bc1055d65c7dc1a9",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-window.mjs": "2a3fd81375429a767d4b376aa17299ea4dfb4e9124042a795bec01575e03e9d8",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/owner-proof-binding.mjs": "edc876cfdc5cc1f64affb57b62896c4ef760072fe08b9bfd5aefb80fc6918c39",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-fence-witness/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-bind-fence.mjs": "4461c3aaa935485c930bcc2e2baa9368841a9e3be59116344952d9d804e00d31",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-control-ready.mjs": "57779429693d2cdffd285c8fd1465f57189b4c5dcf6de346f8acf913bcb6a2eb",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-final-window.mjs": "9d515f258e8fbec96b7e5a66c0d9b355f3d601e682842e44e52305274ad37f81",
+    "/root/bron-secrets/t41-runtime/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/root/bron-secrets/t41-runtime/scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827"
+  },
+  "scope": "Owner-approved encrypted key recovery; after actual owner proof, conditional reversible Source fence plus one final HTTPS window. No preview or publication.",
+  "source": {
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "template_name_prefix": "bron-source-reader-"
+  },
+  "source_data_budget": {
+    "newcap_does_not_reset": true,
+    "remaining": 2,
+    "shared_scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "used": 1
+  },
+  "state": "ISSUED_CONDITIONAL_PHONE_ROOT_AND_ACTUAL_PROOF_REQUIRED",
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "task": "T41",
+  "transfer_budget": {
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "failed_or_uncertain_counts": true,
+    "max_attempts": 3,
+    "required_used": 1,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "verification": {
+    "native_age": "1.1.1 synthetic encrypted identity restore after raw identity deletion, wrong phrase/invalid zstd/timeout tests; no actual VPS/S3 proof",
+    "native_pg": "17.12 final core 50 context checks, both owned fixtures cleaned; no actual Source fence proof",
+    "product_inputs": "unchanged, reuse T14 builds/T39 staging",
+    "production_limit": "Owner crypto/phone/custody/fence/final proof not yet performed; acceptance and publication excluded"
+  },
+  "verify_only": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "actionId": "T41.release_window",
+  "adopts": {
+    "actionId": "T40.http_source_admission",
+    "custody": {
+      "beforeImagePath": "/root/bron-secrets/t40-admission-before-c40a2026.json",
+      "controlReceiptPath": "/root/bron-secrets/t40-admission-control-c40a2026.json",
+      "inversePath": "/root/bron-secrets/t40-admission-inverse-c40a2026.sql",
+      "metadataReceiptPath": "/root/bron-secrets/t40-admission-metadata-c40a2026.json"
+    },
+    "manifestSha256": "a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8"
+  },
+  "blockers": [
+    "actual T30 crypto PASS metadata absent",
+    "separate owner independent custody and second-device login attestation absent",
+    "final actor/operator checklist and publication pins still require current live review"
+  ],
+  "checklist": "docs/runbooks/t41-release-window.md",
+  "execution_authorized": false,
+  "files": {
+    "docs/runbooks/payloads/admission-custody-fs.mjs": "ede7fac49ff60258e9fcaae48138fac38bcd2532cb1c0328e7d4cf6b17ccd08f",
+    "docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "docs/runbooks/payloads/coordinator-fence-ack.mjs": "45fc58a1309c80293abaf3c7ac9c652182215cad7cd66728bbaa31b660965a5f",
+    "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "docs/runbooks/payloads/final-https-transport.mjs": "531450fe463131e6589c83af51953a281117cc30e5c4e7c8bc1055d65c7dc1a9",
+    "docs/runbooks/payloads/final-https-window.mjs": "2a3fd81375429a767d4b376aa17299ea4dfb4e9124042a795bec01575e03e9d8",
+    "docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "docs/runbooks/payloads/source-fence-witness/encrypt-witness.d.mts": "a583b1f365fa126618da5632bdb4aed4171cba3eb15547e7f46acdcf61e782ac",
+    "docs/runbooks/payloads/source-fence-witness/encrypt-witness.mjs": "7ec1ad252fa5c9981b2667cfe92e4b93fbfac76aebfa8e89c0038edcbe8c4a2c",
+    "docs/runbooks/payloads/source-fence-witness/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/source-fence-witness/index.ts": "e3405257e33dbdc1ef48461cbe6c329fddeea5b603ef3cd0181e7c756b2d94a5",
+    "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/source-final-https-reader/index.ts": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0",
+    "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
+    "docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "docs/runbooks/payloads/t41-bind-fence.mjs": "4d5d5554b3626ea001b8f878ebdcf4271eac3ad55a7d4bf8ceceacef53829cb2",
+    "docs/runbooks/payloads/t41-control-ready.mjs": "63b9ae17c9c52b2fa49669de9aab21ee3f11fcbcc84fdb512acf79d0cfeef8c5",
+    "docs/runbooks/payloads/t41-final-window.mjs": "f8fdda765bbaf08cfc5408d1dd65caeee02269150b0cae3096ca46aa33f956d1",
+    "docs/runbooks/t41-release-window.md": "a952edaafad260bafbe9519fd19c9743f86c18d06e13c9503d2c0064406120c9",
+    "scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
+    "tests/ops/coordinator-fence-ack.test.mjs": "b9d226960e224c6bf7a9e2029c4a22872aa60beb30053967d362c4c56da308d9",
+    "tests/ops/final-auth-window-native.mjs": "a103c9f10c986f0939340aee1ae80f7b8110100b6754b29cce0eb09b3ef100c8",
+    "tests/ops/final-auth-window-native.py": "8875598fde709083500238359ddb8cfef80ed09759e88ce5596d05671613f6ad",
+    "tests/ops/final-https-transport.test.mjs": "6200dd29168564dcf5a3816000ba1a53ffda0bff63ce2a851da531b3e6e6fa41",
+    "tests/ops/final-https-window-native.mjs": "6d5258293ef061559c2ee22cb53f3de0d0c0ad931382af9c635e3256a91bf267",
+    "tests/ops/final-https-window-native.py": "4372d6731f51c4099415a947bca6e8ae0aa0df5e50a0673b55a84370327953a1",
+    "tests/ops/final-https-window.test.mjs": "084697e8eaf02af1395d58e01a8d1de3e3940b09bf242f7d5084c48a294c670d",
+    "tests/ops/http-source-admission-native.mjs": "3b96067c2e3d7c1c4267ab49e951e137bfd1abbc2684ee053ef0fc3fc03b55fa",
+    "tests/ops/http-source-admission-native.py": "44e98f6560ee3da5dc970c33fb01b26146f9d16f679fdf44026ca2a2b28602f6",
+    "tests/ops/source-fence-witness.test.mjs": "6035a9be95e41bbf685dc2a9de580921069cbc450be049c4d69674a8a4722958",
+    "tests/ops/source-final-https-reader.test.mjs": "8455ed6d7812bbfe25e2addd81c44b753a30eb55e0706b8fbf1f3c178135691a",
+    "tests/ops/t41-bind-fence.test.mjs": "8d0b659e54b36e266d0bcffe053e1bea2f4839365f72c748837d9579c1d37ce8",
+    "tests/ops/t41-control-ready.test.mjs": "785aee54b60a4230ab95dc2d0788366a062ff08a136eb694b1175decd2267d3b",
+    "tests/ops/t41-final-window.test.mjs": "82af71a4d861cbc021e3e13e6d881e01ed35cf57d7a862a56c5dce7107b2c38d"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T40_before_image_sha256": "2e6dcdd2807371d8020991b8b0c9b3b119b98bc7865ebbb312b5bf555af8a307",
+    "T40_coordinator_closure_receipt_sha256": "39823945e8f5f3a764782e8d3b21099cd3fe198d942b7c7f031cd7e5eb9e9241",
+    "T40_metadata_receipt_sha256": "6445b087e824ec43ccec09ca9067d43954daa066a5ad06cf6658647c5ea06ff2",
+    "T40_receipt_sha256": "e6e66b56f613901a4d9141b09bd9e2c1de10146d749a2f4ce16d911192782e48",
+    "T40_result_sha256": "e3e123dcaeeab3f72cb7721ef14a5b2c2bec7d6df9afcd6396276ffc2a2bd362"
+  },
+  "owner_proof": {
+    "no_task_boolean_substitution": true,
+    "status": "PENDING_ACTUAL_OWNER_FACTS"
+  },
+  "runtime_files": {
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-custody-fs.mjs": "ede7fac49ff60258e9fcaae48138fac38bcd2532cb1c0328e7d4cf6b17ccd08f",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/admission-metadata-custody.mjs": "e4e856af152402f82ee43e3c79db8ea8fc9a2f05aac9762321f1a0867824540f",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/coordinator-fence-ack.mjs": "45fc58a1309c80293abaf3c7ac9c652182215cad7cd66728bbaa31b660965a5f",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-transport.mjs": "531450fe463131e6589c83af51953a281117cc30e5c4e7c8bc1055d65c7dc1a9",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/final-https-window.mjs": "2a3fd81375429a767d4b376aa17299ea4dfb4e9124042a795bec01575e03e9d8",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-fence-witness/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-bind-fence.mjs": "4d5d5554b3626ea001b8f878ebdcf4271eac3ad55a7d4bf8ceceacef53829cb2",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-control-ready.mjs": "63b9ae17c9c52b2fa49669de9aab21ee3f11fcbcc84fdb512acf79d0cfeef8c5",
+    "/root/bron-secrets/t41-runtime/docs/runbooks/payloads/t41-final-window.mjs": "f8fdda765bbaf08cfc5408d1dd65caeee02269150b0cae3096ca46aa33f956d1",
+    "/root/bron-secrets/t41-runtime/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/root/bron-secrets/t41-runtime/scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827"
+  },
+  "source_data_budget": {
+    "newcap_does_not_reset": true,
+    "remaining": 2,
+    "shared_scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "used": 1
+  },
+  "state": "DRAFT_NOT_ISSUED_OWNER_PROOF_PENDING",
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "task": "T41",
+  "verification": {
+    "actual_Source_RO_catalog_preflight": "RR READ ONLY; expectedCONNECT3; lookup/background guards0; no Auth/business rows or Source effects",
+    "focused_Node22_tests": 118,
+    "native_PG17_12_final_core_context_checks": 50,
+    "native_owned_containers_removed": 2,
+    "production_limit": "T41 not issued; no actual key proof, fence, timestamp reconciliation, final audit, owner acceptance or publication"
+  }
+}

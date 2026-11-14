@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'policy-split-required'
   | 'integration-pending'
   | 'external-unavailable'
+  | 'maintenance'
   | 'unauthenticated'
   | 'offline'
   | 'period-locked'
@@ -21,7 +22,7 @@ export type ErrorCode =
 
 const KNOWN: ErrorCode[] = [
   'validation', 'forbidden', 'not-found', 'version-conflict', 'transition-not-allowed', 'idempotency-conflict',
-  'policy-split-required', 'integration-pending', 'external-unavailable', 'unauthenticated', 'period-locked',
+  'policy-split-required', 'integration-pending', 'external-unavailable', 'maintenance', 'unauthenticated', 'period-locked',
 ];
 
 export class AppError extends Error {
@@ -49,9 +50,7 @@ interface PgError {
 export function toAppError(e: unknown): AppError {
   const requestId = getLastRequestId();
   if (e instanceof AppError) return e;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return new AppError('offline', 'Нет связи с сервером. Данные не отправлены.', '', requestId);
-  }
+  const offline = typeof navigator !== 'undefined' && !navigator.onLine;
   const pg = e as PgError;
   if (pg && typeof pg.message === 'string') {
     if ((KNOWN as string[]).includes(pg.message)) {
@@ -61,11 +60,15 @@ export function toAppError(e: unknown): AppError {
     if (pg.code === 'PGRST301' || /JWT/i.test(pg.message)) {
       return new AppError('unauthenticated', 'Сессия истекла. Войдите снова.', '', requestId);
     }
+    // A structured but unknown server error is not evidence of a retryable network failure.
+    if (pg.code) return new AppError('unknown', 'Не удалось выполнить действие', pg.message, requestId);
     if (/fetch|network|load failed/i.test(pg.message)) {
+      if (offline) return new AppError('offline', 'Нет связи с сервером. Данные не отправлены.', '', requestId);
       return new AppError('external-unavailable', 'Сервер недоступен. Попробуйте ещё раз.', '', requestId);
     }
     return new AppError('unknown', 'Не удалось выполнить действие', pg.message, requestId);
   }
+  if (offline) return new AppError('offline', 'Нет связи с сервером. Данные не отправлены.', '', requestId);
   return new AppError('unknown', 'Не удалось выполнить действие', String(e), requestId);
 }
 
@@ -87,7 +90,7 @@ function setInFlight(delta: number) {
  * Вызов команды по контракту (contract.generated.ts). Аргументы — без префикса p_: адаптер добавляет его.
  * Неизвестный аргумент — ошибка программиста, а не сервера. Однострочный результат нормализуется в объект.
  */
-export async function command<T>(name: CommandName, args: Record<string, unknown> = {}): Promise<T> {
+export async function command<T>(name: CommandName, args: Record<string, unknown> = {}, options?: { accessToken: string }): Promise<T> {
   const spec = CONTRACT[name];
   for (const k of Object.keys(args)) {
     if (!(spec.args as readonly string[]).includes(k)) throw new Error(`Команда ${name}: неизвестный аргумент «${k}»`);
@@ -99,8 +102,12 @@ export async function command<T>(name: CommandName, args: Record<string, unknown
     const financial = ['royalty_payment_add', 'royalty_manual_add', 'royalty_set_accrual', 'expense_save'].includes(name);
     const uid = financial ? (await client.auth.getSession()).data.session?.user.id ?? '' : '';
     const receipt = financial ? await operationKey(uid, name, params) : null;
-    const { data, error } = await client.rpc(receipt ? 'financial_operation' : name,
+    const request = client.rpc(receipt ? 'financial_operation' : name,
       receipt ? { p_command: name, p_args: params, p_operation: receipt.id } : params);
+    // A queued operation belongs to the captured session, even if another tab signs in meanwhile.
+    // This header is request-local; the shared client and other callers retain their own session.
+    if (options) request.setHeader('Authorization', `Bearer ${options.accessToken}`);
+    const { data, error } = await request;
     if (!error) receipt?.complete();
     if (error) throw toAppError(error);
     if (spec.returns === 'single' && Array.isArray(data)) return (data[0] ?? null) as T;
