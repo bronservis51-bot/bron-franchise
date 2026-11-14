@@ -3,6 +3,30 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T39 — независимое inert размещение публичной статики — 14.11.2026
+
+[T39 checklist](t39-stage-static.md) / `payloads/t39-stage-static.json` подготовлен
+для следующего EXECUTOR_TASK. Source/Auth экспорт T37 по-прежнему BLOCKED_OWNER_APPROVAL.
+T39 не открывает preview/API: активный maintenance web видит только status bind,
+а app-root56files/landing-root11files остаются на VPS и копируются в будущие
+`bron/site/app`/`landing`. T14 stage не переупаковывается/не пересобирается.
+
+Pre/post exact7T33IDs,5Compose labels, knownmaintenanceCaddy/override hashes и
+status-only mount,3hostsHTTPS503. Не читать Config.Env/renderedCompose, DB/backup/
+ownersecret; не менять services/Caddy/Compose/monitoring/Pages. Обе source manifests
+и оба destination проверяются до writes; неизвестное существующее содержимое
+BLOCKED, точное существующее REUSED. Новые publicdirs755/files644, только manifest
+files; никакого overwrite/delete/links. StatusJSON не трогается, его normal timer
+update не блокирует задачу. Helper180s, одинguard/result, private auditreceipt.
+
+21synthetic filesystem/mount/HTTP tests PASS и independent safety/scope reviewPASS,
+без сети/VPS; фактический staging ещё не выполнялся. Runtime code/data/maintenance
+ещё не менялись. STAGED_INERT не закрывает owner-key/freeze/finalaudit/приёмку/public.
+
+Дополнение к CI: f79d541 completeCI43556903797 SUCCESS; TypeScript/Deno fixture
+исправлен точечными объявлениями, без appCode/checks weakening. T37 payload/scope
+не расширен, его новый preparedmanifestSHA f6d474d1d1d2a8fd941a7cec2926ddaf74fac076b596bdcc1188b0af878d15a5.
+
 ## T38 COMPLETE/PARTIAL и coordinator follow-up — 14.11.2026
 
 Исполнитель подтвердил16/16pins и одинаковые87buildinputs e487↔b42c4fa,
