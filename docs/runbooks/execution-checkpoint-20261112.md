@@ -3,6 +3,46 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T30 Auth BLOCKED; schedule доказан; T31 проверяет передачу — 14.11.2026
+
+T30 принят/исполнен на16f38cc. Connect, BEGIN RO, server deadline, timezone и
+identity PASS; compact Auth SELECT снова client timeout20.009s, target read не
+достигнут. Попытка1/1, без fallback/записи. Receipt
+`/root/bron-secrets/t30-release-receipt.json`, SHA
+`7dbc5cbae788e0340c8498badf836dd3c4e0337e78c3ff2e186f88845f8b7904`.
+T29 receipt SHA получен:
+`bc32f26c6b6ac23ed86712762b72c046b50d4da92d3da8b9994fccae9a2a248c`.
+Owner key helper доставлен, OWNER_ACTION_PENDING; его личная ветка T30 продолжается
+без нового secret prompt и не удерживает подготовку независимого сетевого пакета.
+
+Через независимый source SQL-путь координатор подтвердил: именно T30 SELECT уже
+завершён, backend idle in transaction / ClientRead, без XID. Проверка типов locks
+показала только16relation AccessShareLock и штатный virtualxid ExclusiveLock;
+последний не является блокировкой записи таблицы. Строго идентифицированный наш
+read-only backend завершён, pg_terminate_backend=true; рабочих данных не меняли.
+Frontend close сам по себе не доказал server cleanup. Следующие probes используют
+transaction-local idle timeout10s; текущий source freeze по-прежнему НЕ выполнен.
+
+T22 schedule gate ЗАКРЫТ независимым readback: настоящий event=schedule run
+[43533210497](https://github.com/bronservis51-bot/bron-franchise/actions/runs/43533210497),
+точный main9815f74,14.11 00:17:42–00:17:50Z, success; public-services job success,
+notify ожидаемо skipped. Причина предшествующей задержки API не установлена.
+Cron/dispatch/variables/secrets не менялись; новый Telegram alert не нужен.
+
+T31 — ограниченная синтетическая диагностика без Auth/business rows: один
+canonical DNS IPv4, прежний CA/SNI/password callback, ответы128/512,8x64,1024,
+4096,1MiB. При малых PASS и большом timeout разрешён ОДИН временный эксперимент
+mtu1280/advmss1200 только отсутствующим ранее /32 к тому же peer; before-image
+и exact inverse fsync ДО add. Default route/firewall/существующие маршруты не
+меняются. Не помогло — exact remove/readback; помогло — временный маршрут явно
+учтён до завершения миграции. PMTU пока ГИПОТЕЗА, а не установленная причина.
+Только после полного dummy PASS — один Auth continuation на ТОМ ЖЕ IP, без Mac.
+
+Параллельная подготовка завершила native proof transport-neutral atomic source
+fence и exact full snapshot transport, а также guarded timestamp final-window core.
+Это пока код, не gates: production fence, новые target writes и public/preview
+не разрешаются ни подготовкой, ни T31. T12/T14/T18/T19/T21 PASS сохраняются.
+
 ## T29 закрыт; T30 — компактный Auth и личная проверка ключа — 14.11.2026
 
 T29 отчёт получен: COMPLETE_WITH_BLOCKED_AUTH. Прямой source6543 дошёл до
