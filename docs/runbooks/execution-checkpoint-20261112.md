@@ -3,6 +3,43 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T29 закрыт; T30 — компактный Auth и личная проверка ключа — 14.11.2026
+
+T29 отчёт получен: COMPLETE_WITH_BLOCKED_AUTH. Прямой source6543 дошёл до
+read-only запроса Auth, затем PG_QUERY_READ_TIMEOUT; разрешённый запуск израсходован.
+Fallback через Mac не выполнялся. VPS key --check READY и preview inputs PASS,
+но ни независимое владение ключом, ни аварийный вход с другого устройства этим
+не доказаны. Canonical receipt `/root/bron-secrets/t29-release-receipt.json`;
+полный SHA нужно вернуть в T30, содержимое с секретами не публиковать.
+
+Координатор через подключённый Supabase только чтением увидел собственный backend
+диагностики idle in transaction / ClientRead после завершённого Auth SELECT.
+Auth:16 строк, примерно19KB ответа. Это не доказательство медленного SQL: сервер
+ждал клиента. Узко ограниченная попытка завершения именно этого backend не нашла
+совпадения и никого не завершила; последующее чтение подтвердило его отсутствие.
+Точная причина сбоя response path ещё не установлена; новых source writes нет.
+
+T30 — один МАТЕРИАЛЬНО изменённый compact-запуск, не повтор T29: сервер отдаёт
+точный timestamp в микросекундах и SHA256 canonical JSON ВСЕХ остальных полей.
+UUID/timestamps/digests остаются только в RAM VPS; наружу — counts и timings.
+7 unit + real PG17.12/pg8.23.1 native PASS доказывают эквивалентность сравнения,
+но не закрывают production route. Только прямой VPS→6543, максимум один запуск,
+никаких timestamp writes, full inventory, freeze, preview или публикации.
+
+Независимая ветка T30 разрешает ЛИЧНЫЙ ввод владельца через телефон/второе
+устройство в AdminVPS web console: `bash /root/bron-secrets/t30-owner-verify.sh`.
+Wrapper проверяет старый helper и immutable T21 manifest; ключ только getpass,
+decrypt→zstd-test на VPS, safe result root0600. На Mac нет ни key input, ни
+ciphertext/plaintext. PASS crypto отдельно от подтверждения владельцем независимой
+копии и личного second-device login. Если копии нет — OWNER_COPY_ABSENT, не читать
+серверный identity ради формального PASS. Owner pending не задерживает Auth/отчёт.
+
+Restore T21, Auth/RLS T12, пять пакетов T14, backup/status T18 и видимое Telegram
+сообщение T19 переиспользуются. Schedule нового main остаётся отдельным PENDING.
+Финальные freeze/delta/full audit и личная PWA-приёмка/публикация не выполнены.
+Параллельно готовятся транспорт точной полной сверки и проверяемый обратимый
+source fence; подготовка не является разрешением применить их в T30.
+
 ## T29 подготовлен: узкая Auth-диагностика и VPS-only key readiness — 14.11.2026
 
 Владелец требует краткий сквозной статус в каждом сообщении: этап/подтверждено/
