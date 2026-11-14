@@ -3,6 +3,37 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T31 закрыл диагностику малого ответа; T32 — один host-only эксперимент — 14.11.2026
+
+T31 принят на25e869b после восстановления доставки: Mac git fetch не разрешал
+github.com. Координатор подтвердил remote и актуальный DNS; одно per-command
+http.curloptResolve с sslVerify=true позволило получить тот же pinned commit.
+System DNS/hosts не менялись, packet scope/one-run не сбрасывались.
+
+Actual selected source IPv4=34.215.156.231, CA/SNI/callback сохранены. Connect1268ms,
+BEGIN205, serverDeadline202,idleDeadline201,identity204,synthetic128=204ms PASS;
+synthetic512=PG_QUERY_READ_TIMEOUT8002ms. Большие и multirow stages NOT_RUN.
+TCP: mss/rcvmss/advmss1448,rto6656,bytes_received4716,bytes_sent2824,
+bytes_acked2459,segs_out22,segs_in16,unacked1. Это наблюдение потери/ожидания
+ответа, не установленная причина PMTU или ошибка SQL.
+
+Условие T31 требовало512PASS до route experiment, поэтому он честно NOT_RUN:
+host route UNCHANGED, exact/32count0, before-image отсутствует. Auth NOT_RUN0/1.
+T31 завершён BLOCKED_NETWORK, повторять его helper/guard не разрешается.
+Root result `/root/bron-secrets/t31-source-network-result.json`, SHA
+`a4fa63fc4c269781c3c7062b9ba32cc67ef6174e09b4571ef104f32fcab7be99`;
+canonical receipt SHA
+`c29b3a2d9aa2801b90fee85a87154ac5f9a583bd842f6a672c10ac14da5fed59`.
+Node процессов0; kernel FIN-WAIT-1 без PID не считать живым helper и не удалять
+посторонние sockets. Личная ветка ключа T30 по-прежнему OWNER_ACTION_PENDING.
+
+T32 отдельно разрешает ОДИН ранее НЕ исполнявшийся host-only MSS/MTU эксперимент
+на том же peer по exact pinned T31 evidence (128PASS/512timeout). Новую baseline
+не повторять. До эффекта — private fsynced before-image/exact inverse; прежние
+маршруты/default/firewall/TLS не менять. Далее один fresh TCP/dummy sequence;
+не помогло — exact remove/readback; только полный PASS разрешает Auth continuation.
+Ни source freeze, ни target writes, ни preview/publication этим не разрешаются.
+
 ## T30 Auth BLOCKED; schedule доказан; T31 проверяет передачу — 14.11.2026
 
 T30 принят/исполнен на16f38cc. Connect, BEGIN RO, server deadline, timezone и

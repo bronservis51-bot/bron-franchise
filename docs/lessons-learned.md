@@ -2,6 +2,13 @@
 
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
+- T31: TLS/identity/128bytes PASS,512bytes timeout, unacked1/RTO6656. Предварительное
+  условие512PASS остановило ещё НЕ исполнявшийся host-only эксперимент; это граница
+  пакета, а не доказанная невозможность проверить маршрут. T32 использует exact
+  уже полученный128PASS/512timeout, не повторяет baseline и сохраняет все final gates.
+- GitHub DNS отказ на Mac не означает отсутствующий commit. Одно подтверждённое
+  per-command curloptResolve с sslVerify=true восстановило fetch; не менять hosts,
+  не отключать TLS и не заменять проверку manifest предположением о публикации.
 - T29 raw Auth и T30 compact Auth оба завершились client timeout. Source backend
   T30 уже был idle/ClientRead после SELECT: медленный SQL этим не доказан.
   Следующий шаг — разные размеры и multi-row СИНТЕТИЧЕСКОГО ответа на одном peer,
