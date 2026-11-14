@@ -2,6 +2,17 @@
 
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
+- T33 дал тот же128PASS/512timeout на двух других canonical peers. Не делать ещё
+  один такой Node probe: независимый клиент и порядок ответов снимают другую
+  неизвестность. Libpq PASS сам по себе не доказывает конкретный дефект Node или
+  провайдера; его безопасные partial counts сохранять даже при позднем отказе.
+- Native TLS/client тест не должен читать password из image defaults. Key-only
+  unsets при чистом Docker CLI env + strict service/pgpass подтверждены реальным
+  SCRAM и poisoned-env negative cases, без credential values вargv/env/log.
+- Проверять future freeze draft на реальных READONLY metadata до one-shot task:
+  отличавшийся literal 'cron' выявлен и исправлен до source effects; активный job
+  не меняли/не восстанавливали удалённый run_jobs. Отсутствие прямых унаследованных
+  write grants у lookup-role не исключает NOINHERIT SET ROLE — проверять и этот путь.
 - T32 реально изменил TCP MSS, но512bytes снова не пришли; точный inverse выполнен.
   Не повторять эту гипотезу без новых данных. CanonicalDNS имеет несколько peer:
   отрицательный результат на одном не переносится на остальные; разрешённый bounded

@@ -3,6 +3,48 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T33 все peers BLOCKED; T34 — независимый libpq, без рабочих данных — 14.11.2026
+
+T33 наe34a87b: два других canonicalIPv4,44.225.139.66 и44.252.246.120, каждый
+connect/RO/deadlines/identity/128bytes PASS,512bytes client timeout~8s.
+Все три pooler peer теперь проверены; маршруты/DNS/TLS не меняли. Auth NOT_RUN.
+T33 result SHA `42f1d653fc8938af78377c501c91ee9b6668b0e04cfb280e0f2713c3fc13c492`,
+receipt SHA `6b05775687250366aee23443bd2e247a52ba3bf4404e63d919820ee99b97d6bc`.
+Cause не установлен. Не повторять Node-probes/MSS или объявлять остальные peers
+непроверенными. T34 проверяет один независимый libpq клиент на старом peer.
+
+T34 использует уже cached image текущего неизменённого supabase-db, только как
+одноразовый psql client: --rm/--pullnever/hostnetwork/read-only/capdrop, без старта
+БД/target volumes/ports. Защищённый исходный пароль запрашивается существующим
+callback ТОЛЬКО на VPS, временные root0700/0600 pgpass/service/CA удаляются после
+клиента. Никаких новых owner inputs/переноса secrets или данных на Mac. SQL только
+RR/READONLY identity/deadlines и synthetic FIRST512→128→10x128→1MiB, затемROLLBACK.
+Frontend TLS подтверждается libpq conninfo; pg_stat_ssl за pooler не подменяет
+frontend доказательство. Неполный результат сохраняет safe counts/timings, не PASS.
+
+Native actualpsql17.12/PG17.12 TLS/SCRAM, escapedpgpass, exactsynthetic sequence,
+wrongCA/host/password и poisonedimagePGenv clearance PASS; cleanup PASS. T34
+launcher фиксированным проверенным рецептом связывает helperSHA с Image текущего
+DBcontainer ID51071996..., создаёт protected activation file/hash автоматически.
+Это разрешение только диагностики, не Auth/migration/freeze/preview/publication.
+
+Независимый normalDNS/TLS backup-status GET14.11 05:04МСК: expected503,
+exact3keys,healthy=true,checkage4.81m/backupage64.81m — PASS. Перед финальным
+окном всё равно требуется свежий результат, прошлое наблюдение не бессрочно.
+
+Readonly coordinator preflight source admission до его запуска поймал ожидание
+не той команды: реальный bron-jobs вызывает ТОЛЬКО отсутствующий run_jobs('cron'),
+а draft разрешал только noarg. Исправлено в подготовленном коде без изменения job.
+Проверено также lookupOtherSetRoles=0; guard теперь отвергает NOINHERIT SET-путь.
+Actual readonly preflight: unexpectedCron0,lookupSET0,lookupWrites0,lookupDefiners0,
+prepared0,netQueued0,runJobsExists=false. Соответствующие native negative cases
+прошли до выдачи будущего freeze-пакета; никаких source writes не было.
+
+T33 вернул недостающие безопасные значения из T29: точная пятифайловая Compose
+цепочка, все7 записанных IDs, Caddy4fcafa98.../User empty, staged app-root и
+landing-root release-manifest paths, все private runtime dirs root0700. Повторной
+инвентаризации не было; подготовка preview теперь не зависит от нового запроса.
+
 ## T32 отрицательный; T33 — другие canonical peers и тот же TLS — 14.11.2026
 
 T32 на322e4c5: ровно один /32 MTU1280/MSS1200 эксперимент выполнен. MSS1448→1228,
