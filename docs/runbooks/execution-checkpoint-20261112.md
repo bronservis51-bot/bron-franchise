@@ -3,6 +3,25 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T38 — независимый локальный read-only cutover-contract audit — 14.11.2026
+
+T37 остаётся PREPARED_BLOCKED_OWNER_APPROVAL с уточнённым credential-derived
+Auth-digest scope; deployment и реальные source rows не разрешены. T38 этого
+согласования не подменяет и не использует temporary capability.
+
+[T38 checklist](t38-cutover-contract.md), `payloads/t38-cutover-contract.json`:
+10минут, публичные Git blob buildinputs e487 vs pinnedHEAD без rebuild;
+4URL/3clientorigin/base/scope/storage/publication map; один helper с4fixedGET
+GitHub Pages(environment reviewer counts only)/PR12metadata; порядок общих
+public variables/monitorflag/одной Pages publication/preview/rollback как
+неисполненный план. Никаких Secrets/variables APIs, SSH/VPS/DB/browserstorage,
+подмены owner acceptance или повторения T12/T14/T18/T19/T21/T22/T36.
+
+Только private local plan/state. При недоступном gh/403/DNS — UNKNOWN/PARTIAL,
+без попытки нового login/MFA и без предположения, что у владельца нет доступа.
+Root syntax/puremetadatafilter checks PASS без сети, независимый scope reviewPASS.
+Результат готовности ещё не получен: наличие пакета не означает его ACCEPTED/PASS.
+
 ## T36 CLOSED/PASS; T37 подготовлен, deployment отклонён auto-review — 14.11.2026
 
 T36 на6ade16d: prepare1, GET1, wrongPOST1, validPOST1, retries0. HTTPS200,
