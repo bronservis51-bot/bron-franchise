@@ -1,5 +1,22 @@
 # Ошибки и правила против их повторения
 
+## 14.11.2026 — проверять реальный ref и общий TypeScript gate
+
+- `pull_request.base.sha` не является надёжным witness текущего main. Root ошибочно
+  заподозрил регрессию monitoring по6bf, затем прямойgit/ref иgitls-remote подтвердили
+  actual9815. Сначала получать branchref; чтение файла по старому immutableSHA
+  доказывает только содержимое того commit. Не объявлять изменение причины без refproof.
+- NativeDeno и targetedNode tests не заменяют общийnpmtypecheck, когда fixture.ts
+  лежит в tests, включённых appTSconfig. T37 fixture добавил две compilerошибки;
+  исправлять точечными объявлениями MJS/Deno, не выключать тест/общую проверку.
+- Shared VITE variables питают и Pages, и monitoring. BRON_MONITORING_ENABLED
+  управляетnotify, неmaintenance/checkjob. Сохранять flagtrue и backup/watchdog;
+  ожидаемый503 закрытого preview не выдавать за PASS или неожиданный DBсбой.
+  Не добавлять выключение/восстановление alerts без необходимости; целевыеVITE
+  менять парой непосредственно перед transition, APP_URLRF после publicopen.
+- ОтказGHread в одном executionenvironment не означает отсутствие owner rights.
+  Независимый coordinatorGET разрешил4UNKNOWN; в receipt сохранить оба результата.
+
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
 - T36 закрыл actualHTTPS→DB synthetic gate; не повторять транспортные пробы.

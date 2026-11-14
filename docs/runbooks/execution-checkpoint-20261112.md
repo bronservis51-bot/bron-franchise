@@ -3,6 +3,40 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T38 COMPLETE/PARTIAL и coordinator follow-up — 14.11.2026
+
+Исполнитель подтвердил16/16pins и одинаковые87buildinputs e487↔b42c4fa,
+4URL/3origin/storage map; закрытые builds/PWA не повторялись. Его4GHGETs завершились
+GH_READ_FAILED, поэтому результат PARTIAL сохранён, а не переписан PASS.
+Plan SHA `8436734384755b9e3ffaa8fba467509ff89cd95fea398003d0adac09ab787055`;
+state `5b03d7189b913c532655b90224d684c40d26015e266f43a7f619a1e682f4117d`;
+inputs `1a7c6e607120f432785e2a2835b00b78cad75029bfddf2ce36c04f8fc25a7125`;
+log `f80178981566d0b993b70165a4cfb93a82a3f504239a23a485971708b0eabfcf`.
+
+Root в другой среде получил4GET PASS: appPagesworkflow/main/baseURLbron-franchise,
+landingPageslegacy/main/root/baseURLbronservice-franchise; appenvironment reviewer0,
+waitrule отсутствует, custombranchpolicymain разрешён. PR12 open/draft/mergeabletrue,
+headb42c4fa, CIunstable. Отдельный публичный GET старого landing200 подтвердил
+sourceAPI lead_submit, без отправки формы. Runtime/private data не запрашивались.
+
+CIrun43555052238/job132325908729 действительно failed на typecheck: Deno fixture
+crypto-native.ts не имел MJS declaration и типа Deno.version. Исправлены точечными
+.d.mts + local declare, без ts-nocheck/exclude и без app/runtime/payload изменений;
+localnpmtypecheck, nativeDeno→Node22crypto и Deno check PASS. Новый CI ещё требуется.
+
+Важная коррекция Root: PR12.base.sha6bf — историческая база PR. Нельзя считать её
+текущим main. Прямой gitls-remote и GitHubgit/ref подтвердили actualmain9815f74;
+T19PR13/T22PR14 и exactscheduled43533210497 на9815 независимо найдены. Регрессия
+мониторинга НЕ подтверждена, его gates не переоткрывать. Root сообщил ошибку владельцу.
+
+Flagtrue сохраняется: он включает notify, но не maintenance/checkjob. Выключать
+тревоги ради ожидаемых503 не требуется для release gate. SharedVITE pair меняется
+непосредственно перед appPages transition; APP_URLRF — после publicopen. В preview
+внешние проверки могут закономерно fail на503; backupcheck и VPS timers не выключать,
+не заявлять весьmonitorPASS до publicchecks. Никакого flagwrite сейчас не было.
+T37 approval pending/функция отсутствует; реальных source/Auth rows, freeze,
+preview, merge/publication по-прежнему нет.
+
 ## T38 — независимый локальный read-only cutover-contract audit — 14.11.2026
 
 T37 остаётся PREPARED_BLOCKED_OWNER_APPROVAL с уточнённым credential-derived

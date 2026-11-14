@@ -1,5 +1,6 @@
 // Native Deno encryption fixture; synthetic only, module graph has no remote imports.
 import {encryptSnapshot,PRIVATE_SNAPSHOT_PROTOCOL} from '../../docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs';
+declare const Deno: {readonly version: {readonly deno: string}};
 const capability=new TextEncoder().encode('a'.repeat(64));
 const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',capability));
 const hash=Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');

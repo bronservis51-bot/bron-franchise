@@ -88,6 +88,36 @@ audit ещё впереди; preview и общая публикация пока
 коммитов и тестов не является мерой приближения релиза. Новую оценку времени строим
 по измеренным оставшимся работам, реальному блокеру и доступности личной приёмки.
 
+## Подтверждение T38 и точный порядок мониторинга
+
+T38 сравнил87 tracked клиентских build inputs с e487ec8: mode/type/blob/path/content
+совпали, rebuild не нужен. Карта4URL/3clientorigin подтверждена кодом; app storage
+`bron.auth`/IndexedDB`bron-local` остаётся origin-scoped. Новый RF origin не читает
+старый github.io storage. Клиентские timestamp-builds не обещаются byte-identical.
+
+Координатор отдельно разрешил4 metadata UNKNOWN из T38: app Pages — workflow,
+main и `https://bronservis51-bot.github.io/bron-franchise/`; landing Pages — legacy
+main/root и `https://bronservis51-bot.github.io/bronservice-franchise/`. У app
+`github-pages` нет required reviewer/wait timer; разрешён branchmain. Это не
+разрешение merge/deploy: PR12 draft, CI обязана PASS на точном будущем head.
+Публичный GET старого landing подтвердил sourceAPI lead_submit (без submission).
+Следовательно, нужен и отдельный переход старого landing через его существующий
+legacy publisher; один app Pages workflow не переключает второй репозиторий.
+
+BRON_MONITORING_ENABLED управляет Telegram notify, а не Caddymaintenance и не
+самим checkjob. Оставляем существующий flagtrue: отдельное выключение тревог
+ради короткого releasewindow не является необходимым gate. Checkjob и VPS backup/
+watchdog timers продолжают работать; IP-gated API закономерно возвращает внешнему
+GitHub runner503, поэтому в receipt отмечается ожидаемое окно недоступности,
+а такие проверки не объявляются PASS или неожиданной поломкой БД.
+
+Shared VITE URL/key проверяются согласованной целевой парой непосредственно перед
+единственной appPages transition-publication, не задолго до неё. APP_URL нового
+RF приложения переводится после открытия публичного web/API; до этого отдельный
+public backup-status URL остаётся доступным и проверяется. После личной приёмки/
+public switch подтвердить все доступные пути, целевые variables и flagtrue readback.
+Новые тестовые Telegram сообщения, dispatch или новый монитор не нужны.
+
 ## Граница данных и конкретная публикация
 
 Запрещены backup-export на Mac (даже encrypted) и Mac-transit source данных.

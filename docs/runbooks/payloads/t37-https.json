@@ -75,6 +75,7 @@
   "files": {
     "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
     "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
     "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
     "docs/runbooks/payloads/source-https-reader/index.ts": "0b2ec2a362b535876ea442e23ea6c603262eef5a5430b9bfe6d189f32b1c3056",
     "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
@@ -85,7 +86,7 @@
     "tests/ops/exact-fingerprint-native.py": "d9749f65d0aef2a019b064413b41c24c1cbab637d69dca7466c3e35afcb787ec",
     "tests/ops/exact-query-fingerprint.test.mjs": "c5a977a56ca55faa5fa0c383823a2a8b497ec03121aac560188cc13fbb0d638b",
     "tests/ops/source-https-reader-crypto-native.mjs": "0465e578761ac7d3180119b40f67f403069362a4def06317cbb91371c1a215f5",
-    "tests/ops/source-https-reader-crypto-native.ts": "e5a4ebc0bfbb8fd3ca21f6a2db74701c8ff6cef4c103bc21943588278e4a8da9",
+    "tests/ops/source-https-reader-crypto-native.ts": "df0884d5657b25b62980e637afb3e55288d5f5c5c73c34191bc1ee5aa0d6f10c",
     "tests/ops/source-https-reader.test.mjs": "864228b9cb7e004da57d48a19b7037bab04c8936b2eae383ab991462c7df3156",
     "tests/ops/t37-https-inventory.test.mjs": "96dfbde4db51af456e3c26a3385246f70a6e13fa94cf00ec1aa37de6a9169365"
   },
@@ -164,6 +165,7 @@
     "Deno_check": "actual5filedeploymentbundle strictcheck PASS",
     "Edge_reader": "18focused PASS exactNode22 + independentsecurityreview",
     "VPS_helper": "14focused PASS exactNode22.23.5 + independentreview",
+    "fixture_typecheck": "CI found missing Deno/MJS declarations; added local Deno.version type + encrypt-snapshot.d.mts without skip/exclude/ts-nocheck. npmtypecheck and nativecrypto/Deno-check PASS; runtime/payload unchanged",
     "limit": "sourceworkingdata untouched; deployment rejected/notexecuted; realinventory remainspending",
     "native_Deno_crypto": "Deno2.9.8 actualencrypt module toNode22 decrypt PASS; wrongkey/tamper/nonce rejected",
     "native_PG17": "all32strictgroups/15schema parity3002rows plus sameRR concurrentAuth update and hookrollback PASS"
