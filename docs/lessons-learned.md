@@ -462,3 +462,24 @@ Key proof — final gate, не причина тормозить уже разр
 Ожидание координаторского deploy прямо названо; после его подтверждения новый
 пакет/повторное owner согласие не нужны. Passed restore/builds/RLS/Telegram не
 переоткрывать; проверять реально изменённый транспорт и текущую свежесть копии.
+
+
+### 14.11: actual технический preflight до одноразового вызова
+
+T37 доказал прямой encrypted HTTPS Source→VPS полный snapshot:62tables/4020rows,
+только1 source-newer Auth updated_at. Не возвращаться к TCP/MTU, не повторять
+живую Auth-сверку до freeze. Ledger used1/3; secret rotation не сбрасывает used.
+Reader после результата закрыт v2/GET410; availablelogs дают только наблюдаемое
+окно, не гарантию всего хранения провайдера.
+
+Перед T40 реальный SELECT DISTINCT backend_type (без Auth/businessrows) обнаружил
+`pg_net 0.20.4 worker`; конечный enum и затем слишком узкий regex отклонили бы
+валидное состояние. Исправление сделано до VPS one-shot; этот observed label
+покрыт regression. Фиксированный metadata allowlist не расширялся, поле остаётся
+техническим, fence-предикаты не ослаблены. Не путать локальные тесты с фактической
+совместимостью Supabase extensions.
+
+Log-query API принимает простой SELECT; WITH-expression/CTE не прошли parser/
+переписывание запроса. Для будущих cleanup использовать проверенный plain SELECT
+с inline aggregate expressions, explicittimewindow и только counts; raw logs
+не возвращать.

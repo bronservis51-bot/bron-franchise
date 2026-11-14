@@ -1,6 +1,6 @@
 # Допуск к рабочему релизу
 
-Актуально на **14.11.2026: T39 static placement PASS/inert; T37 требует owner approval; T36/restore/schedule PASS**. Прежнее приложение работает,
+Актуально на **14.11.2026: T37 live inventory complete, только1 source-newer Auth updated_at; T39 inert; ключ/freeze/приёмка открыты**. Прежнее приложение работает,
 российский релиз **ещё не допущен**. Целевая база восстановлена и изолирована;
 на трёх новых доменах работают DNS и доверенный HTTPS со страницей обслуживания
 503. Это не публикация приложения или API.
@@ -14,12 +14,18 @@
 Правило14ноября: выбираем кратчайшее действие, закрывающее gate с прежними
 гарантиями. PASS переиспользуется до затрагивающего изменения/сбоя. Метрика —
 закрытый критерий и работающее поведение сайта; не количество скриптов/тестов.
-T28 завершил старую очередь без повторных эффектов. Исторический live inventory
-подтверждён, но его Mac-route запрещён; прямой DB-канал сейчас BLOCKED.
-finalFreezeAudit остаётся false. T36 hosted DB/TLS/READONLY512KiB и available-log scan
-PASS; dummy endpoint закрыт. T37 full live audit/Auth-план подготовлен, но deployment
-отклонён auto-review до явного owner authorization точного payload/source→VPS.
-Рабочие данные по новому пути ещё не читались, freeze не разрешён.
+T28 завершил старую очередь без повторных эффектов. T37 впервые выполнил полный
+live audit по прямому Source Edge HTTPS→VPS:62tables/4020rows на каждой стороне,
+15schema groups/5sequences. Единственный strict mismatch — data:auth.users:
+16/16 users,1 changed updated_at, source newer, другие поля совпали. Это
+LIVE_AUTH_TIMESTAMP_ONLY, не finalFreezeAudit. Mac data transit=false.
+
+Reader закрыт coordinator tombstonev2 (exactreadback/HTTPS410); available log scan
+2edge+4function records: capability/private-field/body matches0. Общий approved
+бюджет использован1/3, осталось2 финальных snapshot. Прямой PostgreSQL TCP больше
+не блокирует выпуск: выбран доказанный HTTPS-канал, старые TCP/MTU пробы не повторять.
+Ключ/second-device proof pending: на телефоне AdminVPS показал blank «Неразрешенный»,
+что пока не доказывает доступ к консоли. Source freeze ещё не выполнялся.
 
 ## До переключения: текущие критерии
 
@@ -27,7 +33,7 @@ PASS; dummy endpoint закрыт. T37 full live audit/Auth-план подго�
 | --- | --- | --- |
 | Полная копия | Регулярный target-backup/S3-readback/SHA/свежесть PASS. T21: полный cold restore exit0, strict mismatch=[], все семь postchecks и cleanup PASS; receipt связан с точным T12 manifest | Подтвердить независимое хранение ключей вне единственного Mac. Исторический manifest complete=false не переписывать; результат восстановления хранится отдельной квитанцией |
 | Совместимость | T21 globals/preloads, builtin plpgsql, DB metadata/ACL/labels/role settings, global roles, extension metadata, Vault logical и Storage tree PASS; T12 реальные Auth/RPC/RLS PASS | Парольный UI-вход и устройства; выключенные интеграции и устаревший bron-jobs автоматически не включать |
-| Строгая сверка | Полный source/target audit T12 PASS; поля из сравнения не исключались | Финальная сверка под остановленной записью после последней дельты: источник пока продолжает работать |
+| Строгая сверка | Полный audit T12 PASS; T37 full live inventory complete:62/4020, только1 source-newer updated_at diff; поля не исключались | Финальная сверка под остановленной записью после последней дельты: источник пока продолжает работать |
 | Единственная запись | Цель закрыта для пользователей; источник продолжает работать. В панели Free-проекта доступна общая Pause project | Проверить точный порядок остановки всех путей записи, перенести последние изменения и подтвердить прекращение зарубежной записи до открытия цели. Пауза ещё не применялась |
 | DNS и HTTPS | Все три домена ведут на российский VPS и отвечают доверенным HTTPS 503; backend изолирован. T18: технический HTTPS status endpoint установлен и проверен; он содержит только `checked_at`, `last_backup_utc`, `healthy`. T39: app/landing размещены по manifest; активный web видит только status, preview не применён | После cold restore и финальной сверки включить только preview владельца; общую публикацию оставить закрытой до приёмки и остальных условий |
 | Старые анкеты и сборки | T14: пять комплектов цели/отката собраны и доставлены; T39: два RF комплекта размещены в будущем site/app и site/landing без публикации | Выпустить подготовленные сборки и проверить успешную доставку, восстановление ввода и переход со старых форм по ADR-0021; фиктивные лиды не создавать |

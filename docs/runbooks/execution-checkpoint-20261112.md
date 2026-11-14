@@ -1,3 +1,28 @@
+# 14.11.2026 — T37 live inventory завершён, reader закрыт
+
+Executor T37 commit694d70d / manifest ca79265f…:22/22files, oneprepare/onePOST,
+HTTPS200/17958bytes/27770ms. Source07:13:06.219–07:13:33.125Z; target07:13:33.194–33.687Z.
+62tables/4020rows/15schema groups/5sequences each. Strict diff onlydata:auth.users;
+16/16,1 source-newer updated_at, nootherfielddiff/no added/deleted users.
+Status LIVE_AUTH_TIMESTAMP_ONLY; finalFreezeAudit=false/applyAuthorized=false;
+no writes/freeze/Macdata. Budget1/3used,2remain. claimSHA
+42a49f50542d15fdfe5a7a6ded5dee139abcfff41cc3d112da81afcb098a5f59.
+
+Canonical VPS receipt /root/bron-secrets/t37-release-receipt.json SHA
+3ceb55c73d5f900965cb741c967cb95dd67f77449bdf1ff7bd83af0eeee37928;
+resultSHA0d52331ca933776d0e4db055b58a2dfeadbccb35da17c91e3f876baf4017ac25.
+Coordinator closed functionbron-source-reader-3d7e8850bd66 v2: exactsinglefile
+tombstone/no env/DB/cap access, trustedHTTPS410. Availablelogwindow07:11–07:14:30Z:
+2edge+4function rows; capSHAcandidate/privatefields/bodyattrs matches0. This proves
+availablelogs only, not universal providerretention. Coordinatorlocal receiptSHA
+5f16c9c928559871ca5c44d4e8ba9293c5699b275a88cc426c80d34f1153c12a.
+
+T30 phone returned blank «Неразрешенный», no console/loginprompt: independent
+recovery/access remains pending, not a failedkey and not a source transportblocker.
+T40 preparation targets technicalmetadata custody+supportedconsole navigation;
+noAuthworkingrows/newfullaudit/freeze/CONTROL_READY in metadata-only phase.
+Restore/builds/Auth-RLS/Telegram/schedule/T39 PASS reused.
+
 # 14.11.2026 — решение владельца и новый T37
 
 Владелец явно одобрил T37 и общий бюджет3 попытки Source→VPS (FAIL/timeout/uncertain тоже считаются), encrypted full strict snapshot + max16 compact Auth UUID/updated_at/credential-derived digest, без raw values и без Mac. [Точный immutable scope](owner-source-transport-approval.md). Это закрывает прежнюю причину auto-review отказа. Actual T37 пока НЕ выполнялся: истёкший T36 secret не использовать, требуется свежий pinned пакет с VPS-only prepare и общим durable ledger. Owner key proof T30 независим от live-сверки; [понятная инструкция](owner-phone-recovery-check.md). Maintenance сохраняется. Restore/RLS/builds/backup/Telegram/schedule/T39 inert staging PASS не повторять. Final operator ещё интегрируется; approval scope не равен freeze/apply/publication.
