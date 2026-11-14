@@ -1,6 +1,6 @@
 # Допуск к рабочему релизу
 
-Актуально на **14.11.2026: direct Auth/libpq BLOCKED; T35 HTTPS610bytes PASS, REST401; T36 private dummy; schedule PASS**. Прежнее приложение работает,
+Актуально на **14.11.2026: T36 synthetic HTTPS→DB PASS/CLOSED; T37 PREPARED, auto-review требует owner approval; schedule PASS**. Прежнее приложение работает,
 российский релиз **ещё не допущен**. Целевая база восстановлена и изолирована;
 на трёх новых доменах работают DNS и доверенный HTTPS со страницей обслуживания
 503. Это не публикация приложения или API.
@@ -16,8 +16,10 @@
 закрытый критерий и работающее поведение сайта; не количество скриптов/тестов.
 T28 завершил старую очередь без повторных эффектов. Исторический live inventory
 подтверждён, но его Mac-route запрещён; прямой DB-канал сейчас BLOCKED.
-finalFreezeAudit остаётся false. T36 разрешает только private HTTPS dummy, без рабочих
-данных/freeze; hosted DB/TLS/READONLY и log-leak ещё не подтверждены.
+finalFreezeAudit остаётся false. T36 hosted DB/TLS/READONLY512KiB и available-log scan
+PASS; dummy endpoint закрыт. T37 full live audit/Auth-план подготовлен, но deployment
+отклонён auto-review до явного owner authorization точного payload/source→VPS.
+Рабочие данные по новому пути ещё не читались, freeze не разрешён.
 
 ## До переключения: текущие критерии
 

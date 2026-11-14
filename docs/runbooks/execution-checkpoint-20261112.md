@@ -3,6 +3,37 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T36 CLOSED/PASS; T37 подготовлен, deployment отклонён auto-review — 14.11.2026
+
+T36 на6ade16d: prepare1, GET1, wrongPOST1, validPOST1, retries0. HTTPS200,
+actual wrongDBhostname rejection + correctCA/name accepted; postgres database/
+role/session/owner, RR READONLY, statement5s/idle10s,512KiB synthetic, rollback,
+3301ms. Рабочие строки не читались, Mac transit=false. Result SHA
+`7c4b672ca7b7ba6d9a6533a69b75e805d28194a49bb93a1cf30903f5e01d2ca4`;
+receipt `3c18ca7a513d598c6472e9c4bac2004119fc34a79d2c9d9131933078e9744b6d`;
+log `3d61a777338b7445e1c6278d53c220cfd023debdddf381961f530af09904068f`.
+
+Root проверил доступные03:20:40–03:23:20Z logs:3invocations(GET1/POST2/2001/4032)
+и1boot, matching capability-preimage/dummy/bodyattributes=0. Только доступные
+логи, не гарантия всех внутренних retention paths. Dummy функция закрыта tombstone
+v2, exact readback; код больше не содержит capability/env/DB доступа.
+
+[T37 prepared checklist](t37-https-inventory.md) / `payloads/t37-https.json`:
+один полный strict snapshot+compactAuth в одной RR READONLY транзакции, ответ
+целиком AES-GCM/HKDF encrypted для RAM VPS, existing secret/expiry безrotation.
+Установленный T21 auditor не заменяется; новый optional exact reader/beforeCommit
+в отдельном runtime. Native PG17all32groups/parity+concurrentAuthRR/rollback,
+Deno→Node22crypto,18reader+14VPS focused и independentreviews PASS.
+
+Попытка deployment `bron-source-reader-fba3e5a8714f` отклонена автоматической
+проверкой: требуется явное trusted owner authorization для точного sensitive
+payload и destination. Операция не выполнена; fresh list подтвердил отсутствие
+новой функции. Нельзя обходить отказ через исполнителя/другой API. Пакет сохранён
+как PREPARED_BLOCKED_OWNER_APPROVAL, не выданный EXECUTOR_TASK. Root запросит
+разрешение на конкретный read-only encrypted source→VPS payload; до разрешения
+нет deployment/user-data transfer. Maintenance, T30pending/freeze/finalaudit/
+приёмка/публикация остаются. Source data/settings и рабочая цель не изменены.
+
 ## T35 CLOSED/BLOCKED; T36 — приватный HTTPS dummy, без рабочих данных — 14.11.2026
 
 T35 на038226b: settings HTTPS200/610bytes/expected JSON PASS; OpenAPI401,

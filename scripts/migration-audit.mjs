@@ -39,7 +39,15 @@ export function fingerprintRows(rows) {
 }
 
 // One consistent, read-only snapshot per server. Run during the final write freeze.
-export async function snapshotDatabase(db) {
+export async function snapshotDatabase(db, { fingerprintQuery, beforeCommit } = {}) {
+  if (beforeCommit !== undefined && typeof beforeCommit !== 'function')
+    throw Object.assign(new Error('Snapshot beforeCommit must be a function.'), {code:'MIGRATION_SNAPSHOT_HOOK_INVALID'});
+  // An optional exact reader changes transport only; enumeration and SQL stay here.
+  // The default preserves the original row-by-row canonical implementation.
+  const readFingerprint = fingerprintQuery ?? (async (client, sql) => {
+    const rows = (await client.query(sql)).rows;
+    return { count: rows.length, hash: fingerprintRows(rows.map(r => r.value)) };
+  });
   await db.query('begin isolation level repeatable read read only');
   try {
     const mode = (await db.query("select current_setting('transaction_read_only') as mode")).rows[0]?.mode;
@@ -63,8 +71,8 @@ export async function snapshotDatabase(db) {
     const result = {};
     for (const t of tables) {
       const qualified = `${quote(t.schema)}.${quote(t.name)}`;
-      const rows = (await db.query(`select to_jsonb(t)::text as value from ${qualified} t order by to_jsonb(t)::text collate "C"`)).rows;
-      result[`data:${t.schema}.${t.name}`] = { count: rows.length, hash: fingerprintRows(rows.map(r => r.value)) };
+      result[`data:${t.schema}.${t.name}`] = await readFingerprint(db,
+        `select to_jsonb(t)::text as value from ${qualified} t order by to_jsonb(t)::text collate "C"`);
     }
     const catalogs = {
       columns: `select n.nspname,c.relname,a.attname,a.attnum,format_type(a.atttypid,a.atttypmod) as type,
@@ -117,13 +125,15 @@ export async function snapshotDatabase(db) {
         from pg_auth_members where pg_get_userbyid(member) in ('anon','authenticated','service_role','authenticator')`,
     };
     for (const [name, sql] of Object.entries(catalogs)) {
-      const rows = (await db.query(`select to_jsonb(x)::text as value from (${sql}) x order by to_jsonb(x)::text collate "C"`)).rows;
-      result[`schema:${name}`] = { count: rows.length, hash: fingerprintRows(rows.map(r => r.value)) };
+      result[`schema:${name}`] = await readFingerprint(db,
+        `select to_jsonb(x)::text as value from (${sql}) x order by to_jsonb(x)::text collate "C"`);
     }
     const sequences = (await db.query("select schemaname,sequencename from pg_sequences where schemaname in ('public','app_private') order by schemaname,sequencename")).rows;
     for (const s of sequences) {
       result[`sequence:${s.schemaname}.${s.sequencename}`] = (await db.query(`select last_value::text,is_called from ${quote(s.schemaname)}.${quote(s.sequencename)}`)).rows[0];
     }
+    // A fixed caller may capture related metadata in this same consistent view.
+    if (beforeCommit) await beforeCommit(db);
     await db.query('commit');
     return result;
   } catch (error) { await db.query('rollback'); throw error; }

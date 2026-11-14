@@ -2,6 +2,17 @@
 
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
+- T36 закрыл actualHTTPS→DB synthetic gate; не повторять транспортные пробы.
+  Full audit + compactAuth должны разделять ОДИН RR snapshot: отдельный capture
+  после COMMIT допускает drift. Optional beforeCommit и native concurrent-update
+  fixture проверяют эту границу до выдачи пакета.
+- Документация platform invocations допускает body logging; нулевой observed
+  count не доказывает universal retention. Реальный private payload шифровать
+  до HTTP и расшифровывать только VPSRAM; HKDF input — secret, не public capSHA.
+- Auto-review отклонил T37 deploy по sensitive payload/source→VPS authorization.
+  Не обходить исполнителем или другим endpoint. Подготовить проверяемый scope/код
+  и запросить только нужное явное разрешение; prepared не называть issued/deployed.
+
 - T35 settings200/610bytes доказал HTTPS >512; REST401 — отдельный отказ доступа,
   не продолжение TCP-timeout и не основание менять grants. Сохранять общий
   BLOCKED и полезный partial proof одновременно. Следующий probe использует
