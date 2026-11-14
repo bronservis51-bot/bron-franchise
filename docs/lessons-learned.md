@@ -483,3 +483,21 @@ Log-query API принимает простой SELECT; WITH-expression/CTE не
 переписывание запроса. Для будущих cleanup использовать проверенный plain SELECT
 с inline aggregate expressions, explicittimewindow и только counts; raw logs
 не возвращать.
+
+
+### 14.11: runtime readback и одно финальное окно
+
+Source bundler/readback API не вернул type-only .d.mts: сравнивать все runtime
+entrypoint/dependencies побайтно, декларацию типов проверять локальным pinned
+Deno check. Не заявлять «все5вернулись», если API вернул4исполняемых файла.
+Исполняемый код не менялся. Это точность evidence, не исключение private fields.
+
+В одном T41 предусмотрены RootMCPcheckpoints, не новыйtaskIDпосле каждогоACK.
+Уникальный nonce+stage+SQLhash+Sourceclock проверяются в≤60s окне (±5s skew),
+Root приоритизирует эти сообщения, executor не генерируетподтверждениясам.
+WITNESS-purpose GET до небюджетированного POST предотвращает случайное Authчтение
+по URL, уже переведённому в DATA. Порядок WITNESS→durablereport→DATA обязателен.
+
+Не предполагать, что владелец получил backupkey: сначала фактналичия независимой
+копии и нормальный второй-device вход. Если копии нет, нужен безопасный owner-only
+хранительский handoff; команда hiddenverify не создаёт независимую копию сама.

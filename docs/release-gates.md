@@ -1,6 +1,6 @@
 # Допуск к рабочему релизу
 
-Актуально на **14.11.2026: T37 live inventory complete, только1 source-newer Auth updated_at; T39 inert; ключ/freeze/приёмка открыты**. Прежнее приложение работает,
+Актуально на **14.11.2026: T37 live inventory complete, только1 source-newer Auth updated_at; T40 technical custody PASS; ключ/freeze/приёмка открыты**. Прежнее приложение работает,
 российский релиз **ещё не допущен**. Целевая база восстановлена и изолирована;
 на трёх новых доменах работают DNS и доверенный HTTPS со страницей обслуживания
 503. Это не публикация приложения или API.
@@ -25,7 +25,8 @@ Reader закрыт coordinator tombstonev2 (exactreadback/HTTPS410); available 
 бюджет использован1/3, осталось2 финальных snapshot. Прямой PostgreSQL TCP больше
 не блокирует выпуск: выбран доказанный HTTPS-канал, старые TCP/MTU пробы не повторять.
 Ключ/second-device proof pending: на телефоне AdminVPS показал blank «Неразрешенный»,
-что пока не доказывает доступ к консоли. Source freeze ещё не выполнялся.
+что пока не доказывает доступ к консоли. T40 technical before-image/metadata receipt durableVPS PASS, Authbudget1→1;
+reader закрытv2/readback/410 и availablelogscan PASS. Source freeze ещё не выполнялся.
 
 ## До переключения: текущие критерии
 

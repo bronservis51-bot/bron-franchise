@@ -1,3 +1,36 @@
+# 14.11.2026 — T40 metadata custody завершён, endpoint закрыт
+
+Executor T40 commitadc463e / manifesta8f777d…:19files/runtime6 verified;
+oneprepare/onePOST, HTTPS200/11488bytes/3519ms. METADATA_PREPARED:31roles/10ACL/
+11backends, beforeimage+metadatareceipt actualrootdurable/readback. NoAuth/business
+rows, writes/freeze/controlReady=false, Macdata=false; Authledger1→1/2remain.
+
+BeforeimageSHA2e6dcdd2807371d8020991b8b0c9b3b119b98bc7865ebbb312b5bf555af8a307;
+metadataReceiptSHA6445b087e824ec43ccec09ca9067d43954daa066a5ad06cf6658647c5ea06ff2.
+Capture-result root:root0600/regular/nlink1/1199bytes, SHA
+e3e123dcaeeab3f72cb7721ef14a5b2c2bec7d6df9afcd6396276ffc2a2bd362.
+Canonicalreceipt+MacsafeMirrorSHA
+e6e66b56f613901a4d9141b09bd9e2c1de10146d749a2f4ce16d911192782e48;
+logSHA70304f2dd8562e72813502e729782ff044d2345a802e73c0f19d1497f322f558.
+
+Coordinator tombstonev2 exactreadback/HTTPS410. Availablelogs2edge+4function:
+cap/private/body matches0 (availablewindowonly, not universalretention). Local
+coordinatorclosure receiptSHA
+39823945e8f5f3a764782e8d3b21099cd3fe198d942b7c7f031cd7e5eb9e9241.
+Sourcebundle runtime4 exact; type-only.d.mts omittedbybundler/readbackAPI,
+no executablecode changed. Futurechecklists must count runtimefiles accurately.
+
+Independent actualRRRO MCP catalog preflight: expectedCONNECT PUBLIC/postgres/
+dashboard_user grantorpostgres/non-grantable; lookup setroles/writes/sequences/
+definers0; prepared/netqueue/unexpectedcron0; runJobsExistsfalse. NoSourceeffects
+orAuth/businessrows. These are preflight facts, not a currentfuturefence proof.
+NativePG17.12+Node22+pg8.23.1 finalcore50checksPASS,2ownedfixturesremoved.
+
+T41 combinedoperator preparedoffline/reviewed; draft execution_authorized=false.
+Actualowner T30crypto+independentcustody/seconddeviceattestation stillabsent.
+PhoneblankUnauthorized andMacCDPPage.navigate timeoutdoNOTprovekeyinvalid/VPSdown.
+DoNOT issueData/freeze/preview/publicationwhileownergatepending.
+
 # 14.11.2026 — T37 live inventory завершён, reader закрыт
 
 Executor T37 commit694d70d / manifest ca79265f…:22/22files, oneprepare/onePOST,
