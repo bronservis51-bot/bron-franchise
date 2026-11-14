@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {createAdmissionCustodyFs} from '../../docs/runbooks/payloads/admission-custody-fs.mjs';
 import {captureMetadataCustody,metadataQuerySha256} from '../../docs/runbooks/payloads/admission-metadata-custody.mjs';
+import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,resolveEscrowOwnerProof} from '../../docs/runbooks/payloads/owner-proof-binding.mjs';
 
 const ROOT='/root/bron-secrets',sha=x=>createHash('sha256').update(x).digest('hex');
 const canonical=o=>JSON.stringify(o,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?
@@ -66,6 +67,81 @@ test('default production factory requires real Linux root; import itself has no 
  const run=spawnSync(process.execPath,['--input-type=module','-e',
   "import './docs/runbooks/payloads/admission-custody-fs.mjs'"],{encoding:'utf8'});
  assert.equal(run.status,0);assert.equal(run.stdout,'');assert.equal(run.stderr,'');
+});
+
+// Synthetic escrow bytes use actual files and UID/GID evidence; no native crypto,
+// network, key, encrypted identity or encrypted backup artifact is accessed.
+function escrowFixture(){
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'bron-escrow-fs-'));fs.chmodSync(directory,0o700);
+ for(const name of ['t41-release','t41-owner-recovery'])fs.mkdirSync(path.join(directory,name),{mode:0o700});
+ const parentManifestSha256='1'.repeat(64),cipherSha='2'.repeat(64),escrowSha='3'.repeat(64),now=Date.now(),stamp=offset=>new Date(now+offset).toISOString();
+ const backupBytes=encode({artifacts:[{file:'roles.sql.zst.age',bytes:512,sha256:cipherSha}]}),backupSha=sha(backupBytes);
+ const objectKey='migration/owner-key-escrow-'+'4'.repeat(32)+'/identity.age';
+ const result={format:1,task:'T41',actionId:'T41.owner-key-recovery',method:OWNER_PROOF_METHOD,manifestSha256:parentManifestSha256,
+  objectKey,startedUtc:stamp(-4000),oneAttempt:true,status:'PASS',completedUtc:stamp(-3000),parentManifestSha256,guardAction:'T41.owner-key-recovery',
+  endpoint:'https://s3.twcstorage.ru',bucket:'bron-franchise-backups',cipherSha256:escrowSha,cipherBytes:1024,backupManifestSha256:backupSha,
+  backupCipherSha256:cipherSha,backupCipherBytes:512,conditionalPut:true,putAttempts:1,getAttempts:1,putResponseUncertain:false,
+  downloadShaVerified:true,cipherShaVerified:true,decryptionVerified:true,encryptedIdentity:{objectKey,ciphertextSha256:escrowSha,bytes:1024,scrypt:true},
+  backupProbe:{manifestSha256:backupSha,artifact:'roles.sql.zst.age',cipherSha256:cipherSha,cipherBytes:512,decryptionVerified:true,zstdVerified:true},
+  downloadedCipherShaVerified:true,originalIdentityReadForVerification:false,plaintextStored:false,plaintextRecoveredIdentityStored:false,
+  identityStored:false,macDataTransit:false,externalCustody:'OWNER_CONFIRMATION_REQUIRED'};
+ const resultBytes=encode(result),attestationBytes=encode({format:1,task:'T41',method:OWNER_PROOF_METHOD,status:'CONFIRMED',
+  actionId:'T41.owner-key-recovery-attestation',observedUtc:stamp(-2000),confirmedUtc:stamp(-1000),resultSha256:sha(resultBytes),
+  manifestSha256:parentManifestSha256,independentPassphraseCopy:true,adminVpsPhoneAccess:true,timewebPhoneAccess:true,macRequired:false});
+ const proof={format:1,sourceProject:'vkkqffvmztpzgygzfxhq',destinationVps:'152.228.115.115',
+  crypto:{status:'PASS',cipherSha256:cipherSha,cipherShaVerified:true,decryptionVerified:true,identityStored:false,plaintextStored:false},
+  attestation:{independentCopy:true,personalSecondDeviceLogin:true,evidenceSha256:sha(attestationBytes)}};
+ const ownerScope={method:OWNER_PROOF_METHOD,root_approved_input_required:true,proposalSha256:'5'.repeat(64),
+  recoveryCipherBinding:{manifestSha256:backupSha,artifact:'roles.sql.zst.age',from_pinned_backup_manifest:true}};
+ const approvedInputBytes=encode({format:1,task:'T41',method:OWNER_PROOF_METHOD,manifestSha256:parentManifestSha256,
+  resultSha256:sha(resultBytes),attestationSha256:sha(attestationBytes),backupManifestSha256:backupSha,
+  backupCipherSha256:cipherSha,escrowCipherSha256:escrowSha,independentProofSha256:sha(encode(proof))});
+ const resolved=resolveEscrowOwnerProof({manifest:{task:'T41',actionId:'T41.release_window',execution_authorized:true,owner_proof:ownerScope},
+  parentManifestSha256,approvedInputBytes,approvedInputSha256:sha(approvedInputBytes),resultBytes,attestationBytes,backupManifestBytes:backupBytes,now});
+ const a={reviewed:true,actionId:'T40.http_source_admission',manifestSha256:'a'.repeat(64),sourceProject:'vkkqffvmztpzgygzfxhq',destinationVps:'152.228.115.115',
+  metadataReadAuthorized:true,metadataOnly:true,sourceRoute:'fixed-source-edge-https',macDataTransit:false,targetWritesStarted:false,
+  beforeImagePath:ROOT+'/t40-admission-before-c40a2026.json',metadataReceiptPath:ROOT+'/t40-admission-metadata-c40a2026.json',
+  inversePath:ROOT+'/t40-admission-inverse-c40a2026.sql',controlReceiptPath:ROOT+'/t40-admission-control-c40a2026.json',
+  independentKeyProofPath:ROOT+'/t40-admission-key-proof-c40a2026.json',independentKeyProofSha256:resolved.independentProofSha256,recoveryCipherSha256:resolved.recoveryCipherSha256};
+ const real=logical=>path.join(directory,path.relative(ROOT,logical));
+ for(const [logical,content]of [[OWNER_APPROVED_PATH,approvedInputBytes],[OWNER_RESULT_PATH,resultBytes],[OWNER_ATTESTATION_PATH,attestationBytes]])
+  fs.writeFileSync(real(logical),content,{mode:0o600});
+ fs.writeFileSync(path.join(directory,'t12-backup-manifest.json'),backupBytes,{mode:0o600});
+ let adapter;
+ return {directory,a,real,proof,resolved,open:()=>adapter=createAdmissionCustodyFs({activation:a,proofInputs:resolved.proofInputs},
+  {directory,uid:process.getuid(),gid:process.getgid()}),close:()=>{adapter?.close();fs.rmSync(directory,{recursive:true,force:true});}};
+}
+
+test('escrow filesystem branch validates Root-approved metadata and durably creates exact canonical proof with true ownership',()=>{
+ const f=escrowFixture();try{const adapter=f.open(),r=adapter.prepareIndependentKeyProof();assert.equal(r.status,'KEY_PROOF_DURABLE');
+  assert.equal(r.sha256,f.resolved.independentProofSha256);assert.equal(r.path,f.a.independentKeyProofPath);
+  const saved=fs.readFileSync(f.real(r.path));assert.deepEqual(JSON.parse(saved),f.proof);assert.equal(sha(saved),r.sha256);
+  const s=fs.statSync(f.real(r.path));assert.equal(s.uid,process.getuid());assert.equal(s.gid,process.getgid());assert.equal(s.mode&0o7777,0o600);
+  const loaded=adapter.readIndependentKeyProof({path:r.path,sha256:r.sha256});assert.deepEqual(loaded.proof,f.proof);assert.equal(loaded.artifact.uid,process.getuid());
+  assert.throws(()=>adapter.prepareIndependentKeyProof(),{code:'ADMISSION_FS_IO_UNCERTAIN'});
+ }finally{f.close();}
+});
+
+test('escrow proof is not created on stale approval, changed result or missing attestation; plaintext/key artifacts are unnecessary',()=>{
+ for(const mutate of [f=>fs.appendFileSync(f.real(OWNER_RESULT_PATH),' '),f=>fs.unlinkSync(f.real(OWNER_ATTESTATION_PATH)),
+  f=>fs.writeFileSync(f.real(OWNER_APPROVED_PATH),'{}',{mode:0o600})]){
+  const f=escrowFixture();try{mutate(f);const adapter=f.open();assert.throws(()=>adapter.prepareIndependentKeyProof(),{code:'ADMISSION_FS_OWNER_PROOF_PENDING'});
+   assert.equal(fs.existsSync(f.real(f.a.independentKeyProofPath)),false);
+  }finally{f.close();}
+ }
+});
+
+test('escrow nested custody directories and metadata files enforce private modes, no links and fresh readback after proof creation',()=>{
+ for(const mutate of [f=>fs.chmodSync(path.join(f.directory,'t41-owner-recovery'),0o755),
+  f=>{const p=f.real(OWNER_RESULT_PATH);fs.renameSync(p,p+'.real');fs.symlinkSync(p+'.real',p);},
+  f=>fs.linkSync(f.real(OWNER_ATTESTATION_PATH),path.join(f.directory,'alias'))]){
+  const f=escrowFixture();try{mutate(f);const adapter=f.open();assert.throws(()=>adapter.prepareIndependentKeyProof(),{code:'ADMISSION_FS_OWNER_PROOF_PENDING'});
+   assert.equal(fs.existsSync(f.real(f.a.independentKeyProofPath)),false);
+  }finally{f.close();}
+ }
+ const f=escrowFixture();try{const adapter=f.open();adapter.prepareIndependentKeyProof();fs.appendFileSync(f.real(OWNER_ATTESTATION_PATH),' ');
+  assert.throws(()=>adapter.readIndependentKeyProof({path:f.a.independentKeyProofPath,sha256:f.a.independentKeyProofSha256}),{code:'ADMISSION_FS_OWNER_PROOF_PENDING'});
+ }finally{f.close();}
 });
 
 test('actual exclusive files are private, fsynced, read back and usable by the existing callback contract',()=>{

@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {validateManifest,activationFromManifest,validateT40Result,validateOwnerProof,runControlReady} from '../../docs/runbooks/payloads/t41-control-ready.mjs';
+import {validateManifest,activationFromManifest,validateT40Result,resolveOwnerManifest,runControlReady} from '../../docs/runbooks/payloads/t41-control-ready.mjs';
 import {captureMetadataCustody,metadataQuerySha256} from '../../docs/runbooks/payloads/admission-metadata-custody.mjs';
+import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,validateEscrowOwnerScope} from '../../docs/runbooks/payloads/owner-proof-binding.mjs';
 
 const root='/root/bron-secrets',project='vkkqffvmztpzgygzfxhq',vps='152.228.115.115';
 const adoptedManifest='a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8',authorizationSha='1'.repeat(64);
@@ -20,25 +21,22 @@ const state=()=>({db:'postgres',actor:'postgres',session:'postgres',owner:'postg
 const paths=()=>({beforeImagePath:root+'/t40-admission-before-c40a2026.json',metadataReceiptPath:root+'/t40-admission-metadata-c40a2026.json',
  inversePath:root+'/t40-admission-inverse-c40a2026.sql',controlReceiptPath:root+'/t40-admission-control-c40a2026.json'});
 function owner(){
- const now=Date.now(),crypto={status:'PASS',cipherShaVerified:true,decryptionVerified:true,plaintextStored:false,identityStored:false,externalCustody:'OWNER_CONFIRMATION_REQUIRED'};
- const cryptoBytes=Buffer.from(JSON.stringify(crypto)+'\n'),receiptBytes=Buffer.from('{"task":"T30","status":"COMPLETE"}\n');
- const attestation={task:'T30',action:'owner_key_proof',cryptoResultSha256:sha(cryptoBytes),sourceReceiptPath:root+'/t30-release-receipt.json',
-  sourceReceiptSha256:sha(receiptBytes),independentCopy:true,personalSecondDeviceLogin:true,witnessedBy:'owner',deviceClass:'phone',observedUtc:new Date(now).toISOString()};
- const attestationBytes=Buffer.from(JSON.stringify(attestation)+'\n'),cipherSha='c'.repeat(64);
+ const cipherSha='c'.repeat(64),scope={method:OWNER_PROOF_METHOD,root_approved_input_required:true,proposalSha256:'b'.repeat(64),
+  recoveryCipherBinding:{manifestSha256:'a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9',artifact:'roles.sql.zst.age',from_pinned_backup_manifest:true}};
  const proof={format:1,sourceProject:project,destinationVps:vps,crypto:{status:'PASS',cipherSha256:cipherSha,cipherShaVerified:true,decryptionVerified:true,identityStored:false,plaintextStored:false},
-  attestation:{independentCopy:true,personalSecondDeviceLogin:true,evidenceSha256:sha(attestationBytes)}};
- const inputs={crypto:{path:root+'/t30-owner-key-proof-result.json',sha256:sha(cryptoBytes)},attestation:{path:root+'/t30-owner-key-attestation.json',sha256:sha(attestationBytes)},
-  receipt:{path:root+'/t30-release-receipt.json',sha256:sha(receiptBytes)},reviewedT30CipherBinding:{reviewed:true,task:'T30',cryptoResultSha256:sha(cryptoBytes),sourceReceiptSha256:sha(receiptBytes),cipherSha256:cipherSha}};
- return {now,crypto,attestation,proof,cryptoBytes,attestationBytes,receiptBytes,cryptoMtimeMs:now-10000,
-  config:{independentProofSha256:sha(encode(proof)),recoveryCipherSha256:cipherSha,inputs}};
+  attestation:{independentCopy:true,personalSecondDeviceLogin:true,evidenceSha256:'d'.repeat(64)}};
+ const inputs={method:OWNER_PROOF_METHOD,parentManifestSha256:authorizationSha,ownerScope:scope,
+  approvedInput:{path:OWNER_APPROVED_PATH,sha256:'e'.repeat(64)},result:{path:OWNER_RESULT_PATH,sha256:'f'.repeat(64)},attestation:{path:OWNER_ATTESTATION_PATH,sha256:'d'.repeat(64)}};
+ return {proof,scope,config:{...scope,independentProofSha256:sha(encode(proof)),recoveryCipherSha256:cipherSha,approvedInputSha256:'e'.repeat(64),inputs}};
 }
+const initial=m=>({...m,owner_proof:validateEscrowOwnerScope(m.owner_proof)});
 function manifest(o=owner()){
  const runtime=root+'/t41-runtime/docs/runbooks/payloads/';return {task:'T41',execution_authorized:true,actionId:'T41.release_window',
   phase_authorizations:{prepare_control_ready:{actionId:'T41.prepare_control_ready',control_ready_only:true,source_sql_authorized:false,provider_boundary_reviewed:true,rollback_before_target_writes:true},
    final_window:{execution_authorized:false}},adopts:{actionId:'T40.http_source_admission',manifestSha256:adoptedManifest,custody:paths()},
   input_evidence:{T40_result_sha256:'2'.repeat(64),T40_receipt_sha256:'3'.repeat(64),T40_before_image_sha256:'4'.repeat(64),T40_metadata_receipt_sha256:'5'.repeat(64)},
   owner_proof:structuredClone(o.config),files:{'docs/runbooks/payloads/t41-control-ready.mjs':'6'.repeat(64)},
-  runtime_files:Object.fromEntries(['t41-control-ready.mjs','admission-metadata-custody.mjs','admission-custody-fs.mjs','http-source-admission.mjs','t26-source-admission.mjs'].map(p=>[runtime+p,'7'.repeat(64)]))};
+  runtime_files:Object.fromEntries(['t41-control-ready.mjs','admission-metadata-custody.mjs','admission-custody-fs.mjs','http-source-admission.mjs','t26-source-admission.mjs','owner-proof-binding.mjs'].map(p=>[runtime+p,'7'.repeat(64)]))};
 }
 function artifact(path,bytes,durable=false){return {path,sha256:sha(bytes),bytes:bytes.length,uid:0,gid:0,mode:0o600,regularFile:true,symlink:false,nlink:1,readbackSha256:sha(bytes),
  ...(durable?{exclusive:true,fileFsynced:true,directoryFsynced:true}:{})};}
@@ -62,7 +60,7 @@ async function rig(options={}){
  f.args={manifest:m,authorizationManifestSha256:authorizationSha,adapter:f.adapter,
   guard:async()=>{events.push('guard');assert.equal(f.guarded,false,'guard is exclusive');f.guarded=true;},
   assertPinnedInputs:async()=>{events.push('pins');f.checks++;assert.equal(sha(store.get(a.beforeImagePath)),m.input_evidence.T40_before_image_sha256);
-   assert.equal(sha(store.get(a.metadataReceiptPath)),m.input_evidence.T40_metadata_receipt_sha256);validateOwnerProof(o,m.owner_proof,o.now);}};
+   assert.equal(sha(store.get(a.metadataReceiptPath)),m.input_evidence.T40_metadata_receipt_sha256);assert.equal(m.owner_proof.independentProofSha256,sha(encode(o.proof)));}};
  f.run=()=>runControlReady(f.args);return f;
 }
 const safe=e=>{assert.doesNotMatch(e.message+' '+JSON.stringify(e),/PRIVATE_|postgres:\/\/|password|authenticator|1794612345123456/);return true;};
@@ -74,20 +72,21 @@ test('import/noargs CLI are inert and do not expose owner or custody state',()=>
  assert.doesNotMatch(c.stdout,/state|ownerPids|cryptoBytes|password/);
 });
 test('combined T41 manifest adopts exact T40 custody and authorizes only control preparation phase',()=>{
- const m=manifest(),raw=Buffer.from(JSON.stringify(m));assert.equal(validateManifest(raw,sha(raw),'6'.repeat(64)).task,'T41');
+ const m=manifest(),raw=Buffer.from(JSON.stringify(initial(m)));assert.equal(validateManifest(raw,sha(raw),'6'.repeat(64)).task,'T41');
  const a=activationFromManifest(m);assert.equal(a.actionId,'T40.http_source_admission');assert.equal(a.manifestSha256,adoptedManifest);
  assert.deepEqual(Object.fromEntries(Object.keys(paths()).map(k=>[k,a[k]])),paths());assert.equal(a.targetWritesStarted,false);
- const parent=structuredClone(m);parent.runtime_files[root+'/t41-runtime/other-phase.mjs']='8'.repeat(64);const b=Buffer.from(JSON.stringify(parent));validateManifest(b,sha(b),'6'.repeat(64));
+ const parent=initial(structuredClone(m));parent.runtime_files[root+'/t41-runtime/other-phase.mjs']='8'.repeat(64);const b=Buffer.from(JSON.stringify(parent));validateManifest(b,sha(b),'6'.repeat(64));
  for(const edit of [m=>m.actionId='T41.prepare_control_ready',m=>m.execution_authorized=false,m=>m.adopts.manifestSha256='0'.repeat(64),
   m=>m.adopts.custody.inversePath=root+'/t41-admission-inverse-c40a2026.sql',m=>m.phase_authorizations.prepare_control_ready.source_sql_authorized=true,
   m=>m.phase_authorizations.prepare_control_ready.control_ready_only=false,m=>delete m.input_evidence.T40_before_image_sha256]){
-  const v=manifest();edit(v);const r=Buffer.from(JSON.stringify(v));assert.throws(()=>validateManifest(r,sha(r),'6'.repeat(64)));
+  const v=initial(manifest());edit(v);const r=Buffer.from(JSON.stringify(v));assert.throws(()=>validateManifest(r,sha(r),'6'.repeat(64)));
  }
 });
-test('owner proof pins cannot be placeholder, mismatched cipher binding or substituted paths',()=>{
- for(const edit of [m=>m.owner_proof.independentProofSha256='PENDING',m=>m.owner_proof.inputs.crypto.path=root+'/key.age',
-  m=>m.owner_proof.inputs.reviewedT30CipherBinding.reviewed=false,m=>m.owner_proof.inputs.reviewedT30CipherBinding.cipherSha256='0'.repeat(64),
-  m=>m.owner_proof.inputs.reviewedT30CipherBinding.cryptoResultSha256='0'.repeat(64)]){
+test('raw manifest cannot predeclare future proof values; runtime activation needs Root-approved escrow projection',()=>{
+ const full=manifest(),raw=encode(full);assert.throws(()=>validateManifest(raw,sha(raw),'6'.repeat(64)),{code:'T41_OWNER_ROOT_INPUT_REQUIRED'});
+ assert.throws(()=>activationFromManifest(initial(full)),{code:'T41_OWNER_ROOT_INPUT_REQUIRED'});
+ for(const edit of [m=>m.owner_proof.independentProofSha256='PENDING',m=>m.owner_proof.approvedInputSha256='PENDING',
+  m=>m.owner_proof.inputs.method='LEGACY',m=>m.owner_proof.method='LEGACY',m=>m.owner_proof.recoveryCipherBinding.manifestSha256='0'.repeat(64)]){
   const m=manifest();edit(m);assert.throws(()=>activationFromManifest(m),e=>{safe(e);return e.status==='BLOCKED_OWNER_PROOF';});
  }
 });
@@ -100,21 +99,17 @@ test('T40 result must prove metadata-only capture and exact adopted before/recei
   const v=structuredClone(r);edit(v);const b=Buffer.from(JSON.stringify(v));assert.throws(()=>validateT40Result(b,sha(b),f.m.input_evidence),{code:'T41_T40_RESULT_INVALID'});
  }
 });
-test('owner crypto PASS and separate owner second-device attestation jointly bind canonical proof',()=>{
- const o=owner();assert.equal(validateOwnerProof(o,o.config,o.now),true);
- for(const change of [{cryptoMtimeMs:o.now+60001},{cryptoBytes:Buffer.from('PRIVATE')},{attestationBytes:Buffer.from('PRIVATE')}])
-  assert.throws(()=>validateOwnerProof({...o,...change},o.config,o.now),e=>{safe(e);return e.status==='BLOCKED_OWNER_PROOF';});
- for(const edit of [x=>x.independentCopy=false,x=>x.personalSecondDeviceLogin=false,x=>x.witnessedBy='executor',
-  x=>x.deviceClass='mac',x=>x.observedUtc=new Date(o.now+5001).toISOString(),x=>x.sourceReceiptPath=root+'/other.json']){
-  const a={...o.attestation};edit(a);const bytes=Buffer.from(JSON.stringify(a)+'\n'),p=structuredClone(o.config);p.inputs.attestation.sha256=sha(bytes);
-  assert.throws(()=>validateOwnerProof({...o,attestationBytes:bytes},p,o.now),e=>e.status==='BLOCKED_OWNER_PROOF');
- }
- const p=structuredClone(o.config);p.independentProofSha256='0'.repeat(64);assert.throws(()=>validateOwnerProof(o,p,o.now),{code:'T41_OWNER_ENVELOPE_SHA'});
+test('pure owner projection fails closed without explicit Root approval bytes and never rewrites initial scope',()=>{
+ const m=initial(manifest()),before=encode(m);
+ assert.throws(()=>resolveOwnerManifest({manifest:m,parentManifestSha256:authorizationSha,approvedInputSha256:'0'.repeat(64),
+  approvedInputBytes:Buffer.from('{}'),resultBytes:Buffer.from('{}'),attestationBytes:Buffer.from('{}'),backupManifestBytes:Buffer.from('{}')}),
+  e=>{safe(e);assert.equal(e.status,'BLOCKED_OWNER_PROOF');return true;});assert.deepEqual(encode(m),before);
 });
 test('actual custody core follows pinned inputs→guard→proof→load→readback→inverse→receipt without SQL execution',async()=>{
  const f=await rig(),r=await f.run();assert.deepEqual(f.events,['pins','guard','proof','load','confirm','read-proof','inverse','control-receipt','pins']);
  assert.equal(r.status,'CONTROL_READY');assert.equal(r.parentActionId,'T41.release_window');assert.equal(r.adoptedManifestSha256,adoptedManifest);
  assert.equal(r.authorizationManifestSha256,authorizationSha);assert.equal(r.sourceEffects,false);assert.equal(r.sourceBarrierPass,false);assert.equal(r.targetWritesStarted,false);
+ assert.equal(r.ownerProofMethod,OWNER_PROOF_METHOD);assert.equal(r.ownerProofApprovedInputSha256,f.m.owner_proof.approvedInputSha256);
  assert.equal(r.providerSuperusersFenced,false);assert.equal(r.actualSupavisorRecovery,'NOT_TESTED');assert.equal(r.rootComparisonRequired,true);
  assert.equal(Object.keys(r.sqlHashes).length,5);assert.equal(r.inverseSha256,sha(f.store.get(f.a.inversePath)));
  assert.equal(r.controlReceiptSha256,sha(f.store.get(f.a.controlReceiptPath)));

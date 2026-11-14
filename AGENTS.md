@@ -78,6 +78,12 @@ TTY AdminVPS-консоли. T29 разрешал только --check. T30 от
 ключ/ciphertext/plaintext не попадают на Mac. Crypto PASS и независимая custody
 подтверждаются раздельно. Это не разрешает executor вводить ключ за владельца.
 
+14.11 владелец отдельно одобрил [узкое исключение T41](docs/runbooks/t41-owner-recovery-approval.md):
+existing VPS identity шифруется новой личной фразой через скрытый телефонный TTY;
+только scrypt ciphertext идёт VPS→private Timeweb S3 и проверяется после bounded
+GET. Это новый proof method, не T30 PASS. До fresh pinned T41 и рабочего личного
+phone root console helper не исполнять; DMG/raw-T30 verifier не использовать.
+
 ## Интерфейс и мобильная версия
 
 - Основное устройство — телефон. Safari, установленная PWA и компьютер используют

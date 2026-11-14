@@ -212,6 +212,14 @@ Multipart list/abort permissions не предоставлены. Загрузч
 identity age, pgpass и S3 secret key не помещать в этот бакет. Проверку
 сертификата HTTPS не отключать.
 
+Узкое owner-approved исключение 14.11.2026:
+[T41 key-recovery](t41-owner-recovery-approval.md) разрешает только отдельную
+scrypt-encrypted AGE identity с новой личной фразой в уникальном
+`migration/owner-key-escrow-<UUID>/identity.age`, direct VPS→S3. Raw identity,
+фраза, pgpass и S3 secret остаются под прежним запретом. Общий uploader и policy
+не расширяются. Фактические crypto PASS и owner custody ещё должны быть получены;
+approval само по себе не подтверждает восстановление.
+
 [backup-lifecycle-unversioned.json](../../deploy/timeweb/backup-lifecycle-unversioned.json)
 предназначен **только для бакета, где versioning никогда не включали**:
 

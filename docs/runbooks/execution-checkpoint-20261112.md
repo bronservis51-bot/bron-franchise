@@ -1,3 +1,30 @@
+# 14.11.2026 — T41 подготовлен после узкого owner-approved key exception
+
+Владелец явно одобрил метод из owner-key-recovery-proposal.md
+(SHA dc714a9f88a5c2b453a73ce1474d13a39be13872f7251fa06f99223d90e962d8).
+Точная запись решения: t41-owner-recovery-approval.md. Предложение не изменено.
+Raw identity остаётся на VPS; только отдельный scrypt ciphertext по conditional
+single PUT/ bounded GET в private Timeweb S3, downloaded-cipher decrypt pinned
+T12 roles backup. Фраза только в hidden physical phone TTY; DMG/T30 verifier и
+Mac-транзит запрещены. До fresh pin и working phone root console запуск запрещён.
+
+Новый parent manifest payloads/t41-release-window.json, SHA
+54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321:
+54file pins/26code+manifest deliveries; actual raw manifest принимают все3CLI.
+Он разрешает условную owner→control→witness→final последовательность, без
+preview/publication. Future result/attestation SHA появляются только в actual
+Root-approved sidecar; taskboolean и fakeT30 не проходят.
+
+Offline:49 Python tests; Node22 операционные suites153; typecheck PASS.
+Native age1.1.1 encrypted-identity roundtrip после удаления raw synthetic key
+PASS. NativePG17.12 finalcore50checks переиспользован без повторного restore.
+Исправлены .pyc обход source-SHA, все3owner commands требуют physicalrootTTY,
+новый FS proof method проверяется actual tempFS tests. Production proof не получен:
+нет recovery upload/decrypt/attest, Source effects, timestamp UPDATE или finalPASS.
+Phone root console pending. T37 budget остаётся1/3; T37/T40 endpoints закрыты.
+Сайт/API maintenance. После T41 остаются private preview, owner acceptance и
+отдельно ограниченная публикация/старые Pages/PWA переходы.
+
 # 14.11.2026 — T40 metadata custody завершён, endpoint закрыт
 
 Executor T40 commitadc463e / manifesta8f777d…:19files/runtime6 verified;

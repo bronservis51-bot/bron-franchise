@@ -6,13 +6,14 @@ import {networkInterfaces} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
-import {validateManifest as validateControlManifest} from './t41-control-ready.mjs';
+import {validateManifest as validateControlManifest,loadOwnerManifest} from './t41-control-ready.mjs';
 import {runFinalHttpsWindow} from './final-https-window.mjs';
 import {createFinalHttpsTransport} from './final-https-transport.mjs';
 import {targetConfig,verifyTargetIdentity,PROTOCOL} from './t37-https-inventory.mjs';
 import {SOURCE_TRANSFER_SCOPE_SHA256,readBudgetStatus} from './source-transfer-budget.mjs';
 import {validateFreshOwnerWitness} from './http-source-admission.mjs';
 import {databaseConfig} from '../../../scripts/database-config.mjs';
+import {OWNER_PROOF_METHOD} from './owner-proof-binding.mjs';
 
 const ROOT='/root/bron-secrets',DIR=ROOT+'/t41-release',RUNTIME=ROOT+'/t41-runtime';
 const SELF=RUNTIME+'/docs/runbooks/payloads/t41-final-window.mjs',MANIFEST=DIR+'/manifest.json';
@@ -36,7 +37,7 @@ export const requiredCode=Object.freeze(['docs/runbooks/payloads/t41-final-windo
  'docs/runbooks/payloads/source-transfer-budget.mjs','docs/runbooks/payloads/http-source-admission.mjs',
  'docs/runbooks/payloads/t26-source-admission.mjs','docs/runbooks/payloads/exact-query-fingerprint.mjs',
  'docs/runbooks/payloads/t30-auth-compact.mjs','docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs',
- 'docs/runbooks/payloads/coordinator-fence-ack.mjs','scripts/migration-audit.mjs','scripts/database-config.mjs']);
+ 'docs/runbooks/payloads/coordinator-fence-ack.mjs','docs/runbooks/payloads/owner-proof-binding.mjs','scripts/migration-audit.mjs','scripts/database-config.mjs']);
 function policy(m){
  const p=m?.phase_authorizations?.prepare_final,r=m?.phase_authorizations?.run_final,b=m?.transfer_budget;
  if(m?.task!=='T41'||m.actionId!==PARENT||m.execution_authorized!==true||m.approval?.status!=='APPROVED'||
@@ -61,7 +62,8 @@ export function validateControlEvidence({summaryBytes,controlBytes,keyProofBytes
  policy(m);let s,c;
  try{s=JSON.parse(summaryBytes);c=JSON.parse(controlBytes);}catch{fail('T41_FINAL_CONTROL_JSON');}
  if(s?.task!=='T41'||s.status!=='CONTROL_READY'||s.actionId!=='T41.prepare_control_ready'||s.parentActionId!==PARENT||
-  s.authorizationManifestSha256!==manifestSha256||s.adoptedActionId!==BARRIER_ACTION||s.adoptedManifestSha256!==m.adopts.manifestSha256||
+  s.authorizationManifestSha256!==manifestSha256||s.ownerProofMethod!==OWNER_PROOF_METHOD||
+  s.ownerProofApprovedInputSha256!==m.owner_proof.approvedInputSha256||!digest(s.ownerProofApprovedInputSha256)||s.adoptedActionId!==BARRIER_ACTION||s.adoptedManifestSha256!==m.adopts.manifestSha256||
   s.sourceEffects!==false||s.sourceBarrierPass!==false||s.targetWritesStarted!==false||s.macDataTransit!==false||s.t40ArtifactsUnchanged!==true||
   s.controlReceiptPath!==CONTROL||s.controlReceiptSha256!==sha(controlBytes)||s.independentKeyProofPath!==KEY_PROOF||
   s.independentKeyProofSha256!==m.owner_proof.independentProofSha256||sha(keyProofBytes)!==s.independentKeyProofSha256||
@@ -205,7 +207,7 @@ function writeNew(p,value){const bytes=Buffer.isBuffer(value)?value:Buffer.from(
  try{fs.writeFileSync(f,bytes);fs.fsyncSync(f);}finally{fs.closeSync(f);}const d=fs.openSync(path.dirname(p),fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);
  try{fs.fsyncSync(d);}finally{fs.closeSync(d);}if(!read(p).equals(bytes))fail('T41_FINAL_WRITE_READBACK');return sha(bytes);}
 function absent(names){for(const p of names)try{fs.lstatSync(p);fail('T41_FINAL_ALREADY_STARTED');}catch(e){if(e.code!=='ENOENT')throw e;}}
-const safeCode=e=>/^(?:T41_|FINAL_HTTPS_|COORDINATOR_FENCE_|SOURCE_TRANSFER_)[A-Z0-9_]+$/.test(e?.code??'')?e.code:
+const safeCode=e=>/^(?:T41_|FINAL_HTTPS_|COORDINATOR_FENCE_|SOURCE_TRANSFER_|OWNER_PROOF_)[A-Z0-9_]+$/.test(e?.code??'')?e.code:
  /^[0-9A-Z]{5}$/.test(e?.code??'')?e.code:e?.code==='EEXIST'?'T41_FINAL_ALREADY_STARTED':e?.message==='Query read timeout'?'PG_QUERY_READ_TIMEOUT':'T41_FINAL_FAILED';
 async function openTarget(m){
  if(sha(lockBytes())!==LOCK_SHA||JSON.parse(fs.readFileSync(PG+'/package.json','utf8')).version!=='8.23.1')fail('T41_FINAL_DRIVER_PIN');
@@ -222,15 +224,17 @@ async function main(){let phase='preflight',target,ack,guard=false,timer;const a
  let result={task:'T41',status:'BLOCKED',actionId:ACTION,targetWriteOutcome:'UNCHANGED',sourceMustRemainClosed:true,macDataTransit:false};
  try{
   const prepare=process.argv[2]==='--prepare-final',run=process.argv[2]==='--run-final';
-  if((prepare?process.argv.length!==7:run?process.argv.length!==9:true)||process.argv[3]!=='--manifest'||process.argv[4]!==MANIFEST||
-   process.argv[5]!=='--sha256'||!digest(process.argv[6])||run&&(process.argv[7]!=='--fence-input-sha256'||!digest(process.argv[8])))fail('T41_FINAL_EXPLICIT_REVIEW_REQUIRED');
+  if((prepare?process.argv.length!==9:run?process.argv.length!==11:true)||process.argv[3]!=='--manifest'||process.argv[4]!==MANIFEST||
+   process.argv[5]!=='--sha256'||!digest(process.argv[6])||run&&(process.argv[7]!=='--fence-input-sha256'||!digest(process.argv[8]))||
+   process.argv[prepare?7:9]!=='--owner-proof-input-sha256'||!digest(process.argv[prepare?8:10]))fail('T41_FINAL_EXPLICIT_REVIEW_REQUIRED');
   if(process.platform!=='linux'||process.getuid?.()!==0||process.getgid?.()!==0||process.execPath!==NODE||process.versions.node!=='22.23.5'||
    fileURLToPath(import.meta.url)!==SELF||!Object.values(networkInterfaces()).flat().some(i=>i?.address===VPS)||
    process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0'||process.env.NODE_PG_FORCE_NATIVE)fail('T41_FINAL_PINNED_RUNTIME');
   execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
   for(const d of ['/root',ROOT,DIR,RUNTIME,RUNTIME+'/docs',RUNTIME+'/docs/runbooks',RUNTIME+'/docs/runbooks/payloads',
    RUNTIME+'/docs/runbooks/payloads/source-final-https-reader',RUNTIME+'/scripts'])directory(d);
-  const m=validateManifest(read(MANIFEST),process.argv[6],sha(read(SELF)));
+  const initial=validateManifest(read(MANIFEST),process.argv[6],sha(read(SELF)));
+  const m=loadOwnerManifest(initial,process.argv[6],process.argv[prepare?8:10]);
   for(const p of requiredCode)if(sha(read(RUNTIME+'/'+p))!==m.runtime_files[RUNTIME+'/'+p])fail('T41_FINAL_RUNTIME_SHA');
   const control=validateControlEvidence({summaryBytes:read(DIR+'/control-ready-result.json'),controlBytes:read(CONTROL),keyProofBytes:read(KEY_PROOF)},m,process.argv[6]);
   if(sha(read(BEFORE))!==m.input_evidence.T40_before_image_sha256||sha(read(METADATA))!==m.input_evidence.T40_metadata_receipt_sha256||
@@ -270,7 +274,7 @@ async function main(){let phase='preflight',target,ack,guard=false,timer;const a
    const afterBudget=readBudgetStatus(binding());if(afterBudget.used!==3||afterBudget.remaining!==0||afterBudget.uncertain!==false)fail('T41_FINAL_AUTH_BUDGET_AFTER');
    result.authBudgetUsed=afterBudget.used;
   }
- }catch(error){result={...result,status:'BLOCKED',phase:error?.phase??phase,code:safeCode(error),
+ }catch(error){result={...result,status:error?.status==='BLOCKED_OWNER_PROOF'?'BLOCKED_OWNER_PROOF':'BLOCKED',phase:error?.phase??phase,code:safeCode(error),
   ...(error?.recovery?{recovery:error.recovery,targetWriteOutcome:error.recovery.targetWriteOutcome}:{})};}
  finally{clearTimeout(timer);process.off('SIGINT',interrupt);process.off('SIGTERM',interrupt);abort.abort();try{ack?.close();}catch{}
   await closeTarget(target);if(guard)try{writeNew(DIR+'/final-result.json',result);}catch{result={...result,status:'BLOCKED',code:'T41_FINAL_RESULT_WRITE'};}}

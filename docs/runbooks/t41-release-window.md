@@ -1,20 +1,92 @@
-# T41 release window — DRAFT, NOT ISSUED
+# T41 — owner recovery, fence и финальная HTTPS-сверка
 
-Это обзор подготовленного оператора, **не EXECUTOR_TASK и не разрешение запуска**.
-T40 technical metadata custody завершён; endpoint закрытv2/readback/HTTPS410,
-availablelogs2edge+4function без совпадений cap/private/body. Source остаётся
-действующим writer; RF сайты/API maintenance. Auth budgetused1/3.
+Авторитетный checklist для нового EXECUTOR_TASK T41. Сам файл без опубликованного
+commit и SHA `payloads/t41-release-window.json` не разрешает исполнение.
+RF сайт/API остаются в maintenance; source до фактического fence — единственный writer.
+Подтверждены T12 Auth/RLS, T14 сборки, T18 backup/status, T19 Telegram, T21 restore,
+T22 schedule, T37 live inventory и T39 inert staging. Их не повторять.
+T37: только1 source-newer Auth updated_at; это не финальная сверка. Бюджет1/3,
+две попытки сохранены для final; failed/uncertain POST также расходует слот.
 
-Для свежего EXECUTOR_TASK нужны фактические T30 crypto PASS, отдельная owner
-attestation о независимой копии/втором устройстве и их SHA. Эти факты ещё не
-получены. Их нельзя заменить taskboolean, серверным age identity, переданным
-через Mac backup или успешным SSH того же Mac. До этого Source effects запрещены.
+## A. Scope и принятие
 
-## Подготовленная последовательность в одном пакете
+- Использовать только commit и manifest SHA из нового EXECUTOR_TASK. Fast-forward
+  чистого checkout; не stash/reset/clean и не менять checkout работающего процесса.
+  Сверить все `files` SHA до отправки на VPS. ACCEPTED содержит commit/manifest SHA,
+  local state path и canonical VPS receipt path.
+- Разрешены локальные проверки SHA/синтаксиса. **Все серверные фазы, включая
+  --check, ждут фактического PHONE_ROOT_READY**: владелец лично открыл root-консоль
+  с телефона. Fresh task и approval не заменяют этот факт. Если root-консоль
+  недоступна, state=BLOCKED_OWNER_CONSOLE; сохранять maintenance, не менять сеть,
+  аккаунты/пароли/сервер и не использовать T30/DMG/reverse15432.
+- Точное исключение записано в `t41-owner-recovery-approval.md`; одобренное предложение
+  immutable. Ввод новой фразы — только владельцем через скрытый физический TTY
+  телефона. Executor не открывает identity, credentials, ciphertext или backup;
+  это делает только утверждённый server helper в разрешённой фазе.
+- В T41 нет preview, Pages merge, public switch, нового сервиса или изменений
+  мониторинга. После final PASS требуется отдельная приёмка/публикация. Source
+  SQL/fence выполняет только координатор через connected MCP; executor SQL
+  не исполняет. После любого BLOCKED не чинить код, не повторять guard и не
+  расширять scope; независимые безопасные части только если прямо перечислены.
+
+## B. Один preflight и доставка после PHONE_ROOT_READY
+
+1. Strict SSH host key: manifest.vps. Без сканирования/accept-new подмен.
+2. Один preflight: exact Node22.23.5, runtime/dependency lock/installed auditor SHA
+   из manifest; существующие loopback15433/healthy target container+image; нет
+   собственного активного T41 процесса/guard/result. Не читать rendered env или
+   Auth/business rows. Старые T37/T40 receipts/result/beforeimage/metadata проверяются
+   только по pinned SHA, без печати содержимого и без переписывания.
+3. Доставить только `deliveries`: code, manifest и короткий owner launcher.
+   Новый runtime/state — root:root0700; файлы root:root0600, regular/nlink1,
+   no symlinks, O_EXCL, file+directory fsync/readback SHA. Не перезаписывать.
+   Один и тот же parent manifest byte-for-byte идёт в оба manifest path.
+   Удобный launcher получает marker `approved-manifest.sha256`: exact64lowerhex+LF
+   SHA из EXECUTOR_TASK, root600/exclusive/fsynced; marker не включается в hash
+   самого manifest. Его содержимое публичное, не secret.
+4. Сверить удалённые SHA с manifest; AST/syntax only, без запуска secret helper
+   по SSH. Повторный код/архивный backup не нужен. Установленный T21 auditor
+   не заменяется; private T41 audit clone — отдельный pinned runtime.
+5. Один HTTPS maintenance/status check: все3доменa TLS verify/HTTP503;
+   health JSON healthy=true, checked_at≤25min и last_backup_utc≤70min.
+   Сохранить только safe status/ages. Если stale/BLOCKED, не делать fence;
+   диагностировать actual failure вместо переустановки T18.
+
+## C. Личный owner recovery — прежде любых Source effects
+
+Передать владельцу `t41-owner-phone-handoff.md` после доставки/сверки кода.
+Он лично выполняет короткий launcher check → recover → attest. Executor команды
+не запускает и не вводит фразу. Raw identity остаётся на VPS. Helper делает один
+unique conditional PUT и bounded GET scrypt ciphertext напрямую в existing S3;
+проверяет **скачанный** cipher на exact T12 roles backup, без original identity
+при verify. Ни raw key, ни фраза, ни backup на Mac/телефон не скачиваются.
+
+Acceptance этой фазы: actual result status=PASS/method=BRON_OWNER_KEY_ESCROW_V1,
+parent manifest SHA точный, conditionalPut=true/putAttempts=1/getAttempts=1,
+downloadedCipherShaVerified=true, backupProbe.decryptionVerified+zstdVerified=true,
+originalIdentityReadForVerification=false/plaintextRecoveredIdentityStored=false;
+затем отдельная result-SHA-bound owner attestation CONFIRMED о независимой фразе,
+AdminVPS/root и Timeweb phone access. Failure/uncertain attempt не повторять.
+T30 PASS не создаётся. Передать координатору только safe result/attestation и SHA;
+не ciphertext и не key. Guard/put-intent/download-proof/result остаются на VPS.
+
+Координатор проверяет actual evidence и выдаёт exact bytes+SHA для
+`/root/bron-secrets/t41-release/owner-proof-approved.json`. Туда входят parent,
+result, attestation, whole backup manifest и actual roles cipher SHA,
+escrow cipher SHA и canonical independent-proof SHA. Будущие SHA не подставляются
+в parent manifest. Executor сохраняет полученные bytes O_EXCL/root600/fsync,
+проверяет SHA и продолжает **тот же T41**, без нового task ID. Самостоятельно
+конструировать Root approval или заменять proof taskboolean запрещено.
+
+## D. Подготовленная последовательность в том же пакете
+
+Во всех CLI parent SHA берётся из EXECUTOR_TASK, owner-input SHA — из actual Root
+сообщения после C. Фиксированный Node и runtime paths заданы manifest.commands.
+Команды исполняются с закрытым stdout/log на VPS; в чат только safe fields.
 
 1. Fresh pinned T41 manifest/files/runtime preflight. T40 result/receipt/beforeimage/
    metadata receipt принимаются по exactSHA, без переписывания исходного контекста.
-   Owner proof metadata проверяются FS adapter-ом по реальным сохранённым файлам.
+   Owner escrow proof metadata проверяются FS adapter-ом по реальным сохранённым файлам; --owner-proof-input-sha256 обязателен для control/bind/final.
 2. `t41-control-ready.mjs --prepare-control`: создать durable independent proof,
    заново проверить T40 custody, записать exact inverse и CONTROL_READY. Это
    локальная подготовка; Source SQL ещё не исполняется. Old action/manifestT40
@@ -62,9 +134,9 @@ attestation о независимой копии/втором устройств
     проверяет availablelogs и только затем Source Pause+providerstatus readback.
     Source после Pause не читается. Два finalAuthattempts исчерпаны честно.
 
-## Preview, приёмка и публикация — gates не сокращаются
+## E. После T41: приёмка и публикация — пока не разрешены этим пакетом
 
-После finalPASS+SourcePause+freshbackup только web получает IP-gated preview:
+Следующий отдельный operational пакет после finalPASS+SourcePause+freshbackup разрешит только web IP-gated preview:
 existing5file Compose chain + compose.preview.override.yml LAST; Caddy2.11.8
 cached validation; `up -d --no-deps --pull never web`. Перед/после сравнить6backend
 containerIDs/Compose service models в RAMVPS, не выводя env; DB остаётсяloopback,
@@ -93,12 +165,37 @@ MacSourceTunnel/launchd/caffeinate jobs по их exactreceipt/process identity;
 аварийный доступ должны работать при выключенном Mac. Произвольный cleanup
 backup/ageidentity/beforeimages не разрешён.
 
-## Что уже проверено offline
+## F. Квитанция и handoff
 
-Control phase12tests; bindphase17tests +independentreview; finalrunner13tests;
+Canonical safe receipt: `/root/bron-secrets/t41-release-receipt.json`, mirror
+`/tmp/bron-release-executor-20261113/T41-state.json`; оба0600, SHA одинаковый.
+Обновления state разрешены atomic replace/fsync только своей квитанции; phase
+proof/guard/result/input — immutable O_EXCL. Не менять state работающего T40/T37.
+В квитанции каждая фактически выполненная action, start/end UTC, входные SHA,
+exit/status, one-run consumption и пути. Исполнитель после каждого PASS продолжает
+разрешённый checklist; ждёт только конкретного owner/Root checkpoint, без нового ID.
+
+Final report: BUNDLE, PHONE_CONSOLE, OWNER_CRYPTO, OWNER_ATTESTATION,
+OWNER_APPROVED_INPUT_SHA, CONTROL_READY, FINAL_READY, SOURCE_FENCE,
+WITNESS, FINAL_AUDIT, TARGET_WRITE_OUTCOME, AUTH_BUDGET_BEFORE_AFTER,
+ENDPOINT_CLOSURE, SOURCE_PAUSE, MAINTENANCE, CLEANUP, CHANGED_PATHS,
+RECEIPT_SHA, NEXT_BLOCKER. UNKNOWN не превращать в FAIL_NO_WRITE; записать факт
+COMMIT outcome. Не объявлять release-ready: owner acceptance/publication открыты.
+В процессе --run-final немедленно передавать 4 ACK challenges координатору;
+не откладывать до финального отчёта. Challenge≤60s; auth POST не повторять.
+
+## G. Что уже проверено offline
+
+Control phase12tests; bindphase19tests +independentreview; finalrunner13tests;
 finalcore13/transport13/ACK15 tests +reviews; SourceWitness20 +Deno check;
 Sourcefinal predataWitness15 +Deno check. NativePG17.12/Node22.23.5/pg8.23.1
 finalcore повторно прошёл50actual context checks на двух isolatedtmpfs fixtures,
 оба контейнера удалены. Nativeproof включает µs/largeprecision, sameRR capture,
 guardedUPDATE/ROLLBACK, lostCOMMIT, source/role/db drift. Он **не** доказывает actual
 production rootcustody/Sourcefence/HTTPS-route/phoneacceptance — это servergates.
+
+Новый ESCROW flow:49 Python tests (crypto14, workflow21, launcher14) PASS;
+Node22 suites суммарно153 (включая resolver15, FS18 и bind19). Typecheck PASS.
+Native age1.1.1 подтверждён на synthetic key после удаления raw identity;
+реальные S3/owner phone/key ещё не проверены. При ревью исправлена возможность
+загрузки старого .pyc: компилируются именно SHA-проверенные source bytes.

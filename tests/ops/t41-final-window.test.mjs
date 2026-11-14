@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto';
 import {validateManifest,requiredCode,validateControlEvidence,validateBudget,createBasePrepared,validateBasePrepared,
  validateRunInputs,targetIdentitySql,verifyFinalTargetIdentity,targetFromInspect,writeBeforeImage,probeTargetMetadata} from '../../docs/runbooks/payloads/t41-final-window.mjs';
 import {SOURCE_TRANSFER_SCOPE_SHA256 as scope} from '../../docs/runbooks/payloads/source-transfer-budget.mjs';
+import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,validateEscrowOwnerScope} from '../../docs/runbooks/payloads/owner-proof-binding.mjs';
 
 const root='/root/bron-secrets',dir=root+'/t41-release',runtime=root+'/t41-runtime',project='vkkqffvmztpzgygzfxhq',vps='152.228.115.115';
 const adopted='a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8',manifestSha='1'.repeat(64),now=Date.parse('2026-11-14T12:00:00Z');
@@ -17,9 +18,10 @@ const paths={beforeImagePath:root+'/t40-admission-before-c40a2026.json',metadata
 const sqlHashes=()=>Object.fromEntries(['applySql','drainSql','verifyFencedSql','inverseSql','verifyOriginalSql'].map((k,i)=>[k,String(i+2).repeat(64)]));
 function fixture(options={}){
  const keyProofBytes=bytes({format:1,kind:'SYNTHETIC_PROOF'}),keySha=sha(keyProofBytes),cipherSha='c'.repeat(64);
- const ownerInputs={crypto:{path:root+'/t30-owner-key-proof-result.json',sha256:'d'.repeat(64)},
-  attestation:{path:root+'/t30-owner-key-attestation.json',sha256:'e'.repeat(64)},receipt:{path:root+'/t30-release-receipt.json',sha256:'f'.repeat(64)},
-  reviewedT30CipherBinding:{reviewed:true,task:'T30',cryptoResultSha256:'d'.repeat(64),sourceReceiptSha256:'f'.repeat(64),cipherSha256:cipherSha}};
+ const ownerScope={method:OWNER_PROOF_METHOD,root_approved_input_required:true,proposalSha256:'d'.repeat(64),
+  recoveryCipherBinding:{manifestSha256:'a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9',artifact:'roles.sql.zst.age',from_pinned_backup_manifest:true}};
+ const ownerInputs={method:OWNER_PROOF_METHOD,parentManifestSha256:manifestSha,ownerScope,
+  approvedInput:{path:OWNER_APPROVED_PATH,sha256:'e'.repeat(64)},result:{path:OWNER_RESULT_PATH,sha256:'f'.repeat(64)},attestation:{path:OWNER_ATTESTATION_PATH,sha256:'d'.repeat(64)}};
  const m={task:'T41',execution_authorized:true,actionId:'T41.release_window',approval:{status:'APPROVED',document_sha256:scope},
   adopts:{actionId:'T40.http_source_admission',manifestSha256:adopted,custody:{...paths}},
   phase_authorizations:{prepare_control_ready:{actionId:'T41.prepare_control_ready',control_ready_only:true,source_sql_authorized:false,
@@ -29,14 +31,15 @@ function fixture(options={}){
   source:{origin:'https://'+project+'.supabase.co',projectRef:project,protocol:'BRON_PRIVATE_SNAPSHOT_V1',capability_binding:'pinned_VPS_prepare_readback',template_name_prefix:'bron-source-reader-'},
   transfer_budget:{directory:root+'/source-transfer-budget',scope_sha256:scope,source_project:project,destination_vps:vps,max_attempts:3},
   target:{container_id:'a'.repeat(64),image_id:'sha256:'+'b'.repeat(64)},
-  owner_proof:{independentProofSha256:keySha,recoveryCipherSha256:cipherSha,inputs:ownerInputs},
+  owner_proof:{...ownerScope,independentProofSha256:keySha,recoveryCipherSha256:cipherSha,approvedInputSha256:'e'.repeat(64),inputs:ownerInputs},
   input_evidence:{T40_result_sha256:'2'.repeat(64),T40_receipt_sha256:'3'.repeat(64),T40_before_image_sha256:'4'.repeat(64),T40_metadata_receipt_sha256:'5'.repeat(64)},
   files:Object.fromEntries(requiredCode.map(p=>[p,'6'.repeat(64)])),runtime_files:Object.fromEntries(requiredCode.map(p=>[runtime+'/'+p,'7'.repeat(64)]))};
  const control={format:1,status:'CONTROL_READY',actionId:'T40.http_source_admission',manifestSha256:adopted,sourceProject:project,destinationVps:vps,
   ...paths,beforeImageSha256:m.input_evidence.T40_before_image_sha256,metadataReceiptSha256:m.input_evidence.T40_metadata_receipt_sha256,
   independentKeyProofSha256:keySha,recoveryCipherSha256:cipherSha,sqlHashes:sqlHashes(),sourceEffects:false,sourceBarrierPass:false};
  const controlBytes=bytes(control),summary={task:'T41',status:'CONTROL_READY',actionId:'T41.prepare_control_ready',parentActionId:'T41.release_window',
-  authorizationManifestSha256:manifestSha,adoptedActionId:'T40.http_source_admission',adoptedManifestSha256:adopted,...paths,
+  authorizationManifestSha256:manifestSha,ownerProofMethod:OWNER_PROOF_METHOD,ownerProofApprovedInputSha256:m.owner_proof.approvedInputSha256,
+  adoptedActionId:'T40.http_source_admission',adoptedManifestSha256:adopted,...paths,
   beforeImageSha256:control.beforeImageSha256,metadataReceiptSha256:control.metadataReceiptSha256,controlReceiptSha256:sha(controlBytes),
   independentKeyProofPath:root+'/t40-admission-key-proof-c40a2026.json',independentKeyProofSha256:keySha,inverseSha256:control.sqlHashes.inverseSql,
   sqlHashes:control.sqlHashes,sourceEffects:false,sourceBarrierPass:false,targetWritesStarted:false,macDataTransit:false,t40ArtifactsUnchanged:true};
@@ -73,18 +76,18 @@ test('import/noargs CLI and unsupported activation remain inert',()=>{
   assert.equal(c.status,2);assert.equal(c.stderr,'');assert.match(c.stdout,/T41_FINAL_EXPLICIT_REVIEW_REQUIRED/);assert.doesNotMatch(c.stdout,/SYNTHETIC_|private_id|updated_at/);}
 });
 test('manifest binds separate prepare/read-only and run/timestamp-only phases with all runtime pins',()=>{
- const f=fixture(),raw=bytes(f.m);assert.equal(validateManifest(raw,sha(raw),'6'.repeat(64)).task,'T41');
+ const f=fixture(),initial={...f.m,owner_proof:validateEscrowOwnerScope(f.m.owner_proof)},raw=bytes(initial);assert.equal(validateManifest(raw,sha(raw),'6'.repeat(64)).task,'T41');
  for(const edit of [m=>m.approval.document_sha256='0'.repeat(64),m=>m.phase_authorizations.prepare_final.source_data_reads=1,
   m=>m.phase_authorizations.run_final.sourceFrameBudget=3,m=>m.phase_authorizations.run_final.applyTimestampOnly=false,
   m=>m.phase_authorizations.run_final.targetAdmitted=true,m=>m.phase_authorizations.run_final.maxTimestampUpdates=17,
   m=>m.source.origin='https://other.invalid',m=>m.transfer_budget.max_attempts=4,m=>m.target.container_id='wrong',
   m=>delete m.runtime_files[runtime+'/scripts/migration-audit.mjs']]){
-  const m=structuredClone(f.m);edit(m);const r=bytes(m);assert.throws(()=>validateManifest(r,sha(r),'6'.repeat(64)));
+  const m=structuredClone(initial);edit(m);const r=bytes(m);assert.throws(()=>validateManifest(r,sha(r),'6'.repeat(64)));
  }
 });
 test('CONTROL_READY must bind summary, canonical control bytes, key-proof bytes and exact five SQL hashes',()=>{
  const f=fixture();assert.equal(f.evidence.controlReceiptSha256,sha(f.evidenceArgs.controlBytes));
- for(const edit of [s=>s.authorizationManifestSha256='0'.repeat(64),s=>s.sourceBarrierPass=true,s=>s.targetWritesStarted=true,
+ for(const edit of [s=>s.authorizationManifestSha256='0'.repeat(64),s=>s.ownerProofMethod='LEGACY',s=>s.ownerProofApprovedInputSha256='0'.repeat(64),s=>s.sourceBarrierPass=true,s=>s.targetWritesStarted=true,
   s=>s.independentKeyProofSha256='0'.repeat(64),s=>s.controlReceiptSha256='0'.repeat(64),s=>s.sqlHashes={...s.sqlHashes,otherSql:'8'.repeat(64)}]){
   const s=structuredClone(f.summary);edit(s);assert.throws(()=>validateControlEvidence({...f.evidenceArgs,summaryBytes:bytes(s)},f.m,manifestSha),{code:'T41_FINAL_CONTROL_NOT_PROVED'});
  }

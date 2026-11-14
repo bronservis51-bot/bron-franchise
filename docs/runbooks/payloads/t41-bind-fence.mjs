@@ -7,7 +7,8 @@ import {networkInterfaces} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash,createDecipheriv,hkdfSync} from 'node:crypto';
-import {activationFromManifest as controlActivation} from './t41-control-ready.mjs';
+import {activationFromManifest as controlActivation,validateManifest as validateControlManifest,loadOwnerManifest} from './t41-control-ready.mjs';
+import {OWNER_PROOF_METHOD} from './owner-proof-binding.mjs';
 import {createAdmissionCustodyFs} from './admission-custody-fs.mjs';
 import {validateAdmissionMetadata,matchIndependentControlHashes} from './admission-metadata-custody.mjs';
 import {SOURCE_TRANSFER_SCOPE_SHA256,readBudgetStatus} from './source-transfer-budget.mjs';
@@ -23,7 +24,7 @@ const SOURCE_INPUT=DIR+'/source-fence-approved.json',CONTEXT=DIR+'/source-witnes
 const BASE=DIR+'/final-base-prepared.json',FINAL=DIR+'/final-prepared.json',INPUT=DIR+'/fence-input.json',CAP=DIR+'/final-capability';
 const SUMMARY=DIR+'/control-ready-result.json',CONTROL=ROOT+'/t40-admission-control-c40a2026.json',BEFORE=ROOT+'/t40-admission-before-c40a2026.json';
 const RUNTIME_NAMES=['t41-bind-fence.mjs','t41-control-ready.mjs','admission-custody-fs.mjs','admission-metadata-custody.mjs',
- 'http-source-admission.mjs','t26-source-admission.mjs','source-transfer-budget.mjs','source-fence-witness/fence-witness.mjs'];
+ 'http-source-admission.mjs','t26-source-admission.mjs','source-transfer-budget.mjs','source-fence-witness/fence-witness.mjs','owner-proof-binding.mjs'];
 const sha=x=>createHash('sha256').update(x).digest('hex'),digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -34,13 +35,13 @@ const same=(a,b)=>canonical(a)===canonical(b);
 const pid=x=>Number.isInteger(x)&&x>0&&x<=2147483647;
 const micros=x=>typeof x==='string'&&/^\d{12,20}$/.test(x);
 const binding=()=>({directory:ROOT+'/source-transfer-budget',scopeSha256:SOURCE_TRANSFER_SCOPE_SHA256,sourceProject:PROJECT,destinationVps:VPS,maxAttempts:3});
-const failCode=e=>/^(?:T41_BIND_|ADMISSION_FS_|ADMISSION_CUSTODY_|SOURCE_TRANSFER_)[A-Z0-9_]+$/.test(e?.code??'')?e.code:'T41_BIND_FAILED';
+const failCode=e=>/^(?:T41_(?:BIND_|OWNER_|ESCROW_)|ADMISSION_FS_|ADMISSION_CUSTODY_|SOURCE_TRANSFER_|OWNER_PROOF_)[A-Z0-9_]+$/.test(e?.code??'')?e.code:'T41_BIND_FAILED';
 
 export function validateManifest(raw,pin,selfSha){
  if(!digest(pin)||sha(raw)!==pin)fail('T41_BIND_MANIFEST_SHA');let m;try{m=JSON.parse(raw);}catch{fail('T41_BIND_MANIFEST_JSON');}
  if(m?.task!=='T41'||m.actionId!==PARENT||m.execution_authorized!==true||!digest(selfSha)||m.files?.[FILE_KEY]!==selfSha)
   fail('T41_BIND_TASK_SCOPE');
- controlActivation(m);
+ validateControlManifest(raw,pin,m.files?.['docs/runbooks/payloads/t41-control-ready.mjs']);
  for(const [key,posts]of [['prepare_witness',0],['verify_witness',1]]){
   const p=m.phase_authorizations?.[key];
   if(p?.actionId!=='T41.'+key||p.metadata_only!==true||p.source_sql_authorized!==false||p.max_source_POST!==posts)
@@ -138,6 +139,11 @@ export function requestReadiness(prepared,{request=https.request,signal,timeoutM
  return fixedRequest(prepared,'GET',undefined,{request,signal,timeoutMs,maxBody:4096});
 }
 const ready=r=>object(r)&&!r.code&&r.statusCode===403&&exact(r.value,['protocol','ok'])&&r.value.protocol===PROTOCOL&&r.value.ok===false;
+export function safeBindFailure(e,phase){return {status:e?.status==='BLOCKED_OWNER_PROOF'?'BLOCKED_OWNER_PROOF':'BLOCKED',phase,code:failCode(e),
+ ...remoteSafe({protocol:PROTOCOL,stage:e?.remoteStage,code:e?.remoteCode}),
+ ...(/^T41_BIND_[A-Z0-9_]+$/.test(e?.upstreamCode??'')?{upstreamCode:e.upstreamCode}:{}),
+ ...(Number.isInteger(e?.readinessStatus)&&e.readinessStatus>=100&&e.readinessStatus<=599?{readinessStatus:e.readinessStatus}:{}),sourceMustRemainClosed:true,retryAllowed:false};}
+
 
 function decoded(s,max){if(typeof s!=='string'||s.length%4||s.length>Math.ceil(max/3)*4||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(s))fail('T41_BIND_CIPHERTEXT_INVALID');
  const b=Buffer.from(s,'base64');if(b.length>max||b.toString('base64')!==s)fail('T41_BIND_CIPHERTEXT_INVALID');return b;}
@@ -251,7 +257,8 @@ const parse=b=>{try{return JSON.parse(b);}catch{fail('T41_BIND_JSON_INVALID');}}
 function assertGate(m,pin,base,baseSha,approved){
  const sBytes=privateRead(SUMMARY),cBytes=privateRead(CONTROL),s=parse(sBytes),c=parse(cBytes),a=controlActivation(m);
  if(sha(sBytes)!==base.controlSummarySha256||sha(cBytes)!==base.controlReceiptSha256||s.task!=='T41'||s.status!=='CONTROL_READY'||
-  s.actionId!=='T41.prepare_control_ready'||s.parentActionId!==PARENT||s.authorizationManifestSha256!==pin||s.adoptedActionId!==ADOPTED||
+  s.actionId!=='T41.prepare_control_ready'||s.parentActionId!==PARENT||s.authorizationManifestSha256!==pin||
+  s.ownerProofMethod!==OWNER_PROOF_METHOD||s.ownerProofApprovedInputSha256!==m.owner_proof.approvedInputSha256||s.adoptedActionId!==ADOPTED||
   s.adoptedManifestSha256!==a.manifestSha256||s.controlReceiptSha256!==base.controlReceiptSha256||s.independentKeyProofSha256!==base.independentKeyProofSha256||
   s.independentKeyProofSha256!==m.owner_proof.independentProofSha256||s.sourceEffects!==false||s.sourceBarrierPass!==false||s.targetWritesStarted!==false||
   s.rootComparisonRequired!==true||!same(s.sqlHashes,c.sqlHashes))fail('T41_BIND_CONTROL_GATE_INVALID');
@@ -266,16 +273,18 @@ function assertGate(m,pin,base,baseSha,approved){
 async function main(){let phase='preflight',mode,store,timer,started=false;const controller=new AbortController();
  let result={task:'T41',status:'BLOCKED',sourceAuthUserRead:false,sourceBusinessDataRead:false,sourceEffects:false,sourceBarrierPass:false,macDataTransit:false,sourceWitnessReadAttempted:false,sourceWitnessValidated:false};
  try{
-  if(process.argv.length!==9||!['--prepare-witness','--verify-witness'].includes(process.argv[2])||process.argv[3]!=='--manifest'||
-   process.argv[4]!==MANIFEST||process.argv[5]!=='--sha256'||!digest(process.argv[6])||process.argv[7]!=='--input-sha256'||!digest(process.argv[8]))fail('T41_BIND_EXPLICIT_REVIEW_REQUIRED');
+  if(process.argv.length!==11||!['--prepare-witness','--verify-witness'].includes(process.argv[2])||process.argv[3]!=='--manifest'||
+   process.argv[4]!==MANIFEST||process.argv[5]!=='--sha256'||!digest(process.argv[6])||process.argv[7]!=='--input-sha256'||!digest(process.argv[8])||
+   process.argv[9]!=='--owner-proof-input-sha256'||!digest(process.argv[10]))fail('T41_BIND_EXPLICIT_REVIEW_REQUIRED');
   mode=process.argv[2];
   if(process.platform!=='linux'||process.getuid?.()!==0||process.getgid?.()!==0||process.execPath!==NODE||process.versions.node!=='22.23.5'||
    fileURLToPath(import.meta.url)!==SELF||!Object.values(networkInterfaces()).flat().some(i=>i?.address===VPS)||process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0')fail('T41_BIND_PINNED_VPS_RUNTIME');
   execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
   for(const p of ['/root',ROOT,RUNTIME,RUNTIME+'/docs',RUNTIME+'/docs/runbooks',RUNTIME+'/docs/runbooks/payloads',RUNTIME+'/docs/runbooks/payloads/source-fence-witness']){
    const s=fs.lstatSync(p);if(!s.isDirectory()||s.isSymbolicLink()||s.uid!==0||s.gid!==0||(s.mode&0o7777)!==0o700||fs.realpathSync(p)!==p)fail('T41_BIND_PRIVATE_DIRECTORY');}
-  store=createPrivateFiles();const m=validateManifest(store.read(MANIFEST),process.argv[6],sha(privateRead(SELF)));
-  for(const n of RUNTIME_NAMES){const p=RUNTIME+'/docs/runbooks/payloads/'+n;if(sha(privateRead(p))!==m.runtime_files[p])fail('T41_BIND_RUNTIME_SHA');}
+  store=createPrivateFiles();const initial=validateManifest(store.read(MANIFEST),process.argv[6],sha(privateRead(SELF)));
+  for(const n of RUNTIME_NAMES){const p=RUNTIME+'/docs/runbooks/payloads/'+n;if(sha(privateRead(p))!==initial.runtime_files[p])fail('T41_BIND_RUNTIME_SHA');}
+  const m=loadOwnerManifest(initial,process.argv[6],process.argv[10]);
   const approvedBytes=store.read(SOURCE_INPUT,65536);if(sha(approvedBytes)!==process.argv[8])fail('T41_BIND_ROOT_INPUT_SHA');
   const approved=parse(approvedBytes);if(!bytes(approved).equals(approvedBytes))fail('T41_BIND_NONCANONICAL_INPUT');
   const baseBytes=store.read(BASE,16384),base=parse(baseBytes);validateBase(base,process.argv[6]);const baseSha=sha(baseBytes);
@@ -295,9 +304,7 @@ async function main(){let phase='preflight',mode,store,timer,started=false;const
     onSourceAttempt:()=>{result.sourceWitnessReadAttempted=true;},onWitnessValidated:()=>{result.sourceWitnessValidated=true;},
     guard:()=>{const b=bytes({task:'T41',actionId:'T41.verify_witness',manifestSha256:process.argv[6],contextSha256:prepared.contextSha256,sourceFenceApprovedSha256:process.argv[8]});store.write({path:DIR+'/witness-verify.guard',bytes:b,sha256:sha(b)});started=true;}})};
   }
- }catch(e){result={...result,status:'BLOCKED',phase,code:failCode(e),...remoteSafe({protocol:PROTOCOL,stage:e?.remoteStage,code:e?.remoteCode}),
-  ...(/^T41_BIND_[A-Z0-9_]+$/.test(e?.upstreamCode??'')?{upstreamCode:e.upstreamCode}:{}),
-  ...(Number.isInteger(e?.readinessStatus)&&e.readinessStatus>=100&&e.readinessStatus<=599?{readinessStatus:e.readinessStatus}:{}),sourceMustRemainClosed:true,retryAllowed:false};}
+ }catch(e){result={...result,...safeBindFailure(e,phase)};}
  finally{clearTimeout(timer);controller.abort();if(started)try{const b=bytes(result);store.write({path:DIR+'/witness-result.json',bytes:b,sha256:sha(b)});}catch{result={...result,status:'BLOCKED',code:'T41_BIND_RESULT_WRITE_FAILED'};}}
  console.log('T41_WITNESS_RESULT',JSON.stringify(result));if(!['WITNESS_CONTEXT_PREPARED','SOURCE_ADMISSION_CLOSED'].includes(result.status))process.exitCode=2;
 }

@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {makeControlReady,metadataQuerySha256} from './admission-metadata-custody.mjs';
 import {createAdmissionCustodyFs} from './admission-custody-fs.mjs';
+import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,BACKUP_MANIFEST_PATH,validateEscrowOwnerScope,resolveEscrowOwnerProof} from './owner-proof-binding.mjs';
 
 const ROOT='/root/bron-secrets',DIRECTORY=ROOT+'/t41-release',RUNTIME=ROOT+'/t41-runtime';
 const SELF=RUNTIME+'/docs/runbooks/payloads/t41-control-ready.mjs',MANIFEST=DIRECTORY+'/manifest.json';
@@ -16,17 +17,14 @@ const ADOPTED_MANIFEST='a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7d
 const PATHS={beforeImagePath:ROOT+'/t40-admission-before-c40a2026.json',metadataReceiptPath:ROOT+'/t40-admission-metadata-c40a2026.json',
  inversePath:ROOT+'/t40-admission-inverse-c40a2026.sql',controlReceiptPath:ROOT+'/t40-admission-control-c40a2026.json'};
 const KEY_PROOF=ROOT+'/t40-admission-key-proof-c40a2026.json';
-const OWNER_PATHS={crypto:ROOT+'/t30-owner-key-proof-result.json',attestation:ROOT+'/t30-owner-key-attestation.json',receipt:ROOT+'/t30-release-receipt.json'};
 const FILE_KEY='docs/runbooks/payloads/t41-control-ready.mjs',MAX=1048576;
-const RUNTIME_FILES=['t41-control-ready.mjs','admission-metadata-custody.mjs','admission-custody-fs.mjs','http-source-admission.mjs','t26-source-admission.mjs']
+const RUNTIME_FILES=['t41-control-ready.mjs','admission-metadata-custody.mjs','admission-custody-fs.mjs','http-source-admission.mjs','t26-source-admission.mjs','owner-proof-binding.mjs']
  .map(p=>RUNTIME+'/docs/runbooks/payloads/'+p);
 const sha=b=>createHash('sha256').update(b).digest('hex'),digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const exact=(o,keys)=>o!==null&&typeof o==='object'&&!Array.isArray(o)&&Object.keys(o).sort().join(',')===[...keys].sort().join(',');
-const canonical=o=>JSON.stringify(o,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
-const encode=o=>Buffer.from(canonical(o)+'\n');
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const ownerFail=code=>{throw Object.assign(new Error(code),{code,status:'BLOCKED_OWNER_PROOF'});};
-const upstream=error=>/^(?:ADMISSION_FS_|ADMISSION_CUSTODY_|HTTP_ADMISSION_)[A-Z0-9_]{1,60}$/.test(error?.code??'')?error.code:null;
+const upstream=error=>/^(?:ADMISSION_FS_|ADMISSION_CUSTODY_|HTTP_ADMISSION_|OWNER_PROOF_)[A-Z0-9_]{1,60}$/.test(error?.code??'')?error.code:null;
 const phases=new Set(['activation','confirm-prepared-custody','independent-key-proof','make-control-plan','persist-exact-inverse','persist-control-receipt']);
 const pending=error=>error?.status==='BLOCKED_OWNER_PROOF'||['ADMISSION_FS_OWNER_PROOF_PENDING','ADMISSION_FS_OWNER_CRYPTO_REQUIRED',
  'ADMISSION_FS_OWNER_ATTESTATION_REQUIRED','ADMISSION_FS_CIPHER_BINDING_REQUIRED','ADMISSION_FS_OWNER_ENVELOPE_PIN'].includes(error?.code);
@@ -42,24 +40,23 @@ function policy(m){
  const e=m.input_evidence;
  if(!['T40_result_sha256','T40_receipt_sha256','T40_before_image_sha256','T40_metadata_receipt_sha256'].every(k=>digest(e?.[k])))
   fail('T41_T40_PINS_REQUIRED');
- const p=m.owner_proof,i=p?.inputs,b=i?.reviewedT30CipherBinding;
- if(!digest(p?.independentProofSha256)||!digest(p.recoveryCipherSha256)||
-  !exact(i,['crypto','attestation','receipt','reviewedT30CipherBinding'])||
-  Object.entries(OWNER_PATHS).some(([k,path])=>!exact(i[k],['path','sha256'])||i[k].path!==path||!digest(i[k].sha256))||
-  !exact(b,['reviewed','task','cryptoResultSha256','sourceReceiptSha256','cipherSha256'])||b.reviewed!==true||b.task!=='T30'||
-  b.cryptoResultSha256!==i.crypto.sha256||b.sourceReceiptSha256!==i.receipt.sha256||b.cipherSha256!==p.recoveryCipherSha256)
-  ownerFail('T41_OWNER_PROOF_PINS_REQUIRED');
+ try{const scope=validateEscrowOwnerScope(m.owner_proof);
+  if(scope.recoveryCipherBinding.manifestSha256!=='a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9')ownerFail('T41_ESCROW_BACKUP_BINDING');
+ }catch{ownerFail('T41_ESCROW_METHOD_REQUIRED');}
  return m;
 }
 export function validateManifest(raw,manifestSha256,selfSha256){
  if(!digest(manifestSha256)||sha(raw)!==manifestSha256)fail('T41_MANIFEST_SHA');let m;
  try{m=JSON.parse(raw);}catch{fail('T41_MANIFEST_JSON');}policy(m);
+ if(['independentProofSha256','recoveryCipherSha256','inputs','approvedInputSha256'].some(k=>Object.hasOwn(m.owner_proof,k)))ownerFail('T41_OWNER_ROOT_INPUT_REQUIRED');
  if(!digest(selfSha256)||m.files?.[FILE_KEY]!==selfSha256)fail('T41_SELF_SHA');
  if(!m.runtime_files||RUNTIME_FILES.some(p=>!digest(m.runtime_files[p])))fail('T41_RUNTIME_PINS');
  return m;
 }
 export function activationFromManifest(m){
  policy(m);
+ if(!digest(m.owner_proof.independentProofSha256)||!digest(m.owner_proof.recoveryCipherSha256)||
+  !digest(m.owner_proof.approvedInputSha256)||m.owner_proof.inputs?.method!==OWNER_PROOF_METHOD)ownerFail('T41_OWNER_ROOT_INPUT_REQUIRED');
  return {reviewed:true,actionId:ADOPTED_ACTION,manifestSha256:ADOPTED_MANIFEST,sourceProject:PROJECT,destinationVps:VPS,
   metadataReadAuthorized:true,metadataOnly:true,sourceRoute:'fixed-source-edge-https',macDataTransit:false,targetWritesStarted:false,
   ...PATHS,controlTaskAuthorized:true,providerBoundaryReviewed:m.phase_authorizations.prepare_control_ready.provider_boundary_reviewed,
@@ -78,26 +75,17 @@ export function validateT40Result(raw,pin,evidence){
   s.beforeImageSha256!==evidence?.T40_before_image_sha256||s.receiptSha256!==evidence?.T40_metadata_receipt_sha256)
   fail('T41_T40_RESULT_INVALID');return true;
 }
-export function validateOwnerProof({cryptoBytes,attestationBytes,receiptBytes,cryptoMtimeMs},ownerProof,now=Date.now()){
- const i=ownerProof?.inputs;
- if(!i||sha(cryptoBytes)!==i.crypto?.sha256||sha(attestationBytes)!==i.attestation?.sha256||sha(receiptBytes)!==i.receipt?.sha256)
-  ownerFail('T41_OWNER_PROOF_SHA');let c,a;
- try{c=JSON.parse(cryptoBytes);a=JSON.parse(attestationBytes);}catch{ownerFail('T41_OWNER_PROOF_JSON');}
- if(!exact(c,['status','cipherShaVerified','decryptionVerified','plaintextStored','identityStored','externalCustody'])||
-  c.status!=='PASS'||c.cipherShaVerified!==true||c.decryptionVerified!==true||c.plaintextStored!==false||c.identityStored!==false||
-  c.externalCustody!=='OWNER_CONFIRMATION_REQUIRED')ownerFail('T41_OWNER_CRYPTO_REQUIRED');
- if(!exact(a,['task','action','cryptoResultSha256','sourceReceiptPath','sourceReceiptSha256','independentCopy','personalSecondDeviceLogin',
-  'witnessedBy','deviceClass','observedUtc']))ownerFail('T41_OWNER_ATTESTATION_REQUIRED');
- const observed=Date.parse(a.observedUtc);
- if(a.task!=='T30'||a.action!=='owner_key_proof'||a.cryptoResultSha256!==i.crypto.sha256||a.sourceReceiptPath!==OWNER_PATHS.receipt||
-  a.sourceReceiptSha256!==i.receipt.sha256||a.independentCopy!==true||a.personalSecondDeviceLogin!==true||a.witnessedBy!=='owner'||
-  !['phone','second-device'].includes(a.deviceClass)||typeof a.observedUtc!=='string'||!/(?:Z|\+00:00)$/.test(a.observedUtc)||
-  !Number.isFinite(observed)||observed>now+5000||!Number.isFinite(cryptoMtimeMs)||cryptoMtimeMs>observed+60000)
-  ownerFail('T41_OWNER_ATTESTATION_REQUIRED');
- const proof={format:1,sourceProject:PROJECT,destinationVps:VPS,
-  crypto:{status:'PASS',cipherSha256:ownerProof.recoveryCipherSha256,cipherShaVerified:true,decryptionVerified:true,identityStored:false,plaintextStored:false},
-  attestation:{independentCopy:true,personalSecondDeviceLogin:true,evidenceSha256:i.attestation.sha256}};
- if(sha(encode(proof))!==ownerProof.independentProofSha256)ownerFail('T41_OWNER_ENVELOPE_SHA');return true;
+// Runtime projection only: never rewrites the initial parent manifest or its SHA.
+export function resolveOwnerManifest({manifest,parentManifestSha256,...inputs}){
+ policy(manifest);const resolved=resolveEscrowOwnerProof({manifest,parentManifestSha256,...inputs});
+ return {...manifest,owner_proof:{...manifest.owner_proof,independentProofSha256:resolved.independentProofSha256,
+  recoveryCipherSha256:resolved.recoveryCipherSha256,inputs:resolved.proofInputs,approvedInputSha256:resolved.approvedInputSha256}};
+}
+export function loadOwnerManifest(manifest,parentManifestSha256,approvedInputSha256){
+ if(!digest(approvedInputSha256))ownerFail('T41_OWNER_ROOT_INPUT_REQUIRED');
+ try{return resolveOwnerManifest({manifest,parentManifestSha256,approvedInputSha256,
+  approvedInputBytes:read(OWNER_APPROVED_PATH),resultBytes:read(OWNER_RESULT_PATH),attestationBytes:read(OWNER_ATTESTATION_PATH),
+  backupManifestBytes:read(BACKUP_MANIFEST_PATH)});}catch(error){if(error?.status==='BLOCKED_OWNER_PROOF')throw error;ownerFail('T41_OWNER_PROOF_REQUIRED');}
 }
 
 // Adapter is the reviewed createAdmissionCustodyFs instance in production; synthetic
@@ -122,6 +110,7 @@ export async function runControlReady({manifest,authorizationManifestSha256,adap
    readIndependentKeyProof:checked(adapter.readIndependentKeyProof),persistInverse:checked(adapter.persistInverse),persistReceipt:checked(adapter.persistReceipt)});
   phase='confirm-inputs-unchanged';await assertPinnedInputs();
   return {task:'T41',status:'CONTROL_READY',actionId:ACTION,parentActionId:PARENT_ACTION,authorizationManifestSha256,
+   ownerProofMethod:OWNER_PROOF_METHOD,ownerProofApprovedInputSha256:m.owner_proof.approvedInputSha256,
    adoptedActionId:ADOPTED_ACTION,adoptedManifestSha256:ADOPTED_MANIFEST,
    beforeImagePath:PATHS.beforeImagePath,beforeImageSha256:ready.beforeImageSha256,
    metadataReceiptPath:PATHS.metadataReceiptPath,metadataReceiptSha256:ready.metadataReceiptSha256,
@@ -131,7 +120,7 @@ export async function runControlReady({manifest,authorizationManifestSha256,adap
    t40ArtifactsUnchanged:true,rootComparisonRequired:true,sourceEffects:false,sourceBarrierPass:false,targetWritesStarted:false,
    providerSuperusersFenced:false,actualSupavisorRecovery:'NOT_TESTED',macDataTransit:false};
  }catch(error){
-  const owner=pending(error)||pending({code:upstreamCode}),code=owner?'T41_OWNER_PROOF_REQUIRED':/^T41_[A-Z0-9_]+$/.test(error?.code??'')?error.code:'T41_CONTROL_PREPARATION_FAILED';
+  const owner=pending(error)||pending({code:upstreamCode}),code=owner?'T41_OWNER_PROOF_REQUIRED':/^(?:T41_|OWNER_PROOF_)[A-Z0-9_]+$/.test(error?.code??'')?error.code:'T41_CONTROL_PREPARATION_FAILED';
   throw Object.assign(new Error(code),{code,status:owner?'BLOCKED_OWNER_PROOF':'BLOCKED',phase,
    ...(phases.has(error?.phase)?{custodyPhase:error.phase}:{}),...((upstreamCode??upstream(error))?{upstreamCode:upstreamCode??upstream(error)}:{}),
    sourceEffects:false,sourceBarrierPass:false,retryAllowed:false});
@@ -150,30 +139,29 @@ function absent(paths){for(const p of paths)try{fs.lstatSync(p);fail('T41_ALREAD
 async function main(){let phase='preflight',adapter,guard=false;
  let result={task:'T41',status:'BLOCKED',sourceEffects:false,sourceBarrierPass:false,targetWritesStarted:false,macDataTransit:false};
  try{
-  if(process.argv.length!==7||process.argv[2]!=='--prepare-control'||process.argv[3]!=='--manifest'||process.argv[4]!==MANIFEST||
-   process.argv[5]!=='--sha256'||!digest(process.argv[6]))fail('T41_EXPLICIT_REVIEW_REQUIRED');
+  if(process.argv.length!==9||process.argv[2]!=='--prepare-control'||process.argv[3]!=='--manifest'||process.argv[4]!==MANIFEST||
+   process.argv[5]!=='--sha256'||!digest(process.argv[6])||process.argv[7]!=='--owner-proof-input-sha256'||!digest(process.argv[8]))fail('T41_EXPLICIT_REVIEW_REQUIRED');
   if(process.platform!=='linux'||process.getuid?.()!==0||process.getgid?.()!==0||process.execPath!==NODE||process.versions.node!=='22.23.5'||
    fileURLToPath(import.meta.url)!==SELF||!Object.values(networkInterfaces()).flat().some(i=>i?.address===VPS))fail('T41_PINNED_VPS_RUNTIME');
   execFileSync('/usr/bin/prlimit',['--pid',String(process.pid),'--core=0:0'],{stdio:'ignore'});
   for(const d of ['/root',ROOT,DIRECTORY,RUNTIME,RUNTIME+'/docs',RUNTIME+'/docs/runbooks',RUNTIME+'/docs/runbooks/payloads'])directory(d);
-  const m=validateManifest(read(MANIFEST),process.argv[6],sha(read(SELF)));
+  const initial=validateManifest(read(MANIFEST),process.argv[6],sha(read(SELF)));
+  const m=loadOwnerManifest(initial,process.argv[6],process.argv[8]);
   for(const p of RUNTIME_FILES)if(sha(read(p))!==m.runtime_files[p])fail('T41_RUNTIME_SHA');
   const verify=()=>{
    validateT40Result(read(ROOT+'/t40-metadata-custody/capture-result.json'),m.input_evidence.T40_result_sha256,m.input_evidence);
    for(const [p,h]of [[ROOT+'/t40-release-receipt.json',m.input_evidence.T40_receipt_sha256],
     [PATHS.beforeImagePath,m.input_evidence.T40_before_image_sha256],[PATHS.metadataReceiptPath,m.input_evidence.T40_metadata_receipt_sha256]])
     if(sha(read(p))!==h)fail('T41_ADOPTED_ARTIFACTS_CHANGED');
-   try{const c=privateFile(OWNER_PATHS.crypto,4096),attestation=privateFile(OWNER_PATHS.attestation,4096),receipt=privateFile(OWNER_PATHS.receipt);
-    validateOwnerProof({cryptoBytes:c.bytes,attestationBytes:attestation.bytes,receiptBytes:receipt.bytes,cryptoMtimeMs:c.mtimeMs},m.owner_proof);
-   }catch(error){if(error.status==='BLOCKED_OWNER_PROOF')throw error;ownerFail('T41_OWNER_PROOF_REQUIRED');}
+   loadOwnerManifest(initial,process.argv[6],process.argv[8]);
   };
   phase='verify-inputs';verify();absent([DIRECTORY+'/control-ready.guard',DIRECTORY+'/control-ready-result.json',KEY_PROOF,PATHS.inversePath,PATHS.controlReceiptPath]);
   adapter=createAdmissionCustodyFs({activation:activationFromManifest(m),proofInputs:m.owner_proof.inputs});phase='prepare-control';
   result={...result,...await runControlReady({manifest:m,authorizationManifestSha256:process.argv[6],adapter,assertPinnedInputs:verify,
    guard:()=>{writeNew(DIRECTORY+'/control-ready.guard',JSON.stringify({task:'T41',actionId:ACTION,parentActionId:PARENT_ACTION,authorizationManifestSha256:process.argv[6],
-    adoptedActionId:ADOPTED_ACTION,adoptedManifestSha256:ADOPTED_MANIFEST,startedUtc:new Date().toISOString()})+'\n');guard=true;}})};
+    adoptedActionId:ADOPTED_ACTION,adoptedManifestSha256:ADOPTED_MANIFEST,ownerProofMethod:OWNER_PROOF_METHOD,ownerProofApprovedInputSha256:process.argv[8],startedUtc:new Date().toISOString()})+'\n');guard=true;}})};
  }catch(error){result={...result,status:pending(error)?'BLOCKED_OWNER_PROOF':'BLOCKED',phase:error?.phase??phase,
-  code:/^T41_[A-Z0-9_]+$/.test(error?.code??'')?error.code:error?.code==='EEXIST'?'T41_ALREADY_STARTED':'T41_PREPARATION_FAILED',
+  code:/^(?:T41_|OWNER_PROOF_)[A-Z0-9_]+$/.test(error?.code??'')?error.code:error?.code==='EEXIST'?'T41_ALREADY_STARTED':'T41_PREPARATION_FAILED',
   ...(phases.has(error?.custodyPhase)?{custodyPhase:error.custodyPhase}:{}),
   ...((upstream(error)??upstream({code:error?.upstreamCode}))?{upstreamCode:upstream(error)??error.upstreamCode}:{})};}
  finally{try{adapter?.close();}catch{result={...result,status:'BLOCKED',code:'T41_CUSTODY_CLOSE_FAILED'};}

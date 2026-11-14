@@ -6,7 +6,7 @@ import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {createHash,createCipheriv,hkdfSync} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {PROTOCOL,validateManifest,validateBase,validateRootInput,validateLedger,buildWitnessContext,validatePreparedContext,requestWitness,requestReadiness,
+import {PROTOCOL,validateManifest,validateBase,validateRootInput,validateLedger,buildWitnessContext,validatePreparedContext,requestWitness,requestReadiness,safeBindFailure,
  decryptWitness,validateWitnessFrame,buildBindingArtifacts,persistRootArtifacts,runWitnessVerification,createPrivateFiles} from '../../docs/runbooks/payloads/t41-bind-fence.mjs';
 const sha=b=>createHash('sha256').update(b).digest('hex'),canon=x=>JSON.stringify(x,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v),bytes=x=>Buffer.from(canon(x)+'\n');
 const manifestSha='1'.repeat(64),controlSha='2'.repeat(64),summarySha='3'.repeat(64),proofSha='4'.repeat(64),verifySha='5'.repeat(64),token='a'.repeat(64);
@@ -25,10 +25,10 @@ function client({status=200,body,raw,stall=false,error=false}={}){const calls=[]
 test('manifest authorizes only these metadata phases and requires all imported runtime pins',()=>{
  const h='d'.repeat(64),root='/root/bron-secrets',runtime=root+'/t41-runtime/docs/runbooks/payloads/';
  const custody={beforeImagePath:root+'/t40-admission-before-c40a2026.json',metadataReceiptPath:root+'/t40-admission-metadata-c40a2026.json',inversePath:root+'/t40-admission-inverse-c40a2026.sql',controlReceiptPath:root+'/t40-admission-control-c40a2026.json'};
- const inputs={crypto:{path:root+'/t30-owner-key-proof-result.json',sha256:h},attestation:{path:root+'/t30-owner-key-attestation.json',sha256:h},receipt:{path:root+'/t30-release-receipt.json',sha256:h},reviewedT30CipherBinding:{reviewed:true,task:'T30',cryptoResultSha256:h,sourceReceiptSha256:h,cipherSha256:h}};
- const m={task:'T41',actionId:'T41.release_window',execution_authorized:true,adopts:{actionId:'T40.http_source_admission',manifestSha256:'a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8',custody},owner_proof:{independentProofSha256:h,recoveryCipherSha256:h,inputs},input_evidence:Object.fromEntries(['T40_result_sha256','T40_receipt_sha256','T40_before_image_sha256','T40_metadata_receipt_sha256'].map(k=>[k,h])),files:{'docs/runbooks/payloads/t41-bind-fence.mjs':h},runtime_files:Object.fromEntries(['t41-bind-fence.mjs','t41-control-ready.mjs','admission-custody-fs.mjs','admission-metadata-custody.mjs','http-source-admission.mjs','t26-source-admission.mjs','source-transfer-budget.mjs','source-fence-witness/fence-witness.mjs'].map(n=>[runtime+n,h])),phase_authorizations:{prepare_control_ready:{actionId:'T41.prepare_control_ready',control_ready_only:true,source_sql_authorized:false,provider_boundary_reviewed:true,rollback_before_target_writes:true},prepare_witness:{actionId:'T41.prepare_witness',metadata_only:true,source_sql_authorized:false,max_source_POST:0},verify_witness:{actionId:'T41.verify_witness',metadata_only:true,source_sql_authorized:false,max_source_POST:1},run_final:{ownedByOtherHelper:true}}};
+ const ownerScope={method:'BRON_OWNER_KEY_ESCROW_V1',root_approved_input_required:true,proposalSha256:h,recoveryCipherBinding:{manifestSha256:'a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9',artifact:'roles.sql.zst.age',from_pinned_backup_manifest:true}};
+ const m={task:'T41',actionId:'T41.release_window',execution_authorized:true,adopts:{actionId:'T40.http_source_admission',manifestSha256:'a8f777d95d53b365959530a0bbce4a42b21840dc92bf1180c65eaa7dd74136f8',custody},owner_proof:ownerScope,input_evidence:Object.fromEntries(['T40_result_sha256','T40_receipt_sha256','T40_before_image_sha256','T40_metadata_receipt_sha256'].map(k=>[k,h])),files:{'docs/runbooks/payloads/t41-bind-fence.mjs':h,'docs/runbooks/payloads/t41-control-ready.mjs':h},runtime_files:Object.fromEntries(['t41-bind-fence.mjs','t41-control-ready.mjs','admission-custody-fs.mjs','admission-metadata-custody.mjs','http-source-admission.mjs','t26-source-admission.mjs','source-transfer-budget.mjs','source-fence-witness/fence-witness.mjs','owner-proof-binding.mjs'].map(n=>[runtime+n,h])),phase_authorizations:{prepare_control_ready:{actionId:'T41.prepare_control_ready',control_ready_only:true,source_sql_authorized:false,provider_boundary_reviewed:true,rollback_before_target_writes:true},prepare_witness:{actionId:'T41.prepare_witness',metadata_only:true,source_sql_authorized:false,max_source_POST:0},verify_witness:{actionId:'T41.verify_witness',metadata_only:true,source_sql_authorized:false,max_source_POST:1},run_final:{ownedByOtherHelper:true}}};
  const check=x=>{const b=Buffer.from(JSON.stringify(x));return validateManifest(b,sha(b),h);};assert.equal(check(m).task,'T41');
- for(const mutate of [x=>x.execution_authorized=false,x=>x.phase_authorizations.verify_witness.max_source_POST=2,x=>x.phase_authorizations.prepare_witness.source_sql_authorized=true,x=>x.runtime_files={}]){const copy=structuredClone(m);mutate(copy);assert.throws(()=>check(copy));}
+ for(const mutate of [x=>x.execution_authorized=false,x=>x.owner_proof.method='LEGACY',x=>x.owner_proof.independentProofSha256=h,x=>x.owner_proof.inputs={crypto:{path:root+'/t30-owner-key-proof-result.json',sha256:h}},x=>x.phase_authorizations.verify_witness.max_source_POST=2,x=>x.phase_authorizations.prepare_witness.source_sql_authorized=true,x=>x.runtime_files={}]){const copy=structuredClone(m);mutate(copy);assert.throws(()=>check(copy));}
  const b=Buffer.from(JSON.stringify(m));assert.throws(()=>validateManifest(b,'f'.repeat(64),h),{code:'T41_BIND_MANIFEST_SHA'});
 });
 test('fresh base requires exact manifest/control/grant scope and two-hour capability binding',()=>{
@@ -127,4 +127,22 @@ test('import/noargsCLI are inert and failure never exposes private paths or erro
 test('non-ASCII capability bytes are rejected rather than high-bit masked into a valid secret',async()=>{
  const p=await context(),bad=Buffer.alloc(64,0xe1).toString('utf8');assert.throws(()=>requestWitness(bad,base()),{code:'T41_BIND_REQUEST_SCOPE'});
  await assert.rejects(runWitnessVerification({manifestSha,base:base(),baseSha:sha(bytes(base())),approved:approved(),preparedContext:p,control:control(),token:bad,guard:()=>assert.fail('guard'),persist:()=>assert.fail('persist')},{now:()=>now+5,status:()=>ledger(),readiness:async()=>assert.fail('GET'),send:async()=>assert.fail('POST')}),{code:'T41_BIND_CAPABILITY_SHA'});
+});
+
+test('both witness CLI phases require explicit Root owner-proof approval SHA in addition to fence input SHA',()=>{
+ const p=path.resolve('docs/runbooks/payloads/t41-bind-fence.mjs');
+ for(const mode of ['--prepare-witness','--verify-witness']){
+  const common=[p,mode,'--manifest',dir+'/manifest.json','--sha256',manifestSha,'--input-sha256','a'.repeat(64)];
+  const old=spawnSync(process.execPath,common,{encoding:'utf8',timeout:2000});assert.equal(old.status,2);assert.match(old.stdout,/T41_BIND_EXPLICIT_REVIEW_REQUIRED/);assert.equal(old.stderr,'');
+  const bad=spawnSync(process.execPath,[...common,'--owner-proof-input-sha256','PENDING'],{encoding:'utf8',timeout:2000});assert.equal(bad.status,2);assert.match(bad.stdout,/T41_BIND_EXPLICIT_REVIEW_REQUIRED/);
+  const valid=spawnSync(process.execPath,[...common,'--owner-proof-input-sha256','b'.repeat(64)],{encoding:'utf8',timeout:2000});assert.equal(valid.status,2);assert.match(valid.stdout,/T41_BIND_PINNED_VPS_RUNTIME/);assert.equal(valid.stderr,'');
+ }
+});
+
+test('shared ESCROW proof errors retain safe owner-blocked status and finite code without private exception text',()=>{
+ for(const code of ['OWNER_PROOF_ROOT_APPROVAL_INVALID','T41_OWNER_PROOF_REQUIRED','T41_ESCROW_METHOD_REQUIRED']){
+  const e=Object.assign(new Error('PRIVATE_OWNER_RESULT'),{code,status:'BLOCKED_OWNER_PROOF',actualKey:'AGE-SECRET-KEY-PRIVATE'}),r=safeBindFailure(e,'preflight');
+  assert.equal(r.status,'BLOCKED_OWNER_PROOF');assert.equal(r.code,code);assert.equal(r.sourceMustRemainClosed,true);assert.doesNotMatch(JSON.stringify(r),/PRIVATE|AGE-SECRET|actualKey/);
+ }
+ const unknown=safeBindFailure(Object.assign(new Error('SECRET'),{code:'arbitrary private message'}),'preflight');assert.equal(unknown.status,'BLOCKED');assert.equal(unknown.code,'T41_BIND_FAILED');assert.doesNotMatch(JSON.stringify(unknown),/SECRET|arbitrary/);
 });

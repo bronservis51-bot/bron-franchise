@@ -24,8 +24,13 @@ Reader закрыт coordinator tombstonev2 (exactreadback/HTTPS410); available 
 2edge+4function records: capability/private-field/body matches0. Общий approved
 бюджет использован1/3, осталось2 финальных snapshot. Прямой PostgreSQL TCP больше
 не блокирует выпуск: выбран доказанный HTTPS-канал, старые TCP/MTU пробы не повторять.
-Ключ/second-device proof pending: на телефоне AdminVPS показал blank «Неразрешенный»,
-что пока не доказывает доступ к консоли. T40 technical before-image/metadata receipt durableVPS PASS, Authbudget1→1;
+Независимая raw AGE-копия не найдена; пароль DMG её не доказывает. Владелец
+одобрил [узкий escrow-метод T41](runbooks/t41-owner-recovery-approval.md): новый
+owner-held пароль через скрытый телефонный TTY, только scrypt ciphertext VPS→S3,
+проверка скачанного ciphertext и отдельная custody/phone attestation. Это
+разрешение, не фактический key proof и не T30 PASS. Phone AdminVPS показывал
+blank «Неразрешенный»; нужен реальный root prompt и свежий pinned task.
+T40 technical before-image/metadata receipt durableVPS PASS, Authbudget1→1;
 reader закрытv2/readback/410 и availablelogscan PASS. Source freeze ещё не выполнялся.
 
 ## До переключения: текущие критерии
