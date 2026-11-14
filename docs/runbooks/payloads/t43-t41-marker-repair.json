@@ -1,0 +1,105 @@
+{
+  "actionId": "T43.complete_t41_marker_delivery",
+  "checklist": "docs/runbooks/t43-t41-marker-repair.md",
+  "continuation": {
+    "if_generic_check_failure_only": {
+      "allow_unused_t42_phone_diagnostic": true,
+      "diagnostic_path": "/root/bron-secrets/t42-owner-console-diagnostic.py",
+      "diagnostic_sha256": "8975a7324615f98bb8037fb29b098a4640372838249aca1a916ac0f35a8dd340",
+      "do_not_repeat_t42_ssh_inspection": true,
+      "max_runs": 1,
+      "phone_result_path": "/root/bron-secrets/t42-console-diagnostic/phone-result.json",
+      "requires_all_six_pins_pass": true,
+      "requires_phone_result_absent": true,
+      "stop_after_diagnostic": true
+    },
+    "owner_t41_check_max_runs": 1,
+    "ready_resumes_existing_T41_recover_attest": true
+  },
+  "deliveries": [
+    {
+      "allow_existing_only_if_exact_content_sha_and_private_metadata": true,
+      "bytes": 65,
+      "destination": "/root/bron-secrets/t41-owner-recovery/approved-manifest.sha256",
+      "exclusive_no_follow": true,
+      "file_and_directory_fsync": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "readback_required": true,
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t43-t41-approved-manifest.sha256"
+    },
+    {
+      "destination": "/root/bron-secrets/t43-marker-repair/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t43-t41-marker-repair.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t43-marker-repair"
+  ],
+  "execution_authorized": true,
+  "expected_t41_public_files": {
+    "/root/bron-secrets/t41-owner-console.py": "a341b39f5740ee294f3928dee97ab3fa15b1f8afcb5a2a8374ff30f3ff1b222e",
+    "/root/bron-secrets/t41-owner-recovery/manifest.json": "54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321",
+    "/root/bron-secrets/t41-recovery-runtime/deploy/timeweb/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/owner-key-escrow-crypto.py": "f5fdc144a6640d06d4c07b3782f775ced9256c1b0b941fa27449d1f96c1a04d5",
+    "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/t41-owner-key-recovery.py": "5d34425751fab224e63129103ac2da5f5b2bcd2098faa28dbe70cdbce32d6ce2"
+  },
+  "files": {
+    "docs/runbooks/payloads/t43-t41-approved-manifest.sha256": "2d2b23617cc14ef16668a9c9260cad5f4f19d69e861a85126609b0335e6415a4",
+    "docs/runbooks/t43-t41-marker-repair.md": "28dfda796320b2d958500d0559fd6809e1d59bae85e1750757996cd4e3f1c55f"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T42_inspect_path": "Use actual saved safe result path from accepted T42 state/receipt",
+    "T42_inspect_sha256": "4faf69119938b1d227a63712a0130ed1b5606360da7b5e458580436ac583e8ad",
+    "T42_receipt_path": "/root/bron-secrets/t42-release-receipt.json",
+    "T42_receipt_sha256": "d2558f8dd5d521f6ad1f72c36960d1bdd078543dc2598a17266891e15d3a9d11",
+    "expected_errno": 2,
+    "expected_exceptionClass": "FileNotFoundError",
+    "expected_fileId": "MARKER",
+    "other_public_matches": 5
+  },
+  "marker_sha256": "2d2b23617cc14ef16668a9c9260cad5f4f19d69e861a85126609b0335e6415a4",
+  "not_authorized": [
+    "Overwrite/chmod/remove a pre-existing mismatched marker",
+    "Alter any T41 helper or parent manifest",
+    "Repeat consumed T42 SSH inspection",
+    "Read keys, identities, backup or credentials under T43",
+    "Source, DB, S3 or product API actions under T43",
+    "Recovery/attestation by executor instead of owner",
+    "Mac transit of actual secrets, backup or real Source data",
+    "New services, dependencies, network repair, preview, Pages or public release"
+  ],
+  "parentCommit": "a6b4c8db464c8806282944c7dd63d9e2111d612d",
+  "parentManifestSha256": "54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321",
+  "parentTask": "T41",
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t43-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T43-state.json",
+    "mode": "0600",
+    "same_sha256": true
+  },
+  "scope": "Create only missing public T41 approval marker; original code/manifest unchanged; then owner check under T41",
+  "shared_auth_budget_unchanged": {
+    "remaining": 2,
+    "used": 1
+  },
+  "task": "T43",
+  "verification": {
+    "marker_content_is_original_T41_manifest_sha_plus_LF": true,
+    "marker_exact_65_bytes": true,
+    "original_T41_54_file_pins_unchanged": true,
+    "production_repair": "NOT_RUN",
+    "scope_independent_review": "PASS"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
