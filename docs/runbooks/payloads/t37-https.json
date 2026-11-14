@@ -16,9 +16,12 @@
     "wall_seconds": 140
   },
   "approval": {
+    "auth_digest_input": "UTF8 text of (to_jsonb(auth.users row)-'updated_at'); every other field participates, including password-hash/token-related columns when present",
+    "includes_credential_derived_auth_digests": true,
+    "raw_password_token_profile_fields_exported": false,
     "raw_passwords_or_JWT_or_Auth_profiles_exported": false,
     "reason": "Automatic approval review rejected deploy: trusted authorization required for exact sensitive payload and destination",
-    "requested_action": "deploy temporary capability-authenticated source Edge reader exporting AES-GCM encrypted strict audit summary+max16compactAuth records only to VPS RAM152.228.115.115; no Mac data/backup transit",
+    "requested_action": "deploy temporary capability-authenticated source Edge reader and perform one read-only comparison exporting AES-GCM encrypted strict audit summary+max16 compact Auth records{UUID,updated_at,epochMicros,SHA256(all remaining auth.users fields including password-hash/token-related columns)} only to VPS RAM152.228.115.115; no raw credential/profile fields or Mac data/backup transit",
     "required": true,
     "source_or_target_data_writes": false
   },
@@ -76,7 +79,7 @@
     "docs/runbooks/payloads/source-https-reader/index.ts": "0b2ec2a362b535876ea442e23ea6c603262eef5a5430b9bfe6d189f32b1c3056",
     "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
     "docs/runbooks/payloads/t37-https-inventory.mjs": "029dce47fe93a96a3eee70ce2e213236c8fe4df94ad621622fd02303dd9cc7cc",
-    "docs/runbooks/t37-https-inventory.md": "e74427017fe977a04376b7d8b4111a7a4b31e6a129f65267a180d70de5b5e45e",
+    "docs/runbooks/t37-https-inventory.md": "f4abda61cac8bb66f9e13d03659ecaffd818ca1fe58473469f3e020f8f09efe1",
     "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
     "tests/ops/exact-fingerprint-native.mjs": "f635f3343cfe1774526faf12027d3cd37a35b9fc213c0a2de51c8f3c12034358",
     "tests/ops/exact-fingerprint-native.py": "d9749f65d0aef2a019b064413b41c24c1cbab637d69dca7466c3e35afcb787ec",
@@ -150,7 +153,7 @@
     "functionName": "bron-source-reader-fba3e5a8714f",
     "no_extension_or_rotation": true,
     "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
-    "payload": "all same strict audit groups/counts/hashes/sequences + max16 compact Auth{UUID,updated_at,epochMicros,SHA256(otherfields)} in one RR READONLY snapshot",
+    "payload": "all same strict audit groups/counts/hashes/sequences + max16 compact Auth{UUID,updated_at,epochMicros,SHA256(UTF8(to_jsonb(row)-updated_at))}; per-user digest includes password-hash/token-related fields when present; encrypted to VPSRAM only, one RR READONLY snapshot",
     "prepared_metadata": "/root/bron-secrets/t36-https-prepared.json",
     "projectRef": "vkkqffvmztpzgygzfxhq",
     "protocol": "BRON_PRIVATE_SNAPSHOT_V1"

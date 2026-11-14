@@ -8,7 +8,12 @@
 
 Запрашиваемый payload: полные counts/SHA-256 прежних strict audit groups,
 sequence state и максимум16 compact Auth records (UUID, updated_at, epoch micros,
-SHA-256 остальных полей строки). Пароли, JWT и raw Auth profiles не передаются.
+SHA-256 остальных полей строки). Точный вход per-user SHA-256 — UTF8 представление
+`(to_jsonb(auth.users row) - 'updated_at')::text`: исключается только updated_at,
+поэтому digest зависит в том числе от полей с парольными хешами и токенами,
+если они присутствуют в строке. Это credential-derived приватное значение,
+а не обезличенная/несекретная статистика; данный scope явно включён в запрос
+разрешения владельца. Исходные password/token/profile fields не передаются.
 Весь ответ AES-GCM encrypted; единственный получатель — RAM VPS152.228.115.115.
 Secret остаётся VPS; Mac получает только safe aggregate отчёт. Новый endpoint
 закрыт mandatory private256bit capability и absolute expiry05:19:57.052Z.

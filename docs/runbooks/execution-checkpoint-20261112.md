@@ -29,7 +29,11 @@ Deno→Node22crypto,18reader+14VPS focused и independentreviews PASS.
 проверкой: требуется явное trusted owner authorization для точного sensitive
 payload и destination. Операция не выполнена; fresh list подтвердил отсутствие
 новой функции. Нельзя обходить отказ через исполнителя/другой API. Пакет сохранён
-как PREPARED_BLOCKED_OWNER_APPROVAL, не выданный EXECUTOR_TASK. Root запросит
+как PREPARED_BLOCKED_OWNER_APPROVAL, не выданный EXECUTOR_TASK. Review уточнил:
+per-user digest вычисляется по всей JSONB строке auth.users без updated_at,
+включая password-hash/token-related поля при наличии. Это credential-derived
+приватный digest, хотя исходные поля не экспортируются; manifest/checklist и
+запрос owner approval явно включают эту границу. Уточнение не является approval. Root запросит
 разрешение на конкретный read-only encrypted source→VPS payload; до разрешения
 нет deployment/user-data transfer. Maintenance, T30pending/freeze/finalaudit/
 приёмка/публикация остаются. Source data/settings и рабочая цель не изменены.
