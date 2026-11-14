@@ -1,0 +1,158 @@
+{
+  "acceptance": {
+    "oldT41": "same guard/result paths, contents, SHA, metadata; no move or overwrite",
+    "ownerAttest": "exit0 + T44_RESULT CONFIRMED + safe attestation.json bound to actual result SHA",
+    "ownerRecovery": "exit0 + T44_RESULT PASS + safe result.json/SHA; downloaded ciphertext actually decrypts pinned backup",
+    "prepare": "exit0 + T44_RESULT PREPARED + actual prepared.json binding/readback",
+    "runtime": "original pinned crypto/S3/generic utilities unchanged; no old main/recover/attest/global mutation"
+  },
+  "actionId": "T44.owner-key-recovery",
+  "attemptNumber": 2,
+  "checklist": "docs/runbooks/t44-isolated-key-recovery.md",
+  "commands": {
+    "owner_attest": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t44-owner-key-recovery.py",
+      "--attest"
+    ],
+    "owner_recover": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t44-owner-key-recovery.py",
+      "--owner-recover"
+    ],
+    "prepare": [
+      "/usr/bin/python3",
+      "-I",
+      "/root/bron-secrets/t44-owner-key-recovery.py",
+      "--prepare",
+      "--manifest",
+      "/root/bron-secrets/t44-owner-recovery/manifest.json",
+      "--sha256",
+      "<T44 manifest SHA from EXECUTOR_TASK>"
+    ]
+  },
+  "deferUntilAfterLaunch": [
+    "GitHub visibility change",
+    "Legal questionnaire/docs already deferred by owner",
+    "SLA procurement",
+    "MoySklad and product enhancements",
+    "Optional hardening/cleanup; no new infrastructure/monitoring/dispatch"
+  ],
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t44-owner-key-recovery.py",
+      "exclusive_no_follow": true,
+      "file_directory_fsync_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t44-owner-key-recovery.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t44-owner-recovery/manifest.json",
+      "exclusive_no_follow": true,
+      "file_directory_fsync_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t44-owner-key-recovery.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t44-owner-recovery"
+  ],
+  "execution_authorized": true,
+  "expected_t41_public_files": {
+    "/root/bron-secrets/t41-owner-console.py": "a341b39f5740ee294f3928dee97ab3fa15b1f8afcb5a2a8374ff30f3ff1b222e",
+    "/root/bron-secrets/t41-owner-recovery/approved-manifest.sha256": "2d2b23617cc14ef16668a9c9260cad5f4f19d69e861a85126609b0335e6415a4",
+    "/root/bron-secrets/t41-owner-recovery/manifest.json": "54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321",
+    "/root/bron-secrets/t41-recovery-runtime/deploy/timeweb/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/owner-key-escrow-crypto.py": "f5fdc144a6640d06d4c07b3782f775ced9256c1b0b941fa27449d1f96c1a04d5",
+    "/root/bron-secrets/t41-recovery-runtime/docs/runbooks/payloads/t41-owner-key-recovery.py": "5d34425751fab224e63129103ac2da5f5b2bcd2098faa28dbe70cdbce32d6ce2"
+  },
+  "failedT41GuardSha256": "b0dbe110d4fb66d87af93002d1fdcf91ae31e836a38fee9e51b234426d74889f",
+  "failedT41ResultSha256": "7f201d9c8fd7293998e2285e90664b0afa5850a784d4f79870bf458e6849db11",
+  "files": {
+    "docs/runbooks/payloads/t44-owner-key-recovery.py": "f5eb7ef6237b963b9dda64eaafc24fb13d223e4375b88f4f1b9138ec202bb026",
+    "docs/runbooks/t44-isolated-key-recovery.md": "45be4656caa67e962b71ca81f0f02cca3f16061dff83a20b8ee888464bfc33c8",
+    "tests/ops/test_t44_owner_key_recovery.py": "bd7079826fda5df313ed4ec5b568d40b57a9ff707e0213b76c7fbab189e6aec8"
+  },
+  "format": 1,
+  "maxAdditionalOwnerRecoverAttempts": 1,
+  "minimalReleaseSequence": [
+    "Actual T44 key restoration and independent custody/device proof; actual T44 binding handoff",
+    "Durable inverse and fresh backup; reversible verified Source write freeze; final delta transfer and strict full audit; known commit outcome; reader closure and Source pause readback",
+    "Private web-only preview; old-origin transition static; password UI + real phone/PWA/draft/queue/form acceptance",
+    "One public switch and live lead intake/write/Auth/old+new URL/monitor routing/rollback verification; one writer; operation independent of Mac"
+  ],
+  "not_authorized": [
+    "Moving/deleting/overwriting/resetting T41 consumed guard/result or old code/manifest",
+    "More than one final T44 recover invocation or any automatic retry",
+    "Secret input by executor, through Mac, argv, env, logs, screenshots or chat",
+    "Plaintext AGE identity export or Mac transit of any key/ciphertext/backup",
+    "S3 policy/credential/lifecycle/uploader allowlist expansion or new services",
+    "Source access/freeze/DB delta/Pages/private-preview/publication under T44",
+    "Weakening data preservation, Auth/RLS, restoreability, safe rollback or acceptance gates"
+  ],
+  "ownerAuthorization": {
+    "decision": "Owner explicitly authorized one final isolated T44 attempt and valid hidden phone phrase with independent paper copy; preserve all launch integrity gates",
+    "method": "BRON_OWNER_KEY_ESCROW_V1",
+    "newStorageOrEgressPermission": false,
+    "proposalPath": "docs/runbooks/owner-key-recovery-proposal.md",
+    "proposalSha256": "dc714a9f88a5c2b453a73ce1474d13a39be13872f7251fa06f99223d90e962d8"
+  },
+  "ownerFinalAttemptAuthorized": true,
+  "ownerInputFailureConfirmed": true,
+  "parentT41Commit": "a6b4c8db464c8806282944c7dd63d9e2111d612d",
+  "parentT41ManifestSha256": "54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321",
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t44-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T44-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "reuse_pass_without_relevant_change": [
+    "T12 Auth/RLS",
+    "T14 builds and rollback",
+    "T18 backup/status",
+    "T19 Telegram",
+    "T21 cold restore",
+    "T22 scheduled monitoring",
+    "T37 live inventory, not final freeze audit",
+    "T39 inert static staging",
+    "T40 metadata custody, not Source fence",
+    "T43 marker"
+  ],
+  "scope": "One final isolated T44 owner recovery under existing approved method; T41 consumed guard/result remain in place byte-identical; no reset/overwrite/rerun",
+  "shared_auth_budget_unchanged": {
+    "maxAttempts": 3,
+    "remaining": 2,
+    "used": 1
+  },
+  "stateRoot": "/root/bron-secrets/t44-owner-recovery",
+  "task": "T44",
+  "transferLimits": {
+    "macKeyCiphertextBackupTransit": false,
+    "maxAdditionalGetAttempts": 1,
+    "maxAdditionalPutAttempts": 1,
+    "noOverwrite": true,
+    "priorT41GetAttempts": 0,
+    "priorT41PutAttempts": 0,
+    "uniqueMigrationPrefix": "migration/owner-key-escrow-<UUID>/identity.age"
+  },
+  "verification": {
+    "independentReview": "PASS",
+    "nativeAge": "1.1.1 T44 orchestration with fake S3 and deleted raw synthetic identity before downloaded-cipher verify PASS",
+    "original_t41_54_files_unchanged": true,
+    "productionAttempt": "NOT_RUN",
+    "targetedPythonTests": 21
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
