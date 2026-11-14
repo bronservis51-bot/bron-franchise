@@ -3,6 +3,38 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T32 отрицательный; T33 — другие canonical peers и тот же TLS — 14.11.2026
+
+T32 на322e4c5: ровно один /32 MTU1280/MSS1200 эксперимент выполнен. MSS1448→1228,
+rcvmss/advmss1448→1188; connect1291ms/прочие этапы~206ms,128bytes PASS,
+512bytes снова timeout8002ms. RTO6656→6736, counters совпали:received4716,
+sent2824,acked2459,unacked1. Изменение параметров TCP доказано, улучшение — нет.
+Exact inverse/readback PASS: RESTORED_NO_HOST_ROUTE, retained=false,/32count0.
+Auth NOT_RUN0/1, guard отсутствует. Process0, kernel FIN-WAIT-1 без PID не трогали.
+T32 result SHA `6265d628f08feb0707b10f31f2575cbdf9822e7da1c217b4f00249ad0a617971`,
+receipt SHA `b9371f35eb699f48fb5bff42835de91093a1eb41c8e3633e4bdc0864a41ebc81`.
+MTU-эксперимент не повторять и причину по этим данным не придумывать.
+
+Координатор DNS14.11 01:27:26Z: canonical pooler имеет3IPv4 —34.215.156.231,
+44.225.139.66,44.252.246.120. T31/T32 проверяли только первый; нельзя объявлять
+остальные пути неисправными. T33 использует один текущий DNS A набор на VPS,
+исключает старый peer, максимум два других/один probe на каждый, без route changes.
+Первый полный dummy1MiB+rollback PASS останавливает перебор и разрешает один Auth
+read на том же peer. Это не финальная сверка и не разрешение freeze/записи.
+
+Новый native proof реально включает TLS, а не только plaintext PgPipe: PG17.12,
+pg8.23.1, ТОЧНЫЙ Node22.23.5 (также24.22.1), TLSv1.3, canonicalSNI/CA overIP,
+RR/READONLY, actual5s/idle10,128/512/1MiB PASS; wrongCA/hostname отвергнуты.
+Node22 извлечён только в dev/tmp из officialnodejs.org archive, SHA
+`cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8`
+совпал с officialTLS SHASUMS. Установок, изменения PATH и production-вызовов нет;
+fixture/синтетические ключи удалены. Это НЕ proof сети VPS или реального Supavisor.
+
+Точные технические preview inputs уже T29 PASS, но значения не были включены
+в T30 отчёт. T33 возвращает только выбранные безопасные поля из старого pinned
+receipt, без повторной инвентаризации/рендера env. T30 key owner action всё ещё
+pending. T12/T14/T18/T19/T21/T22 reused; freeze/final audit/приёмка/public не сделаны.
+
 ## T31 закрыл диагностику малого ответа; T32 — один host-only эксперимент — 14.11.2026
 
 T31 принят на25e869b после восстановления доставки: Mac git fetch не разрешал
