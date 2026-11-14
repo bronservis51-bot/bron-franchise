@@ -1,0 +1,119 @@
+{
+  "actionId": "T42.owner_console_diagnostic",
+  "actions": {
+    "diagnose": {
+      "actor": "owner_phone_physical_root_console",
+      "command": [
+        "/usr/bin/python3",
+        "-I",
+        "/root/bron-secrets/t42-owner-console-diagnostic.py",
+        "--diagnose"
+      ],
+      "expected_code": "T42_WRAPPER_CHECK_PATH_PASSED",
+      "expected_status": "CHECK_PATH_COMPLETE_NO_EXEC",
+      "max_runs": 1,
+      "no_stdio_redirection": true,
+      "only_after": "inspect_files expected status and code",
+      "safe_result_path": "/root/bron-secrets/t42-console-diagnostic/phone-result.json"
+    },
+    "inspect_files": {
+      "actor": "executor_existing_ssh",
+      "command": [
+        "/usr/bin/python3",
+        "-I",
+        "/root/bron-secrets/t42-owner-console-diagnostic.py",
+        "--inspect-files"
+      ],
+      "crypto_import": false,
+      "expected_code": "T42_PUBLIC_FILES_MATCH",
+      "expected_status": "INSPECTION_COMPLETE",
+      "max_runs": 1,
+      "original_console_guard": false
+    },
+    "original_t41_check_retry": {
+      "actor": "owner_phone_physical_root_console",
+      "command": [
+        "/usr/bin/python3",
+        "-I",
+        "/root/bron-secrets/t41-owner-console.py",
+        "check"
+      ],
+      "max_runs": 1,
+      "only_after": "diagnose expected status and code",
+      "then_if_ready": "Resume previously authorized T41 recover and attest; no new approval/task ID required"
+    }
+  },
+  "checklist": "docs/runbooks/t42-owner-console-diagnostic.md",
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t42-owner-console-diagnostic.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t42-owner-console-diagnostic.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t42-console-diagnostic/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t42-owner-console-diagnostic.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t42-console-diagnostic"
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/t42-owner-console-diagnostic.py": "8975a7324615f98bb8037fb29b098a4640372838249aca1a916ac0f35a8dd340",
+    "docs/runbooks/t42-owner-console-diagnostic.md": "4dbe7b8c3946d07b9fa0e7b8d8e4dca47973be6a447fb6ba7c06352934427007",
+    "tests/ops/test_owner_console_diagnostic.py": "cb992ede2c5420587504cffd80a393d962ade0882fdae00fdb11cbd80b4c5aa6"
+  },
+  "format": 1,
+  "not_authorized": [
+    "Original T41 code/manifest/marker edits or repair",
+    "Recovery or secret prompt under T42",
+    "Identity, encrypted identity, backup or credentials access, including metadata",
+    "S3 or Source access; application DB/product API changes or real data reads",
+    "Raw exception string, traceback text, source lines, locals or environment values",
+    "Phone stdout/stderr/stdin piping/redirection or tee",
+    "Force accepted TTY or bypass original pinned guard",
+    "New network/DNS experiments, dependencies, services, public release or Pages",
+    "Retry after a failed/uncertain diagnostic run or overwrite own result"
+  ],
+  "parentCommit": "a6b4c8db464c8806282944c7dd63d9e2111d612d",
+  "parentManifestSha256": "54c34e5abdf553fb36194aeca7f81251f1859af832b8406a48fe1520c4ae0321",
+  "parentTask": "T41",
+  "parent_t41_files_unchanged": true,
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t42-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T42-state.json",
+    "mode": "0600",
+    "same_sha256": true
+  },
+  "safe_evidence": [
+    "fixed file/function IDs and line numbers",
+    "fixed public file stat/SHA and match status",
+    "finite exception class, errno, literal allowlisted code",
+    "TTY metadata and foreground comparison; environment PRESENCE booleans only",
+    "own diagnostic action/result paths/SHA/count/status"
+  ],
+  "scope": "Bounded public-code/file/TTY diagnostic of OWNER_CONSOLE_CHECK_FAILED; no recovery, secret access or Source effects",
+  "shared_auth_budget_unchanged": {
+    "remaining": 2,
+    "used": 1
+  },
+  "task": "T42",
+  "verification": {
+    "independent_review": "PASS",
+    "original_t41_code_modified": false,
+    "production_diagnostic": "NOT_RUN",
+    "targeted_python_tests": 14
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
