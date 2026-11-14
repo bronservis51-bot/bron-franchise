@@ -1,13 +1,16 @@
 # Решение владельца: временная передача результатов сверки Source → VPS
 
-**PENDING. Этот документ не является разрешением или EXECUTOR_TASK.**
-T37 не развёрнут; source working/Auth rows по новому каналу не передавались.
-Автоматическая проверка отклонила deployment до явного owner authorization
-точного чувствительного payload и получателя.
+**APPROVED — явное решение владельца получено в этом чате 14.11.2026.**
+Владелец одобрил T37 и общий scope ниже: максимум три попытки, включая
+неудачные/неопределённые, encrypted Source → VPS 152.228.115.115, без Mac.
+Решение включает credential-derived Auth digests. T37 ещё не запускался;
+исполнение возможно только по свежему pinned EXECUTOR_TASK и checklist.
+Прежний отказ автоматической проверки относился к отсутствовавшему тогда
+разрешению; это условие теперь устранено явным решением владельца.
 
 ## Один ограниченный data-scope для оставшегося выпуска
 
-Запрашивается разрешение на временную функцию в существующем Source Supabase,
+Разрешена временная функция в существующем Source Supabase,
 защищённую обязательным private256bit capability до обращения к БД; разрешены
 только закреплённые READ ONLY запросы, не произвольный SQL/URL. Внешний JWTgate
 отключён только у этой machine-auth функции; продуктовые Auth/RLS не меняются.
@@ -56,4 +59,11 @@ T37 как отдельный task по-прежнему имеет onePOST/no-D
 После каждой завершённой snapshot-фазы временный endpoint явно закрывается/tombstone;
 absolute expiry — дополнительный предел, не причина оставлять endpoint открытым;
 ни одного нового чтения после SourcePause. Новый scope/payload/получатель/лимит
-сверх трёх попыток потребует отдельного решения. До явного ответа владельца статус PENDING.
+сверх трёх попыток потребует отдельного решения. Общий бюджет фиксируется на VPS до первого вызова и не сбрасывается новым
+секретом или пакетом. Проверка ключа T30 остаётся отдельным gate для final window;
+она не блокирует разрешённую live-сверку T37.
+
+
+Подтверждение: `EXECUTOR_OWNER_DECISION` в пользовательском сообщении:
+
+> The owner explicitly approved both the T37 live-transfer request and the broader scope as presented: up to three total attempts (one T37 live plus two final comparisons; failed/uncertain attempts count), read-only snapshots, encrypted directly to VPS 152.228.115.115 only, strict counts/SHA plus up to 16 Auth records with UUID, updated_at and digests of other fields, with no raw values and no Mac. Do not run T37 until a fresh pinned T37 task and its SHA-verified checklist are issued.

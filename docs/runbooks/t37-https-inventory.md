@@ -1,101 +1,93 @@
-# T37: одна полная live-сверка и Auth-план по HTTPS, без записей
+# T37 — разрешённая live-сверка по Source HTTPS, новый pinned пакет
 
-**PREPARED / BLOCKED_OWNER_APPROVAL. Это ещё не выданный EXECUTOR_TASK.**
-14.11 автоматическая проверка отклонила deployment нового reader: требуется
-явное разрешение владельца на точный приватный payload и VPS-получатель.
-Функция не развёрнута. До разрешения, deployment/readback/prime координатора
-и нового pinned EXECUTOR_TASK T37 ничего из execution checklist не запускать.
+Владелец явно одобрил описанный в `owner-source-transport-approval.md` data-scope.
+T37 исполняется только после свежего EXECUTOR_TASK с commit и SHA этого manifest.
+Старый T36 capability истёк и не используется. T37 имеет ровно одну live-попытку;
+общий неизменяемый журнал на VPS ограничивает весь выпуск тремя попытками
+(T37.live, final_before, final_after), включая неудачные/неопределённые.
+Создание нового capability бюджет не сбрасывает. T30 key proof не блокирует T37.
 
-Запрашиваемый payload: полные counts/SHA-256 прежних strict audit groups,
-sequence state и максимум16 compact Auth records (UUID, updated_at, epoch micros,
-SHA-256 остальных полей строки). Точный вход per-user SHA-256 — UTF8 представление
-`(to_jsonb(auth.users row) - 'updated_at')::text`: исключается только updated_at,
-поэтому digest зависит в том числе от полей с парольными хешами и токенами,
-если они присутствуют в строке. Это credential-derived приватное значение,
-а не обезличенная/несекретная статистика; данный scope явно включён в запрос
-разрешения владельца. Исходные password/token/profile fields не передаются.
-Весь ответ AES-GCM encrypted; единственный получатель — RAM VPS152.228.115.115.
-Secret остаётся VPS; Mac получает только safe aggregate отчёт. Новый endpoint
-закрыт mandatory private256bit capability и absolute expiry05:19:57.052Z.
+## Единый checklist: подготовка → передача координатору → одна сверка
 
-T36 подтвердил реальный HTTPS→managedDB без Mac: wrong capability403,
-wrong DB hostname rejected,512KiB synthetic/actual RR READ ONLY/rollback PASS.
-В доступных журналах всех трёх запросов T36 и boot event нет capability/dummy/body
-fields. Тестовый endpoint закрыт tombstone v2; его не вызывать повторно.
-T37 использует новую закреплённую функцию и существующий VPS-only secret T36.
-Нового READY, ввода секрета или продления TTL нет.
+1. Закрытые T38/T39 не повторять. Убедиться, что нет незавершённого своего процесса;
+   чистый fast-forward ветки до точного commit EXECUTOR_TASK. Проверить SHA байтов
+   manifest `docs/runbooks/payloads/t37-https.json` и всех `files`. Отправить
+   ACCEPTED и продолжить без ACK. Проверить strict SSH fingerprint, Node22.23.5,
+   `verify_only`, pg8.23.1 и прежний dependency-lock SHA из manifest runtime,
+   T36 PASS resultSHA. Не показывать contents приватных файлов.
+2. Доставить **только `deliveries`**, exclusive-create, directories root:root0700,
+   files root:root0600. Если файл уже есть: проверить точный SHA/mode/owner/nlink,
+   неизменный совпадающий файл переиспользовать; любой иной — BLOCKED, не заменять.
+   Доставленные runtime modules не заменяют установленный T21 auditor.
+   Сверить SHA/readback и syntax. Без installs, compose, сервисов, TCP/маршрутов.
+3. Ровно один `commands.prepare`, подставив exact manifest SHA. Пакет создаёт
+   permanent prepare.guard, общий grant descriptor, новый machine capability и
+   prepared metadata на VPS. Обязателен нулевой прежний Auth-бюджет. Любой
+   существующий guard/частичное состояние — BLOCKED, без удаления или повтора.
+   **Не читать capability в терминал, argv/env, лог, clipboard или Mac.**
+4. Отправить `EXECUTOR_READY T37 COMMIT=... MANIFEST_SHA=... CAPABILITY_SHA256=...
+   EXPIRES_UTC=... FUNCTION_NAME=... OWNER_GRANT_SHA256=... BUDGET_USED=0`.
+   Это hash-only metadata. **Остановить только зависимую --run фазу до сообщения
+   координатора DEPLOYMENT_READY T37** с теми же hash/name/expiry. Это продолжение
+   того же task, нового checkout/разрешения владельца не требуется. Самостоятельно
+   не развёртывать reader. Не расходовать Auth-попытку на readiness/проверку сети.
+5. Координатор проверяет точный SHA шаблонов, рендерит только public capSHA и
+   абсолютный expiry, развёртывает новый hash-derived endpoint существующего
+   Source project и получает исходники обратно для exact readback. `verify_jwt=false`
+   относится только к mandatory-capability machine reader; продуктовые Auth/RLS,
+   REST/JWT и shop-worker не меняются. GET без секрета обязан отказать до БД.
+   После подтверждённого readback и GET координатор отправляет DEPLOYMENT_READY.
+6. Получив DEPLOYMENT_READY, проверить соответствие prepared metadata и достаточный
+   остаток TTL. Выполнить `commands.run` ровно один раз с прежним manifest SHA.
+   Новый immutable live guard и общий durable budget claim записываются/fsync
+   **до** настоящего POST. FAIL/timeout/неизвестный исход расходуют попытку;
+   повтор, resume, fallback, новый capability в этом task запрещены.
+7. Один raw64ASCII capability POST только по fixed verified HTTPS Source URL;
+   no redirect, finite wall/size bounds. Source берёт полный прежний canonical
+   snapshot и compact Auth в одном RR READ ONLY: UTC, pg_catalog, statement5s,
+   idle10s. Весь ответ AES-GCM/HKDF шифруется в Source, plaintext/ciphertext
+   остаются в RAM VPS. No raw profile/password/token values exported; Auth digest
+   включает все иные поля, в том числе password-hash/token-related.
+8. Один target snapshot теми же функциями, compact Auth из той же RR READ ONLY.
+   Не записывать/печатать body, UUID, пользовательские timestamps/digests/DSN.
+   На Mac передаётся только safe receipt, без encrypted envelope и working data.
+   Обновлять updated_at, применять дельту, freeze/Pause или открывать API запрещено.
+9. Завершить клиентов/helper; сохранить canonical safe receipt и log root0600,
+   зеркалировать **только safe receipt** на Mac с одинаковыми bytes/SHA.
+   Не ждать T30, не повторять build/restore/RLS/Telegram/schedule/staging.
+   Координатор после отчёта закрывает reader tombstone и проверяет доступные
+   агрегированные логи, не публикуя raw logs/capability. TTL — дополнительная защита.
 
-## Порядок исполнения
+## Точные acceptance checks
 
-1. До checkout проверить отсутствие своего работающего T36/T37 процесса и взять
-   закрытый T36 итог из прежней квитанции. Только чистый fast-forward до commit
-   из EXECUTOR_TASK T37; проверить точные bytes/SHA manifest и всех `files`.
-   Отправить ACCEPTED и продолжить без ACK.
-2. Strict SSH fingerprint, Node22.23.5, manifest `verify_only` и T36 resultSHA.
-   Доставить только manifest `deliveries` exclusive-create. Новые directories
-   root:root0700, files0600. Не менять установленный T21 auditor a530…,
-   node_modules, старые payloads, compose и рабочие сервисы. Никаких installs.
-3. Проверить SHA/syntax доставленного helper; runtime module hashes сверяются
-   manifest. Источник — только фиксированный HTTPS endpoint из manifest;
-   PostgreSQL-клиент источника, TCP-пробы, reverse15432 и fallback запрещены.
-4. Ровно один запуск команды из manifest с его SHA последним аргументом.
-   Helper проверяет существующие prepared metadata/capability/неизменный expiry,
-   root600/privacy/runtime и целевой DB identity/isolation, создаёт immutable
-   one-run guard. До истечения должен оставаться полный разрешённый run budget;
-   при недостатке времени BLOCKED, без rotation/extension/нового секрета.
-5. Один настоящий POST, только raw64ASCII capability в body; TLS verified,
-   no redirects, finite wall/size bounds. Root заранее deploy/readback/403-prime
-   новой функции проверил. Не повторять запрос при любом отказе.
-6. Source Edge в одном RR READ ONLY snapshot вычисляет все прежние strict
-   table/schema/sequence groups и exact compact Auth capture до COMMIT той же
-   транзакции. SQL, URL и таблицы клиент не передаёт. В HTTP возвращается только
-   AES-GCM encrypted envelope; HKDF зависит от secret, не от публичного hash.
-   Дешифровать только в RAM VPS. Не записывать/печатать HTTP body, hashes/UUIDs,
-   timestamps пользователей, парольные fingerprints или decrypted object.
-7. Снять один target snapshot теми же audit/fingerprint функциями и compact Auth
-   в той же RR READ ONLY транзакции. Сопоставить все strict groups и Auth-план.
-   Реальные данные/backup/даже encrypted envelope не пересылаются на Mac.
-8. Не исправлять updated_at. Вывести безопасные counts, mismatch object names,
-   имена отличающихся столбцов/направление времени, source/target окна и cleanup.
-   Любой неожиданный diff сохраняет блокировку, не исключается из comparator.
+- Bundle, SSH/runtime/modes/input-evidence SHA PASS; T21 canonical auditor unchanged.
+- Fresh prepared metadata bound current manifest SHA and approved grant SHA;
+  cap remains VPS-only, two-hour absolute expiry, exact deployed source readback.
+- Before source POST: permanent live guard and fixed shared budget reservation
+  durable. At most one actual source POST/snapshot and one target snapshot.
+- Все strict table/schema/sequence groups полны, прежний comparator сохранён;
+  ошибок/пропусков как пустых групп нет. UUID/counts/Auth digests проверены в RAM.
+- `STRICT_MATCH`: mismatch пуст и compact Auth согласован.
+  `LIVE_AUTH_TIMESTAMP_ONLY`: единственный strict diff data:auth.users, те же
+  cohorts ≤16, только source-newer updated_at, остальные поля совпали.
+  Иной diff — LIVE_MISMATCH; неполный/технический отказ — BLOCKED.
+  Всегда `finalFreezeAudit=false`, `applyAuthorized=false`.
+- Source/target writes=0, freeze/preview/publication=0, Mac data transit=false.
+  Соединения закрыты, свой процесс0. Все исходы/claims/изменённые пути отражены.
+- Общий бюджет после T37: used=1 / remaining=2, если POST мог начаться;
+  при отказе до claim used=0. Не выдавать uncertain outcome за отсутствие чтения.
 
-## Приёмка
+## Отчёт и независимая owner-ветка
 
-- Все pins/private modes/runtime и T36 prior PASS; канонический T21 auditor unchanged.
-- Один source POST/snapshot и один target snapshot; реальные TLS/roles/RO/UTC,
-  deadlines, bounds и тот же полный canonical audit, без hash-of-hashes.
-- Сравнены все enumerated table/schema/sequence groups. Снимки полные; ни одна
-  ошибочная/пропущенная группа не трактуется как пустая.
-- Компактные Auth rows взяты из того же snapshot, <=16, UUIDs/digests валидны;
-  source/target counts, missing counts, changed counts, other-fields/direction
-  проверены. Source newer updated_at не означает уже разрешённый UPDATE.
-- `STRICT_MATCH` только при пустом mismatch и согласованном Auth-плане.
-  `LIVE_AUTH_TIMESTAMP_ONLY` только при единственном data:auth.users mismatch,
-  matching cohorts и source-newer-only timestamp changes. Иные diff — LIVE_MISMATCH,
-  технический отказ/неполный снимок — BLOCKED. Это live inventory,
-  `finalFreezeAudit=false`, `applyAuthorized=false` при любом результате.
-- Клиенты закрыты, соединения/own helper закончены; private result/state/log/receipt
-  mode0600. Ошибки только finite code/phase и безопасные progress fields.
-
-## Независимая ветка и отчёт
-
-T30: только existence/root metadata уже ожидаемого owner-result и ранее полученная
-личная attestation. Не читать key/identity, не запускать --verify за владельца,
-не просить повторный ввод. OWNER_PENDING не задерживает отчёт T37.
-T12/T14/T18/T19/T21/T22 PASS переиспользовать; builds/restore/RLS/Telegram/schedule
-не повторять. Текущую свежесть backup проверять отдельно перед final window.
+`EXECUTOR_REPORT T37`: BUNDLE; PREPARE; DEPLOYMENT_OBSERVED; BUDGET;
+SOURCE_HTTPS; INVENTORY_COMPLETE; STRICT_MATCH; MISMATCH_GROUPS; TABLE/ROW_COUNTS;
+AUTH_PLAN (только counts/имена столбцов/направление); WINDOWS; OWNER; CLEANUP;
+RESULT/RECEIPT/LOG_SHA; NEXT_BLOCKER.
 
 Canonical `/root/bron-secrets/t37-release-receipt.json`, local mirror
 `/tmp/bron-release-executor-20261113/T37-state.json`, log
-`/root/bron-secrets/t37-release.log`, mode0600; mirror совпадает по bytes/SHA.
-Квитанция перечисляет все реально выполненные actions/guard/input SHA/output SHA,
-времена/exit/status, безопасные counts/windows, changed paths и cleanup.
-После отчёта координатор закрывает временный reader и проверяет доступные логи
-только агрегированными counts. Не выводить raw logs или секретные HTTP fields.
-
-`EXECUTOR_REPORT T37`: BUNDLE; SOURCE_HTTPS; INVENTORY_COMPLETE; STRICT_MATCH;
-MISMATCH_GROUPS; TABLE/ROW_COUNTS; AUTH_PLAN; WINDOWS; OWNER; CLEANUP;
-RESULT/RECEIPT/LOG_SHA; NEXT_BLOCKER.
-
-Maintenance остаётся. Source/target DML/DDL/freeze/Pause/preview/publication,
-новые secrets/сервисы/покупки, изменения сети/мониторинга запрещены.
+`/root/bron-secrets/t37-release.log`, mode0600. Include input/output SHA, commands
+without secrets, timestamps/exit, guards/budget, all actual actions and paths.
+T30: прочитать только безопасный result при его наличии; не читать identity,
+не запускать --verify за владельца. Инструкция: `owner-phone-recovery-check.md`.
+Maintenance сохраняется независимо от live PASS.

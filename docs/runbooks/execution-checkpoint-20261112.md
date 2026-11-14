@@ -1,3 +1,7 @@
+# 14.11.2026 — решение владельца и новый T37
+
+Владелец явно одобрил T37 и общий бюджет3 попытки Source→VPS (FAIL/timeout/uncertain тоже считаются), encrypted full strict snapshot + max16 compact Auth UUID/updated_at/credential-derived digest, без raw values и без Mac. [Точный immutable scope](owner-source-transport-approval.md). Это закрывает прежнюю причину auto-review отказа. Actual T37 пока НЕ выполнялся: истёкший T36 secret не использовать, требуется свежий pinned пакет с VPS-only prepare и общим durable ledger. Owner key proof T30 независим от live-сверки; [понятная инструкция](owner-phone-recovery-check.md). Maintenance сохраняется. Restore/RLS/builds/backup/Telegram/schedule/T39 inert staging PASS не повторять. Final operator ещё интегрируется; approval scope не равен freeze/apply/publication.
+
 # Продолжение исполнения 12.11.2026
 
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.

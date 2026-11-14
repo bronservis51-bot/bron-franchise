@@ -8,7 +8,9 @@
     "max_source_snapshots": 1,
     "max_target_snapshots": 1,
     "max_wire_bytes": 2097152,
-    "owner": "reuseT30pending resultmetadata+existingattestation only; no keyread/input/executor--verify; no waitingforowner toreport",
+    "owner": "T30 safe existing resultmetadata only; no keyread/input/executor--verify; key pending does not block live",
+    "prepare_guard": "/root/bron-secrets/t37-https-prepare.guard",
+    "readiness": "executor sends READY, waits only for coordinator DEPLOYMENT_READY; no actual POST/poll while waiting",
     "result": "/root/bron-secrets/t37-https-inventory-result.json",
     "source_plaintext_stricter_bound": 700000,
     "source_wall_seconds": 90,
@@ -17,32 +19,45 @@
   },
   "approval": {
     "auth_digest_input": "UTF8 text of (to_jsonb(auth.users row)-'updated_at'); every other field participates, including password-hash/token-related columns when present",
+    "document": "docs/runbooks/owner-source-transport-approval.md",
+    "document_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "evidence": "trusted EXECUTOR_OWNER_DECISION user message on 2026-11-14; exact quote retained in document",
+    "grant": "max3 total attempts shared across tasks/capabilities; T37live1 + fencedfinal2; failures/timeouts/uncertain count; later tasks require separate pins/gates",
     "includes_credential_derived_auth_digests": true,
-    "proposed_release_data_grant": {
-      "document": "docs/runbooks/owner-source-transport-approval.md",
-      "document_sha256": "d37a24d8ed1a99f21336bd892406487deb68451d2229d7abc8d0fd7d7a2e6e0f",
-      "does_not_change_T37_one_POST_scope": true,
-      "final_packages_require_separate_pins_and_gates": true,
-      "includes_failed_timeout_uncertain": true,
-      "max_auth_snapshot_attempts_total": 3,
-      "phases": [
-        "one T37 live readonly comparison",
-        "one fenced final snapshot before target COMMIT",
-        "one fenced final snapshot after target COMMIT"
-      ],
-      "review": "independent scope review corrections applied: attemptbudget/finitefields/T37one+finaltwo/pending/noautoDML",
-      "shared_across_packets_and_capabilities": true,
-      "status": "PENDING_OWNER_DECISION"
-    },
     "raw_password_token_profile_fields_exported": false,
-    "raw_passwords_or_JWT_or_Auth_profiles_exported": false,
-    "reason": "Automatic approval review rejected deploy: trusted authorization required for exact sensitive payload and destination",
-    "requested_action": "proposed owner DATA grant for max3 total authenticated Source snapshot read attempts (T37live1+fencedfinalbefore/after2), including failed/timeout/uncertain; same AES-GCM encrypted strictaudit+max16Auth{UUID,updated_at,micros,SHA256(allotherfields includingpassword-hash/token-related)} to VPSRAM152.228.115.115 only; noMac/rawcredentials. T37 taskitself remainsonePOST/noDML/nofreeze; futurefinaltasks separatepins+gates; executionnotauthorizeduntilownerdecision",
     "required": true,
-    "source_or_target_data_writes": false
+    "source_or_target_data_writes": false,
+    "status": "APPROVED"
   },
   "checklist": "docs/runbooks/t37-https-inventory.md",
+  "commands": {
+    "prepare": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t37-https-prepare.mjs",
+      "--prepare",
+      "--manifest",
+      "/root/bron-secrets/t37-https.json",
+      "--sha256",
+      "<manifest SHA from EXECUTOR_TASK>"
+    ],
+    "run": [
+      "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+      "/root/bron-secrets/t37-https-inventory.mjs",
+      "--run",
+      "--manifest",
+      "/root/bron-secrets/t37-https.json",
+      "--sha256",
+      "<same manifest SHA from EXECUTOR_TASK>"
+    ]
+  },
   "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t37-https-prepare.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t37-https-prepare.mjs"
+    },
     {
       "destination": "/root/bron-secrets/t37-https-inventory.mjs",
       "mode": "0600",
@@ -77,27 +92,41 @@
       "owner": "root:root",
       "replace_existing": false,
       "source": "docs/runbooks/payloads/t30-auth-compact.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t37-runtime/payloads/source-transfer-budget.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-transfer-budget.mjs"
     }
   ],
   "deployment": {
-    "executor_must_wait_for_issued_task": true,
+    "coordinator_only": true,
+    "executor_waits_for": "DEPLOYMENT_READY T37 matching prepared capSHA/functionName/expiry/manifestSHA",
+    "jwt_scope": "verify_jwt=false only new mandatory-capability function; product unchanged",
     "new_name_absent_before_attempt": true,
-    "readback_verified": false,
-    "readiness_prime_verified": false,
-    "rendered_index_sha256": "f30109d6afd3a241898a27f4960b4d49fc1015943302110cccd9bf1aa0c9a22f",
-    "status": "NOT_DEPLOYED_AUTO_REVIEW_REJECTED"
+    "readback_and_secretless_GET_required": true,
+    "source_render_fields": [
+      "CAPABILITY_SHA256",
+      "EXPIRES_EPOCH_MS"
+    ],
+    "status": "WAIT_FRESH_VPS_PREPARE"
   },
-  "execution_authorized": false,
+  "execution_authorized": true,
   "files": {
-    "docs/runbooks/owner-source-transport-approval.md": "d37a24d8ed1a99f21336bd892406487deb68451d2229d7abc8d0fd7d7a2e6e0f",
+    "docs/runbooks/owner-phone-recovery-check.md": "4d086e330e24a47287637dae90baa2f46389e45b2271735167f27157e1531066",
+    "docs/runbooks/owner-source-transport-approval.md": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
     "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
     "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
     "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
     "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
     "docs/runbooks/payloads/source-https-reader/index.ts": "0b2ec2a362b535876ea442e23ea6c603262eef5a5430b9bfe6d189f32b1c3056",
+    "docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
     "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
-    "docs/runbooks/payloads/t37-https-inventory.mjs": "029dce47fe93a96a3eee70ce2e213236c8fe4df94ad621622fd02303dd9cc7cc",
-    "docs/runbooks/t37-https-inventory.md": "f4abda61cac8bb66f9e13d03659ecaffd818ca1fe58473469f3e020f8f09efe1",
+    "docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "docs/runbooks/payloads/t37-https-prepare.mjs": "c371791868622c6261261bc2acbdb4962a58ec787527d262fcd823877e268aad",
+    "docs/runbooks/t37-https-inventory.md": "5d6628a69fe4cd092d33215c4cb14df6281ec7722e436f64b3b2f31a89afd071",
     "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
     "tests/ops/exact-fingerprint-native.mjs": "f635f3343cfe1774526faf12027d3cd37a35b9fc213c0a2de51c8f3c12034358",
     "tests/ops/exact-fingerprint-native.py": "d9749f65d0aef2a019b064413b41c24c1cbab637d69dca7466c3e35afcb787ec",
@@ -105,7 +134,9 @@
     "tests/ops/source-https-reader-crypto-native.mjs": "0465e578761ac7d3180119b40f67f403069362a4def06317cbb91371c1a215f5",
     "tests/ops/source-https-reader-crypto-native.ts": "df0884d5657b25b62980e637afb3e55288d5f5c5c73c34191bc1ee5aa0d6f10c",
     "tests/ops/source-https-reader.test.mjs": "864228b9cb7e004da57d48a19b7037bab04c8936b2eae383ab991462c7df3156",
-    "tests/ops/t37-https-inventory.test.mjs": "96dfbde4db51af456e3c26a3385246f70a6e13fa94cf00ec1aa37de6a9169365"
+    "tests/ops/source-transfer-budget.test.mjs": "2be72a1bbc824d5d2508e9f52e22811a568c226420c0b995a0d96cbfb3c9884d",
+    "tests/ops/t37-https-inventory.test.mjs": "bfbdd2124c9bac747c58828f31444e060328e41d4a59e4c5e1ff3ff283d563fc",
+    "tests/ops/t37-https-prepare.test.mjs": "a9a652badc7f17ab39bbca1ea0cfb57b40d0bf91d341b07cda3c313aece61cff"
   },
   "format": 1,
   "input_evidence": {
@@ -121,21 +152,14 @@
     "source_target_DML_DDL_freeze_PauseRestore",
     "Mac_data_backup_transit_even_encrypted",
     "rawbody_rows_UUID_stamps_hashes_in_chat_logs",
-    "capability_secret_rotation_extension_export",
     "existing_installed_auditor_replacement",
     "source_DB_TCP_or_reverse_fallback",
     "dependency_image_install_purchase",
     "JWT_REST_shop_worker_changes",
     "Telegram_message_workflowdispatch_cronchange",
-    "preview_PRmerge_publication"
-  ],
-  "prepared_command": [
-    "/opt/bron/node-v22.23.5-linux-x64/bin/node",
-    "/root/bron-secrets/t37-https-inventory.mjs",
-    "--manifest",
-    "/root/bron-secrets/t37-https.json",
-    "--sha256",
-    "<exact SHA256 of newly authorized manifest>"
+    "preview_PRmerge_publication",
+    "secret_export_or_TTL_extension_or_second_prepare",
+    "shared_attempt_budget_reset_delete_or_bypass"
   ],
   "receipts": {
     "canonical_vps": "/root/bron-secrets/t37-release-receipt.json",
@@ -145,6 +169,7 @@
     "output": "safe counts,mismatchnames,Authcounts/changedcolumnnames/direction,windows,phase/code,cleanup,SHA; no rowIDs/stamps/fingerprints"
   },
   "runtime": {
+    "dependency_lock_path": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
     "dependency_lock_sha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69",
     "directories_root0700": [
       "/root/bron-secrets/t37-runtime",
@@ -157,35 +182,52 @@
   },
   "runtime_files": {
     "/root/bron-secrets/t37-runtime/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "/root/bron-secrets/t37-runtime/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
     "/root/bron-secrets/t37-runtime/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
     "/root/bron-secrets/t37-runtime/scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827"
   },
   "scope": "one complete read-only HTTPS live snapshot + same-snapshot compact Auth plan; no writes/freeze/final acceptance",
   "source": {
     "authentication": "mandatory private256bitcap body before env/DNS/DB; verify_jwt=false only own-auth newtemporaryfunction",
-    "capability_sha256": "fba3e5a8714f7fb82725c6d69e6424caaec9b761fbe76005198740660f1f208c",
+    "capability": "/root/bron-secrets/t37-https-capability",
+    "capability_binding": "pinned_VPS_prepare_readback",
     "database_writes": false,
     "encryption": "HKDF-SHA256 secret ASCII64, public capSHA UTF8 salt, protocol UTF8info; AES-GCM256 random12nonce tag16; decrypt VPSRAM only",
-    "existing_capability": "/root/bron-secrets/t36-https-capability",
-    "expires_utc": "2026-11-14T05:19:57.052Z",
-    "functionName": "bron-source-reader-fba3e5a8714f",
-    "no_extension_or_rotation": true,
     "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
     "payload": "all same strict audit groups/counts/hashes/sequences + max16 compact Auth{UUID,updated_at,epochMicros,SHA256(UTF8(to_jsonb(row)-updated_at))}; per-user digest includes password-hash/token-related fields when present; encrypted to VPSRAM only, one RR READONLY snapshot",
-    "prepared_metadata": "/root/bron-secrets/t36-https-prepared.json",
+    "prepare_creates_new_secret_once": true,
+    "prepared_metadata": "/root/bron-secrets/t37-https-prepared.json",
     "projectRef": "vkkqffvmztpzgygzfxhq",
-    "protocol": "BRON_PRIVATE_SNAPSHOT_V1"
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "template_name_prefix": "bron-source-reader-",
+    "ttl_seconds": 7200
   },
-  "state": "PREPARED_BLOCKED_OWNER_APPROVAL",
+  "state": "APPROVED_FRESH_PREPARE_REQUIRED",
   "task": "T37",
+  "transfer_budget": {
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "failed_or_uncertain_count": true,
+    "fixed_phases": [
+      "T37.live",
+      "Tnn.final_before",
+      "same Tnn.final_after"
+    ],
+    "max_attempts": 3,
+    "reset_or_delete_authorized": false,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
   "verification": {
     "Deno_check": "actual5filedeploymentbundle strictcheck PASS",
     "Edge_reader": "18focused PASS exactNode22 + independentsecurityreview",
     "VPS_helper": "14focused PASS exactNode22.23.5 + independentreview",
     "fixture_typecheck": "CI found missing Deno/MJS declarations; added local Deno.version type + encrypt-snapshot.d.mts without skip/exclude/ts-nocheck. npmtypecheck and nativecrypto/Deno-check PASS; runtime/payload unchanged",
-    "limit": "sourceworkingdata untouched; deployment rejected/notexecuted; realinventory remainspending",
+    "fresh_context_and_budget": "33 exact Node22 tests PASS: inventory16 + immutable actualFS budget12 + prepare5; final pure exports compatibility13 PASS; no Source read",
+    "limit": "source working data untouched; old deployment rejected before owner approval; actual live inventory pending fresh package",
     "native_Deno_crypto": "Deno2.9.8 actualencrypt module toNode22 decrypt PASS; wrongkey/tamper/nonce rejected",
-    "native_PG17": "all32strictgroups/15schema parity3002rows plus sameRR concurrentAuth update and hookrollback PASS"
+    "native_PG17": "all32strictgroups/15schema parity3002rows plus sameRR concurrentAuth update and hookrollback PASS",
+    "owner_instructions": "official my.adminvps.ru login endpoint HTTPS200 verified; account console labels/root login and independent key custody remain owner facts, not assumed"
   },
   "verify_only": {
     "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
