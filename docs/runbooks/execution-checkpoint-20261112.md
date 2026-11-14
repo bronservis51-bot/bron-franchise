@@ -1,31 +1,60 @@
 # Продолжение исполнения 12.11.2026
 
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
-Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
+Рабочее переключение **не выполнено**. Рабочие данные источника не менялись,
+seed/reset не запускались; временный synthetic endpoint T36 закрыт.
 
-## T39 — независимое inert размещение публичной статики — 14.11.2026
+## T39 PASS — публичная статика размещена без открытия preview — 14.11.2026
 
-[T39 checklist](t39-stage-static.md) / `payloads/t39-stage-static.json` подготовлен
-для следующего EXECUTOR_TASK. Source/Auth экспорт T37 по-прежнему BLOCKED_OWNER_APPROVAL.
-T39 не открывает preview/API: активный maintenance web видит только status bind,
-а app-root56files/landing-root11files остаются на VPS и копируются в будущие
-`bron/site/app`/`landing`. T14 stage не переупаковывается/не пересобирается.
+Отчёт исполнителя для c18865c и manifest
+`e9ab853a139d64d1789932befefaa8afadc2c151929e68ca5d0bf86f8bc615cb`:
+5/5fileSHA, SSHfingerprint, exclusive deliveries root600 и ASTparse PASS.
+Один helper exit0/PASS_INERT_STAGED, retries0. Новые назначения:
 
-Pre/post exact7T33IDs,5Compose labels, knownmaintenanceCaddy/override hashes и
-status-only mount,3hostsHTTPS503. Не читать Config.Env/renderedCompose, DB/backup/
-ownersecret; не менять services/Caddy/Compose/monitoring/Pages. Обе source manifests
-и оба destination проверяются до writes; неизвестное существующее содержимое
-BLOCKED, точное существующее REUSED. Новые publicdirs755/files644, только manifest
-files; никакого overwrite/delete/links. StatusJSON не трогается, его normal timer
-update не блокирует задачу. Helper180s, одинguard/result, private auditreceipt.
+- `/opt/bron/supabase/docker/bron/site/app`: app-root56contentfiles/1,488,957bytes;
+  manifest `e7e9acc8c54631d54b095dd6448130d38266491ab3f810f7bb6affe046efc1c4`;
+- `/opt/bron/supabase/docker/bron/site/landing`: landing-root11contentfiles/911,996bytes;
+  manifest `4c3f2b8efd9be02ecc089a1b44a5d86d7cb830e5c685c9f3246c38c494e081b8`.
 
-21synthetic filesystem/mount/HTTP tests PASS и independent safety/scope reviewPASS,
-без сети/VPS; фактический staging ещё не выполнялся. Runtime code/data/maintenance
-ещё не менялись. STAGED_INERT не закрывает owner-key/freeze/finalaudit/приёмку/public.
+Всего73newpaths, без overwrite/delete. Копия только публичных files+manifests,
+source packages не записывались и не шли через Mac. DB/Auth/backup/key не читались.
+Pre/post exact7containerIDs, activeCaddy/override/mount/config checks PASS;
+все3hosts strictTLS503. Status subtree untouched. Активный web по-прежнему видит
+только status bind, новые app/landing не опубликованы. Staging не повторять;
+будущий activation проверит готовое назначение и применит только gated webconfig.
 
-Дополнение к CI: f79d541 completeCI43556903797 SUCCESS; TypeScript/Deno fixture
-исправлен точечными объявлениями, без appCode/checks weakening. T37 payload/scope
-не расширен, его новый preparedmanifestSHA f6d474d1d1d2a8fd941a7cec2926ddaf74fac076b596bdcc1188b0af878d15a5.
+Root-only retained result/helper/manifest/guard/log/receipt, процесс закончился.
+Result SHA `ed5e7b52aa1efa4653da911e1af5b8775bbd082550aea84acf7f44541dc62a9b`;
+VPS `/root/bron-secrets/t39-release-receipt.json` SHA
+`bfd85f9ec2565b96ef3bf64434fa26d189a1e519eb974b4454f43cc1531d0c49`;
+log `/root/bron-secrets/t39-stage-static.log` SHA
+`fee961ca75ec2d29f210067b2fc8d901915aa6252090637cefe1eb693142f5c1`.
+Canonical safe localmirror `/tmp/bron-release-executor-20261113/T39-state.json`
+совпал по bytes/SHA; вложенный path в ACCEPTED был промежуточным state.
+Серверное доказательство — отчёт закреплённого helper через исполнителя,
+не самостоятельное SSH-чтение координатором.
+
+Дополнительно Root publicbackupstatus14.11 08:05:57МСК: strictTLS/expected503,
+exact3fields/healthytrue, checkage5.94min/backupage65.93min, configuredfreshnessPASS
+на этот момент. Nodefetch из cloudenv не получил ответ; независимый urllibGET
+получил валидный status. Это не свидетельство server failure; перед финальным
+окном нужна новая freshness, а не обещание бесконечной пригодности этого sample.
+
+T37 deployment/source workingrows по-прежнему BLOCKED_OWNER_APPROVAL. Его existing
+capability expire14.11 08:19:57МСК; после expiry старый пакет не запускать/не продлевать
+самостоятельно. Для одного явного owner решения на оставшийся data-scope подготовлен
+[bounded approval scope](owner-source-transport-approval.md): максимум3 Auth-bearing
+snapshots (T37live1 + finalfencedbefore/after2), тот же credential-derived16record
+payload/получатель, без Mac. Это PENDING, не расширение выданного T37 onePOST:
+финальный HTTPS operator ещё адаптируется, directPGrunner не активировать.
+Нельзя считать разрешение на одну T37-сверку разрешением на два finalвызова.
+
+T30 independent key/device proof pending; freeze/finalaudit/
+owneracceptance/publication не выполнены. T39 не выдаётся за preview-ready/release.
+
+CI f79d541 complete43556903797 SUCCESS. T37 preparedmanifestSHA
+`f6d474d1d1d2a8fd941a7cec2926ddaf74fac076b596bdcc1188b0af878d15a5` сохраняет
+тот же private payload scope; никакого owner approval из исправления типов не следует.
 
 ## T38 COMPLETE/PARTIAL и coordinator follow-up — 14.11.2026
 

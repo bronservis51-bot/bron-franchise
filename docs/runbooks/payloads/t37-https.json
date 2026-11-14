@@ -18,10 +18,26 @@
   "approval": {
     "auth_digest_input": "UTF8 text of (to_jsonb(auth.users row)-'updated_at'); every other field participates, including password-hash/token-related columns when present",
     "includes_credential_derived_auth_digests": true,
+    "proposed_release_data_grant": {
+      "document": "docs/runbooks/owner-source-transport-approval.md",
+      "document_sha256": "d37a24d8ed1a99f21336bd892406487deb68451d2229d7abc8d0fd7d7a2e6e0f",
+      "does_not_change_T37_one_POST_scope": true,
+      "final_packages_require_separate_pins_and_gates": true,
+      "includes_failed_timeout_uncertain": true,
+      "max_auth_snapshot_attempts_total": 3,
+      "phases": [
+        "one T37 live readonly comparison",
+        "one fenced final snapshot before target COMMIT",
+        "one fenced final snapshot after target COMMIT"
+      ],
+      "review": "independent scope review corrections applied: attemptbudget/finitefields/T37one+finaltwo/pending/noautoDML",
+      "shared_across_packets_and_capabilities": true,
+      "status": "PENDING_OWNER_DECISION"
+    },
     "raw_password_token_profile_fields_exported": false,
     "raw_passwords_or_JWT_or_Auth_profiles_exported": false,
     "reason": "Automatic approval review rejected deploy: trusted authorization required for exact sensitive payload and destination",
-    "requested_action": "deploy temporary capability-authenticated source Edge reader and perform one read-only comparison exporting AES-GCM encrypted strict audit summary+max16 compact Auth records{UUID,updated_at,epochMicros,SHA256(all remaining auth.users fields including password-hash/token-related columns)} only to VPS RAM152.228.115.115; no raw credential/profile fields or Mac data/backup transit",
+    "requested_action": "proposed owner DATA grant for max3 total authenticated Source snapshot read attempts (T37live1+fencedfinalbefore/after2), including failed/timeout/uncertain; same AES-GCM encrypted strictaudit+max16Auth{UUID,updated_at,micros,SHA256(allotherfields includingpassword-hash/token-related)} to VPSRAM152.228.115.115 only; noMac/rawcredentials. T37 taskitself remainsonePOST/noDML/nofreeze; futurefinaltasks separatepins+gates; executionnotauthorizeduntilownerdecision",
     "required": true,
     "source_or_target_data_writes": false
   },
@@ -73,6 +89,7 @@
   },
   "execution_authorized": false,
   "files": {
+    "docs/runbooks/owner-source-transport-approval.md": "d37a24d8ed1a99f21336bd892406487deb68451d2229d7abc8d0fd7d7a2e6e0f",
     "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
     "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
     "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
