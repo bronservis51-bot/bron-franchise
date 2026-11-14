@@ -3,6 +3,33 @@
 Дополнение к `chat-continuation-20261112.md`, не новый план миграции.
 Рабочее переключение **не выполнено**. Источник не менялся, seed/reset не запускались.
 
+## T35 CLOSED/BLOCKED; T36 — приватный HTTPS dummy, без рабочих данных — 14.11.2026
+
+T35 на038226b: settings HTTPS200/610bytes/expected JSON PASS; OpenAPI401,
+общий T35_METADATA_BLOCKED,1245ms. Это подтверждает HTTPS-ответ >512bytes,
+но не DB-доступ. 401 — application/auth отказ; рабочие REST grants не менять.
+Capability не создана. Result SHA
+`e69b851567e0ba3b674ef1eb81940e6f075ca382fe71a61651316755f25fc7bb`;
+receipt `51d35460f5868bb743e1b6da9a1be07ac57c4a34ae1d1cb43f64f64585e122c6`;
+log `f57171826b8521f003acd0d62b9818763cbe03c54d0b096aa81d19b936cf6e21`.
+Нет source user-data/изменений, Mac transit, Edge deployment, freeze или публикации.
+
+T36 [единый checklist](t36-https-probe.md) / `payloads/t36-https.json`:
+VPS создаёт capability, передаёт только SHA/expiry, координатор развёртывает новый
+hash-derived временный Edge endpoint с собственным обязательным private256bit auth.
+После readiness исполнитель проверяет wrongcap403 и один fixed512KiB dummy из БД.
+Endpoint не имеет произвольного SQL, application/Auth rows или CORS; TTL2h,
+DBTLS hostname-negative + positive, RR/READONLY/deadlines и rollback обязательны.
+`verify_jwt=false` только на новом endpoint с собственной аутентификацией;
+существующие JWT/Auth/REST/shop-worker не меняются. Secret остаётся только VPS.
+Сначала actual hosted PASS и count-only log-leak check, затем отдельный real reader.
+
+Подготовка: helper11 focused tests PASS на точном Node22.23.5; Edge23 focused PASS,
+Deno2.9.8 strict check и native loopback TLS/512KiB PASS (wrongCA/name rejected).
+Это не доказывает hosted-путь. Независимые reviews helper/Edge PASS.
+T12/T14/T18/T19/T21/T22 переиспользуются. T30 личный ключ pending не задерживает
+T36; до конечного freeze gate он остаётся обязательным. Maintenance сохраняется.
+
 ## T34 libpq тоже BLOCKED; T35 — HTTPS443 metadata и приватная подготовка — 14.11.2026
 
 T34 на5ae797e: отдельный cached psql image

@@ -2,6 +2,18 @@
 
 ## 14.11.2026 — повтор compact-запроса не заменяет проверку передачи
 
+- T35 settings200/610bytes доказал HTTPS >512; REST401 — отдельный отказ доступа,
+  не продолжение TCP-timeout и не основание менять grants. Сохранять общий
+  BLOCKED и полезный partial proof одновременно. Следующий probe использует
+  обязательный private capability, а не публичный anon JWT как секрет.
+- Ready/deploy handoff должен быть частью одного пакета: READY с hash/expiry
+  отправляется сразу, bounded readiness WAIT допускает одно явное продолжение
+  без новой capability/нового task ID и без расхода actual one-run guard.
+  Повтор реального probe после FAIL этим не разрешается.
+- Negative TLS proof не принимает generic TLS reset/timeout за certificate
+  identity rejection. Protocol marker и response schema клиента/Edge сверять
+  до выдачи пакета, чтобы техническая несовместимость не съела единственный run.
+
 - T34 независимый libpq тоже не получил FIRST512 при успешных TLS/identity/RO.
   Перебирать тот же TCP подход дальше без нового основания неэффективно. HTTPS
   существующей платформы — другой путь; metadata probe не называть уже миграцией.
