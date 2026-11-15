@@ -1,0 +1,149 @@
+{
+  "actionId": "T51.mcp_readiness",
+  "after_pass": "Report actual timing and callable MCP+SSH readiness; prepare fresh pinned final-window continuation preserving max3 shared ledger and two remaining snapshot slots. No stale window run.",
+  "checklist": "docs/runbooks/t51-mcp-result-and-readiness.md",
+  "connection": {
+    "OAuth": "ALREADY_AUTHORIZED",
+    "arguments": [
+      "query"
+    ],
+    "native_tool": "execute_sql",
+    "network_permissions": "existing approved workspace-write network grant and exact receipt parent; no bypass",
+    "no_new_login": true,
+    "official_url": "https://mcp.supabase.com/mcp?project_ref=vkkqffvmztpzgygzfxhq&features=database,docs",
+    "server": "bron-release-source"
+  },
+  "current_state": {
+    "T45": "CONSUMED_DO_NOT_REPEAT",
+    "T49": "NOT_RUN_EXPIRED",
+    "fresh_source_fence": "UNVERIFIED",
+    "last_confirmed_source_fence": "FENCED",
+    "maintenance": true,
+    "targetWriteOutcome": "UNCHANGED"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t51-mcp-ready.py",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t51-mcp-ready.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t51-mcp-result.json",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t51-mcp-result.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/mcp-fence-result.py": "7ebfdc5ed076d09c121d4efabd850113c129984a4df71a7cd9c6bae60f2353e0",
+    "docs/runbooks/payloads/t50-local-mcp.json": "f01e773d036916f54d5596ad5a72fc3354d2cb6991f9b07627c2ddd57e6a803f",
+    "docs/runbooks/payloads/t50-mcp-ready.py": "e032a9e692d5b31c18206cfb928fdd25d601e7c521f9c3bb78723e33a9d56cea",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "docs/runbooks/payloads/t51-mcp-ready.py": "4439f9b428fb05695b9008ca4222732c91002e1bb4f5c1ade78fafd0798dbb89",
+    "docs/runbooks/payloads/t51-mcp-response.py": "4af1bf8f163f749ec794e08c3041f844713e2a74d8d00068e5dece815c7a0f5c",
+    "docs/runbooks/payloads/t51-recover-mcp.py": "7c595a2f039cf54c5c5d99cdc6c27b08734aaf40036cc71b8d8c3c9f9085845d",
+    "docs/runbooks/payloads/t51-worker-prompt.txt": "e17770775180d491e70a1e9a49042ed7b0dd35da54e8dc12cd2876c087cbcca8",
+    "docs/runbooks/t51-mcp-result-and-readiness.md": "274ae86eee195d877bcfa3c1857acd70d6afc35e25375668c7ab065982513ff0",
+    "tests/ops/test_mcp_fence_result.py": "2996470a5bf1b605d894c191374989c228a6570e5b660f1ad8763b3c908fceb1",
+    "tests/ops/test_t51_mcp_response.py": "f31d54224ed489e79c1287ba24e774b1d9296c6a61777a69035baf6023cd3d30",
+    "tests/ops/test_t51_recover_mcp.py": "c17c0cd2425bda47c8acc97a2882392863edb78ace5c263df33a4d717e55507a"
+  },
+  "format": 1,
+  "local_paths": {
+    "bound_response": "response.json",
+    "collector_final_summary": "fresh-recorded-result.json.summary.json",
+    "fresh_recorded_result": "fresh-recorded-result.json",
+    "fresh_request": "fresh-request.json",
+    "mirror": "/tmp/bron-release-executor-20261113/T51-state.json",
+    "old_T50_mirror": "/tmp/bron-release-executor-20261113/T50-state.json",
+    "private_directory": "/tmp/bron-release-executor-20261113/T51",
+    "ready_marker": "fresh-recorded-result.json.ready.json",
+    "worker_provisional_result": "native-worker-result.json"
+  },
+  "no_owner_action_expected": true,
+  "not_authorized": [
+    "reset/retry T50/T45/old T49",
+    "raw Auth/business rows or snapshots",
+    "Source mutations/target writes/deployment/pause/capability extension",
+    "new login/PAT/dependency/service/monitor dispatch",
+    "unscoped personal history/token/keychain scan",
+    "capture output from unpinned SQL",
+    "change proxy/identity/known_hosts or sandbox/approval bypass",
+    "claim readiness from offline/historical fixture or stale Source clock",
+    "public opening before final audit and actual owner acceptance"
+  ],
+  "parent_task": {
+    "commit": "7fcbf4ff6f595fa499ac661f9a824f080a4aa7c5",
+    "complete_count": 0,
+    "last_confirmed_fence": "FENCED",
+    "manifest_sha256": "f01e773d036916f54d5596ad5a72fc3354d2cb6991f9b07627c2ddd57e6a803f",
+    "mcp_calls": 1,
+    "prepare_count": 1,
+    "preserve_request_guard_state": true,
+    "snapshotAttemptsUsed": 0,
+    "sourceFenceT50": "UNVERIFIED",
+    "status": "BLOCKED_MCP_RESULT_CONSUMED",
+    "targetWrites": 0,
+    "task": "T50"
+  },
+  "phase_authorizations": {
+    "historical_recovery": {
+      "do_not_scan_personal_history": true,
+      "known_session_files_max": 1,
+      "only_exact_pinned_call_result": true,
+      "query_sha256": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+      "source_queries": 0
+    },
+    "new_readiness": {
+      "clock_skew_ms": 5000,
+      "collector_exact_query_before_capture": true,
+      "collector_must_be_running_before_prepare": true,
+      "complete_max": 1,
+      "drain_until_EOF": true,
+      "final_acceptance_requires_no_ambiguity": true,
+      "fresh_mcp_technical_transaction_max": 1,
+      "max_round_trip_ms": 30000,
+      "persist_before_decode": true,
+      "prepare_max": 1,
+      "reuse_OAuth_and_approved_network": true,
+      "source_snapshot_attempts": 0,
+      "target_writes": 0
+    }
+  },
+  "proof": {
+    "capture_and_decode_are_not_proof_by_themselves": true,
+    "helper_exact_T50_namespace_clone": true,
+    "raw_representation": "CANONICAL_RECORDED_TOOL_RESULT",
+    "real_provider_result_and_VPS_delivery_required": true,
+    "separate_from_T50": true,
+    "state_directory": "/root/bron-secrets/t51-mcp-readiness"
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t51-release-receipt.json",
+    "finalized_by_parent_after_collector_EOF": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T51-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "task": "T51",
+  "verification": {
+    "Source_or_VPS_execution": "NOT_RUN",
+    "builder_tests": "9/9 PASS",
+    "capture_tests": "17/17 PASS",
+    "decoder_tests": "13/13 PASS",
+    "independent_review": "PASS",
+    "offline_end_to_end_capture_ready_decode_build_bindings": "PASS"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
