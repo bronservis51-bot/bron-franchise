@@ -1,0 +1,153 @@
+{
+  "actionId": "T54.mcp_readiness",
+  "actors": {
+    "cloud_broker": "Existing connected Supabase MCP+GitHub in existing workspace; actual fixed technical SQL exactly once",
+    "code_only_new_branch": true,
+    "parent_executor": "Existing approved strict SSH+GitHub, Python3 stdlib only; no native CLI/SQLite"
+  },
+  "after_pass": "Finish fresh pinned final-window preparation preserving shared ledger max3/two DATA snapshots; then strict pass, reader closure/Source Pause, private actual owner acceptance and public switch. Owner acceptance cannot be fabricated during sleep.",
+  "checklist": "docs/runbooks/t54-automatic-relay-readiness.md",
+  "cloud_paths": {
+    "MCP_guard": "mcp-claim.json",
+    "MCP_raw_result": "mcp-raw-result.json",
+    "private_directory": "/workspace/artifacts/t54-relay"
+  },
+  "current_state": {
+    "T45": "CONSUMED_DO_NOT_REPEAT",
+    "T49": "NOT_RUN_EXPIRED",
+    "T50": "CONSUMED_DO_NOT_REPEAT",
+    "T51": "CLOSED_PREPARE0",
+    "T52": "CLOSED_PREPARE0",
+    "fresh_fence": "UNVERIFIED",
+    "last_confirmed_fence": "FENCED",
+    "maintenance": true,
+    "target_writes": 0
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t54-mcp-ready.py",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t54-mcp-ready.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t54-relay-readiness.json",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t54-relay-readiness.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/mcp-fence-result.py": "7ebfdc5ed076d09c121d4efabd850113c129984a4df71a7cd9c6bae60f2353e0",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "docs/runbooks/payloads/t52-readiness.json": "a1fa1a3a4a28dbdabaa357378132d7ace4d439731d1887a8610db699b0a43e35",
+    "docs/runbooks/payloads/t54-cloud-broker-io.py": "fe1d7830901e28920a6410042710b004664117a83eb5fabaa248c416a00d3943",
+    "docs/runbooks/payloads/t54-cloud-broker.js": "f04464051e4cb44f001aaaf7210a176a91ecb5bee907a620c54c68aa711ed98b",
+    "docs/runbooks/payloads/t54-mcp-ready.py": "06bbb43474dde6883ba612185ba59079df3675143f61539fe189eae4041ec275",
+    "docs/runbooks/payloads/t54-relay-client.py": "371afe2d9a683e7e9359ce30eba070676858560e25d5b12617a645c48ec789ed",
+    "docs/runbooks/t54-automatic-relay-readiness.md": "9ec8a3dd6fc44de9ddb0d167c469cbc58c50edd05f5e4977cc9d981e6c07abe5",
+    "tests/ops/test_t54_cloud_broker.py": "a9a696b9115a8af30585d5494df3533b557390450b4c4cdf0104a3c455d837e4",
+    "tests/ops/test_t54_relay_client.py": "945a5b8f9807a814a46ab3c0a2ddc2a772f2e0a068e719abf356aa314e4cf5b4"
+  },
+  "format": 1,
+  "helper_pass_code": "T54_AUTOMATIC_MCP_RELAY_PROVEN",
+  "local_paths": {
+    "client_result": "client-result.json",
+    "directory": "/tmp/bron-release-executor-20261113/T54",
+    "preflight": "client-preflight.json",
+    "private_ssh_options": "ssh-options.json",
+    "state": "/tmp/bron-release-executor-20261113/T54-state.json"
+  },
+  "not_authorized": [
+    "owner Terminal/unlock/OAuth during sleep",
+    "native CLI/SQLite/owner launcher or global profile writes",
+    "sandbox/approval bypass or new SSH/proxy/identity/known_hosts settings",
+    "new PAT/service/dependency or workflow/monitor dispatch",
+    "overwrite/delete existing relay proof files or reset guards/ledger",
+    "Source private rows/snapshots/capability extension/deployment/pause/target writes",
+    "fake Source clock/response or use manual chat ACK",
+    "run old T45/T49/T50/T51/T52",
+    "public switch before final audit and actual owner acceptance"
+  ],
+  "owner_direction": {
+    "automatic_path_previously_authorized": "T49 same-worker OR proven automatic<=30s channel",
+    "no_approval_weakening": true,
+    "no_outside_sandbox_access": true,
+    "no_owner_action_requested": true,
+    "owner_asleep": true
+  },
+  "parent_task": {
+    "acceptance_was_delivered": true,
+    "commit": "3b579d1883f01663306589763166ecf3fd7da56e",
+    "complete": 0,
+    "do_not_retry": true,
+    "execute_sql": 0,
+    "manifest_sha256": "a1fa1a3a4a28dbdabaa357378132d7ace4d439731d1887a8610db699b0a43e35",
+    "prepare": 0,
+    "snapshots": 0,
+    "status": "BLOCKED_NATIVE_EXECUTOR_ENVIRONMENT",
+    "task": "T52"
+  },
+  "phase_authorizations": {
+    "live_proof": {
+      "VPS_complete_max": 1,
+      "VPS_prepare_max": 1,
+      "broker_MCP_call_max": 1,
+      "client_run_max": 1,
+      "clock_skew_ms": 5000,
+      "max_round_trip_ms": 30000,
+      "nonce_expiry_ms": 60000,
+      "raw_MCP_saved_before_decode": true,
+      "round_trip_metric": "VPS nonce creation to durable response on VPS",
+      "snapshot_attempts": 0,
+      "source_private_rows": 0,
+      "target_writes": 0
+    },
+    "setup": {
+      "broker_starts_after_client_ready": true,
+      "client_must_report": "T54_CLIENT_READY_NO_PREPARE",
+      "no_timer_until_broker_armed": true,
+      "preflight_only": true,
+      "prepare_Source_SQL": false
+    }
+  },
+  "public_payload_allowlist": "Technical request/response only: nonce SHA, clock, project/barrier/query/manifest/request SHA; no raw nonce/capability/keys/backup/Auth/business rows/digests/SQL errors",
+  "receipts": {
+    "also_report_actual_helper_result_sha": true,
+    "canonical_vps": "/root/bron-secrets/t54-release-receipt.json",
+    "final_success_top_level": {
+      "status": "PASS",
+      "task": "T54"
+    },
+    "local_mirror": "/tmp/bron-release-executor-20261113/T54-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "relay": {
+    "branch": "ops/t54-ack-relay-20261115",
+    "repository": "bronservis51-bot/bron-franchise",
+    "requestPath": ".release-control/t54-proof/request.json",
+    "responsePath": ".release-control/t54-proof/response.json",
+    "workerId": "cloud-supabase-mcp-github-relay"
+  },
+  "source_query_sha256": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+  "task": "T54",
+  "verification": {
+    "broker_fixtures": "7/7 PASS",
+    "client_fixtures": "11/11 PASS",
+    "helper_predicates": "unchanged except truthful worker identity+pass code",
+    "offline_JS_orchestration": "PASS",
+    "production_Source_or_VPS_GitHub_actions": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
