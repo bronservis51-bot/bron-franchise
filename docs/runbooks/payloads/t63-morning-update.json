@@ -1,0 +1,70 @@
+{
+  "format": 1,
+  "task": "T63",
+  "status": "AUTHORIZED_OWNER_MORNING_UPDATE",
+  "productCommit": "3e46a89e7e6eba8f55bd81ef0ea175aeb97a06f8",
+  "checklist": "docs/runbooks/t63-morning-update.md",
+  "sourceMustRemainInactive": true,
+  "sourceReads": 0,
+  "maintenanceRequired": false,
+  "roleActivityIsNotMaintenanceCondition": true,
+  "servingMode": "PRODUCTION_PUBLIC",
+  "passwordResetAuthorized": false,
+  "allowedMutations": [
+    "three_checksum_pinned_additive_target_migrations",
+    "atomic_public_app_static_switch",
+    "owner_supplied_missing_November2026_RUB_day_totals_via_existing_authenticated_RPC",
+    "explicit_point_assignment_for_named_existing_manager_if_unambiguous"
+  ],
+  "artifact": {
+    "sourceCommit": "3e46a89e7e6eba8f55bd81ef0ea175aeb97a06f8",
+    "files": 56,
+    "manifestSha256": "bad92bd51cb6a36b2af339560b23675163e1a7c68ee683db17d563693b500fac",
+    "archiveSha256": "539f054071ad3767c2ca4be7a241a83ae0d420d72e609d8574402e59d9990749",
+    "archiveBytes": 1556480,
+    "build": {
+      "build": "2026-11-15T22:11:28.517Z"
+    },
+    "repositoryPath": "docs/runbooks/payloads/t63-app-root.tar"
+  },
+  "files": {
+    "docs/runbooks/t63-morning-update.md": "a5a402989297a3a02281aa382ec75cb64cc538e5be7c73a0bd11b8b9e2d1b625",
+    "docs/runbooks/morning-target-operator.md": "80ee0face743f5143857b038e339b6c6e23f62e275340fa033e7d90414b89e7e",
+    "docs/runbooks/payloads/morning-target-operator.py": "ad4b530b334971448a4fdfd031fc933c2880ba38977e9b6afcfa58818ae5ac02",
+    "docs/runbooks/payloads/morning-static-publish.py": "d91d0cf2dd581f074a3b4b651fe2b6f68811b901de58975d910e5f66cb13b72c",
+    "docs/runbooks/payloads/t63-migration-manifest.json": "e8e8104b97440eba171d336489739153e9618ee64fbbaa2770369eb5e47d2b99",
+    "docs/runbooks/payloads/t63-publish-pin.json": "7855c8b9cc1f5b647331036074956d58aa3128d48552c824734245a0b0c80983",
+    "docs/runbooks/payloads/morning-revenue-import.mjs": "6f4776216b7aa56ef11f0ab92908bcaf0f3898edcc695cad02df655ee50202c4",
+    "docs/runbooks/payloads/morning-revenue-import.md": "7f96f741f5eb5f0be1030cd7e7d943e856f60ca291904f10d99a18de3d110d42",
+    "supabase/migrations/20261116010000_daily_payroll.sql": "97ea41528818cebc49fc7ef88553cdcbfad671881299974c35f99295c6b3cdcd",
+    "supabase/migrations/20261116020000_staff_scopes.sql": "ace1af3e7edb101e36dff6608723e26a2ff18aadf7b74fd27e4e7a6cd34266a0",
+    "supabase/migrations/20261116030000_partner_preparation.sql": "3c0a29883bea205a2da495a0d52b290fc2626a8cd9d166042be9a4e674187f53",
+    "docs/morning-acceptance-cases.md": "13d04493071bcf0163b81e8887d1666f0543a3c74b5638198d5d7ce79a9abd62",
+    "docs/product-backlog.md": "671bd8ee0676ac7ea3450ff3fc1d9248c169a2bd64d0f83d15e4c5bee454973f",
+    "src/platform/contract.generated.ts": "856f5cdc7d6d84c4b0e8a0186cfbd56c6d346556bd329cb597366cc7c4dfa721",
+    "docs/runbooks/payloads/t63-app-root.tar": "539f054071ad3767c2ca4be7a241a83ae0d420d72e609d8574402e59d9990749",
+    "tests/ops/test_morning_target_operator.py": "ce5f63859df84342950c6b5bc398000d2cbf882bb1c81f895164266caaa1d465",
+    "tests/ops/test_morning_static_publish.py": "875139f8d803c5275eb78742683ee2e8b3ed8cc18f8ef25cfe8f863e72e1bf39",
+    "tests/db/staff_manager_intent_initializer.test.ts": "745f2e0360199288b3f518588fecf827376acc39e1e43ca1ca9482dcf7f1ee90"
+  },
+  "verification": {
+    "fullVitestTestsPassed": 369,
+    "fullVitestFilesPassed": 52,
+    "operatorTestsPassed": 17,
+    "uiWidthTextCasesPassed": 216,
+    "typecheck": "PASS",
+    "productionBuild": "PASS",
+    "actualBuiltArchiveScan": "PASS",
+    "initializerRegressionTestsPassed": 1
+  },
+  "canonicalReceipt": "/root/bron-secrets/t63-release-receipt.json",
+  "localMirror": "/private/tmp/bron-release-executor-20261113/T63-state.json",
+  "deferrals": [
+    "shared_till_pay_allocation",
+    "daily_minimum_across_two_points",
+    "monthly_salary_rules",
+    "email_invitation_infrastructure",
+    "accounting",
+    "new_integrations"
+  ]
+}

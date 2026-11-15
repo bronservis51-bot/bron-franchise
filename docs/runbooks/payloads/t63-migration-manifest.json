@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "task": "T63",
+  "migrations": [
+    {
+      "name": "20261116010000_daily_payroll.sql",
+      "sha256": "97ea41528818cebc49fc7ef88553cdcbfad671881299974c35f99295c6b3cdcd"
+    },
+    {
+      "name": "20261116020000_staff_scopes.sql",
+      "sha256": "ace1af3e7edb101e36dff6608723e26a2ff18aadf7b74fd27e4e7a6cd34266a0"
+    },
+    {
+      "name": "20261116030000_partner_preparation.sql",
+      "sha256": "3c0a29883bea205a2da495a0d52b290fc2626a8cd9d166042be9a4e674187f53"
+    }
+  ]
+}

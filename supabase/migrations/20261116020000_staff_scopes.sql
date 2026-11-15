@@ -5,7 +5,7 @@ alter table public.staff_member add column manager_enabled boolean not null defa
 create function app_private.staff_initialize_manager_intent() returns void
 language sql security definer set search_path=public,app_private,pg_temp as $$
  update public.staff_member s set manager_enabled=true where exists(select 1 from public.role_assignment a
- where a.user_id=s.user_id and a.role='franchisee_manager' and (a.revoked_at is null or not s.active))
+ where a.user_id=s.user_id and a.scope_id=s.partner_id and a.role='franchisee_manager' and (a.revoked_at is null or not s.active))
 $$;
 select app_private.staff_initialize_manager_intent();
 drop function app_private.staff_initialize_manager_intent();
