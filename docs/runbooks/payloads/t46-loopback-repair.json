@@ -1,0 +1,107 @@
+{
+  "actionId": "T46.restore_target_loopback",
+  "checklist": "docs/runbooks/t46-target-loopback-repair.md",
+  "command": [
+    "/usr/bin/python3",
+    "-I",
+    "/root/bron-secrets/t46-loopback-repair.py",
+    "--run",
+    "--manifest",
+    "/root/bron-secrets/t46-loopback-repair/manifest.json",
+    "--sha256",
+    "<EXACT T46 manifest SHA>"
+  ],
+  "continuation": {
+    "additionalSqlProbe": false,
+    "afterActualPass": "resume already accepted T45 B/C automatically with original pins/approval; Root retains Source SQL/deploy/ACK ownership",
+    "repeatClosedChecks": false,
+    "sqlIdentityProbe": "existing T45 prepare_final only"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t46-loopback-repair.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t46-loopback-repair.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t46-loopback-repair/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t46-loopback-repair.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t46-loopback-repair"
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/t46-loopback-repair.py": "9b11e1bce124ba820d5aef6a27cdb2894271cd1f45bb87d78273c5394bd78314",
+    "docs/runbooks/t46-target-loopback-repair.md": "999e8c216bae1ac083b51c540aa755012491e15f4b690ab45ae8b4699eead70c",
+    "tests/ops/test_t46_loopback_repair.py": "fbc9780febae968d2f0a010394424afe7fa1c5273ce707a7e3cb5ded711b3874"
+  },
+  "format": 1,
+  "inputEvidence": {
+    "actualT44Attestation": "CONFIRMED",
+    "actualT44Crypto": "PASS",
+    "diskCandidates": 0,
+    "historicalSocketEvidence": "docs/runbooks/execution-checkpoint-20261112.md:1181",
+    "loadedCandidates": 0,
+    "startInvoked": false,
+    "state": "T45_BEFORE_DELIVERY_CONTROL_FINAL_NO_DATA_EFFECTS"
+  },
+  "listen": "127.0.0.1:15433",
+  "maxDaemonReloadAttempts": 1,
+  "maxRuns": 1,
+  "maxStartAttempts": 1,
+  "not_authorized": [
+    "Source/DB/S3/secret/backup/Auth/business data operations under T46",
+    "SQL probe or retry of T44 or Source snapshots",
+    "Install software; create container/network; change Compose/firewall/DNS/host routes; restart Docker/DB/backend services",
+    "Persistent unit enablement or extra services/endpoints; any externally bound database port",
+    "Overwrite existing unit/guard/result; auto-retry or automatic cleanup/inverse",
+    "Preview/API/Pages/public release; changing T44/T45 code/manifests/proofs; optional hardening/diagnostics"
+  ],
+  "ownerProofApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+  "parentCommit": "e264e30e19c2b06e45372e82fea63d97742400fb",
+  "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+  "parentTask": "T45",
+  "proxyExecutable": "/usr/lib/systemd/systemd-socket-proxyd",
+  "proxyGroup": "nogroup",
+  "proxyUser": "nobody",
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t46-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T46-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "runtimeUnitDirectory": "/run/systemd/system",
+  "runtimeUnits": [
+    "bron-t46-target-loopback.socket",
+    "bron-t46-target-loopback.service"
+  ],
+  "scope": "Restore only the previously approved target loopback endpoint using two new temporary OS socket-proxy unit definitions; no new software/container/network or backend restart.",
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "destination_address": "current verified target Docker IPv4 only",
+    "destination_port": 5432,
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc",
+    "network_name": "supabase_default"
+  },
+  "task": "T46",
+  "unitMode": "0644",
+  "verification": {
+    "nativeUnitSyntax": "Offline systemd-analyze user-mode parser PASS; no live daemon proof in Cloud; actual VPS verification required",
+    "productChanges": false,
+    "productionRepair": "NOT_RUN",
+    "targetedFixtureTests": "12/12 PASS; independent review PASS"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
