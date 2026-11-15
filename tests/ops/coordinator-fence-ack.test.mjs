@@ -64,8 +64,27 @@ test('four exact ordered stages persist unique private nonce challenges and acce
  }finally{f.close();}
 });
 
+test('T45 uses isolated published paths and rejects an otherwise valid T41 ACK',async()=>{
+ const f=fixture();try{
+  f.activation.actionId='T45.final_https_window';
+  const adapter=f.open({onChallenge:c=>{f.challenges.push(c);
+   assert.equal(c.actionId,'T45.final_https_window');
+   assert.equal(c.requestPath,'/root/bron-secrets/t45-release/fence-check-start.request.json');
+   assert.equal(c.ackPath,'/root/bron-secrets/t45-release/fence-check-start.ack.json');
+   f.deliver(c,{...f.ack(c),actionId:'T41.final_https_window'});
+  }});
+  await assert.rejects(adapter.assertFence('start'),closed('COORDINATOR_FENCE_ACK_BINDING'));
+ }finally{f.close();}
+ const g=fixture();try{
+  g.activation.actionId='T45.final_https_window';const adapter=g.open();
+  for(const stage of coordinatorFenceStages){const proof=await adapter.assertFence(stage);assert.equal(proof.currentAck.stage,stage);}
+  assert.equal(g.challenges.length,4);assert(g.challenges.every(c=>c.actionId==='T45.final_https_window'&&c.ackPath.startsWith('/root/bron-secrets/t45-release/')));
+ }finally{g.close();}
+});
+
 test('activation and already-verified immutable barrier proof cannot be substituted or weakened',()=>{
- for(const patch of [{reviewed:false},{actionId:'T41.other'},{sourceProject:'other'},{sourceBarrierActionId:'T41.http_source_admission'},
+ for(const patch of [{reviewed:false},{actionId:'T41.other'},{actionId:'T46.final_https_window'},
+  {actionId:{toString:()=> 'T45.final_https_window'}},{sourceProject:'other'},{sourceBarrierActionId:'T41.http_source_admission'},
   {manifestSha256:'bad'},{sourceBarrierReceiptSha256:'bad'},{verifyFencedSqlSha256:'bad'}]){
   const f=fixture();try{Object.assign(f.activation,patch);assert.throws(()=>f.open(),closed('COORDINATOR_FENCE_ACTIVATION_INVALID'));}finally{f.close();}
  }

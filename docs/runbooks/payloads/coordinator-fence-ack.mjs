@@ -5,7 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash,randomBytes} from 'node:crypto';
 
-const DIRECTORY='/root/bron-secrets/t41-release',PROJECT='vkkqffvmztpzgygzfxhq';
+const PROJECT='vkkqffvmztpzgygzfxhq';
+// Only these independently reviewed final-window tasks may own ACK custody.
+// Each task has isolated nonce/ACK files; T41 evidence is never relabelled T45.
+const DIRECTORIES=Object.freeze({'T41.final_https_window':'/root/bron-secrets/t41-release',
+ 'T45.final_https_window':'/root/bron-secrets/t45-release'});
 export const coordinatorFenceStages=Object.freeze(['start','before-target-write','before-final-audit','end']);
 const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x),sha=x=>createHash('sha256').update(x).digest('hex');
 const canonical=x=>JSON.stringify(Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])))+'\n';
@@ -32,14 +36,14 @@ export function createCoordinatorFenceAck({activation,barrierProof,signal,timeou
  try{
   exact(activation,activationKeys);exact(barrierProof,barrierKeys);
   const a=Object.freeze({...activation}),barrier=Object.freeze({...barrierProof});
-  if(a.reviewed!==true||a.actionId!=='T41.final_https_window'||a.sourceProject!==PROJECT||
+  if(a.reviewed!==true||typeof a.actionId!=='string'||!Object.hasOwn(DIRECTORIES,a.actionId)||a.sourceProject!==PROJECT||
    a.sourceBarrierActionId!=='T40.http_source_admission'||!digest(a.manifestSha256)||
    !digest(a.sourceBarrierReceiptSha256)||!digest(a.verifyFencedSqlSha256)||
    barrier.sourceBarrierActionId!==a.sourceBarrierActionId||barrier.sourceBarrierReceiptSha256!==a.sourceBarrierReceiptSha256||
    ['normalConnectDenied','existingClientsDrained','freshOwnerReconnect','providerBoundaryReviewed','durableOnVps'].some(k=>barrier[k]!==true)||
    barrier.sourcePaused!==false||!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>60000||
    (onChallenge!==undefined&&typeof onChallenge!=='function'))fail('COORDINATOR_FENCE_ACTIVATION_INVALID');
-  let directory=DIRECTORY,uid=0,gid=0;
+  const publicDirectory=DIRECTORIES[a.actionId];let directory=publicDirectory,uid=0,gid=0;
   if(testOnly){
    if(!process.env.NODE_TEST_CONTEXT)fail('COORDINATOR_FENCE_TEST_POLICY_FORBIDDEN');
    exact(testOnly,['directory','uid','gid']);({directory,uid,gid}=testOnly);
@@ -120,7 +124,7 @@ export function createCoordinatorFenceAck({activation,barrierProof,signal,timeou
      createdEpochMs:now,expiresEpochMs:now+timeoutMs};
     const bytes=Buffer.from(canonical(request)),saved=writeRequest(requestName,bytes);
     const {nonce:omitted,...publicRequest}=request;
-    const challenge=Object.freeze({...publicRequest,requestPath:DIRECTORY+'/'+requestName,ackPath:DIRECTORY+'/'+ackName,
+    const challenge=Object.freeze({...publicRequest,requestPath:publicDirectory+'/'+requestName,ackPath:publicDirectory+'/'+ackName,
      requestSha256:sha(bytes),storageUid:saved.uid,storageGid:saved.gid,storageMode:saved.mode});
     const active=()=>{if(closed||failed||signal?.aborted)fail('COORDINATOR_FENCE_ABORTED');
      if(Date.now()>=request.expiresEpochMs)fail('COORDINATOR_FENCE_ACK_TIMEOUT');};

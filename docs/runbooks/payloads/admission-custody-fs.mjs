@@ -6,9 +6,14 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {validateAdmissionMetadata,metadataQuerySha256,matchIndependentControlHashes} from './admission-metadata-custody.mjs';
 import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,BACKUP_MANIFEST_PATH,resolveEscrowOwnerProof} from './owner-proof-binding.mjs';
+import {OWNER_APPROVED_PATH as T44_APPROVED_PATH,OWNER_RESULT_PATH as T44_RESULT_PATH,OWNER_ATTESTATION_PATH as T44_ATTESTATION_PATH,
+ OWN_MANIFEST_PATH as T44_MANIFEST_PATH,OWN_MANIFEST_SHA256 as T44_MANIFEST_SHA256,OLD_GUARD_PATH as T44_OLD_GUARD_PATH,
+ OLD_RESULT_PATH as T44_OLD_RESULT_PATH,resolveEscrowOwnerProof as resolveT44OwnerProof} from './t45-owner-proof.mjs';
 
 const ROOT='/root/bron-secrets',PROJECT='vkkqffvmztpzgygzfxhq',VPS='152.228.115.115',MAX=1048576;
 const T30={crypto:ROOT+'/t30-owner-key-proof-result.json',attestation:ROOT+'/t30-owner-key-attestation.json',receipt:ROOT+'/t30-release-receipt.json'};
+const T44_INPUT_PATHS={approvedInput:T44_APPROVED_PATH,manifest:T44_MANIFEST_PATH,result:T44_RESULT_PATH,
+ attestation:T44_ATTESTATION_PATH,oldGuard:T44_OLD_GUARD_PATH,oldResult:T44_OLD_RESULT_PATH};
 const ownError=Symbol('safe-fs-error'),sha=x=>createHash('sha256').update(x).digest('hex');
 const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const fail=code=>{throw Object.assign(new Error(code),{code,[ownError]:true});};
@@ -55,7 +60,8 @@ export function createAdmissionCustodyFs({activation,proofInputs},testOnly){
   }
   const keyPath=ROOT+'/'+task.toLowerCase()+'-admission-key-proof-'+suffix+'.json';
   if(a.independentKeyProofPath!==undefined&&a.independentKeyProofPath!==keyPath)fail('ADMISSION_FS_PATH');
-  const allowed=new Set([...Object.values(T30),OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,BACKUP_MANIFEST_PATH,a.beforeImagePath,a.metadataReceiptPath,a.inversePath,a.controlReceiptPath,keyPath]);
+  const allowed=new Set([...Object.values(T30),OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,...Object.values(T44_INPUT_PATHS),
+   BACKUP_MANIFEST_PATH,a.beforeImagePath,a.metadataReceiptPath,a.inversePath,a.controlReceiptPath,keyPath]);
   const privateDir=directory=>{
    const s=fs.lstatSync(directory);
    if(!s.isDirectory()||s.isSymbolicLink()||s.uid!==uid||s.gid!==gid||(s.mode&0o7777)!==0o700)
@@ -145,6 +151,29 @@ export function createAdmissionCustodyFs({activation,proofInputs},testOnly){
     fail('ADMISSION_FS_WRITE_INVALID');return r;
   };
   const ownerProof=()=>{
+   if(proofInputs?.task==='T44'){
+    exact(proofInputs,['task','method','parentManifestSha256','ownerScope',...Object.keys(T44_INPUT_PATHS)]);
+    if(proofInputs.method!==OWNER_PROOF_METHOD||a.independentKeyProofPath!==keyPath||!digest(a.independentKeyProofSha256)||
+     !digest(a.recoveryCipherSha256)||!digest(proofInputs.parentManifestSha256))fail('ADMISSION_FS_OWNER_PROOF_PENDING');
+    for(const [name,p]of Object.entries(T44_INPUT_PATHS)){
+     exact(proofInputs[name],['path','sha256']);
+     if(proofInputs[name].path!==p||!digest(proofInputs[name].sha256))fail('ADMISSION_FS_OWNER_INPUT_PIN');
+    }
+    if(proofInputs.manifest.sha256!==T44_MANIFEST_SHA256)fail('ADMISSION_FS_OWNER_INPUT_PIN');
+    let resolved;try{
+     resolved=resolveT44OwnerProof({manifest:{task:'T45',actionId:'T45.release_window',execution_authorized:true,owner_proof:proofInputs.ownerScope},
+      parentManifestSha256:proofInputs.parentManifestSha256,
+      approvedInputBytes:read(T44_APPROVED_PATH,proofInputs.approvedInput.sha256,16384).bytes,approvedInputSha256:proofInputs.approvedInput.sha256,
+      ownManifestBytes:read(T44_MANIFEST_PATH,proofInputs.manifest.sha256).bytes,
+      resultBytes:read(T44_RESULT_PATH,proofInputs.result.sha256,65536).bytes,
+      attestationBytes:read(T44_ATTESTATION_PATH,proofInputs.attestation.sha256,16384).bytes,
+      oldGuardBytes:read(T44_OLD_GUARD_PATH,proofInputs.oldGuard.sha256,16384).bytes,
+      oldResultBytes:read(T44_OLD_RESULT_PATH,proofInputs.oldResult.sha256,16384).bytes,
+      backupManifestBytes:read(BACKUP_MANIFEST_PATH,proofInputs.ownerScope.recoveryCipherBinding.manifestSha256).bytes});
+    }catch{fail('ADMISSION_FS_OWNER_PROOF_PENDING');}
+    if(resolved.independentProofSha256!==a.independentKeyProofSha256||resolved.recoveryCipherSha256!==a.recoveryCipherSha256)
+     fail('ADMISSION_FS_OWNER_ENVELOPE_PIN');return resolved.proof;
+   }
    if(proofInputs?.method===OWNER_PROOF_METHOD){
     exact(proofInputs,['method','parentManifestSha256','ownerScope','approvedInput','result','attestation']);
     if(a.independentKeyProofPath!==keyPath||!digest(a.independentKeyProofSha256)||!digest(a.recoveryCipherSha256)||

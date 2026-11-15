@@ -8,6 +8,11 @@ import {spawnSync} from 'node:child_process';
 import {createAdmissionCustodyFs} from '../../docs/runbooks/payloads/admission-custody-fs.mjs';
 import {captureMetadataCustody,metadataQuerySha256} from '../../docs/runbooks/payloads/admission-metadata-custody.mjs';
 import {OWNER_PROOF_METHOD,OWNER_APPROVED_PATH,OWNER_RESULT_PATH,OWNER_ATTESTATION_PATH,resolveEscrowOwnerProof} from '../../docs/runbooks/payloads/owner-proof-binding.mjs';
+import {OWNER_APPROVED_PATH as T44_APPROVED_PATH,OWNER_RESULT_PATH as T44_RESULT_PATH,OWNER_ATTESTATION_PATH as T44_ATTESTATION_PATH,
+ OWN_MANIFEST_PATH as T44_MANIFEST_PATH,OWN_MANIFEST_SHA256 as T44_MANIFEST_SHA256,OLD_GUARD_PATH as T44_OLD_GUARD_PATH,
+ OLD_RESULT_PATH as T44_OLD_RESULT_PATH,PROPOSAL_SHA256} from '../../docs/runbooks/payloads/t45-owner-proof.mjs';
+import {T44_PARENT_MANIFEST_SHA256,T44_FAILED_GUARD_SHA256,T44_FAILED_RESULT_SHA256,T44_BACKUP_MANIFEST_SHA256}
+ from '../../docs/runbooks/payloads/t44-owner-proof-binding.mjs';
 
 const ROOT='/root/bron-secrets',sha=x=>createHash('sha256').update(x).digest('hex');
 const canonical=o=>JSON.stringify(o,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?
@@ -111,6 +116,57 @@ function escrowFixture(){
  return {directory,a,real,proof,resolved,open:()=>adapter=createAdmissionCustodyFs({activation:a,proofInputs:resolved.proofInputs},
   {directory,uid:process.getuid(),gid:process.getgid()}),close:()=>{adapter?.close();fs.rmSync(directory,{recursive:true,force:true});}};
 }
+
+// The genuine historical failure/backup bytes remain VPS-only, so this fixture
+// can test rejection/FS boundaries but cannot fabricate full positive T44 proof.
+function t44Fixture(){
+ const f=fixture();
+ for(const name of ['t41-owner-recovery','t44-owner-recovery','t45-release'])fs.mkdirSync(path.join(f.directory,name),{mode:0o700});
+ const metadata={approvedInput:Buffer.from('{}\n'),manifest:fs.readFileSync('docs/runbooks/payloads/t44-owner-key-recovery.json'),
+  result:Buffer.from('{"task":"T44","status":"PASS"}\n'),attestation:Buffer.from('{"task":"T44","status":"CONFIRMED"}\n'),
+  oldGuard:Buffer.from('{"task":"T41"}\n'),oldResult:Buffer.from('{"task":"T41","status":"BLOCKED"}\n')};
+ const inputs={task:'T44',method:OWNER_PROOF_METHOD,parentManifestSha256:'a'.repeat(64),
+  ownerScope:{method:OWNER_PROOF_METHOD,recoveryTask:'T44',root_approved_input_required:true,proposalSha256:PROPOSAL_SHA256,
+   recoveryManifestSha256:T44_MANIFEST_SHA256,parentT41ManifestSha256:T44_PARENT_MANIFEST_SHA256,
+   failedT41GuardSha256:T44_FAILED_GUARD_SHA256,failedT41ResultSha256:T44_FAILED_RESULT_SHA256,
+   recoveryCipherBinding:{manifestSha256:T44_BACKUP_MANIFEST_SHA256,artifact:'roles.sql.zst.age',from_pinned_backup_manifest:true}}};
+ const locations={approvedInput:T44_APPROVED_PATH,manifest:T44_MANIFEST_PATH,result:T44_RESULT_PATH,attestation:T44_ATTESTATION_PATH,
+  oldGuard:T44_OLD_GUARD_PATH,oldResult:T44_OLD_RESULT_PATH};
+ const real=p=>path.join(f.directory,path.relative(ROOT,p));
+ for(const [name,p]of Object.entries(locations)){
+  fs.writeFileSync(real(p),metadata[name],{mode:0o600});inputs[name]={path:p,sha256:sha(metadata[name])};
+ }
+ fs.writeFileSync(path.join(f.directory,'t12-backup-manifest.json'),'{"artifacts":[]}\n',{mode:0o600});
+ return {...f,inputs,real,open:()=>f.open({proofInputs:inputs})};
+}
+
+test('actual T44 mode requires its own fixed Root-approved paths and cannot fall through to old T41/T30 proof',()=>{
+ for(const change of [f=>f.inputs.method='other',f=>delete f.inputs.attestation,
+  f=>f.inputs.result.path=OWNER_RESULT_PATH,f=>f.inputs.approvedInput.path=OWNER_APPROVED_PATH,
+  f=>f.inputs.manifest.sha256='0'.repeat(64),f=>f.inputs.oldGuard.path=ROOT+'/source-backup.agekey']){
+  const f=t44Fixture();try{change(f);const adapter=f.open();assert.throws(()=>adapter.prepareIndependentKeyProof(),error=>{
+   assert.ok(['ADMISSION_FS_OWNER_PROOF_PENDING','ADMISSION_FS_SHAPE','ADMISSION_FS_OWNER_INPUT_PIN'].includes(error.code));return true;
+  });assert.equal(fs.existsSync(f.real(f.a.independentKeyProofPath)),false);}finally{f.close();}
+ }
+});
+test('T44 private metadata files enforce root policy and do not need key, identity or backup artifact reads',t=>{
+ for(const change of [f=>fs.chmodSync(path.dirname(f.real(T44_RESULT_PATH)),0o755),
+  f=>{const p=f.real(T44_RESULT_PATH);fs.renameSync(p,p+'.real');fs.symlinkSync(p+'.real',p);},
+  f=>fs.linkSync(f.real(T44_ATTESTATION_PATH),path.join(f.directory,'alias')),
+  f=>fs.unlinkSync(f.real(T44_APPROVED_PATH))]){
+  const f=t44Fixture();try{change(f);const adapter=f.open();assert.throws(()=>adapter.prepareIndependentKeyProof(),{code:'ADMISSION_FS_OWNER_PROOF_PENDING'});
+   assert.equal(fs.existsSync(f.real(f.a.independentKeyProofPath)),false);
+  }finally{f.close();}
+ }
+ const f=t44Fixture();try{
+  const adapter=f.open(),original=fs.openSync,opened=[];
+  const mock=t.mock.method(fs,'openSync',(...args)=>{opened.push(String(args[0]));return original(...args);});
+  assert.throws(()=>adapter.prepareIndependentKeyProof(),{code:'ADMISSION_FS_OWNER_PROOF_PENDING'});mock.mock.restore();
+  assert.ok(opened.some(p=>p.endsWith('/t44-owner-recovery/result.json')));
+  assert.equal(opened.some(p=>/agekey|identity\.|roles\.sql\.zst\.age|t30-owner/.test(p)),false);
+  assert.equal(fs.existsSync(f.real(f.a.independentKeyProofPath)),false);
+ }finally{t.mock.restoreAll();f.close();}
+});
 
 test('escrow filesystem branch validates Root-approved metadata and durably creates exact canonical proof with true ownership',()=>{
  const f=escrowFixture();try{const adapter=f.open(),r=adapter.prepareIndependentKeyProof();assert.equal(r.status,'KEY_PROOF_DURABLE');
