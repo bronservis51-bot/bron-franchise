@@ -1,0 +1,110 @@
+{
+  "actionId": "T48.continue_T45_witness",
+  "checklist": "docs/runbooks/t48-witness-fresh-observation.md",
+  "command": [
+    "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "/root/bron-secrets/t48-witness-continuation.mjs",
+    "--manifest",
+    "/root/bron-secrets/t48-witness-continuation/manifest.json",
+    "--sha256",
+    "<EXACT T48 manifest SHA>",
+    "--current-fence-input-sha256",
+    "<ACTUAL FRESH ROOT SHA>"
+  ],
+  "continuation": "Actual WITNESS PASS -> Root verifies durable barrier/final input -> already approved DATA v2 -> same T45 final window; no owner step",
+  "currentFenceInput": {
+    "allowedDifferenceFromOriginal": "observedUtc only",
+    "maxAgeMs": 600000,
+    "path": "/root/bron-secrets/t48-witness-continuation/source-fence-current-approved.json",
+    "sameDrainBoundary": true,
+    "source": "actual fresh Root verifyFencedSql plus Source clock, exact canonical bytes+SHA issued after package publish"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t48-witness-continuation.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t48-witness-continuation.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t48-witness-continuation/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t48-witness-continuation.json"
+    }
+  ],
+  "deployedFunction": {
+    "exactThreeExecutableReadback": "PASS",
+    "indexSha256": "c8b1ed8ff6832ba01d9b43645b48ed1f9b1475774d7156f0dbde15614d965058",
+    "name": "bron-source-reader-920938e06472",
+    "status": "ACTIVE",
+    "tlsGetPurpose403": "PASS",
+    "verify_jwt": false,
+    "version": 1
+  },
+  "directories_root0700": [
+    "/root/bron-secrets/t48-witness-continuation"
+  ],
+  "execution_authorized": true,
+  "expiryUnchanged": true,
+  "files": {
+    "docs/runbooks/payloads/t48-witness-continuation.mjs": "bd0d28f3df4b56c2322a6a1031a6926a4b84695641b16270c5b7dfb6edf2bd0e",
+    "docs/runbooks/t48-witness-fresh-observation.md": "935760ade04568690e3ceb0a00f4a974f0844f2fafe2c1d15c2b80624454e5b7",
+    "tests/ops/t48-witness-continuation.test.mjs": "c84509168062003a48821c81e3e9488c7a40d788f0e1d7914757e5d0f3884a03"
+  },
+  "format": 1,
+  "guardPolicy": {
+    "T45WitnessVerifyNeverPreviouslyAttempted": true,
+    "createOnlyUnusedT45WitnessVerifyGuardAndArtifacts": true,
+    "maxInvocations": 1,
+    "preserveOldWitnessPrepareGuard": true
+  },
+  "maxReadinessRequests": 1,
+  "maxWitnessRequests": 1,
+  "not_authorized": [
+    "Override Date.now/mtime or use fixture to bypass present freshness",
+    "Overwrite/reset/delete old input/context/guards/results",
+    "Rotate capability, extend expiry or reset snapshot budget",
+    "Repeat Source apply/drain/grants",
+    "Source Auth/business reads or target writes under T48",
+    "Additional WITNESS POST/retry/automatic inverse",
+    "Source Pause before strict final PASS",
+    "New infrastructure/dependencies/monitoring/Pages/preview/publication"
+  ],
+  "pins": {
+    "basePreparedSha256": "ed0871f06237339c60218e84185b7d278e0881c5443ffddbbc2a8152e793220f",
+    "capabilitySha256": "920938e064729dca455bc902f98674775c70e52c5cfc265f5f537550410ebb98",
+    "contextSha256": "6c012cc0c0682209fee35aa8b5efffa667a8db0ccc9ea6f9a8b9a2076f1fc53b",
+    "expiresUtc": "2026-11-15T04:14:51.589Z",
+    "oldFenceInputSha256": "09d2ceafa5ab4adb2017439e0c7df8a052ef7265f104c7e5d5708cc32c6fc811",
+    "oldPreparedContextSha256": "4141a28376644e42938c2b397149df51ba1335da55996c3275b98a7fa77368ce",
+    "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+    "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8"
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t48-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T48-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "scope": "One T45 production WITNESS verification using freshly verified Root fence observation; preserve original proof/context, capability, expiry, budget and original runtime code.",
+  "sourceDataFrames": 0,
+  "sourceSnapshotBudgetUnchanged": {
+    "remaining": 2,
+    "used": 1
+  },
+  "task": "T48",
+  "verification": {
+    "focusedTests": "7/7 PASS",
+    "independentReview": "PASS",
+    "productionInvocation": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
