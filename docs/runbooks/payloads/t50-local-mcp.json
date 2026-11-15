@@ -1,0 +1,134 @@
+{
+  "actionId": "T50.mcp_readiness",
+  "after_pass": "Report actual callable MCP and <=30s VPS proof. Continue fresh pinned final-window preparation under same max3 ledger, no stale T45/T49 run or cap extension under T50.",
+  "checklist": "docs/runbooks/t50-local-supabase-mcp.md",
+  "closed_gates_reused": [
+    "T12 Auth/RLS",
+    "T14 artifacts",
+    "T18 backup/status",
+    "T19 Telegram",
+    "T21 cold restore",
+    "T22 schedule",
+    "T37 live inventory",
+    "T39 inert staging",
+    "T40 metadata custody",
+    "T44 key+custody",
+    "T48 witness"
+  ],
+  "commands_remote": {
+    "complete_stdin_only": [
+      "python3",
+      "-I",
+      "/root/bron-secrets/t50-mcp-ready.py",
+      "--complete"
+    ],
+    "prepare": [
+      "python3",
+      "-I",
+      "/root/bron-secrets/t50-mcp-ready.py",
+      "--prepare"
+    ]
+  },
+  "connection": {
+    "existing_different_config": "STOP_NO_OVERWRITE",
+    "name": "bron-release-source",
+    "native_tool_required": "execute_sql",
+    "new_dependencies": false,
+    "new_pat": false,
+    "official_url": "https://mcp.supabase.com/mcp?project_ref=vkkqffvmztpzgygzfxhq&features=database,docs",
+    "personal_owner_action": "only actual official OAuth login/MFA/consent if required",
+    "project_scope": "vkkqffvmztpzgygzfxhq",
+    "queries_pinned_read_only_catalogs_only": true,
+    "read_only_role": false
+  },
+  "current_state": {
+    "T49": "NOT_RUN_HEADROOM_ELAPSED",
+    "T49_old_start_cutoff_utc": "2026-11-15T04:04:31.589Z",
+    "last_target_write_outcome": "UNCHANGED",
+    "maintenance": true,
+    "old_capability_expires_utc": "2026-11-15T04:14:51.589Z",
+    "source_fenced": true
+  },
+  "deferred": [
+    "visibility",
+    "owner-deferred legal docs",
+    "SLA",
+    "MoySklad",
+    "optional tooling/hardening/cleanup",
+    "extra postreset strong-model review"
+  ],
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t50-mcp-ready.py",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t50-mcp-ready.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t50-local-mcp.json",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t50-local-mcp.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/t50-mcp-ready.py": "e032a9e692d5b31c18206cfb928fdd25d601e7c521f9c3bb78723e33a9d56cea",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "docs/runbooks/payloads/worker-t45-verify-fenced.sql": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "docs/runbooks/t50-local-supabase-mcp.md": "31c35d437f07b7e72d6dbc28e0205d369ddf5e1b1b4a9ce6a96b6b8cf2d348d0",
+    "tests/ops/test_t50_mcp_ready.py": "b95c3649cb85b5098742743a58a5f8aca7aef5d808b59c511ba48970cc3e8b71"
+  },
+  "format": 1,
+  "not_authorized": [
+    "T45 or T49 execution/reset",
+    "capability renewal/deploy/Source pause",
+    "Auth/business rows or keys/backup/ciphertext through Mac",
+    "Source mutations or target writes",
+    "browser SQL/direct PG/GitHub relay fallback",
+    "new PAT/dependencies/services or approval bypass",
+    "public switch before final audit and actual owner acceptance"
+  ],
+  "parent_handoff": {
+    "commit": "492e34cfb5248eff7c5db08a7abb45483835bc28",
+    "manifest": "docs/runbooks/payloads/release-worker-handoff-20261115.json",
+    "sha256": "e8fe54668b3f6854b17ac2473b07b74feba547108bd5a59e2f953b1ddc55f8ab"
+  },
+  "proof": {
+    "checks_wall_and_monotonic": true,
+    "clock_skew_ms": 5000,
+    "complete_max": 1,
+    "directory_created_by_prepare_only": true,
+    "max_end_to_end_ms": 30000,
+    "mcp_verification_transactions_max": 1,
+    "no_manual_chat_relay": true,
+    "prepare_max": 1,
+    "same_worker_mcp_and_ssh": true,
+    "source_auth_business_reads": 0,
+    "source_snapshot_claims": 0,
+    "state_directory": "/root/bron-secrets/t50-mcp-readiness",
+    "target_writes": 0
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t50-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T50-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "task": "T50",
+  "verification": {
+    "focused_tests": "12/12 PASS",
+    "independent_review": "PASS",
+    "production_or_source_execution": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
