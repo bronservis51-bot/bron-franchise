@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Install one public cloud-worker key; never alter SSH service or existing keys."""
+import base64
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import shlex
+import stat
+import sys
+
+PUBLIC_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMzMUVA2QALEVapG+z8ol6N0weDxRWUncbDltrB+zc2E bron-release-cloud-20261116'
+KEY_TYPE, KEY_BODY, _ = PUBLIC_KEY.split(' ', 2)
+AUTHORIZED_LINE = ('restrict ' + PUBLIC_KEY).encode('ascii')
+FINGERPRINT = 'SHA256:' + base64.b64encode(hashlib.sha256(base64.b64decode(KEY_BODY)).digest()).decode().rstrip('=')
+MAX_BYTES = 1024 * 1024
+
+
+class Blocked(Exception):
+    pass
+
+
+def checked_dir(path, uid=0):
+    path = Path(path)
+    metadata = path.lstat()
+    if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != uid
+            or metadata.st_gid != uid or metadata.st_mode & 0o022
+            or path.resolve() != path):
+        raise Blocked('UNSAFE_DIRECTORY')
+    return path
+
+
+def read_at(directory_fd, name, uid=0):
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+    try:
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != uid
+                or metadata.st_gid != uid or metadata.st_nlink != 1
+                or metadata.st_mode & 0o022 or metadata.st_size > MAX_BYTES):
+            raise Blocked('UNSAFE_AUTHORIZED_KEYS')
+        with os.fdopen(fd, 'rb', closefd=False) as source:
+            contents = source.read(MAX_BYTES + 1)
+        if len(contents) != metadata.st_size:
+            raise Blocked('AUTHORIZED_KEYS_CHANGED')
+        signature = (metadata.st_dev, metadata.st_ino, metadata.st_size,
+                     metadata.st_mtime_ns, metadata.st_ctime_ns)
+        return contents, signature
+    finally:
+        os.close(fd)
+
+
+def write_exclusive(directory_fd, name, contents):
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                 0o600, dir_fd=directory_fd)
+    with os.fdopen(fd, 'wb') as destination:
+        os.fchmod(destination.fileno(), 0o600)
+        destination.write(contents)
+        destination.flush()
+        os.fsync(destination.fileno())
+    os.fsync(directory_fd)
+
+
+def existing_matches(contents):
+    matches = []
+    for line in contents.splitlines():
+        if not line.strip() or line.lstrip().startswith(b'#'):
+            continue
+        try:
+            fields = shlex.split(line.decode('utf-8', 'surrogateescape'))
+        except ValueError:
+            continue  # Preserve unrelated existing lines verbatim.
+        for position in (0, 1):
+            if len(fields) > position + 1 and fields[position:position + 2] == [KEY_TYPE, KEY_BODY]:
+                matches.append(line)
+                break
+    return matches
+
+
+def install(home=Path('/root'), uid=0):
+    home = checked_dir(home, uid)
+    ssh = home / '.ssh'
+    try:
+        ssh.mkdir(mode=0o700)
+        fd = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except FileExistsError:
+        pass
+    checked_dir(ssh, uid)
+    directory_fd = os.open(ssh, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    lock_fd = None
+    temporary = None
+    try:
+        lock_fd = os.open('.bron-cloud-key.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+                          0o600, dir_fd=directory_fd)
+        metadata = os.fstat(lock_fd)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != uid
+                or metadata.st_gid != uid or metadata.st_nlink != 1
+                or metadata.st_mode & 0o077):
+            raise Blocked('UNSAFE_INSTALL_LOCK')
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            previous, signature = read_at(directory_fd, 'authorized_keys', uid)
+            existed = True
+        except FileNotFoundError:
+            previous, signature, existed = b'', None, False
+        matches = existing_matches(previous)
+        if matches:
+            if matches == [AUTHORIZED_LINE]:
+                return {'status': 'KEY_ALREADY_PRESENT', 'fingerprint': FINGERPRINT,
+                        'previousKeysPreserved': True, 'filesChanged': False}
+            raise Blocked('KEY_ALREADY_EXISTS_WITH_DIFFERENT_OPTIONS_OR_DUPLICATE')
+        suffix = secrets.token_hex(12)
+        backup = None
+        if existed:
+            backup = 'authorized_keys.before-bron-cloud-' + suffix
+            write_exclusive(directory_fd, backup, previous)
+        updated = previous + (b'' if not previous or previous.endswith(b'\n') else b'\n') + AUTHORIZED_LINE + b'\n'
+        if len(updated) > MAX_BYTES:
+            raise Blocked('AUTHORIZED_KEYS_SIZE_BOUND')
+        temporary = '.authorized_keys.bron-cloud-' + suffix
+        write_exclusive(directory_fd, temporary, updated)
+        if read_at(directory_fd, temporary, uid)[0] != updated:
+            raise Blocked('STAGED_KEY_READBACK')
+        if existed:
+            current, current_signature = read_at(directory_fd, 'authorized_keys', uid)
+            if current != previous or current_signature != signature:
+                raise Blocked('AUTHORIZED_KEYS_CHANGED_NO_REPLACEMENT')
+            os.replace(temporary, 'authorized_keys', src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+            temporary = None
+        else:
+            # No-overwrite creation if another operator installed keys meanwhile.
+            os.link(temporary, 'authorized_keys', src_dir_fd=directory_fd,
+                    dst_dir_fd=directory_fd, follow_symlinks=False)
+            os.unlink(temporary, dir_fd=directory_fd)
+            temporary = None
+        os.fsync(directory_fd)
+        actual, _ = read_at(directory_fd, 'authorized_keys', uid)
+        if actual != updated:
+            raise Blocked('INSTALLED_KEY_READBACK_UNVERIFIED')
+        return {'status': 'KEY_INSTALLED', 'fingerprint': FINGERPRINT,
+                'previousKeysPreserved': actual.startswith(previous),
+                'keyOptions': 'restrict', 'backup': str(ssh / backup) if backup else None,
+                'sshdChanged': False, 'firewallChanged': False,
+                'serverNetworkOrDataChanged': False}
+    finally:
+        if temporary is not None:
+            try:
+                os.unlink(temporary, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        if lock_fd is not None:
+            os.close(lock_fd)
+        os.close(directory_fd)
+
+
+if __name__ == '__main__':
+    try:
+        if sys.platform != 'linux' or os.geteuid() != 0 or len(sys.argv) != 1:
+            raise Blocked('VPS_ROOT_ONLY_NO_ARGUMENTS')
+        os.umask(0o077)
+        print(json.dumps(install(), sort_keys=True))
+    except (Blocked, OSError, ValueError) as error:
+        print(json.dumps({'status': 'BLOCKED', 'code': str(error) if isinstance(error, Blocked)
+                          else type(error).__name__, 'fingerprint': FINGERPRINT}))
+        sys.exit(2)
