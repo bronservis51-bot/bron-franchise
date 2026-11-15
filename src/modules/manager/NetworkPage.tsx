@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarX, ChevronRight, Plus, Sparkles } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
-import { Button, DataState, EmptyState, PageHeader } from '../../ui';
+import { Badge, Button, DataState, EmptyState, PageHeader } from '../../ui';
+import { PARTNER_PREPARATION, st } from '../../ui/status';
 import { MonthNav } from '../revenue/components';
 import { revenueOverview, type LocationMonth } from '../revenue/api';
 import { PartnerDialog } from './PartnerDialog';
@@ -16,6 +17,10 @@ function PctBadge({ r }: { r: LocationMonth }) {
   if (r.pct === null) return <span className="faint">нет плана</span>;
   const tone = r.pct >= 100 ? 'success' : r.pct >= 80 ? 'neutral' : 'warning';
   return <span className={`badge tone-${tone}`}>{r.pct.toLocaleString('ru-RU')} %</span>;
+}
+
+function PreparationBadge({ stage }: { stage?: string | null }) {
+  return stage ? <Badge tone={st(PARTNER_PREPARATION, stage)[1]}>{st(PARTNER_PREPARATION, stage)[0]}</Badge> : null;
 }
 
 export function NetworkPage() {
@@ -59,7 +64,10 @@ export function NetworkPage() {
                 </div>
                 {[...groups.entries()].map(([pid, list]) => (
                   <div key={pid} role="rowgroup" className="net-group">
-                    <Link to={`/partners/${pid}`} className="net-partner" role="row">{list[0].partner_name}<ChevronRight size={16} aria-hidden /></Link>
+                    <Link to={`/partners/${pid}`} className="net-partner" role="row">
+                      <span className="row" style={{ minWidth: 0, flexWrap: 'wrap' }}><span style={{ overflowWrap: 'anywhere' }}>{list[0].partner_name}</span>
+                        <PreparationBadge stage={partnerList.data?.find(p => p.id === pid)?.preparation_stage} /></span>
+                      <ChevronRight size={16} style={{ flexShrink: 0 }} aria-hidden /></Link>
                     {list.map((r) => (
                       <button type="button" key={r.location_id} className="net-tr" role="row" onClick={() => navigate(`/partners/${pid}?location=${r.location_id}&month=${month}`)}>
                         <span role="cell" className="net-name"><strong>{r.location_name}</strong><span className="faint">{r.city} · {r.currency}</span></span>
@@ -81,7 +89,9 @@ export function NetworkPage() {
       {withoutPoints.length > 0 && <section className="stack" style={{marginTop:24}}>
         <h2 className="section-title">Партнёры без добавленных точек</h2>
         {withoutPoints.map(p => <Link key={p.id} to={`/partners/${p.id}`} className="read-card">
-          <span className="todo-main"><span className="todo-title">{p.name}</span><span className="todo-meta">Кабинет создан. Добавьте точку, чтобы начать учёт выручки.</span></span><ChevronRight size={18} aria-hidden />
+          <span className="todo-main"><span className="todo-title">{p.name}</span>
+            {p.preparation_stage && <span className="todo-meta">{st(PARTNER_PREPARATION, p.preparation_stage)[0]}</span>}
+            <span className="todo-meta">Кабинет создан. Добавьте точку, чтобы начать учёт выручки.</span></span><ChevronRight size={18} aria-hidden />
         </Link>)}
       </section>}
       {adding && <PartnerDialog onClose={() => setAdding(false)} onSaved={(id) => navigate(`/partners/${id}`)} />}

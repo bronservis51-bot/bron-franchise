@@ -47,8 +47,8 @@ export function LoginPage() {
         <span className="big-mark"><LogoMark height={340} /></span>
         <div style={{ position: 'relative' }}>
           <LogoFull height={52} />
-          <h1>Кабинет франчайзи</h1>
-          <p>База знаний и выручка точки: инструкции и регламенты, план на месяц и итог продаж за каждый день.</p>
+          <h1>Кабинет Бронь Сервис</h1>
+          <p>Для франчайзи и сотрудников сети.</p>
         </div>
         <div className="faint" style={{ position: 'relative', color: '#6f7076' }}>© Бронь Сервис</div>
       </aside>
@@ -58,7 +58,6 @@ export function LoginPage() {
           <ServerStatus s={server} onRetry={recheck} />
           <div className="card"><div className="card-body">{form()}</div></div>
           <div style={{ marginTop: 12 }}><InstallButton /></div>
-          <p className="faint" style={{ marginTop: 16 }}>Доступ выдаёт менеджер по франшизе. Самостоятельная регистрация отключена.</p>
           <p className="faint">Версия от {new Date(import.meta.env.VITE_BUILD_TIME ?? Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
           <a href={`${import.meta.env.BASE_URL}help.html`} target="_blank" rel="noopener noreferrer">Помощь при сбое</a>
         </div>

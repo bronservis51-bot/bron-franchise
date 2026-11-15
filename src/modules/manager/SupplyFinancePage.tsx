@@ -9,6 +9,7 @@ import { ActionError, Button, Card, DataState, PageHeader, Select } from '../../
 import { MonthNav } from '../revenue/components';
 import { revenueOverview } from '../revenue/api';
 import { royaltySummary } from './api';
+import { RoyaltyPage } from './RoyaltyPage';
 
 interface SupplyRow { partner_id: string; partner_name: string; mapped_count: number; counterparties: string[]; sales_minor: number; cost_minor: number; profit_minor: number }
 interface Unmapped { counterparty_id: string; name: string; sales_minor: number; cost_minor: number; profit_minor: number }
@@ -16,6 +17,17 @@ interface SupplySnapshot { month: string; fetched_at: string | null; period_to: 
 const money = (n: number | string | undefined, c = 'RUB') => n === undefined ? '—' : formatMoneyShort(n, c);
 
 export function SupplyFinancePage() {
+  const [section, setSection] = useState<'overview' | 'royalty'>('overview');
+  return <>
+    <div className="chips" role="group" aria-label="Раздел экономики">
+      <button type="button" className="chip" aria-pressed={section === 'overview'} onClick={() => setSection('overview')}>Сводка франшизы</button>
+      <button type="button" className="chip" aria-pressed={section === 'royalty'} onClick={() => setSection('royalty')}>Роялти</button>
+    </div>
+    {section === 'royalty' ? <RoyaltyPage /> : <FranchiseOverview />}
+  </>;
+}
+
+function FranchiseOverview() {
   const [month, setMonth] = useState(monthStart());
   const q = useQuery({ queryKey: ['supply', month], queryFn: () => command<SupplySnapshot>('manager_supply_snapshot', { month }) });
   const rev = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });

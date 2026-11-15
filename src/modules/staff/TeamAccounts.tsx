@@ -1,58 +1,99 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { command,from,rows } from '../../platform/backend';
+import { command, from, rows } from '../../platform/backend';
 import { useSession } from '../../platform/session';
-import { Button, Checkbox, ConfirmDialog, DataState, Field, Input, PageHeader } from '../../ui';
+import { dayLabel, monthStart } from '../../platform/dates';
+import { formatMoneyShort } from '../../platform/money';
+import { Button, Card, Checkbox, ConfirmDialog, DataState, Field, Input, PageHeader, Select } from '../../ui';
 import { StaffHome } from './StaffHome';
 import { OrderCard } from '../orders/OrderLink';
-import { formatPhone, randomPassword, userSetPassword } from './api';
+import { MonthNav } from '../revenue/components';
+import { formatPhone, randomPassword, staffList, userSetPassword, type StaffRow } from './api';
 
-type Team = {user_id:string; full_name:string; phone:string; active:boolean};
+type Team = { user_id: string; full_name: string; phone: string; active: boolean; location_ids: string[]; location_names: string[] };
+type TeamAction = 'new' | 'assign' | { type: 'password' | 'active'; user: Team } | {type:'scope';user:Team};
+type RevenuePoint = {location_id:string; location_name:string; currency:string; total_minor:number; days:{day:string;total_minor:number}[]};
 export function TeamHome() {
-  const { me,can } = useSession();
+  const { me, can } = useSession();
+  const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee_manager')?.scope_id;
   return <div className="home"><PageHeader title={me?.user.full_name ?? 'Главная'} /><OrderCard />
-    {can('shift.work') && <StaffHome />}<div className="stack"><Link className="read-card" to="/staff">Сотрудники</Link><Link className="read-card" to="/kb">База знаний</Link></div></div>;
+    {can('shift.work') && <StaffHome />}{partner && <TeamRevenue partner={partner} />}
+    <div className="stack"><Link className="read-card" to="/staff">Сотрудники</Link><Link className="read-card" to="/kb">База знаний</Link></div></div>;
 }
-export function TeamAccounts({partner}:{partner:string}) {
-  const {can}=useSession(); const qc=useQueryClient();
-  const [action,setAction]=useState<'new'|{type:'password'|'active';user:Team}|null>(null);
-  const q=useQuery({queryKey:['team',partner],enabled:can('team.manage'),queryFn:()=>command<Team[]>('team_list',{partner})});
-  if(!can('team.manage')) return null;
-  return <details className="team-accounts"><summary>Управляющие</summary>
-    <p className="faint">Могут заказывать материалы, добавлять и удалять сотрудников. Доступа к управлению всей сетью нет.</p>
-    <Button size="sm" onClick={()=>setAction('new')}>Добавить управляющего</Button>
-    <DataState query={q}>{list=><ul className="list">{list.map(u=><li key={u.user_id} className="access-row row between">
-      <span><strong>{u.full_name}</strong><span className="faint"> · {u.active?'доступ открыт':'доступ закрыт'}</span></span>
-      <div className="row">{u.active && <Button size="sm" onClick={()=>setAction({type:'password',user:u})}>Пароль</Button>}
-        <Button size="sm" onClick={()=>setAction({type:'active',user:u})}>{u.active?'Закрыть доступ':'Вернуть доступ'}</Button></div>
+function TeamRevenue({partner}:{partner:string}) {
+  const [month,setMonth]=useState(monthStart());
+  const q=useQuery({queryKey:['team-revenue',partner,month],queryFn:()=>command<RevenuePoint[]>('team_revenue_month',{partner,month})});
+  return <section className="stack"><h2>Выручка моих точек</h2><MonthNav month={month} onChange={setMonth} max={monthStart()}/>
+    <DataState query={q}>{points=>points.length?points.map(p=><Card key={p.location_id}>
+      <div className="row between"><strong>{p.location_name}</strong><strong className="num">{formatMoneyShort(p.total_minor,p.currency)}</strong></div>
+      <details><summary>По дням · {p.days.length} отчётов</summary><ul className="list">{p.days.map(d=><li key={d.day} className="row between"><span>{dayLabel(d.day)}</span><span className="num">{formatMoneyShort(d.total_minor,p.currency)}</span></li>)}</ul></details>
+      {!p.days.length&&<p className="faint">Выручка за этот месяц ещё не внесена.</p>}
+    </Card>):<p className="faint">Франчайзи ещё не назначил точки управления.</p>}</DataState>
+  </section>;
+}
+export function TeamAccounts({ partner }: { partner: string }) {
+  const { can } = useSession(); const qc = useQueryClient();
+  const [action, setAction] = useState<TeamAction | null>(null);
+  const [historyOpen,setHistoryOpen]=useState(false);
+  const q = useQuery({ queryKey: ['team', partner], enabled: can('team.manage'), queryFn: () => command<Team[]>('team_list', { partner }) });
+  const history=useQuery({queryKey:['staff-access-history',partner],enabled:can('team.manage')&&historyOpen,
+    queryFn:()=>command<{id:number;at:string;action:string;actor_name:string|null;user_name:string|null}[]>('staff_access_history',{partner})});
+  if (!can('team.manage')) return null;
+  const actionLabel:Record<string,string>={'team.create':'Создан доступ управляющего','staff.create':'Создан доступ','staff.update':'Изменён профиль','staff.access':'Изменены роль или точки','user.password':'Изменён пароль','staff.remove':'Доступ закрыт','staff.restore':'Доступ возвращён','team.active':'Изменён доступ','staff.active':'Изменён доступ','team.remove':'Доступ закрыт','team.restore':'Доступ возвращён'};
+  return <details className="team-accounts"><summary>Управляющие и доступы</summary>
+    <p className="faint">Управляющий видит выручку и сотрудников назначенных точек, заказывает материалы своей компании. Точки можно менять; график работы не фиксирован.</p>
+    <div className="row"><Button size="sm" onClick={() => setAction('assign')}>Назначить сотрудника</Button><Button size="sm" onClick={() => setAction('new')}>Новый управляющий</Button></div>
+    <DataState query={q}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
+      <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
+      <div className="row">{u.active && <><Button size="sm" onClick={() => setAction({ type: 'scope', user: u })}>Точки и роль</Button><Button size="sm" onClick={() => setAction({ type: 'password', user: u })}>Пароль</Button></>}
+        <Button size="sm" onClick={() => setAction({ type: 'active', user: u })}>{u.active ? 'Закрыть доступ' : 'Вернуть доступ'}</Button></div>
     </li>)}</ul>}</DataState>
-    {action && <TeamDialog partner={partner} action={action} onClose={()=>{setAction(null);void qc.invalidateQueries({queryKey:['team',partner]});}} />}
+    <details onToggle={e=>setHistoryOpen(e.currentTarget.open)}><summary>История доступа</summary><DataState query={history}>{list=><ul className="list">{list.map(a=><li key={a.id}><strong>{actionLabel[a.action]??'Изменён доступ'}</strong> · {a.user_name??'Сотрудник'}<span className="faint" style={{display:'block'}}>{new Date(a.at).toLocaleString('ru-RU')} · {a.actor_name??'Система'}</span></li>)}{!list.length&&<li>Изменений доступа пока нет.</li>}</ul>}</DataState></details>
+    {action && (action==='assign'||typeof action==='object'&&action.type==='scope'
+      ? <StaffAccessDialog partner={partner} user={typeof action==='object'?action.user:undefined} onClose={()=>{setAction(null);void qc.invalidateQueries({queryKey:['team',partner]});void qc.invalidateQueries({queryKey:['staff-list']});void qc.invalidateQueries({queryKey:['staff-access-history',partner]});}}/>
+      : <TeamDialog partner={partner} action={action} onClose={() => { setAction(null); void qc.invalidateQueries({ queryKey: ['team', partner] });void qc.invalidateQueries({queryKey:['staff-access-history',partner]}); }} />)}
   </details>;
 }
-function TeamDialog({partner,action,onClose}:{partner:string;action:'new'|{type:'password'|'active';user:Team};onClose:()=>void}) {
-  const [name,setName]=useState(''); const [phone,setPhone]=useState(''); const [password,setPassword]=useState(randomPassword);
-  const [done,setDone]=useState(false);
-  const [selected,setSelected]=useState<string[]>([]);
-  const locations=useQuery({queryKey:['team-locations',partner],enabled:action==='new',queryFn:()=>rows<{id:string;name:string}>(from('location').select('id,name').eq('partner_id',partner).eq('status','active'))});
-  const access=action!=='new'&&action.type==='active';
-  const m=useMutation({mutationFn:async()=>{
-    if(action==='new') await command('staff_account_create',{partner,full_name:name.trim(),login:phone,password,locations:selected,manager:true});
-    else if(action.type==='active') await command('team_set_active',{partner,user:action.user.user_id,active:!action.user.active});
-    else await userSetPassword(action.user.user_id,password);
-  },onSuccess:()=>access?onClose():setDone(true)});
-  if(done) return <ConfirmDialog open title="Доступ готов" confirmLabel="Готово" onConfirm={onClose} onClose={onClose}>
-    <p>Передайте управляющему данные для входа. Пароль повторно не показывается.</p>
-    <div className="login-card-data"><div>Логин: <strong>{formatPhone(action==='new'?phone:action.user.phone)}</strong></div><div>Пароль: <strong className="mono">{password}</strong></div></div>
+function StaffAccessDialog({partner,user,onClose}:{partner:string;user?:Team;onClose:()=>void}) {
+  const {me}=useSession();
+  const [selectedUser,setSelectedUser]=useState(user?.user_id??'');
+  const [selected,setSelected]=useState<string[]>(user?.location_ids??[]);
+  const [manager,setManager]=useState(true);
+  const employees=useQuery({queryKey:['staff-list',partner,monthStart()],queryFn:()=>staffList(partner,monthStart())});
+  const locations=useQuery({queryKey:['team-locations',partner],queryFn:()=>rows<{id:string;name:string}>(from('location').select('id,name').eq('partner_id',partner).eq('status','active'))});
+  const m=useMutation({mutationFn:()=>command('staff_access_set',{partner,user:selectedUser,manager,locations:selected}),onSuccess:onClose});
+  const selectEmployee=(id:string)=>{setSelectedUser(id);const employee=employees.data?.find(s=>s.user_id===id);setSelected(employee?.location_ids??[]);};
+  return <ConfirmDialog open title={user?'Роль и точки управляющего':'Назначить управляющего'} confirmLabel="Сохранить" onConfirm={()=>m.mutate()} onClose={onClose} busy={m.isPending} error={m.error} disabled={!selectedUser||!selected.length}>
+    {user?<p>{user.full_name}</p>:<Field label="Сотрудник" required>{id=><Select id={id} value={selectedUser} onChange={e=>selectEmployee(e.target.value)}><option value="">Выберите сотрудника</option>{employees.data?.filter((s:StaffRow)=>s.active&&s.user_id!==me?.user.id&&s.can_manage!==false).map(s=><option key={s.user_id} value={s.user_id}>{s.full_name}</option>)}</Select>}</Field>}
+    <Checkbox label="Управляющий" checked={manager} onChange={setManager}/>
+    <Field label="Точки работы и управления" required>{()=>locations.data?.map(l=><Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v=>setSelected(v?[...selected,l.id]:selected.filter(x=>x!==l.id))}/>)}</Field>
+    <p className="faint">Действующие сеансы сотрудника завершатся. После повторного входа будут действовать новые права. Смены и начисления сохранятся. Без роли управляющего остаётся обычный доступ сотрудника.</p>
   </ConfirmDialog>;
-  return <ConfirmDialog open title={action==='new'?'Новый управляющий':access?(action.user.active?'Закрыть доступ?':'Вернуть доступ?'):'Новый пароль'}
-    confirmLabel={access?'Подтвердить':'Сохранить'} onConfirm={()=>m.mutate()} onClose={onClose} busy={m.isPending} error={m.error}
-    disabled={!access && (password.length<6 || action==='new'&&(!name.trim()||!/^[a-z][a-z0-9._-]{1,39}$/.test(phone)||!selected.length))}>
+}
+function TeamDialog({ partner, action, onClose }: { partner: string; action: 'new' | { type: 'password' | 'active'; user: Team }; onClose: () => void }) {
+  const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [password, setPassword] = useState(randomPassword);
+  const [done, setDone] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const locations = useQuery({ queryKey: ['team-locations', partner], enabled: action === 'new', queryFn: () => rows<{ id: string; name: string }>(from('location').select('id,name').eq('partner_id', partner).eq('status', 'active')) });
+  const access = action !== 'new' && action.type === 'active';
+  const m = useMutation({ mutationFn: async () => {
+    if (action === 'new') await command('staff_account_create', { partner, full_name: name.trim(), login: phone, password, locations: selected, manager: true });
+    else if (action.type === 'active') await command('team_set_active', { partner, user: action.user.user_id, active: !action.user.active });
+    else await userSetPassword(action.user.user_id, password);
+  }, onSuccess: () => access ? onClose() : setDone(true) });
+  if (done) return <ConfirmDialog open title="Доступ готов" confirmLabel="Готово" onConfirm={onClose} onClose={onClose}>
+    <p>Передайте управляющему данные для входа. Пароль повторно не показывается.</p>
+    <div className="login-card-data"><div>Логин: <strong>{formatPhone(action === 'new' ? phone : action.user.phone)}</strong></div><div>Пароль: <strong className="mono">{password}</strong></div></div>
+  </ConfirmDialog>;
+  return <ConfirmDialog open title={action === 'new' ? 'Новый управляющий' : access ? (action.user.active ? 'Закрыть доступ?' : 'Вернуть доступ?') : 'Новый пароль'}
+    confirmLabel={access ? 'Подтвердить' : 'Сохранить'} onConfirm={() => m.mutate()} onClose={onClose} busy={m.isPending} error={m.error}
+    disabled={!access && (password.length < 6 || action === 'new' && (!name.trim() || !/^[a-z][a-z0-9._-]{1,39}$/.test(phone) || !selected.length))}>
     {access ? <p>История сохранится. Для следующего входа понадобится заново ввести логин и пароль.</p> : <>
-      {action==='new'&&<><Field label="Имя" required>{id=><Input id={id} value={name} onChange={e=>setName(e.target.value)}/>}</Field>
-        <Field label="Короткий логин" required>{id=><Input id={id} value={phone} onChange={e=>setPhone(e.target.value)}/>}</Field></>}
-      {action==='new'&&<Field label="Точки работы" required>{()=>locations.data?.map(l=><Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v=>setSelected(v?[...selected,l.id]:selected.filter(x=>x!==l.id))}/>)}</Field>}
-      <Field label="Пароль" required>{id=><Input id={id} value={password} onChange={e=>setPassword(e.target.value)}/>}</Field>
+      {action === 'new' && <><Field label="Имя" required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>
+        <Field label="Короткий логин" required>{id => <Input id={id} value={phone} onChange={e => setPhone(e.target.value)} />}</Field></>}
+      {action === 'new' && <Field label="Точки работы и управления" required>{() => locations.data?.map(l => <Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v => setSelected(v ? [...selected, l.id] : selected.filter(x => x !== l.id))} />)}</Field>}
+      <Field label="Пароль" required>{id => <Input id={id} value={password} onChange={e => setPassword(e.target.value)} />}</Field>
     </>}
   </ConfirmDialog>;
 }

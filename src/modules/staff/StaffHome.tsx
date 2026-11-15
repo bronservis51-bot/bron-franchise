@@ -5,13 +5,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Check, ChevronRight, Clock, Play, Square, Wallet } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
-import { dayLabel, monthLabel } from '../../platform/dates';
+import { dayLabel, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, sumMinor } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox } from '../../ui';
 import { useToast } from '../../ui/toast';
 import {onOutboxChange,queuedOps} from '../../platform/outbox';
 import { pctBp, shiftCancel, shiftClose, shiftOpen, staffHome, type Shift, type StaffHomeData } from './api';
+import { MonthNav } from '../revenue/components';
+
+/** Advisory UI only: the server checks its clock after locking the shift. */
+function canCorrect(shift: Shift) {
+  return shift.status === 'closed' && !!shift.closed_at && Date.now() < Date.parse(shift.closed_at) + 5 * 60_000;
+}
 
 function since(iso: string) {
   const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -48,10 +54,10 @@ function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
         <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} requireExplicitValue onValidityChange={setCardValid} currency={currency} placeholder="0" />}</Field>
       </div>
       {total===0n&&<Checkbox label="Подтверждаю: продаж за эту смену не было" checked={zero} onChange={setZero}/>}
-      {editing&&<p className="faint">Если закрыли раньше времени, внесите здесь полный итог своей смены в конце дня. Новая смена и второй фикс не создаются.</p>}
+      {editing&&<p className="faint">Исправить выручку можно в течение 5 минут после первой сдачи. Изменение сохранится в истории; позже обратитесь к руководителю. Новая смена и второе начисление не создаются.</p>}
       <div className="day-total-line"><span>Выручка смены</span><Money minor={total} currency={currency} strong /></div>
       <div className="earn-line"><Wallet size={18} aria-hidden /><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
-      <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Сумма по ступени кассы: максимум фикса или процента, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
+      <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Больше из гарантированного минимума и процента от выручки, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
       <Field label="Комментарий">{(id) => <Input id={id} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />}</Field>
     </ConfirmDialog>
   );
@@ -61,8 +67,9 @@ export function StaffHome() {
   const { me } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
-  useTick(60_000);
-  const q = useQuery({ queryKey: ['staff', 'home'], queryFn: () => staffHome(null), refetchInterval: 120_000 });
+  useTick(10_000);
+  const [month, setMonth] = useState<string | null>(null);
+  const q = useQuery({ queryKey: ['staff', 'home', month], queryFn: () => staffHome(month), refetchInterval: 120_000 });
   const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string }[]>('kb_to_read') });
   const [opening,setOpening]=useState<StaffHomeData['locations'][number]|null>(null);
   const [cancelling,setCancelling]=useState<Shift|null>(null);
@@ -110,10 +117,10 @@ export function StaffHome() {
             ) : d.locations.length ? (
               <section className="stack">
                 {d.locations.map((l) => l.my_today ? (
-                  <button key={l.location_id} type="button" disabled={!!queuedShift(l.my_today.id)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
+                  <button key={l.location_id} type="button" disabled={!!queuedShift(l.my_today.id)||!canCorrect(l.my_today)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
                     <span className="ok-icon"><Check size={18} aria-hidden /></span>
                     <span>{l.location_name}: смена закрыта, заработано <strong>{formatMoneyShort(l.my_today.earned_minor ?? 0, l.currency)}</strong></span>
-                    <span className="faint">исправить суммы</span>
+                    <span className="faint">{canCorrect(l.my_today) ? 'исправить в течение 5 минут' : 'для исправления обратитесь к руководителю'}</span>
                   </button>
                 ) : (
                   <Button key={l.location_id} variant="primary" block className="btn-lg" disabled={open.isPending} onClick={() => setOpening(l)}>
@@ -127,10 +134,11 @@ export function StaffHome() {
             <ActionError error={open.error ?? cancel.error} />
             {d.open_shift&&queuedShift(d.open_shift.id)&&<p role="status">Итог ожидает отправки. Не закрывайте смену повторно; состояние обновится после подтверждения сервера.</p>}
             <section className="plan-card earn-card" aria-label="Заработок за месяц">
+              <MonthNav month={d.month} max={monthStart()} onChange={value=>{setMonth(value);setResult(null);}} />
               <div className="plan-label">Заработано за {monthLabel(d.month, false)}</div>
               <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
               <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
-              <div className="plan-foot"><span>{d.use_partner_motivation ? 'По ступеням кассы: фикс или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>
+              <div className="plan-foot"><span>{d.pay_policy && !('mode' in d.pay_policy) ? 'По ступеням кассы: минимум или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>
             </section>
 
             {Boolean(toRead.data?.length) && (
@@ -166,7 +174,7 @@ export function StaffHome() {
       {closing && q.data && (
         <CloseDialog shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
           onClose={() => setClosing(null)}
-          onDone={(earned, month) => { setClosing(null); setResult({ earned, month }); void qc.invalidateQueries({ queryKey: ['staff'] }); }} />
+          onDone={(earned, month) => { setClosing(null); setMonth(null); setResult({ earned, month }); void qc.invalidateQueries({ queryKey: ['staff'] }); }} />
       )}
     </div>
   );

@@ -6,7 +6,7 @@ import { Edit3, KeyRound, Landmark, Plus, Target, UserPlus, X } from 'lucide-rea
 import { monthStart } from '../../platform/dates';
 import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 import { PartnerCardPanel } from './PartnerCard';
-import { PARTNER_STATUS, st } from '../../ui/status';
+import { PARTNER_PREPARATION, PARTNER_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
 import { DayList, MonthNav, PlanCard } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
@@ -99,7 +99,9 @@ export function PartnerPage() {
       {() => partner && (
         <>
           <PageHeader back={{ to: '/', label: 'Франчайзи' }} title={partner.name}
-            sub={<span className="row"><Badge tone={st(PARTNER_STATUS, partner.status)[1]}>{st(PARTNER_STATUS, partner.status)[0]}</Badge><span>{partner.currency}</span></span>}
+            sub={<span className="row"><Badge tone={st(PARTNER_STATUS, partner.status)[1]}>{st(PARTNER_STATUS, partner.status)[0]}</Badge>
+              {partner.preparation_stage && <Badge tone={st(PARTNER_PREPARATION, partner.preparation_stage)[1]}>{st(PARTNER_PREPARATION, partner.preparation_stage)[0]}</Badge>}
+              <span>{partner.currency}</span></span>}
             actions={<>
               <Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти</Link>
               <Button onClick={() => setEditing(true)}><Edit3 size={16} aria-hidden />Изменить</Button>

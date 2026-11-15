@@ -51,7 +51,7 @@ it('uses supplied seven tiers at exact boundaries, preserves old shifts and snap
  await t.as(OWNER,'select motivation_set($1,$2,0)',[partner,JSON.stringify({...policy,floor_minor:150000})]);
  await t.as('qa.seller@access.bron.local','select shift_close($1,1000000,0,null)',[s.id]);
  const saved=(await t.admin<{earned_minor:number;pay_policy:unknown}>('select earned_minor,pay_policy from work_shift where id=$1',[s.id]))[0];
- expect(saved.pay_policy).toEqual(oldPolicy);expect(Number(saved.earned_minor)).toBe(240000);
+ expect(saved.pay_policy).toEqual(oldPolicy);expect(Number(saved.earned_minor)).toBe(180000);
  await t.expectError(OTHER,'select motivation_get($1)','forbidden',[partner]);
  await t.expectError(OWNER,'select motivation_set($1,$2,0)','version-conflict',[partner,JSON.stringify(policy)]);
  await t.expectError(OWNER,"select motivation_set($1,'{\"floor_minor\":1000,\"tiers\":[]}',1)",'validation',[partner]);

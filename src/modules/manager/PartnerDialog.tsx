@@ -7,14 +7,16 @@ import { useToast } from '../../ui/toast';
 import { planSet } from '../revenue/api';
 import { accessGrant, accountCreate, countries, locationSave, partnerSave, type Location, type Partner } from './api';
 import { randomPassword, userSetPassword } from '../staff/api';
+import { PARTNER_PREPARATION } from '../../ui/status';
 
 export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
   const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity });
   const [f, setF] = useState({ name: partner?.name ?? '', country: partner?.country ?? 'RU', contact_name: partner?.contact_name ?? '',
-    contact_phone: partner?.contact_phone ?? '', contact_email: partner?.contact_email ?? '', status: partner?.status ?? 'active' });
+    contact_phone: partner?.contact_phone ?? '', contact_email: partner?.contact_email ?? '', status: partner?.status ?? 'active',
+    preparation_stage: partner?.preparation_stage ?? '' });
   const m = useMutation({
-    mutationFn: () => partnerSave({ id: partner?.id ?? null, ...f }),
+    mutationFn: () => partnerSave({ id: partner?.id ?? null, ...f, preparation_stage: f.preparation_stage || null }),
     onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -34,6 +36,12 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
           </Select>
         )}</Field>}
       </div>
+      <Field label="Этап подготовки" hint="Меняется свободно; не отключает доступ и работу точек">{(id) => (
+        <Select id={id} value={f.preparation_stage} onChange={set('preparation_stage')}>
+          <option value="">Не указан</option>
+          {Object.entries(PARTNER_PREPARATION).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
+        </Select>
+      )}</Field>
       <Field label="Контактное лицо">{(id) => <Input id={id} value={f.contact_name} onChange={set('contact_name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Телефон">{(id) => <Input id={id} type="tel" value={f.contact_phone} onChange={set('contact_phone')} />}</Field>

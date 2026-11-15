@@ -1,6 +1,7 @@
 import { command, from, rows } from '../../platform/backend';
 
 export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string;
+  preparation_stage?: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null;
   /** Ссылка контрагента в МойСклад для заказа материалов. */
   order_url: string | null }
@@ -12,8 +13,8 @@ export const partners = () => rows<Partner>(from('partner').select('*').order('n
 export const locationsOf = (partner: string) => rows<Location>(from('location').select('*').eq('partner_id', partner).order('name'));
 export const countries = () => rows<Country>(from('country').select('code, name, default_currency').order('name'));
 
-export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string }) =>
-  command<string>('partner_save', p);
+export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null }) =>
+  command<string>('partner_save_preparation', p);
 export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null }) =>
   command<string>('location_save', l);
 

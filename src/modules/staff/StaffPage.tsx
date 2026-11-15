@@ -78,13 +78,13 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
       <Field label="Статус сотрудника">{id=><Select id={id} value={kind} onChange={e=>setKind(e.target.value as 'employee'|'trainee')}><option value="employee">Менеджер продаж</option><option value="trainee">Стажёр</option></Select>}</Field>
       {kind==='trainee'&&<>
         <div className="grid grid-2"><Field label="Начало стажировки">{id=><Input id={id} type="date" value={start} onChange={e=>setStart(e.target.value)}/>}</Field><Field label="Последний день" hint="Пусто — один календарный месяц">{id=><Input id={id} type="date" value={until} onChange={e=>setUntil(e.target.value)}/>}</Field></div>
-        <Field label={`Фикс стажёра за смену, ${currency}`} hint="Фикс или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
+        <Field label={`Минимум стажёра за смену, ${currency}`} hint="Минимум или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
         <p className="faint">После последнего дня действуют обычные условия ниже. Статус не закрывает доступ и не подтверждает практические навыки автоматически.</p>
       </>}
       <Checkbox label="Обучение для сотрудника включено" checked={learningEnabled} onChange={setLearningEnabled}/>
-      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="По общей схеме: фикс или процент, плюс премия" />
+      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="Минимум или процент (большее), плюс премия" />
       {!usePartner && <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label={`За выход, ${currency}`} hint="Фикс за смену">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
+        <Field label={`За выход, ${currency}`} hint="Фикс за смену суммируется с процентом">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
         <Field label="% от выручки смены">{(id) => <Input id={id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
       </div>
       }
@@ -179,11 +179,12 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     </div>
                   </div>
                   <div className="row" style={{ marginTop: 10 }}>
-                    {s.user_id!==me?.user.id && (s.active ? <>
+                    {s.user_id!==me?.user.id && s.can_manage!==false && (s.active ? <>
                       <Button size="sm" variant="ghost" onClick={() => setEdit(s)}><Pencil size={14} aria-hidden />Изменить</Button>
                       <Button size="sm" variant="ghost" onClick={() => setPw(s)}><KeyRound size={14} aria-hidden />Пароль</Button>
                       <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}><UserMinus size={14} aria-hidden />Удалить</Button>
                     </> : <Button size="sm" variant="ghost" loading={setActive.isPending} onClick={() => setActive.mutate({ user: s.user_id, active: true })}><UserRoundCheck size={14} aria-hidden />Вернуть</Button>)}
+                    {s.can_manage===false&&s.user_id!==me?.user.id&&<span className="faint">Доступ и общие условия меняет франчайзи</span>}
                     {s.shifts.length > 0 && (
                       <Button size="sm" variant="ghost" onClick={() => setOpen(open === s.user_id ? null : s.user_id)}>
                         {open === s.user_id ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}Смены

@@ -1,6 +1,6 @@
 // Меню по роли. Франчайзи: главная, сотрудники, рейтинг (только в России), финансы (вкл. роялти), база знаний. Сотрудник: смена и база знаний.
 // Менеджер: франчайзи, заявки с сайта, роялти, рейтинг, база знаний.
-import { BookOpen, GraduationCap, Clock, Home, Inbox, Landmark, Store, Trophy, Users, Wallet } from 'lucide-react';
+import { BookOpen, GraduationCap, Clock, Home, Inbox, Landmark, Store, ShoppingCart, Trophy, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export interface NavItem {
@@ -23,7 +23,7 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
   if (role === 'support') return [{to:'/',label:'Вопросы',icon:Inbox,badge:'kb'},{to:'/kb',label:'Знания',icon:BookOpen}];
-  if (role === 'team') return [training,{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
+  if (role === 'team') return [training,{to:'/order',label:'Заказы',icon:ShoppingCart},{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
   if (role === 'staff') return [
     { to: '/', label: 'Смена', icon: Clock },
     training,
