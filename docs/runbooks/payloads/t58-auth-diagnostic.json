@@ -1,0 +1,133 @@
+{
+  "format": 1,
+  "task": "T58",
+  "actionId": "T58.auth_diagnostic",
+  "execution_authorized": true,
+  "approval": {
+    "status": "APPROVED",
+    "document_sha256": "2d3dd423b2dced4b7f768d62c0b00e7f46675f8c7b27c53322a5e9c7142a5558",
+    "maxTotal": 3,
+    "priorUsed": 2,
+    "diagnosticSnapshots": 1,
+    "repurposeUnusedOriginalSlot": true,
+    "credentialDerivedColumnDigests": true,
+    "encryptedToVpsRamOnly": true,
+    "rawAuthValues": false,
+    "targetWrites": false,
+    "futureFinalsAuthorized": false
+  },
+  "source": {
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "protocol": "BRON_AUTH_DIAGNOSTIC_V1",
+    "template_name_prefix": "bron-auth-diag-"
+  },
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "user": "root",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true
+  },
+  "checklist": "docs/runbooks/t58-auth-diagnostic.md",
+  "files": {
+    "docs/runbooks/payloads/t58-auth-diagnostic.mjs": "925bf9bd1a08c3ce2d7f3e3f0231f16d2edd0ecfb1505822a71bf546eccd3df8",
+    "docs/runbooks/payloads/t58-auth-diagnostic-core.mjs": "6bd4e44d1284e80dbf89b1b56d949a2f38fbd2bc2c0b5935fcec82af2ae52749",
+    "docs/runbooks/payloads/t58-encrypt-diagnostic.mjs": "77dda3d2083d64a646d8efa6906191c855d968bd12fa1c3d4032182d460a6a9a",
+    "docs/runbooks/payloads/source-auth-diagnostic/index.ts": "f21c5a67ac7374d3627428a69d30e6598c593731c7f4fa133bb33a25c9a41250",
+    "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/source-transfer-budget.mjs": "244b9e080978e76c941a7df4757c4ccc08163f6ca6a1a3f40a37b8153c7188d7",
+    "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "docs/runbooks/owner-t58-auth-diagnostic-approval.md": "2d3dd423b2dced4b7f768d62c0b00e7f46675f8c7b27c53322a5e9c7142a5558",
+    "docs/runbooks/t58-auth-diagnostic.md": "748859acb5d87facb021442b9f41d4b0b2783b87e12587566b08c73c36bcdc82",
+    "tests/ops/t58-auth-diagnostic-core.test.mjs": "3fa586fb3ca2360b82c23a212e6f0d50890b64c4ec689b9a55096576c1e1d227",
+    "tests/ops/t58-auth-diagnostic-transport.test.mjs": "8d5ed25b4dd02952c8cefb0a0e5166e217cde8a393af7749d0eac2ee7afff41a"
+  },
+  "deliveries": [
+    {
+      "source": "docs/runbooks/payloads/t58-auth-diagnostic.mjs",
+      "destination": "/root/bron-secrets/t58-auth-diagnostic.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t58-auth-diagnostic-core.mjs",
+      "destination": "/root/bron-secrets/t58-auth-diagnostic-core.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t58-encrypt-diagnostic.mjs",
+      "destination": "/root/bron-secrets/t58-encrypt-diagnostic.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/source-auth-diagnostic/index.ts",
+      "destination": "/root/bron-secrets/t58-release/source-index.ts.template",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t58-auth-diagnostic.json",
+      "destination": "/root/bron-secrets/t58-release/manifest.json",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t58-owner-approval.json",
+      "destination": "/root/bron-secrets/t58-release/owner-approval.json",
+      "separately_pinned_by_task": true,
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    }
+  ],
+  "runtime": {
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "version": "22.23.5",
+    "pg": "8.23.1",
+    "dependency_lock": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
+    "lock_sha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69"
+  },
+  "scope": {
+    "sourceAuthPostMax": 1,
+    "targetAuthReadOnly": true,
+    "sourceBusinessReads": 0,
+    "rawAuthValues": false,
+    "sourceDataRecipient": "RAM VPS152.228.115.115",
+    "macPrivateDataTransit": false,
+    "extensionLedger": "/root/bron-secrets/source-auth-extension-e58a2026",
+    "originalLedgerImmutable": true,
+    "globalUsedBefore": 2,
+    "globalMax": 3,
+    "sourceFenceRequired": true,
+    "maintenanceRequired": true
+  },
+  "parent": {
+    "task": "T56",
+    "status": "BLOCKED",
+    "code": "FINAL_HTTPS_NON_TIMESTAMP_OR_DIRECTION_DIFF",
+    "targetWriteOutcome": "UNCHANGED",
+    "finalGuardSha256": "ddd83ceb039df9616a0cc1f6dae3057ef044a616505c5769f44a849189ba04e7"
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t58-release-receipt.json",
+    "local_mirror": "/private/tmp/bron-release-executor-20261113/T58-state.json",
+    "mode": "0600",
+    "matching_sha256_required": true
+  },
+  "verification": {
+    "core": "12/12 Node22 tests PASS including actual PostgreSQL SQL execution on fictional data via PGlite",
+    "transport": "10/10 Node22 tests PASS; rendered TypeScript parse PASS",
+    "independent_review": "PASS; no live Source/VPS actions claimed"
+  }
+}
