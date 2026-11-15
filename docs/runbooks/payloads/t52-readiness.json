@@ -1,0 +1,147 @@
+{
+  "actionId": "T52.mcp_readiness",
+  "after_pass": "Prepare fresh pinned final-window scope with original shared ledger max3 and two remaining snapshots; no stale capability run.",
+  "checklist": "docs/runbooks/t52-baseline-ssh-readiness.md",
+  "connection": {
+    "OAuth": "ALREADY_AUTHORIZED_DO_NOT_REPEAT",
+    "approval_review": "preserve automatic review; no bypass",
+    "arguments": [
+      "query"
+    ],
+    "native_tool": "execute_sql",
+    "network": "existing approved workspace-write grant",
+    "project": "vkkqffvmztpzgygzfxhq",
+    "receipt_write": "existing canonical receipt parent add-dir",
+    "server": "bron-release-source"
+  },
+  "correction": {
+    "ControlMaster_required": false,
+    "complete_SSH_handshake_included": true,
+    "no_new_socket_or_master": true,
+    "prepare_SSH_handshake_precedes_metric": true,
+    "preserve_proxy_jump_identity_hostkey_and_approval_policy": true,
+    "proof_max_ms": 30000,
+    "proof_metric": "VPS nonce creation inside prepare -> durable response on VPS",
+    "use_exact_successful_child_baseline_SSH": true
+  },
+  "current_state": {
+    "T45": "CONSUMED_NO_RETRY",
+    "T49": "NOT_RUN_EXPIRED",
+    "T50": "CONSUMED_NO_RETRY",
+    "T51": "CLOSED_NO_TIMER",
+    "current_fence": "UNVERIFIED",
+    "last_confirmed_fence": "FENCED",
+    "maintenance": true,
+    "target_writes": 0
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t52-mcp-ready.py",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t52-mcp-ready.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t52-readiness.json",
+      "exclusive_create": true,
+      "fsync_and_sha_readback": true,
+      "mode": "0600",
+      "owner": "root:root",
+      "source": "docs/runbooks/payloads/t52-readiness.json"
+    }
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/mcp-fence-result.py": "7ebfdc5ed076d09c121d4efabd850113c129984a4df71a7cd9c6bae60f2353e0",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "docs/runbooks/payloads/t51-mcp-result.json": "51a2c8b3eedbd762482646989c401bf172226831d0e865969345b31825a24cff",
+    "docs/runbooks/payloads/t52-mcp-ready.py": "1d74d088617491d32fc4038054db9709932cd87841617803662426e6420cc83b",
+    "docs/runbooks/payloads/t52-mcp-response.py": "f4e48805eefe2ff5381740f8f8603c32b011577c319eda627bc94cbedbb332fe",
+    "docs/runbooks/payloads/t52-recover-mcp.py": "6c23cfc9acb84ef1d3c9b5e1113ddff64b97063fe8564e1675703780d02995a4",
+    "docs/runbooks/payloads/t52-worker-prompt.txt": "5180c31347bcfb6af77904d529c5f658ced911f03f8e8dd13a119904a544b1b4",
+    "docs/runbooks/t52-baseline-ssh-readiness.md": "b0cb49376099213ceb9aa10fdc3230e22cdbafe566c4570d60ce2186cb1ed78b"
+  },
+  "format": 1,
+  "local_paths": {
+    "capture_ready": "fresh-recorded-result.json.ready.json",
+    "capture_summary": "fresh-recorded-result.json.summary.json",
+    "private_directory": "/tmp/bron-release-executor-20261113/T52",
+    "raw": "fresh-recorded-result.json",
+    "request": "fresh-request.json",
+    "response": "response.json",
+    "state": "/tmp/bron-release-executor-20261113/T52-state.json",
+    "worker_result": "native-worker-result.json"
+  },
+  "no_owner_action_expected": true,
+  "not_authorized": [
+    "T50/T51/T45 retry or old T49 start",
+    "new ControlMaster/socket/proxy/key/known_hosts/SSH policy or approval bypass",
+    "Auth/business read or Source snapshot/capability/ledger modification",
+    "target writes/Source writes/deployment/pause/publication",
+    "new OAuth/PAT/dependencies/services/monitor dispatch",
+    "personal history recovery/closed tests or gates repeated",
+    "fabricated response/clock/deadline extension"
+  ],
+  "parent_task": {
+    "commit": "029e0e006a168f7919fa0a3032b9a0f3da813be4",
+    "complete": 0,
+    "execute_sql": 0,
+    "existing_parent_socket": "EXPIRED",
+    "manifest_sha256": "51a2c8b3eedbd762482646989c401bf172226831d0e865969345b31825a24cff",
+    "new_child_ControlMaster": "FAILED_EXIT_255",
+    "no_retry_or_timer": true,
+    "normal_child_strict_SSH": "PASS",
+    "prepare": 0,
+    "preserve_all_evidence": true,
+    "status": "BLOCKED_CONTROLMASTER_PREFLIGHT",
+    "task": "T51"
+  },
+  "phase_authorizations": {
+    "fresh_readiness": {
+      "Auth_or_business_rows": 0,
+      "MCP_rows": "exact technical status+clock only",
+      "Source_clock_skew_ms": 5000,
+      "collector_drain_until_EOF": true,
+      "complete_max": 1,
+      "execute_sql_max": 1,
+      "expiry_ms": 60000,
+      "final_parent_acceptance_requires_matchingCalls": 1,
+      "prepare_max": 1,
+      "raw_persist_before_decode": true,
+      "snapshot_attempts": 0,
+      "source_query_sha256": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+      "target_writes": 0,
+      "wall_and_monotonic_max_ms": 30000
+    },
+    "preflight": {
+      "fresh_fixed_SSH_printf": 1,
+      "no_Source_SQL": true,
+      "normal_worker_permissions_only": true
+    }
+  },
+  "proof_state_directory": "/root/bron-secrets/t52-mcp-readiness",
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t52-release-receipt.json",
+    "finalize_only_after_collector_EOF": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T52-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "task": "T52",
+  "verification": {
+    "Source_or_VPS_operations": "NOT_RUN",
+    "T51_components": "39 focused tests previously PASS; not rerun",
+    "T52_namespace_derivation_and_AST": "PASS",
+    "T52_offline_capture_ready_decode_build_bindings_and_old_task_rejection": "PASS",
+    "independent_code_and_procedure_review": "PASS",
+    "production_readiness": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

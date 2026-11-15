@@ -1,0 +1,57 @@
+EXECUTOR_TASK T52 — fresh technical readiness using the already-working strict SSH.
+
+Read the accepted T52 envelope and private T52-state.json in
+/tmp/bron-release-executor-20261113; verify pinned commit/manifest SHA and every
+declared file in docs/runbooks/payloads/t52-readiness.json. Read
+docs/runbooks/t52-baseline-ssh-readiness.md. T51 is closed with prepare0/MCP0/
+complete0; do not run its helpers, timer, collector, recovery or proof. Preserve
+all T50/T51 receipts and guards. OAuth, MCP registration and offline tests are
+already done; do not repeat them. Maintenance stays active, target writes0.
+
+You personally must have callable bron-release-source execute_sql, approved
+workspace-write network access, canonical receipt-parent write access, and the
+SAME baseline strict SSH invocation that passed T51_SSH_READY in T51. Preserve
+proxy/jump, authentication, host-key and approval settings. Do NOT create, require
+or diagnose ControlMaster; do not use T51 temporary -M/-S/ControlPersist options.
+No alternate proxy/route/full-access/approval bypass. If baseline access fails,
+record the safe failure and stop before the proof. The parent has delivered and
+verified the T52 helper/manifest and is already draining your --json stdout into
+the scoped T52 collector. Verify its private paths before starting the timer.
+
+Before --prepare: have the exact SQL and complete local response/delivery command
+ready, verify file pins and ordinary SSH once with fixed printf T52_SSH_READY,
+and verify your receipt writes. Do not spend timed seconds re-reading docs or
+constructing shell quoting. Use subprocess stdin/file input, never heredoc/script
+stdin mixed with JSON. The30s proof starts at nonce creation on the VPS inside
+--prepare and ends at durable response delivery there. The prepare SSH handshake
+precedes that clock; MCP, processing and the complete handshake are included.
+
+Run remote python3 -I /root/bron-secrets/t52-mcp-ready.py --prepare ONCE through
+that baseline strict SSH. Save exact returned canonical technical JSON+LF locally
+as fresh-request.json, O_EXCL0600/fsync/readback in the private T52 directory.
+IMMEDIATELY call native execute_sql ONCE with the exact full bytes of
+docs/runbooks/payloads/t50-verify-fenced.sql, SHA256
+0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15.
+Only that technical transaction is authorized. No Auth/business rows/snapshots,
+other SQL, Source changes, target writes, deployments or extra calls.
+
+After the call the collector, not you, creates fresh-recorded-result.json and
+fresh-recorded-result.json.ready.json. Do not edit/fabricate these artifacts or
+wait for stream EOF. The pinned builder validates marker/result hashes and real
+Source clock. Run t52-mcp-response.py with --request fresh-request.json --raw
+fresh-recorded-result.json --output response.json. On success immediately send
+that response FILE as stdin through the SAME baseline strict SSH to remote
+python3 -I /root/bron-secrets/t52-mcp-ready.py --complete ONCE. Do not add Master
+flags or reconnect via another route after failure. No repeated prepare/SQL/
+complete, no fake clock, no deadline extension or manual response editing.
+
+Read actual helper result/readback metadata. Write private native-worker-result.json
+with real counts/timing/input/output SHA and safe code/phase. Any helper PASS is
+PROVISIONAL_HELPER_PASS: the parent checks the collector EOF summary for exactly
+one call/no ambiguity before creating final canonical receipt and matching mirror.
+Source fence remains last-confirmed FENCED/current UNVERIFIED unless this actual
+attempt verifies it. Keep Source closed and product maintenance on every outcome.
+
+Finish this native worker after the proof report so the collector can finish EOF;
+the long-lived parent executor remains active. Do not change checkout, reset old
+evidence/ledger, extend capability, run T45/stale T49 or publish anything.
