@@ -51,12 +51,11 @@ def unwrap_text(text, depth):
     starts = list(re.finditer(r'(?m)^<untrusted-data-([A-Za-z0-9][A-Za-z0-9_-]{0,95})>\r?$', text))
     ends = list(re.finditer(r'(?m)^</untrusted-data-([A-Za-z0-9][A-Za-z0-9_-]{0,95})>\r?$', text))
     if starts or ends:
-        require(text.count('<untrusted-data-') == 1 and text.count('</untrusted-data-') == 1,
-                'MCP_FENCE_MARKERS')
         require(len(starts) == len(ends) == 1, 'MCP_FENCE_MARKERS')
         start, end = starts[0], ends[0]
         require(start.group(1) == end.group(1) and start.end() < end.start(), 'MCP_FENCE_MARKERS')
-        # Prose outside these anchored matching boundaries is untrusted data, not instructions.
+        # Inline references in provider prose are not additional boundaries. Only
+        # one actual anchored matching pair encloses the strictly validated rows.
         return decode_value(json_value(text[start.end():end.start()]), depth + 1)
     # Encoded JSON strings contain escaped newlines, so their marker-looking text
     # must first be decoded as JSON; only actual anchored boundaries take priority.
