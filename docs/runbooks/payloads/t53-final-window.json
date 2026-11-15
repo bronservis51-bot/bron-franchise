@@ -1,0 +1,142 @@
+{
+  "format": 1,
+  "task": "T53",
+  "actionId": "T53.release_window",
+  "execution_authorized": true,
+  "maxSuccessorWindows": 1,
+  "pins": {
+    "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+    "inputSha256": "c9e0b5fa1fd207e70f63292ad3a3c69d79218ec6b9185fafd5db0ac44ff6a4d6",
+    "barrierSha256": "0231b2ad09cb0a4fb11ff285c41b66a1274a3666ffe2889e37a49cd8ec41a1a6",
+    "basePreparedSha256": "ed0871f06237339c60218e84185b7d278e0881c5443ffddbbc2a8152e793220f",
+    "finalPreparedSha256": "a226cfa9eb96fbe9ca2276e20bffc637d04cbd2670417f18dc45f03df63f25a8",
+    "contextSha256": "564c015f97aea285659304a78437840562bf701e3ed5df55b94f04c9008c5f3b",
+    "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+    "verifyFencedSqlSha256": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "priorResultSha256": "7987d55b1323c1b4a64aeeac7e8b7050f500f9fc6cf778d973c1b9d0e3cd9aca",
+    "ownerGrantSha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "sourceTemplateSha256": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0"
+  },
+  "t55ReceiptSha256": "ae80d30eea394c17935cf0c53da0baacff9f9dbe75f9d8088597a2cde3e623f4",
+  "t55ResultSha256": "0d1bc7558781e152680ed2aed3e684a4582348e354a0df6f61f7d89d879290f1",
+  "approval": {
+    "document_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "status": "APPROVED"
+  },
+  "source": {
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "template_name_prefix": "bron-source-reader-"
+  },
+  "transfer_budget": {
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "failed_or_uncertain_counts": true,
+    "max_attempts": 3,
+    "required_used": 1,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "mcpRelay": {
+    "repository": "bronservis51-bot/bron-franchise",
+    "branch": "ops/t53-final-relay-20261115",
+    "requestPrefix": ".release-control/t53/",
+    "workerId": "cloud-supabase-mcp-github-relay"
+  },
+  "phase_authorizations": {
+    "prepare_final": {
+      "actionId": "T53.prepare_final",
+      "capability_ttl_seconds": 7200,
+      "source_data_reads": 0,
+      "target_metadata_probe": 1
+    },
+    "run_final": {
+      "actionId": "T53.final_https_window",
+      "applyTimestampOnly": true,
+      "maxTimestampUpdates": 1,
+      "sourceFrameBudget": 2,
+      "priorSourceAuthSnapshotAttempts": 1,
+      "beforeImagePath": "/root/bron-secrets/t53-auth-before-c53a2026.json",
+      "wall_seconds": 480,
+      "targetAdmitted": false
+    },
+    "preview": {
+      "authorized": false
+    },
+    "publication": {
+      "authorized": false
+    }
+  },
+  "checklist": "docs/runbooks/t53-final-window.md",
+  "runtime": {
+    "dependency_lock_path": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
+    "dependency_lock_sha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69",
+    "directory": "/root/bron-secrets/t45-runtime",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "pg": "8.23.1",
+    "version": "22.23.5"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  },
+  "verify_only": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "files": {
+    "docs/runbooks/payloads/t53-final-window.mjs": "222326ed7703b8ed6ce5bbd6a3bcf636bbf5c9d87a0f6c88f26f4db1b32719fe",
+    "docs/runbooks/payloads/coordinator-fence-ack-t53.mjs": "64838638394c4c74231ef88dba0edf69b8599625286c191d7924e428b00ee80c",
+    "docs/runbooks/payloads/source-final-https-reader/index.ts": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0",
+    "tests/ops/t53-final-window.test.mjs": "3904f37548d4b8a116e895c56429b379e2ff36639f4cef8ae1b25ece5fd65572",
+    "docs/runbooks/t53-final-window.md": "5ebb671f9d14967dbe7a1d2e363711df17c160a6be0a66d370731b5e8fb6a14d"
+  },
+  "deliveries": [
+    {
+      "source": "docs/runbooks/payloads/t53-final-window.mjs",
+      "destination": "/root/bron-secrets/t53-final-window.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/coordinator-fence-ack-t53.mjs",
+      "destination": "/root/bron-secrets/coordinator-fence-ack-t53.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/source-final-https-reader/index.ts",
+      "destination": "/root/bron-secrets/t53-release/source-reader-index.ts.template",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t53-final-window.json",
+      "destination": "/root/bron-secrets/t53-release/manifest.json",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    }
+  ],
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t53-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T53-state.json",
+    "mode": "0600",
+    "matching_sha256_required": true,
+    "safe_metadata_only": true
+  },
+  "scope": "One isolated successor window, two remaining approved encrypted Source-to-VPS snapshots, max one timestamp-only update and strict audit. No preview/publication; transport appendix and live deployment proof required before nonce/final run."
+}
