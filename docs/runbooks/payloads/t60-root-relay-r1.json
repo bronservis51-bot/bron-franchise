@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "task": "T60",
+  "actionId": "T60.root_relay_r1",
+  "status": "ROOT_CONTROL_READY",
+  "t60ManifestSha256": "007e0216027d310903e8cab0d6c9a891e7800636120edef5f08cd8927ebd8185",
+  "ownerProofSha256": "3597bdb56d065d0b88f9d130f2b1aae3ce5acefd9af6a262b27c33679638d793",
+  "preparedSha256": "b64fe2c52b56d3937b4ec180f02e89d04031e7468a3c83142f1f1ec80ba233e9",
+  "deploymentProofSha256": "621d79534a328878afff931428860256656cd46719ee4d30cb3b6d8d95143d8c",
+  "priorRootJob": "/workspace/artifacts/t60-final-relay",
+  "priorRootPreparedSha256": "27e7504ed6028a9ddd02426f578c9cdcfd93aee6ace92ba7199561c19d35e374",
+  "priorRootFailureSha256": "54d43e66f9cef02a7c32a0d7f224e19c745ff55de07975d23e40b39e470c3c73",
+  "priorRootMcpClaims": 0,
+  "jobDirectory": "/workspace/artifacts/t60-final-relay-r1",
+  "vpsFilesChanged": false,
+  "snapshotLedgerChanged": false,
+  "newSourceFramesAuthorized": 0,
+  "rootStages": [
+    "ready",
+    "start",
+    "before-target-write",
+    "before-final-audit",
+    "end"
+  ],
+  "nonceSourceClockExpiryChecksUnchanged": true,
+  "change": "Bounded GitHub request-poll network failures wait without accepting a request or claiming an MCP call; successful malformed responses and auth failures still block.",
+  "files": {
+    "docs/runbooks/payloads/t60-root-relay-r1.py": "1fa0b5bb5a5aa4462473acd5c719b0734e152860977be200b0263142b1c329c3",
+    "docs/runbooks/payloads/t60-root-relay-r1.js": "698388d4a24ab48b58654e99c90d7a89bfe9dc8fca77ed8d8cc039e409878eb4",
+    "tests/ops/test_t60_root_relay_r1.py": "77f7e08a42310ac21c63a9f9e75f603207c61a890c740adc4fc0bb92d90fb5e4"
+  }
+}
