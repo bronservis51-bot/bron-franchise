@@ -43,13 +43,31 @@ function FranchiseOverview() {
     <ActionError error={rev.error ?? royalty.error ?? bind.error} />
     <DataState query={q} skeleton={5}>{s => {
       const total = s.rows.filter(r => r.mapped_count > 0).reduce((a, r) => ({ sales: a.sales + Number(r.sales_minor), cost: a.cost + Number(r.cost_minor), profit: a.profit + Number(r.profit_minor) }), { sales: 0, cost: 0, profit: 0 });
+      const retailByCurrency = (rev.data?.rows ?? []).reduce<Record<string, number>>((totals, row) => {
+        totals[row.currency] = (totals[row.currency] ?? 0) + Number(row.fact_minor);
+        return totals;
+      }, {});
+      const missingDays = rev.data?.rows.reduce((count, row) => count + row.missing_days.length, 0);
+      const hasMappedSupply = Boolean(s.fetched_at && s.rows.some(r => r.mapped_count > 0));
       return <div className="stack">
         {s.fetched_at && <p className="faint">Снимок поставок от {new Date(s.fetched_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} МСК. Период по {s.period_to?.slice(0, 10).split('-').reverse().join('.')}. Кнопка обновляет сводку из последнего загруженного снимка.</p>}
-        {s.fetched_at && s.rows.some(r => r.mapped_count > 0) && <div className="kpis">
-          <div className="kpi"><span className="v">{s.fetched_at ? money(total.sales) : '—'}</span><span className="l">наши продажи партнёрам, ₽</span></div>
-          <div className="kpi"><span className="v">{s.fetched_at ? money(total.cost) : '—'}</span><span className="l">себестоимость отгрузок, ₽</span></div>
-          <div className="kpi"><span className="v">{s.fetched_at ? money(total.profit) : '—'}</span><span className="l">валовая прибыль поставок, ₽</span></div>
-        </div>}
+        <Card title="Сводка сети за месяц">
+          <div className="kpis">
+            <div className="kpi"><span className="l">Розничная выручка</span>
+              {Object.entries(retailByCurrency).length ? Object.entries(retailByCurrency).map(([currency, value]) => <span className="v" key={currency}>{money(value, currency)}</span>) : <span className="v">—</span>}
+              <span className="l">Продажи партнёров своим клиентам</span>
+            </div>
+            <div className="kpi"><span className="l">Роялти: начислено / оплачено</span>
+              {royalty.data?.totals.length ? royalty.data.totals.map(row => <span className="v" key={row.currency}>{money(row.accrued_minor, row.currency)} / {money(row.paid_minor, row.currency)}</span>) : <span className="v">—</span>}
+              <span className="l">По валютам, без пересчёта в одну</span>
+            </div>
+            <div className={`kpi${missingDays ? ' warn' : ''}`}><span className="v">{missingDays === undefined ? '—' : missingDays}</span><span className="l">Не заполнено прошедших дней</span></div>
+            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.sales) : '—'}</span><span className="l">Поставки: наши продажи, ₽</span></div>
+            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.cost) : '—'}</span><span className="l">Себестоимость отгрузок, ₽</span></div>
+            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.profit) : '—'}</span><span className="l">Валовая прибыль поставок, ₽</span></div>
+          </div>
+          <p className="faint">Это показатели выручки партнёров, роялти и поставок; они не складываются в чистую прибыль сети.</p>
+        </Card>
         <div className="economics-table-wrap"><table className="economics-table">
           <thead><tr><th>Партнёр</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
           <tbody>{s.rows.map(r => {
