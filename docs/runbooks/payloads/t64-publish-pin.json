@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "task": "T64",
+  "sourceCommit": "f38806ad8f8d8a2f5a82f6039f79906b7e2bf449",
+  "archiveSha256": "86f99096a8d027188d4c7fdd2ada70ba88e97945cf0ecf37a8103a200ec8cfef",
+  "manifestSha256": "71f28fef50cb132d80091fd8e6034112eb9dfc57211a1d04e06610622e805e60",
+  "migrations": [
+    {
+      "name": "20261116040000_staff_helper_execute.sql",
+      "sha256": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c"
+    },
+    {
+      "name": "20261116050000_rating_manager_only.sql",
+      "sha256": "f5dfd4ffbf5de3309c725be7e83bcfcd69154bda4579d42d032f058b78611b80"
+    },
+    {
+      "name": "20261116060000_phone_logins.sql",
+      "sha256": "64521049ea271a7a67eedfab65d8ef35b99554b55c1b45e1b85e2e79a38b9e22"
+    }
+  ]
+}

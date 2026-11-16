@@ -1,0 +1,66 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyThisBucketMetadataAndObjectNames",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::bron-franchise-backups"
+    },
+    {
+      "Sid": "UploadAndReadBackOnlyBackupPrefixes",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::bron-franchise-backups/hourly/*",
+        "arn:aws:s3:::bron-franchise-backups/daily/*",
+        "arn:aws:s3:::bron-franchise-backups/monthly/*",
+        "arn:aws:s3:::bron-franchise-backups/migration/*"
+      ]
+    },
+    {
+      "Sid": "DenyObjectDeletionAndAclChanges",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:PutObjectAcl"
+      ],
+      "Resource": "arn:aws:s3:::bron-franchise-backups/*"
+    },
+    {
+      "Sid": "DenyBucketDeletionAndBackupControlChanges",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketAcl"
+      ],
+      "Resource": "arn:aws:s3:::bron-franchise-backups"
+    },
+    {
+      "Sid": "DenyUnencryptedTransport",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::bron-franchise-backups",
+        "arn:aws:s3:::bron-franchise-backups/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    }
+  ]
+}

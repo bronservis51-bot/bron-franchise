@@ -90,7 +90,7 @@ describe('сотрудники: франчайзи управляет сам', (
 });
 
 describe('рейтинг', () => {
-  it('только франчайзи в России, по прогнозу выполнения; выручка открыта всем участникам', async () => {
+  it('менеджер видит рейтинг российских франчайзи с прежними расчётами', async () => {
     // второй российский франчайзи, чтобы было с кем сравнивать
     await t.admin(`insert into public.partner(code, name, country, currency) values ('RU2', 'Пётр (Самара)', 'RU', 'RUB')`);
     await t.admin(`insert into public.location(code, name, partner_id, city, timezone, currency, opened_on)
@@ -98,23 +98,23 @@ describe('рейтинг', () => {
     await t.admin(`insert into public.daily_revenue(location_id, partner_id, day, currency, cash_minor)
       select l.id, l.partner_id, d::date, 'RUB', 1500000 from public.location l,
         generate_series(date_trunc('month', current_date)::date, current_date - 1, interval '1 day') d where l.code = 'RU2-1'`);
-    const r = await one<{ rows: Record<string, unknown>[] }>(VIKTOR, `select public.rating() j`);
+    const r = await one<{ rows: Record<string, unknown>[] }>(FM, `select public.rating() j`);
     expect(r.rows.map((x) => x.partner_name).sort()).toEqual(['Виктор (Волгоград)', 'Пётр (Самара)']);
     expect(r.rows.every((x) => x.currency === 'RUB')).toBe(true);
     const pcts = r.rows.map((x) => x.forecast_pct as number | null).filter((x) => x !== null) as number[];
     expect([...pcts].sort((a, b) => b - a)).toEqual(pcts);
-    expect(r.rows.filter((x) => x.is_me).map((x) => x.partner_name)).toEqual(['Виктор (Волгоград)']);
+    expect(r.rows.filter((x) => x.is_me)).toHaveLength(0);
     if (new Date().getDate() > 1) expect(Number(r.rows.find((x) => x.partner_name === 'Пётр (Самара)')!.fact_minor)).toBeGreaterThan(0);
-    // менеджер видит тот же рейтинг
-    expect((await one<{ rows: unknown[] }>(FM, `select public.rating() j`)).rows).toHaveLength(2);
+    expect(r.rows).toHaveLength(2);
   });
 
-  it('иностранный франчайзи рейтинг не видит: команда закрыта, пункта меню нет', async () => {
+  it('франчайзи любой страны рейтинг не видят: команда и разрешение закрыты', async () => {
     await t.expectError(MARSEL, `select public.rating()`, 'forbidden');
     const me = await one<{ assignments: { permissions: string[] }[] }>(MARSEL, `select public.me() j`);
     expect(me.assignments[0].permissions).not.toContain('rating.read');
     const vik = await one<{ assignments: { permissions: string[] }[] }>(VIKTOR, `select public.me() j`);
-    expect(vik.assignments[0].permissions).toContain('rating.read');
+    expect(vik.assignments[0].permissions).not.toContain('rating.read');
+    await t.expectError(VIKTOR, `select public.rating()`, 'forbidden');
   });
 });
 

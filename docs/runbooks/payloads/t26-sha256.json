@@ -1,0 +1,249 @@
+{
+  "acceptance": {
+    "finalFreezeAudit": false,
+    "inventoryComplete": true,
+    "inventory_exit": 0,
+    "output": "technical object/column names, counts, equality booleans and UTC windows only; no values/ids/hashes/SQL/credentials",
+    "route_required": "T26_SOURCE_TRANSPORT passed=true, actual identity/readOnly, bulkPass=true before full inventory",
+    "strictMatch": "report actual value; false does not fail inventory",
+    "transactions": "read-only and ended"
+  },
+  "actions": {
+    "T26.mac_network": {
+      "source_tcp": {
+        "attempts": 1,
+        "host": "aws-1-us-west-2.pooler.supabase.com",
+        "no_authentication": true,
+        "port": 5432,
+        "seconds": 5
+      },
+      "ssh_dummy": {
+        "attempts": 1,
+        "bytes": 1048576,
+        "output": "counts, elapsed, fixed status only",
+        "receiver": "memory-only stdin byte count; no files",
+        "seconds": 20,
+        "sender": "Mac-generated x bytes",
+        "target": "existing verified VPS SSH endpoint"
+      }
+    },
+    "T26.provider_ticket": {
+      "no_new_message_or_purchase": true,
+      "owner_login_needed": "record BLOCKED for this branch; continue independent repair",
+      "scope": "read existing ticket reply only in already accessible browser/account",
+      "service": "AdminVPS",
+      "ticket": 482050
+    },
+    "T26.repaired_source_inventory": {
+      "default_argv": [],
+      "direct_session_condition": "existing provider reply confirms5432 permitted AND current VPS canonical5432 TCP probe passes; same source TLS/callback, no protected-file edit",
+      "full_inventory_condition": "staged transport passed=true including identity/readOnly and 1MiB bulk within10s",
+      "max_launches": 1,
+      "on_transport_failure": "inventory NOT_RUN; report exact stage, no retry",
+      "optional_argv": [
+        "--direct-session"
+      ]
+    },
+    "T26.source_tunnel_restart": {
+      "before": [
+        "no active audit or freeze",
+        "inspect wrapper and record its SHA privately",
+        "confirm dedicated migration-only control/PID, canonical destination5432 and VPS loopback15432",
+        "reject broad pkill/shared control or unknown scope"
+      ],
+      "commands": [
+        "status",
+        "stop",
+        "start",
+        "status"
+      ],
+      "do_not_edit_wrapper": true,
+      "do_not_stop_other_tunnels": true,
+      "if_uncertain": "verify current wrapper/listener state; do not repeat stop/start",
+      "max_stop_start_cycles": 1,
+      "wrapper": "~/.ssh/bron-source-tunnel"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t26-delta-readonly.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t23-delta-readonly.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t26-transport-probe.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t26-transport-probe.mjs"
+    }
+  ],
+  "failure_acceptance": {
+    "exit": 2,
+    "forbidden": [
+      "error.message",
+      "error.detail",
+      "error.hint",
+      "stack",
+      "SQL",
+      "row_values",
+      "credentials"
+    ],
+    "no_blind_retry": true,
+    "optional_safe_fields": [
+      "query.object",
+      "query.elapsedMs"
+    ],
+    "query_context": "required after an audited query; null is expected if every route failed before inventory",
+    "required_safe_fields": [
+      "phase",
+      "code"
+    ]
+  },
+  "files": {
+    "docs/runbooks/payloads/t23-delta-readonly.mjs": "9d26bd47cae26e85bb60e75a31e4650904af7aec88ab4cfd6811d5f54cd0c27e",
+    "docs/runbooks/payloads/t26-transport-probe.mjs": "c105c796fb189f18c3edcf610494c3fbba1d6b1d7067e66ac84b02dbfe275b1d",
+    "tests/ops/delta-readonly.test.mjs": "5d28ba22b61eebebf847cb505b8cc2b5bc81eb6b09f1d169434b442da7d389ca",
+    "tests/ops/restore-native-pg17.py": "c07227281d3ac2f9ba17c6237baf1d49cac0062702a5d079987e57896d04b653",
+    "tests/ops/transport-native.mjs": "829acd5b03693ad9f960ff90f3e6e19b44b35bf1f88508bffbf18e7522ea69a2",
+    "tests/ops/transport-native.py": "f890a0ea340b3868affb6529de27fa28a2a17e2018dd803d6dba242257f4ef56",
+    "tests/ops/transport-probe.test.mjs": "f883a4c5a0fff9b7995963fcc0763428b52c81a80c9ef719bbd2649dd136c728"
+  },
+  "format": 1,
+  "native_preflight": {
+    "canonical_tls_and_callback_preservation": "unit PASS; production uses unchanged source factory",
+    "driver": "pg8.23.1 actual wire protocol",
+    "engine": "PostgreSQL17.12",
+    "fixture": "tests/ops/transport-native.py",
+    "fixture_container_removed": true,
+    "inventory_comparator": "T25 native real-driver PASS REUSED; algorithm unchanged",
+    "real_vps_route_acceptance": "PENDING_T26",
+    "result": "PASS",
+    "scope": "synthetic seven-stage probe and actual1MiB response, NOSUPER postgres; not actual network/TLS acceptance",
+    "unit_tests": 12
+  },
+  "not_authorized": [
+    "source_write_or_freeze",
+    "source_locks",
+    "target_mutation",
+    "DDL",
+    "restore_retry",
+    "backup_reinstallation",
+    "dependency_installation",
+    "build_repetition",
+    "key_change",
+    "Telegram_message",
+    "cron_change",
+    "workflow_dispatch",
+    "PR_merge",
+    "preview_apply",
+    "public_publish",
+    "source_admission_draft_activation",
+    "provider_message_or_purchase",
+    "firewall_or_product_network_change",
+    "DB_password_on_Mac",
+    "repeat_managed_tunnel_restart"
+  ],
+  "one_run": {
+    "action_id": "T26.repaired_source_inventory",
+    "capture_bytes": 67108864,
+    "max_attempts": 1,
+    "max_full_inventory_attempts": 1,
+    "per_table_rows": 25000,
+    "total_rows": 100000,
+    "wall_seconds": 240
+  },
+  "prior_failure": {
+    "cause": "stage UNKNOWN; aggregate10s included connection and all queries",
+    "duration_seconds": 25,
+    "exit": 2,
+    "inventory": "NOT_RUN",
+    "retry_prior_task": false,
+    "routes": [
+      {
+        "code": "SOURCE_ROUTE_FAILED",
+        "elapsedMs": 5007,
+        "route": "canonical-session"
+      },
+      {
+        "code": "SOURCE_ROUTE_DEADLINE",
+        "elapsedMs": 10002,
+        "route": "canonical-transaction"
+      },
+      {
+        "code": "SOURCE_ROUTE_DEADLINE",
+        "elapsedMs": 10001,
+        "route": "existing-reverse"
+      }
+    ],
+    "task": "T25"
+  },
+  "restore_evidence": {
+    "manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+    "receipt": "/root/bron-secrets/t21-restore-5684c16-receipt.json",
+    "repeat_restore": false
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release bundles on VPS",
+    "T18 backup/status installation",
+    "T19 confirmed private Telegram delivery and enabled monitor",
+    "T21 full cold restore PASS",
+    "T22 PR14 merge and cron readback",
+    "T23 delivered historical helper/log/receipt preserved; no writes and cleanup PASS",
+    "T24 read-only failure context, cleanup PASS, no source/target writes",
+    "T25 no inventory/no writes/cleanup PASS"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "dependency_realpath": "/opt/bron/rehearsal-audit.exfSfv9a/node_modules",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "schedule_observation": {
+    "event": "schedule",
+    "minimum_main_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+    "pending_does_not_block": true,
+    "repository": "bronservis51-bot/bron-franchise",
+    "workflow": "availability.yml"
+  },
+  "scope": "one managed migration-tunnel repair, independent provider-ticket read, staged read-only transport proof, then at most one live inventory",
+  "source_sql_evidence": {
+    "field_bytes": 1971596,
+    "interpretation": "server completes inside 8s; does not prove current VPS route bulk throughput",
+    "method": "Supabase execute_sql, actual source READ ONLY, statement_timeout 8000ms",
+    "query": "exact augmented daily_revenue projection + ORDER BY + LIMIT25001, returning only aggregated counts/bytes",
+    "result": "PASS",
+    "rows": 2975,
+    "value_bytes": 1828780
+  },
+  "task": "T26",
+  "transport_probe": {
+    "bulk_bytes": 1048576,
+    "bulk_pass_ms": 10000,
+    "canonical_verified_tls_and_existing_password_callback": true,
+    "connection_time_excluded_from_bulk_gate": true,
+    "no_transaction_pooler_for_control": true,
+    "only_existing_protected_route_or_explicit_canonical_session": true,
+    "protected_config_files_unchanged": true,
+    "small_bytes": 1024,
+    "stage_caps_ms": {
+      "begin": 5000,
+      "bulk": 20000,
+      "connect": 15000,
+      "identity": 5000,
+      "rollback": 5000,
+      "serverDeadline": 5000,
+      "small": 5000
+    }
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b"
+  }
+}

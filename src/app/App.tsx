@@ -31,7 +31,6 @@ const SupplyFinancePage = page(() => import('../modules/manager/SupplyFinancePag
 const OrderPage = page(() => import('../modules/orders/OrderLink'), 'OrderPage');
 const NetworkPage = page(() => import('../modules/manager/NetworkPage'), 'NetworkPage');
 const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'PartnerPage');
-const RoyaltyPage = page(() => import('../modules/manager/RoyaltyPage'), 'RoyaltyPage');
 const RoyaltyPartnerPage = page(() => import('../modules/manager/RoyaltyPartnerPage'), 'RoyaltyPartnerPage');
 const StaffHome = page(() => import('../modules/staff/StaffHome'), 'StaffHome');
 const StaffPage = page(() => import('../modules/staff/StaffPage'), 'StaffPage');
@@ -77,10 +76,10 @@ const router = createHashRouter([
       { path: 'order', element: <ByRole franchisee={<OrderPage />} team={<OrderPage />} /> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
-      { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
+      { path: 'royalty', element: <Navigate to="/finance" replace /> },
       { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} team={<StaffPage />} /> },
-      { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingOnly><RatingPage /></RatingOnly>} /> },
+      { path: 'rating', element: <ManagerOnly><RatingPage /></ManagerOnly> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },
       { path: 'kb/manage', element: <KbManagePage /> },
@@ -113,12 +112,6 @@ function ByRole({ manager, franchisee, team }: { manager?: ReactNode; franchisee
   const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
   const el = isManager ? manager : isTechnical ? null : isStaff ? null : isTeamManager ? team : franchisee;
   return el ? <>{el}</> : <Navigate to="/" replace />;
-}
-
-/** Рейтинг — только франчайзи в России (у иностранных нет разрешения rating.read). */
-function RatingOnly({ children }: { children: ReactNode }) {
-  const { can } = useSession();
-  return can('rating.read') ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function ManagerOnly({ children }: { children: ReactNode }) {

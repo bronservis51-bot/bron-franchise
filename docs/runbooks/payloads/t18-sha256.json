@@ -1,0 +1,24 @@
+{
+  "files": {
+    ".github/workflows/availability.yml": "5f68e1b3690b06d6b4453610971b4d7fa89f01304314722f3c2717d0f09d680e",
+    "deploy/timeweb/Caddyfile": "22f364fe3d69190adae37338ed2bbd42a2d0e9a07d19af007a39f7b3fb3d4ca9",
+    "deploy/timeweb/Caddyfile.maintenance": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "deploy/timeweb/Caddyfile.preview": "4e13363180893412d922cf2a6bf914179bfc8d8d621e617f2a38ca0f9d506e12",
+    "deploy/timeweb/backup-alert-telegram.py": "8a664ac86bef4044a4e271d19e0cee7cedb24ecffe95fc2210e252e0d21d0dd7",
+    "deploy/timeweb/bron-target-watchdog.service": "5bd7dcc580656fa57d6445d8139a16dea1495e91f3adf6c1f5296f4274c91940",
+    "deploy/timeweb/compose.maintenance.override.yml": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424",
+    "deploy/timeweb/target-backup.py": "0b4c6e9ef03f7d97dde50b097fb64b5729779b1f16f1304716090361ab6d8d57",
+    "docs/runbooks/payloads/t11-restore-target.mjs": "4f1a54351e394c574382f464c4a588ef1ab1ede65061a83265049100e95ef91e",
+    "scripts/check-availability.mjs": "71868b851141663bd5ba1bb6c0e76321563f6c4c4c4781bf72006896c60eb654"
+  },
+  "format": 1,
+  "target_backup_manifest": {
+    "path": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "task": "T18",
+  "verify_only_vps": {
+    "/opt/bron/backup/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/opt/bron/backup/source-backup.py": "94c4a9411db6085ac18daae0fd18e7a5f14f2c9a82adb256e39f73039121f75d"
+  }
+}

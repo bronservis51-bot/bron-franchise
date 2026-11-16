@@ -59,9 +59,9 @@ it('trainees default to one calendar month and 500 floor with same percentages, 
  const s=(await t.admin<{internship_until:string;internship_floor_minor:number}>('select internship_until::text,internship_floor_minor from staff_member where user_id=$1',[uid]))[0];
  expect(String(s.internship_until).slice(0,10)).toBe('2026-02-27');expect(Number(s.internship_floor_minor)).toBe(50000);
  const policy=(await t.admin<{j:any}>('select app_private.staff_pay_policy($1,\'2026-02-27\') j',[uid]))[0].j;
- expect(policy.floor_minor).toBe(50000);expect(policy.tiers[0].rate_bp).toBe(1700);
+ expect(policy.floor_minor).toBe(50000);expect(policy.tiers[0].rate_bp).toBe(1600);
  expect(Number((await t.admin<{n:number}>('select app_private.motivation_pay(100000,$1) n',[JSON.stringify(policy)]))[0].n)).toBe(50000);
- expect(Number((await t.admin<{n:number}>('select app_private.motivation_pay(600000,$1) n',[JSON.stringify(policy)]))[0].n)).toBe(114000);
+ expect(Number((await t.admin<{n:number}>('select app_private.motivation_pay(600000,$1) n',[JSON.stringify(policy)]))[0].n)).toBe(96000);
  expect((await t.admin<{j:any}>('select app_private.staff_pay_policy($1,\'2026-02-28\') j',[uid]))[0].j.floor_minor).toBe(100000);
  await t.expectError(OTHER,'select staff_onboarding_set($1,$2)','forbidden',[uid,JSON.stringify(settings)]);
  await t.expectError(STAFF,'select staff_onboarding_set($1,$2)','forbidden',[uid,JSON.stringify(settings)]);

@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "task": "T57",
+  "actionId": "T57.auth_catalog_diagnostic",
+  "execution_authorized": true,
+  "checklist": "docs/runbooks/t57-auth-catalog-diagnostic.md",
+  "files": {
+    "docs/runbooks/payloads/t57-auth-catalog.sql": "8eee70b7ed9929d44b8892fa01d27f06135e34faee82069fd5410f945fa7ee75",
+    "docs/runbooks/t57-auth-catalog-diagnostic.md": "3b1ecb2d9c3d97adedb81d373b1f4d8666f112db5264bd99b28b984b12691953"
+  },
+  "max_target_catalog_queries": 1,
+  "max_source_catalog_queries": 1,
+  "source_private_row_reads": 0,
+  "target_private_row_reads": 0,
+  "source_snapshots": 0,
+  "target_writes": 0,
+  "source_project": "vkkqffvmztpzgygzfxhq",
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "user": "root",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true
+  },
+  "parent": {
+    "task": "T56",
+    "manifestSha256": "4db248c8620541a840b19b8fb2ea94bbd74f2763ffd2691fd108c9df8d811593",
+    "status": "BLOCKED",
+    "phase": "target-frame-before",
+    "code": "FINAL_HTTPS_NON_TIMESTAMP_OR_DIRECTION_DIFF",
+    "targetWriteOutcome": "UNCHANGED",
+    "sourceFrameAttempts": 1,
+    "sharedBudgetUsed": 2,
+    "sharedBudgetRemaining": 1,
+    "sharedBudgetUncertain": false
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t57-release-receipt.json",
+    "local_mirror": "/private/tmp/bron-release-executor-20261113/T57-state.json",
+    "mode": "0600",
+    "matching_sha256_required": true
+  },
+  "maintenance_required": true,
+  "source_must_remain_closed": true
+}

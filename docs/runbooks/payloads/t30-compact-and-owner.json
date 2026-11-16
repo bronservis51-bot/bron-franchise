@@ -1,0 +1,152 @@
+{
+  "acceptance": {
+    "auth": "exit0 and diagnosticComplete true, sourceRows=targetRows=16, expected safe fields; exact direction and other-field/missing counts; applyAuthorized/finalFreezeAudit false. Any missing/non-timestamp/target-newer/null diff is REVIEW_REQUIRED, never apply or strict PASS.",
+    "branches": "Auth failure stops Auth dependents only; finish independent owner preparation and receipt; do not wait for root ACK or schedule before reporting",
+    "cleanup": "zero active T30 Auth processes, both clients closed; no writes/freeze/preview/publication; only specified private payload/state/log/result paths changed",
+    "key": "cryptographic proof and owner independent-custody/second-device attestation are separate checks; report both; no manufactured PASS"
+  },
+  "actions": {
+    "T30.auth_compact": {
+      "applyAuthorized": false,
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t30-auth-compact.mjs"
+      ],
+      "consume_before": "launch, never reset on failure",
+      "durable_guard": "/root/bron-secrets/t30-auth-compact.state",
+      "finalFreezeAudit": false,
+      "full_inventory_authorized": false,
+      "if_blocked": "report precise safe phase/step/code; no retry/tunnel restart/fallback/metadata fix; independent owner branch continues",
+      "max_launches": 1,
+      "query": "auth.users only, at most16 rows; exact microsecond timestamp and server SHA256 of canonical JSON of ALL other fields; private IDs/timestamps/digests remain in VPS RAM",
+      "safe_output": [
+        "counts",
+        "direction",
+        "source/target technical windows",
+        "phase/step/code/elapsedMs"
+      ],
+      "source": "ONLY direct aws-1-us-west-2.pooler.supabase.com:6543; existing TLS CA/SNI/password callback unchanged; NO reverse15432",
+      "target": "verified 127.0.0.1:15433/postgres/supabase_admin; cron off and pg_net 0",
+      "transactions": "READ ONLY REPEATABLE READ, UTC, local statement_timeout 5s; rollback; both clients close",
+      "wall_deadline_seconds": 90
+    },
+    "T30.owner_key_proof": {
+      "backup_manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+      "backup_manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+      "ciphertext": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/roles.sql.zst.age",
+      "data_boundary": "ciphertext, decryption and compressed plaintext stay on VPS; no key or backup artifact/real data copied to or through Mac",
+      "entry_device": "owner PHONE or second independent device, official AdminVPS VPS web console and hidden TTY; NOT the Mac",
+      "handoff": "update existing private T28-owner-handoff.md with exact command, trusted official AdminVPS login route, personal MFA if prompted; no repeated Supabase login or Telegram input",
+      "identity_source": "owner independently held secure copy; never read/substitute VPS private identity",
+      "input": "only AGE-SECRET-KEY line through getpass; no chat/argv/env/file/log/recording",
+      "max_personal_input_attempts": 2,
+      "owner_only_command": "bash /root/bron-secrets/t30-owner-verify.sh",
+      "pending": "OWNER_ACTION_PENDING or OWNER_COPY_ABSENT; does not block Auth or first T30 report; continue this already-authorized branch after owner input without new task ID",
+      "prepare": "verify existing t29 helper and immutable T21 manifest hashes, deliver verified phone entry shell; reuse T29 READY without another --check",
+      "result": "/root/bron-secrets/t30-owner-key-proof-result.json",
+      "retry_rule": "only owner may retry once for mistyped input; no automated identity retry or alternate server key",
+      "success": "fresh private result status PASS, cipherShaVerified/decryptionVerified true, identityStored/plaintextStored false PLUS separate owner attestation of independent copy and personal second-device login"
+    },
+    "T30.receipt_pin": {
+      "if_missing": "report missing field; do not rerun T29 inventory",
+      "input": "/root/bron-secrets/t29-release-receipt.json",
+      "preview_inputs_from_existing_receipt_only": [
+        "actual web ordered Compose config-file paths",
+        "web project and working directory",
+        "seven current recorded service/container IDs",
+        "app-root/landing-root extracted paths and manifest metadata",
+        "cached Caddy imageID/Config.User"
+      ],
+      "return": "full SHA256 only plus selected safe technical preview inputs below; no secret environment/raw config"
+    },
+    "T30.schedule": {
+      "does_not_block_report": true,
+      "no_dispatch_or_cron_change": true,
+      "reuse": "T22 PENDING_OBSERVATION; owner-visible T19 alert already confirmed"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t30-auth-compact.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t30-auth-compact.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t30-owner-verify.sh",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t30-owner-verify.sh"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "docs/runbooks/payloads/t30-owner-verify.sh": "5c580f7e2ca5f0856dc70bf9fb9909ef8df26f5f9e3d69e2f5bf10fdd05dbed0",
+    "tests/ops/auth-compact-native.mjs": "1b8a8dde628093922e0dd361003b48d854082370e89fcbaafc6ae30a4fc59382",
+    "tests/ops/auth-compact-native.py": "87f7daafdfd9436aacc7b00049cbcc998e6cc1ff8872d05fc4593750b9be696d",
+    "tests/ops/auth-compact.test.mjs": "fb979da2c0b5804237f2ab69774a5dc91279856b942449f40a161e942b80bd3b"
+  },
+  "format": 1,
+  "not_authorized": [
+    "source_or_target_writes",
+    "timestamp_reconciliation",
+    "freeze_or_admission",
+    "Supabase_Pause_or_Restore",
+    "full_inventory_or_restore",
+    "runtime_auditor_replacement",
+    "build_or_install",
+    "PR_merge",
+    "preview_or_publication",
+    "new_credential_or_PAT",
+    "Telegram_message_or_secret_input",
+    "workflow_dispatch_or_cron_change",
+    "source_data_transit_via_Mac",
+    "backup_export_to_Mac_even_encrypted",
+    "Mac_key_input_or_decryption",
+    "reading_VPS_private_identity",
+    "T29_retry_or_reverse15432_fallback"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T30 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "create/atomic update state and per-action guard; preserve action IDs, input SHAs, UTC times, attempt budget and outcome",
+    "canonical_vps": "/root/bron-secrets/t30-release-receipt.json",
+    "continue_without_reply": true,
+    "first_report_without_owner_wait": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T30-state.json",
+    "log_vps": "/root/bron-secrets/t30-release.log",
+    "mode": "0600"
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five delivered artifacts",
+    "T18 backup/status installation and expected maintenance HTTP503",
+    "T19 owner-visible Telegram alert",
+    "T21 full cold restore",
+    "T22 cron merge; new genuine schedule still pending",
+    "T28 live62tables/4020rows only1updated_at diff; not frozen",
+    "T29 VPS-only key READY and preview inputs"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "one compact direct VPS-to-source Auth read and a personally operated phone/second-device key proof; no freeze or publication",
+  "task": "T30",
+  "verification": {
+    "auth_native": "PostgreSQL17.12/realpg8.23.1 PASS: server digest equals SHA of raw canonical other-field JSON, bigint/decimal field mutation detected, exact microseconds and direction/null checks, actual RO/RR/5s, cleanup/redaction",
+    "auth_unit": "7 PASS",
+    "build_restore": "reuse T14/T21; no product changes or repeat",
+    "owner_entry": "bash syntax PASS; independent P0 review no blocker; underlying unchanged helper 8unit plus real age1.1.1/zstd correct/wrong synthetic key PASS",
+    "production_route": "not proven by native fixture; one materially changed compact attempt only"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/root/bron-secrets/t29-owner-key-proof.py": "5b67358a605d8280a5477ea1d335d28a5bf9ecf6798d6b5328dd60483a1b4c7f"
+  }
+}

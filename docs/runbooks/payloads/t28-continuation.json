@@ -1,0 +1,355 @@
+{
+  "acceptance": {
+    "finalFreezeAudit": false,
+    "inventoryComplete": true,
+    "inventory_exit": 0,
+    "output": "technical object/column names, counts, equality booleans and UTC windows only; no values/ids/hashes/SQL/credentials",
+    "route_required": "legacy payload T26_SOURCE_TRANSPORT passed=true, actual identity/readOnly, bulkPass=true before full inventory; accountable task T28",
+    "strictMatch": "report actual value; false does not fail inventory",
+    "transactions": "read-only and ended"
+  },
+  "action_aliases": {
+    "T28.repaired_source_inventory": [
+      "T26.repaired_source_inventory"
+    ],
+    "T28.source_tunnel_restart": [
+      "T26.source_tunnel_restart"
+    ]
+  },
+  "actions": {
+    "T28.context_reconcile": {
+      "T27_queue": "SUPERSEDED_INTO_T28, never fabricated PASS",
+      "helpers_only": "reuse known regular root0600 SHA-matching helper copies; helper presence is not proof of a restart or audit launch",
+      "if_all_absent": "SUPERSEDED_NO_EXECUTION_EVIDENCE; fast-forward clean checkout and execute immediately, no wait for T26 completed receipt",
+      "legacy_locations": [
+        "/tmp/bron-release-executor-20261113/ matching T26/T27 state/guards/logs/receipts",
+        "/root/bron-secrets/ matching t26/T26 state/guards/logs/receipts",
+        "known helper/audit PIDs with creation times"
+      ],
+      "output": "only task/action IDs, status, timestamps, fixed paths; no raw log/env/argv"
+    },
+    "T28.mac_network": {
+      "source_tcp": {
+        "attempts": 1,
+        "host": "aws-1-us-west-2.pooler.supabase.com",
+        "no_authentication": true,
+        "port": 5432,
+        "seconds": 5
+      },
+      "ssh_dummy": {
+        "attempts": 1,
+        "bytes": 1048576,
+        "output": "counts, elapsed, fixed status only",
+        "receiver": "memory-only stdin byte count; no files",
+        "seconds": 20,
+        "sender": "Mac-generated x bytes",
+        "target": "existing verified VPS SSH endpoint"
+      }
+    },
+    "T28.owner_handoff": {
+      "destination": "/tmp/bron-release-executor-20261113/T28-owner-handoff.md",
+      "directory_mode": "0700",
+      "do_not_collect_owner_login_json": true,
+      "each_item": [
+        "gate",
+        "exact existing service/URL/helper path",
+        "READY or BLOCKED or OWNER_ACTION_PENDING or REUSED",
+        "why personally owner-only",
+        "secure input location with no secret requested in chat",
+        "expected verified result",
+        "prerequisites"
+      ],
+      "existing_helper_rule": "locate from existing T11/recovery receipts; inspect code/known digest without running it; no broad secret search; if missing/unreviewed mark NEEDS_COORDINATOR_CODE and do not ask owner to enter a secret",
+      "file_mode": "0600",
+      "gate_items": [
+        "independent backup key custody/decryption outside sole Mac/VPS/git",
+        "second device AdminVPS/MFA/emergency console access",
+        "password UI and old PWA/local queue + main existing sections on real phone/mobile and WiFi after reviewed private preview"
+      ],
+      "no_new_storage_account_or_secret_copy": true,
+      "no_phone_actions_before_preview": true,
+      "reuse_existing_T27_if_prepared": true,
+      "secret_input": "existing password directly in target HTTPS UI only after preview; recovery key only through already verified private helper/existing secure owner storage, never args/log/chat"
+    },
+    "T28.provider_ticket": {
+      "no_new_message_or_purchase": true,
+      "owner_login_needed": "record BLOCKED for this branch; continue independent repair",
+      "scope": "read existing ticket reply only in already accessible browser/account",
+      "service": "AdminVPS",
+      "ticket": 482050
+    },
+    "T28.repaired_source_inventory": {
+      "default_argv": [],
+      "direct_session_condition": "existing provider reply confirms5432 permitted AND current VPS canonical5432 TCP probe passes; same source TLS/callback, no protected-file edit",
+      "full_inventory_condition": "staged transport passed=true including identity/readOnly and 1MiB bulk within10s",
+      "max_launches": 1,
+      "on_transport_failure": "inventory NOT_RUN; report exact stage, no retry",
+      "optional_argv": [
+        "--direct-session"
+      ]
+    },
+    "T28.schedule": {
+      "descendant_requires_ancestry_proof": true,
+      "if_absent": "PENDING_OBSERVATION, no waiting or dispatch",
+      "minimum_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+      "required_event": "schedule",
+      "reuse": "any current prior observation, otherwise one passive gh query"
+    },
+    "T28.source_tunnel_restart": {
+      "before": [
+        "no active audit or freeze",
+        "inspect wrapper and record its SHA privately",
+        "confirm dedicated migration-only control/PID, canonical destination5432 and VPS loopback15432",
+        "reject broad pkill/shared control or unknown scope"
+      ],
+      "commands": [
+        "status",
+        "stop",
+        "start",
+        "status"
+      ],
+      "do_not_edit_wrapper": true,
+      "do_not_stop_other_tunnels": true,
+      "if_uncertain": "verify current wrapper/listener state; do not repeat stop/start",
+      "max_stop_start_cycles": 1,
+      "max_total_stop_start_cycles_across_T26_T28": 1,
+      "wrapper": "~/.ssh/bron-source-tunnel"
+    },
+    "T28.time_sensitive_evidence": {
+      "backup_max_minutes": 70,
+      "backup_status_url": "https://api.bronservis.ru/.well-known/bron-health.json",
+      "checked_max_minutes": 25,
+      "exact_json_keys": [
+        "checked_at",
+        "last_backup_utc",
+        "healthy"
+      ],
+      "expected_http": 503,
+      "method": "one normal DNS/TLS GET, timeout15s",
+      "no_service_restart_or_new_backup": true,
+      "reuse_recent_equivalent_evidence": true
+    }
+  },
+  "activation": {
+    "authority": "this distinct EXECUTOR_TASK T28 resolves prior queue; no coordinator completion confirmation needed",
+    "closed": "reuse existing action results; execute only remaining authorized branches",
+    "no_execution_evidence": "if no local/VPS accepted/started guard, state, log, receipt or process, record SUPERSEDED_NO_EXECUTION_EVIDENCE and proceed immediately",
+    "per_action_reconciliation": "task acceptance or a delivered helper alone does not consume a restart/inventory budget; reconcile action-specific start/effect guards and evidence; reuse completed delivery and execute genuinely unstarted actions",
+    "reconcile_before_fast_forward": true,
+    "running": "observe same process; do not change its checkout or start another; independent readiness without checkout change or in isolated worktree",
+    "unknown": "read existing evidence/current effects; do not reset guards or repeat consumed/unknown effects; independent branches continue"
+  },
+  "coordinator_capability": {
+    "get_project_actual_status": "ACTIVE_HEALTHY",
+    "no_owner_dashboard_login_preflight": "use connector after proper gates; ask only on actual access failure",
+    "pause_restore_tools": "available, not invoked and effects not tested",
+    "supabase_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t28-transport/inventory.mjs",
+      "directory_mode": "0700",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t23-delta-readonly.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t28-transport/t26-transport-probe.mjs",
+      "directory_mode": "0700",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t26-transport-probe.mjs"
+    }
+  ],
+  "failure_acceptance": {
+    "exit": 2,
+    "forbidden": [
+      "error.message",
+      "error.detail",
+      "error.hint",
+      "stack",
+      "SQL",
+      "row_values",
+      "credentials"
+    ],
+    "no_blind_retry": true,
+    "optional_safe_fields": [
+      "query.object",
+      "query.elapsedMs"
+    ],
+    "query_context": "required after an audited query; null is expected if every route failed before inventory",
+    "required_safe_fields": [
+      "phase",
+      "code"
+    ]
+  },
+  "files": {
+    "docs/runbooks/local-access-handoff.md": "52016cd2f370786ca991b4cbb4acd7da1bc0e115d468d4a76457917dff3b2619",
+    "docs/runbooks/payloads/t23-delta-readonly.mjs": "9d26bd47cae26e85bb60e75a31e4650904af7aec88ab4cfd6811d5f54cd0c27e",
+    "docs/runbooks/payloads/t26-transport-probe.mjs": "c105c796fb189f18c3edcf610494c3fbba1d6b1d7067e66ac84b02dbfe275b1d"
+  },
+  "format": 1,
+  "native_preflight": {
+    "canonical_tls_and_callback_preservation": "unit PASS; production uses unchanged source factory",
+    "driver": "pg8.23.1 actual wire protocol",
+    "engine": "PostgreSQL17.12",
+    "fixture": "tests/ops/transport-native.py",
+    "fixture_container_removed": true,
+    "inventory_comparator": "T25 native real-driver PASS REUSED; algorithm unchanged",
+    "real_vps_route_acceptance": "PENDING_T28; code unchanged from tested T26",
+    "result": "PASS",
+    "scope": "synthetic seven-stage probe and actual1MiB response, NOSUPER postgres; not actual network/TLS acceptance",
+    "unit_tests": 12
+  },
+  "not_authorized": [
+    "source_write_or_freeze",
+    "source_locks",
+    "target_mutation",
+    "DDL",
+    "restore_retry",
+    "backup_reinstallation",
+    "dependency_installation",
+    "build_repetition",
+    "key_change",
+    "Telegram_message",
+    "cron_change",
+    "workflow_dispatch",
+    "PR_merge",
+    "preview_apply",
+    "public_publish",
+    "source_admission_draft_activation",
+    "provider_message_or_purchase",
+    "firewall_or_product_network_change",
+    "DB_password_on_Mac",
+    "repeat_managed_tunnel_restart",
+    "fabricate_T26_completion",
+    "wait_forever_for_absent_T26_receipt",
+    "reset_or_overwrite_consumed_legacy_guard",
+    "new_task_ID_as_retry_permission",
+    "source_admission_draft_activation"
+  ],
+  "one_run": {
+    "action_id": "T28.repaired_source_inventory",
+    "aliases": [
+      "T26.repaired_source_inventory"
+    ],
+    "capture_bytes": 67108864,
+    "max_attempts": 1,
+    "max_full_inventory_attempts": 1,
+    "max_total_attempts_across_aliases": 1,
+    "per_table_rows": 25000,
+    "total_rows": 100000,
+    "wall_seconds": 240
+  },
+  "payload_version_note": "unchanged native-tested T26 code; stdout T26_* is a legacy payload label, not a request to execute old task or reset attempts",
+  "prior_failure": {
+    "cause": "stage UNKNOWN; aggregate10s included connection and all queries",
+    "duration_seconds": 25,
+    "exit": 2,
+    "inventory": "NOT_RUN",
+    "retry_prior_task": false,
+    "routes": [
+      {
+        "code": "SOURCE_ROUTE_FAILED",
+        "elapsedMs": 5007,
+        "route": "canonical-session"
+      },
+      {
+        "code": "SOURCE_ROUTE_DEADLINE",
+        "elapsedMs": 10002,
+        "route": "canonical-transaction"
+      },
+      {
+        "code": "SOURCE_ROUTE_DEADLINE",
+        "elapsedMs": 10001,
+        "route": "existing-reverse"
+      }
+    ],
+    "task": "T25"
+  },
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T28 COMMIT=<pin> STATE=<local path> RECEIPT=<canonical path>",
+    "before_effects": "create ACCEPTED with task/commit/manifest digest, legacy reconciliation and per-action guards; fsync/atomic updates; existing receipt is read not overwritten",
+    "canonical_vps": "/root/bron-secrets/t28-release-receipt.json",
+    "final_report_required_even_if_blocked_or_schedule_pending": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T28-state.json",
+    "log_vps": "/root/bron-secrets/t28-release.log",
+    "mode": "0600",
+    "no_reply_needed_after_acceptance": true
+  },
+  "restore_evidence": {
+    "manifest": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "manifest_sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9",
+    "receipt": "/root/bron-secrets/t21-restore-5684c16-receipt.json",
+    "repeat_restore": false
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release bundles on VPS",
+    "T18 backup/status installation",
+    "T19 confirmed private Telegram delivery and enabled monitor",
+    "T21 full cold restore PASS",
+    "T22 PR14 merge and cron readback",
+    "T23 delivered historical helper/log/receipt preserved; no writes and cleanup PASS",
+    "T24 read-only failure context, cleanup PASS, no source/target writes",
+    "T25 no inventory/no writes/cleanup PASS",
+    "T27 facts/rules persisted at339fa4a; no task execution asserted"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "dependency_realpath": "/opt/bron/rehearsal-audit.exfSfv9a/node_modules",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "schedule_observation": {
+    "event": "schedule",
+    "minimum_main_revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+    "pending_does_not_block": true,
+    "repository": "bronservis51-bot/bron-franchise",
+    "workflow": "availability.yml"
+  },
+  "scope": "reconcile unacknowledged T26 and queued T27, supersede their unexecuted branches, perform already-authorized transport recovery and one inventory plus independent owner readiness",
+  "source_sql_evidence": {
+    "field_bytes": 1971596,
+    "interpretation": "server completes inside 8s; does not prove current VPS route bulk throughput",
+    "method": "Supabase execute_sql, actual source READ ONLY, statement_timeout 8000ms",
+    "query": "exact augmented daily_revenue projection + ORDER BY + LIMIT25001, returning only aggregated counts/bytes",
+    "result": "PASS",
+    "rows": 2975,
+    "value_bytes": 1828780
+  },
+  "supersedes": {
+    "T26": "unacknowledged issuance; not completion; reconcile before effects",
+    "T27": "queued dependency removed; unexecuted readiness branches absorbed",
+    "do_not_wait_for_missing_T26_receipt": true,
+    "not_a_new_attempt_budget": true
+  },
+  "task": "T28",
+  "transport_probe": {
+    "bulk_bytes": 1048576,
+    "bulk_pass_ms": 10000,
+    "canonical_verified_tls_and_existing_password_callback": true,
+    "connection_time_excluded_from_bulk_gate": true,
+    "no_transaction_pooler_for_control": true,
+    "only_existing_protected_route_or_explicit_canonical_session": true,
+    "protected_config_files_unchanged": true,
+    "small_bytes": 1024,
+    "stage_caps_ms": {
+      "begin": 5000,
+      "bulk": 20000,
+      "connect": 15000,
+      "identity": 5000,
+      "rollback": 5000,
+      "serverDeadline": 5000,
+      "small": 5000
+    }
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b"
+  }
+}

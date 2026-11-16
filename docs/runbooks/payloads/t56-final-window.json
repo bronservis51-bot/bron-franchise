@@ -1,0 +1,186 @@
+{
+  "format": 1,
+  "task": "T56",
+  "actionId": "T56.release_window",
+  "execution_authorized": true,
+  "maxSuccessorWindows": 1,
+  "pins": {
+    "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+    "inputSha256": "c9e0b5fa1fd207e70f63292ad3a3c69d79218ec6b9185fafd5db0ac44ff6a4d6",
+    "barrierSha256": "0231b2ad09cb0a4fb11ff285c41b66a1274a3666ffe2889e37a49cd8ec41a1a6",
+    "basePreparedSha256": "ed0871f06237339c60218e84185b7d278e0881c5443ffddbbc2a8152e793220f",
+    "finalPreparedSha256": "a226cfa9eb96fbe9ca2276e20bffc637d04cbd2670417f18dc45f03df63f25a8",
+    "contextSha256": "564c015f97aea285659304a78437840562bf701e3ed5df55b94f04c9008c5f3b",
+    "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+    "verifyFencedSqlSha256": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "priorResultSha256": "7987d55b1323c1b4a64aeeac7e8b7050f500f9fc6cf778d973c1b9d0e3cd9aca",
+    "ownerGrantSha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "sourceTemplateSha256": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0"
+  },
+  "priorT53": {
+    "manifestSha256": "f63ac165e0f3302202ebf73468f66c59c0d26677115bdeb3cac1215189279885",
+    "custody": "verify-expired-public-metadata-and-seal-on-vps"
+  },
+  "t55ReceiptSha256": "ae80d30eea394c17935cf0c53da0baacff9f9dbe75f9d8088597a2cde3e623f4",
+  "t55ResultSha256": "0d1bc7558781e152680ed2aed3e684a4582348e354a0df6f61f7d89d879290f1",
+  "approval": {
+    "document_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "status": "APPROVED"
+  },
+  "source": {
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "template_name_prefix": "bron-source-reader-"
+  },
+  "transfer_budget": {
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "failed_or_uncertain_counts": true,
+    "max_attempts": 3,
+    "required_used": 1,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "mcpRelay": {
+    "repository": "bronservis51-bot/bron-franchise",
+    "branch": "ops/t56-final-relay-20261115",
+    "requestPrefix": ".release-control/t56/",
+    "workerId": "cloud-supabase-mcp-github-relay"
+  },
+  "phase_authorizations": {
+    "prepare_final": {
+      "actionId": "T56.prepare_final",
+      "capability_ttl_seconds": 7200,
+      "source_data_reads": 0,
+      "target_metadata_probe": 1
+    },
+    "run_final": {
+      "actionId": "T56.final_https_window",
+      "applyTimestampOnly": true,
+      "maxTimestampUpdates": 1,
+      "sourceFrameBudget": 2,
+      "priorSourceAuthSnapshotAttempts": 1,
+      "beforeImagePath": "/root/bron-secrets/t56-auth-before-c56a2026.json",
+      "wall_seconds": 480,
+      "targetAdmitted": false
+    },
+    "preview": {
+      "authorized": false
+    },
+    "publication": {
+      "authorized": false
+    }
+  },
+  "checklist": "docs/runbooks/t56-final-window.md",
+  "runtime": {
+    "dependency_lock_path": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
+    "dependency_lock_sha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69",
+    "directory": "/root/bron-secrets/t45-runtime",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "pg": "8.23.1",
+    "version": "22.23.5"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  },
+  "verify_only": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "files": {
+    "docs/runbooks/payloads/t56-final-window.mjs": "4717f5cf23c8598e7113b824d505df8e1b29e7beb2ceaeddca17b69e30b879bf",
+    "docs/runbooks/payloads/coordinator-fence-ack-t56.mjs": "8502c3f967678e1cf211c8fdf3a203b04b5ca63ceb4cb936e375a29109f0230a",
+    "docs/runbooks/payloads/t56-relay-driver.py": "a0a4da1330c8a0d43d394357bf0f21202cf36f19af544d7b956a0f8ebc5e2562",
+    "docs/runbooks/payloads/t56-cloud-broker.js": "f8d3156a77488e11c42ef8a3c3b8751a4156f40dec9dda1b4728e7e9cc28bc0f",
+    "docs/runbooks/payloads/t56-cloud-broker-io.py": "e2218238d02cb4ce6d728ad8c1296f7f55de084212238f56b863805ef22d56a0",
+    "docs/runbooks/payloads/mcp-fence-result.py": "28e9b858332946333752279f8a9ef8a94a36b46ba15c62c9bc305f7535f4a5aa",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "docs/runbooks/payloads/source-final-https-reader/index.ts": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0",
+    "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "docs/runbooks/payloads/source-https-reader/auth-rows.mjs": "4b35db4983115be1575e17b97af4d5c66ee3554b124f3941a1e6b68fe9fedb28",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
+    "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
+    "tests/ops/t56-final-window.test.mjs": "96126369418370803d39396c7ad834122102ea1d7e3df141992247c159cf4ea3",
+    "tests/ops/test_t56_relay_driver.py": "9b4cb2c74cefb905232f80ba54d3eee4ae5e34291ec4042e6e6f29faa0b1301b",
+    "tests/ops/test_t56_cloud_broker.py": "dd9c9adb20910fa39233b88701b6733e95c8c1afe28c236b56e54bcacf23725d",
+    "tests/ops/t56-cloud-broker.test.mjs": "82a32d2f9a60ea2e13738af502a6364e53fa89d5d90da57ad5c8f77271e491d4",
+    "docs/runbooks/t56-final-window.md": "9bba22e65c088b60a7b5625a5ac8f56e193c0291629b0b37e7926bcd926e15b1"
+  },
+  "deliveries": [
+    {
+      "source": "docs/runbooks/payloads/t56-final-window.mjs",
+      "destination": "/root/bron-secrets/t56-final-window.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/coordinator-fence-ack-t56.mjs",
+      "destination": "/root/bron-secrets/coordinator-fence-ack-t56.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/source-final-https-reader/index.ts",
+      "destination": "/root/bron-secrets/t56-release/source-reader-index.ts.template",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t56-final-window.json",
+      "destination": "/root/bron-secrets/t56-release/manifest.json",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    }
+  ],
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t56-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T56-state.json",
+    "mode": "0600",
+    "matching_sha256_required": true,
+    "safe_metadata_only": true
+  },
+  "execution_window": {
+    "capability_seconds": 7200,
+    "minimum_run_headroom_seconds": 620,
+    "ready_round_trip_seconds": 30,
+    "ready_max_age_seconds": 30,
+    "ack_seconds": 60,
+    "final_wall_seconds": 480,
+    "prepare_only_after_broker_and_mcp_ready": true
+  },
+  "observed_prior_T53": {
+    "observedUtc": "2026-11-15T10:40:26.505Z",
+    "status": "FINAL_READY",
+    "preparedSha256": "2fd49a3403205eaf0319d6063f8706ac4f2effc684ad439f95da032f78260994",
+    "prepareResultSha256": "60e6355737bd9044364f7571568a14853f69eaddb3d04f5c012336cf122baf72",
+    "prepareGuardSha256": "863ad0d47610dabeff51094fd2893e77972970535b0bf484895b52ad2fa8f4ed",
+    "receiptSha256": "6f5bf7de592465a6a4d6b7a7c2548a5091f76c20576a45a1652f5d986e3d7587",
+    "createdUtc": "2026-11-15T07:30:39.956Z",
+    "expiresUtc": "2026-11-15T09:30:39.956Z",
+    "finalRunGuardPresent": false,
+    "finalResultPresent": false,
+    "readinessRequestPresent": false,
+    "deploymentProofPresent": false,
+    "sharedBudgetUsed": 1,
+    "sharedBudgetRemaining": 2,
+    "sharedBudgetUncertain": false
+  },
+  "scope": "One isolated final window after expired T53 preparation, automatic real Source-clock checks, two remaining encrypted Source-to-VPS snapshots, max one timestamp-only update and strict audit. No same-ID retry, private Mac transit, preview or publication."
+}

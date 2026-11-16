@@ -1,6 +1,6 @@
-// Меню по роли. Франчайзи: главная, сотрудники, рейтинг (только в России), финансы (вкл. роялти), база знаний. Сотрудник: смена и база знаний.
-// Менеджер: франчайзи, заявки с сайта, роялти, рейтинг, база знаний.
-import { BookOpen, GraduationCap, Clock, Home, Inbox, Landmark, Store, Trophy, Users, Wallet } from 'lucide-react';
+// Меню по роли. Франчайзи: главная, сотрудники, финансы (вкл. роялти), база знаний. Рейтинг — только менеджеру сети.
+// Менеджер: франчайзи, заявки с сайта, экономика (вкл. роялти), рейтинг, база знаний.
+import { BookOpen, GraduationCap, Clock, Home, Inbox, Store, ShoppingCart, Trophy, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export interface NavItem {
@@ -17,13 +17,12 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
   if (role === 'manager') return [
     { to: '/', label: 'Франчайзи', icon: Store },
     { to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' },
-    { to: '/royalty', label: 'Роялти', icon: Landmark },
     { to: '/finance', label: 'Экономика', icon: Wallet },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
   if (role === 'support') return [{to:'/',label:'Вопросы',icon:Inbox,badge:'kb'},{to:'/kb',label:'Знания',icon:BookOpen}];
-  if (role === 'team') return [training,{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
+  if (role === 'team') return [training,{to:'/order',label:'Заказы',icon:ShoppingCart},{ to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
   if (role === 'staff') return [
     { to: '/', label: 'Смена', icon: Clock },
     training,
@@ -32,7 +31,6 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
   return [
     { to: '/', label: 'Главная', icon: Home },
     { to: '/staff', label: 'Сотрудники', icon: Users },
-    { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/finance', label: 'Финансы', icon: Wallet },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];

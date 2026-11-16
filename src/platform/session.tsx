@@ -3,8 +3,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from '@tanstack/react-query';
 import { command, from, rows, toAppError } from './backend';
 import { setCurrencyMinorUnits } from './money';
-import { AppError } from './backend';
-import { queuedOps } from './outbox';
 import { clearUserData } from './offline';
 import { setRememberDevice, snapshot, supabase } from './supabase';
 
@@ -127,8 +125,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const uid = me?.user.id;
-    if (uid && (await queuedOps(uid)).length) throw new AppError('validation', 'Есть неотправленные записи. Сначала отправьте их или сохраните копию из списка очереди.', '', '');
-    if (uid) await clearUserData(uid); // черновики пользователя удаляются с устройства
+    if (uid) await clearUserData(uid); // атомарно проверяет очередь и удаляет только черновики
     qc.clear();
     snapshot.clear();
     await supabase?.auth.signOut({ scope: 'local' });

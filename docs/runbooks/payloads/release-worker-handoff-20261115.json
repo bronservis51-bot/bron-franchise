@@ -1,0 +1,88 @@
+{
+  "currentState": {
+    "T45": "BLOCKED_SOURCE_FENCE_START",
+    "T49": "NOT_RUN",
+    "maintenance": true,
+    "sourceBudgetFreshCheckRequired": true,
+    "sourceBudgetLastKnownUsed": 1,
+    "sourceFenced": true,
+    "sourceFrameAttempts": 0,
+    "targetWriteOutcome": "UNCHANGED"
+  },
+  "deferred": [
+    "GitHub visibility",
+    "owner-deferred legal docs",
+    "SLA",
+    "MoySklad",
+    "product enhancements",
+    "optional hardening/cleanup",
+    "additional strong-model review after reset13MSK"
+  ],
+  "diagnosis": {
+    "ackCanonicalShaAndBindings": "PASS",
+    "ackLateMs": 94116,
+    "ackWrittenEpochMs": 1794712527545,
+    "cause": "ACK_DELIVERY_AFTER_DEADLINE",
+    "requestExpiryEpochMs": 1794712433429,
+    "resultSha256": "7987d55b1323c1b4a64aeeac7e8b7050f500f9fc6cf778d973c1b9d0e3cd9aca",
+    "resultWrittenEpochMs": 1794712433434
+  },
+  "execution_authorized": true,
+  "files": {
+    "deploy/timeweb/Caddyfile": "22f364fe3d69190adae37338ed2bbd42a2d0e9a07d19af007a39f7b3fb3d4ca9",
+    "deploy/timeweb/Caddyfile.preview": "4e13363180893412d922cf2a6bf914179bfc8d8d621e617f2a38ca0f9d506e12",
+    "deploy/timeweb/compose.preview.override.yml": "a54cbc378e356acaacf32de6d32f06d3945a9dee6ec68a4762c801a8ceaf4710",
+    "deploy/timeweb/compose.production.override.yml": "4cf23a2d3db3613e339afb983925d8d2fa31ac2292aa8c8aaddfe9a6891c16cf",
+    "docs/runbooks/payloads/coordinator-fence-ack-t49.mjs": "0df9d1aa00a26d15e803d9f6fc4d779c85e0f14f1452a6054ea8335fbbc89b96",
+    "docs/runbooks/payloads/t49-final-window.json": "b934310370d3cdf921f798000414c10de6cfd410c81fef4ac9a8a6a6563160d3",
+    "docs/runbooks/payloads/t49-final-window.mjs": "b5fd088279ab544e0c0ce79bbaf3aff87d3edaae61b37065ac2ba2bdee70aee6",
+    "docs/runbooks/payloads/worker-reader-tombstone.ts": "bbaf7aeb0201df62a3342790315ed122a9956ac75eb4d9de2b5264c172fafe71",
+    "docs/runbooks/payloads/worker-t45-inverse.sql": "68545c5bcb9f8b0aaacd2f703d0cb42a8424d737efa8077c22441547860cc51b",
+    "docs/runbooks/payloads/worker-t45-verify-fenced.sql": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "docs/runbooks/payloads/worker-t45-verify-original.sql": "81e21c3d9d2fee2a96269ff889885c19270030fcc7979debe8bc47e696884d78",
+    "docs/runbooks/release-worker-handoff-20261115.md": "9e42f8146aa165257a5ce2b64c1aa3b1ffca970c192ddc557e7d65574e6b198e",
+    "docs/runbooks/t49-successor-final-window.md": "168cccc5540df128d728049a1ff185a3510216b8d06da9b38d4a6dc6789729fc",
+    "tests/ops/t49-final-window.test.mjs": "42ec697b94de6cff163e0dff5e73f1decc328e936c09a0c759930e3feb5864ea"
+  },
+  "format": 1,
+  "handoff": "docs/runbooks/release-worker-handoff-20261115.md",
+  "noStrongModelApprovalAfterEachPassRequired": true,
+  "oneTaskAtATime": true,
+  "ownerActions": [
+    "actual essential acceptance before publication",
+    "personal OAuth/MFA only if genuinely required by existing service"
+  ],
+  "scope": "Delegate remaining release-critical work, one task at a time; no repeated coordination with primary model. Preserve actual MCP, data-integrity, acceptance and rollback gates.",
+  "sequence": [
+    "WB01 closed diagnosis reuse",
+    "T49 one successor after all prerequisites",
+    "WB02 strict-pass-only reader closure and Source pause",
+    "WB03 private preview/legacy transition/one actual owner acceptance",
+    "WB04 public switch and live verification"
+  ],
+  "stopConditions": [
+    "missing actual MCP/SSH readiness",
+    "ledger not exactly1/3 or uncertain",
+    "prior target outcome differs from UNCHANGED",
+    "expiry/headroom exhausted",
+    "new BLOCKED/UNKNOWN or non-timestamp difference",
+    "owner acceptance absent"
+  ],
+  "successorManifest": "docs/runbooks/payloads/t49-final-window.json",
+  "successorManifestSha256": "b934310370d3cdf921f798000414c10de6cfd410c81fef4ac9a8a6a6563160d3",
+  "successorTask": "T49",
+  "task": "RELEASE_WORKER_HANDOFF_20261115",
+  "verification": {
+    "T49focusedTests": "6/6 PASS",
+    "independentT49Review": "PASS",
+    "oldT45RuntimeUnchanged": true,
+    "productionSuccessor": "NOT_RUN"
+  },
+  "workerRoleAuthorization": {
+    "noFakeProofOrUiSqlBypass": true,
+    "realPerStageAckDeadlineMs": 60000,
+    "realReadyTrialMaxMs": 30000,
+    "sameAgentSshAndMcpOrProvenFastAutomationRequired": true,
+    "sourceCoordinator": "delegated owner-authorized worker using Supabase MCP"
+  }
+}

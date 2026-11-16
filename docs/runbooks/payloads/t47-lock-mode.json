@@ -1,0 +1,83 @@
+{
+  "actionId": "T47.repair_lock_mode_and_resume_prepare",
+  "additionalPrepareFinalInvocations": 1,
+  "checklist": "docs/runbooks/t47-lock-mode-and-prepare.md",
+  "command": [
+    "/usr/bin/python3",
+    "-I",
+    "/root/bron-secrets/t47-lock-mode.py",
+    "--manifest",
+    "/root/bron-secrets/t47-lock-mode/manifest.json",
+    "--sha256",
+    "<EXACT T47 manifest SHA>"
+  ],
+  "continuation": "Actual mode PASS -> ONE additional unchanged T45 prepare_final -> FINAL_READY -> same T45 Root-managed window; no new approval wait",
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t47-lock-mode.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t47-lock-mode.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t47-lock-mode/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t47-lock-mode.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t47-lock-mode"
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/t47-lock-mode.py": "523f3e2a6883717cad06206ecb0d99aa8f5537b665950bded66a6e41768341a5",
+    "docs/runbooks/t47-lock-mode-and-prepare.md": "7f67cd6938fbcdc0a4414fbf69d6f4690b718c623cb42a5c49392b4eca6f937f"
+  },
+  "format": 1,
+  "fromMode": "0664",
+  "guardPreviouslyClaimed": false,
+  "lockPath": "/opt/bron/rehearsal-audit.exfSfv9a/package-lock.json",
+  "lockSha256": "a100d1e53b1923fa350912eac4cb82a330e7390f79949f3346295fefab0b8b69",
+  "maxTotalPrepareFinalInvocations": 2,
+  "not_authorized": [
+    "Lock content/owner/inode replacement or dependency installation",
+    "T45 guard deletion/reset/code/manifest/proof changes",
+    "More than one additional prepare_final invocation",
+    "Source/DB/S3/secret/backup/Auth/business operations by mode helper",
+    "Service/container/network/firewall/DNS changes",
+    "Preview/Pages/publication under T47"
+  ],
+  "oldBlockedReceiptPath": "/root/bron-secrets/t45-release-receipt.json",
+  "oldBlockedReceiptSha256": "65a61c2888b96ba9a8ae9870fcbb95c9edc624c3fc2cec2d4a25352fe2d82d37",
+  "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+  "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+  "parentTask": "T45",
+  "preservedOldReceiptPath": "/root/bron-secrets/t47-lock-mode/prior-T45-blocked-receipt.json",
+  "priorPrepareFinalInvocations": 1,
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t47-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T47-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "sourceSnapshotBudgetUnchanged": {
+    "remaining": 2,
+    "used": 1
+  },
+  "task": "T47",
+  "toMode": "0644",
+  "verification": {
+    "independentReview": "PASS",
+    "nativeFdModeFixture": "PASS: O_RDONLY|O_NOFOLLOW fd fchmod0664->0644+fsync; actual fixture UID1000; same SHA/dev/ino/size/mtime",
+    "productionModeFix": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

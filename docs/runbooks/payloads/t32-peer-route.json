@@ -1,0 +1,158 @@
+{
+  "actions": {
+    "T32.auth_on_verified_peer": {
+      "algorithm": "unchanged T30/T31 tested exact microseconds and canonical SHA of ALL other fields; actual RO/RR/UTC, server5s/idle10s, verified loopback target/cronoff/pgnet0",
+      "applyAuthorized": false,
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t32-auth-verified-peer.mjs"
+      ],
+      "condition": "ONLY fresh root0600 T32 full-network PASS on same peer; continue without new coordinator ACK",
+      "data": "auth.users only,16/16 expected; private IDs/timestamps/digests onlyVPS RAM; safe counts/direction/phase/step/timings only",
+      "finalFreezeAudit": false,
+      "guard": "/root/bron-secrets/t32-auth-verified-peer.guard.json",
+      "max_launches": 1,
+      "on_auth_failure": "BLOCKED with safe context, no second Auth attempt or metadata repair",
+      "on_network_failure": "NOT_RUN, no rerun oldT30/T31/no alternatepeer/Macfallback",
+      "wall_seconds": 90
+    },
+    "T32.owner_branch": {
+      "does_not_block_network_or_report": true,
+      "no_new_secret_prompt": true,
+      "reuse": "T30 personally operated phone-console key proof and independent-copy/second-device attestation"
+    },
+    "T32.peer_route_experiment": {
+      "FAIL": "exact inverse removes only matching added host route and confirms absence; drift=>CLEANUP_REQUIRED, never delete unrelated route",
+      "PASS": "all stages plus rollback PASS, exact1MiB contents/count and exact route still matches AFTER probe; only then retain temporary migration route",
+      "before_effect": "exclusive root0600 fsynced file AND parent /root/bron-secrets/t32-network-route-before.json includes exact before-state/add/inverse",
+      "change": "ONLY absent exact34.215.156.231/32 using observed simple gateway/dev/src, mtu1280 advmss1200 metric42731; no replace/default/firewall/persistent change",
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t32-peer-route.mjs"
+      ],
+      "guard": "/root/bron-secrets/t32-network-helper.guard",
+      "interpretation": "MTU/MSS remains a hypothesis; report actual comparative result, no invented cause",
+      "max_launches": 1,
+      "new_baseline_or_dns_rotation": false,
+      "new_dummy_probes": 1,
+      "new_route_adds": 1,
+      "output": "safe phase/code/timings and changed/unchanged numeric TCP metrics, route state/inverse path; no raw packet capture/SQL/credentials",
+      "probe": "reuse unchanged T31 native-tested READ ONLY dummy128,512,8x64,1024,4096,1MiB; statement4s/idle10s; firstfailure stops",
+      "result": "/root/bron-secrets/t32-source-network-result.json",
+      "signal_or_deadline": "destroy own sockets, reconcile/exactinverse and record result before exit; abruptkill uses durable before-image, no blind rerun",
+      "transport": "new direct VPS6543 TCP to same selected canonical peer, unchanged CA/SNI/certificate/password callbacks; no Mac transit",
+      "wall_seconds_including_cleanup": 120
+    },
+    "T32.schedule": {
+      "event": "schedule",
+      "no_dispatch_or_change": true,
+      "revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+      "run_id": 43533210497,
+      "status": "PASS_REUSED"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t32-peer-route.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t32-peer-route.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t32-auth-verified-peer.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t32-auth-verified-peer.mjs"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t32-auth-verified-peer.mjs": "c798800a3fcaf20d328808ae43b0557a5112eff694d45f35971813c700475e18",
+    "docs/runbooks/payloads/t32-peer-route.mjs": "ab946ba88d976dc62a0c20015ffb2788f798a2a3d722a7b4c2ee77c755dfd16b",
+    "tests/ops/t32-auth-verified-peer.test.mjs": "4d8b13ea1331ebdbb696d3638bce7ffaa0b039f08315b5b12ed1d85f71dd30ec",
+    "tests/ops/t32-peer-route.test.mjs": "30583bdcc3ef2d662b9122160ea96ac4c163000798eb0532b815a3b46611e3b8"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T31_reported_receipt_sha256": "c29b3a2d9aa2801b90fee85a87154ac5f9a583bd842f6a672c10ac14da5fed59",
+    "network_result": "/root/bron-secrets/t31-source-network-result.json",
+    "network_result_sha256": "a4fa63fc4c269781c3c7062b9ba32cc67ef6174e09b4571ef104f32fcab7be99",
+    "peer_ipv4": "34.215.156.231",
+    "required": "T31 BLOCKED, canonical peer, baseline128PASS/512PG_QUERY_READ_TIMEOUT, unchanged/no prior host route experiment; exact protected result SHA before effects"
+  },
+  "not_authorized": [
+    "source_or_target_datawrites",
+    "timestamp_reconciliation",
+    "source_admission_freeze_or_Pause_Restore",
+    "full_inventory_or_restore",
+    "auditorreplacement",
+    "build_install_newservice",
+    "new_baseline_or_peer_rotation",
+    "replaceexistingroute_default_firewall_globalpersistentMTU",
+    "morethanone_routeexperiment_or_Authlaunch",
+    "Macsource_data_orbackup_evenencrypted",
+    "readserveridentity_or_newsecretprompt",
+    "Telegrammessage_workflowdispatch_cronchange",
+    "PRmerge_preview_publication"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T32 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "acceptance/guards/inputSHAs/action budget/route intent and inverse durable before action; never reset consumed oldguards",
+    "canonical_vps": "/root/bron-secrets/t32-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T32-state.json",
+    "log_vps": "/root/bron-secrets/t32-release.log",
+    "mode": "0600",
+    "output": [
+      "all dummy stage outcomes and latency",
+      "numeric TCP comparison versus pinned T31",
+      "route retained/restored/CLEANUP_REQUIRED and before-image/inverse path",
+      "Auth counts/direction orNOT_RUN/BLOCKED",
+      "owner branch separately pending/proved",
+      "full SHA network-result/release-receipt/log",
+      "cleanup and changed paths"
+    ],
+    "report_without_owner_wait": true
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 artifacts",
+    "T18 backup/status",
+    "T19 owner-visible alert",
+    "T21 coldrestore",
+    "T22 actual schedule43533210497",
+    "T22 actual schedule43533210497",
+    "T29 keyREADY/previewinputs",
+    "T30 ownerbranch pending",
+    "T31 synthetic128PASS/512timeout and noMSS experiment"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "one previously unexecuted host-only MTU/MSS experiment against exact T31 evidence, one conditional Auth read after complete transport PASS; no new baseline",
+  "task": "T32",
+  "verification": {
+    "Auth": "REUSED T30 exact µs/canonicalSHA nativePG17.12/pg8.23.1; T32 task/guard/result namespace only",
+    "actual_kernel_and_network": "conditional runtime acceptance, not claimed by unit fixtures",
+    "native": "REUSED unchanged T31 runDummyProbe actualPG17.12/pg8.23.1 twofresh ROconnections, all6stages including1MiB, actual4s/10s controls andcleanup PASS; no SQL/driver change",
+    "route_lifecycle": "durable beforeimage-beforeadd, failed/incompleteprobe inverse, ambiguousadd inverse, drift refusal including PASS+drift, persistence error handling PASS",
+    "unit": "T32 route lifecycle8 + T32 Auth fresh-result gate1 PASS"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/root/bron-secrets/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t31-source-network.mjs": "9ef0c3e8c32626b7760e307efc57f26c033affddeef43f4841e70ebb5a2f8472"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

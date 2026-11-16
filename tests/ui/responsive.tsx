@@ -8,6 +8,7 @@ import {createShiftFixture} from './shift-fixture';
 import {learningFixture} from './learning-fixture';
 import { knowledgeFixture } from './knowledge-fixture';
 import {createLeadFixture} from './lead-fixture';
+import { opQueue } from '../../src/platform/offline';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
@@ -17,8 +18,9 @@ const encode = (v: unknown) => btoa(JSON.stringify(v)).replace(/=/g, '').replace
 const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: uid, exp, role: 'authenticated' })}.synthetic-qa`;
 localStorage.removeItem('bron.remember-device');
 sessionStorage.setItem('bron.auth', JSON.stringify({ access_token: token, refresh_token: 'synthetic-qa-only', token_type: 'bearer', expires_at: exp, expires_in: 3600, user }));
-const partner = { id: 'qa-partner', name: 'Франчайзи с очень длинным названием города и несколькими торговыми точками', country: 'RU', currency: 'RUB', status: 'active', contact_name: 'Вымышленный владелец', contact_phone: null, contact_email: 'long-contact-address-for-responsive-test@example.invalid', order_url: null };
+const partner = { id: 'qa-partner', name: 'Франчайзи с очень длинным названием города и несколькими торговыми точками', country: 'RU', currency: 'RUB', status: 'active', preparation_stage: 'opening_preparation', contact_name: 'Вымышленный владелец', contact_phone: null, contact_email: 'long-contact-address-for-responsive-test@example.invalid', order_url: null };
 const location = { id: 'qa-location', name: 'Торговый центр с очень длинным названием', partner_id: partner.id, city: 'Вымышленный город', currency: 'RUB', status: 'active', opened_on: null, address: null };
+const teamLocation = {...location,id:'qa-location-rotation',name:'Вторая точка для подмен и ротации с очень длинным названием'};
 const section = { id: 'qa-section', slug: 'qa-section', title: 'Гарантии и жалобы', description: 'Что делать, если клиент недоволен', icon: 'shield', sort: 10, parent_id: null, count: 3 };
 const articles = ['Гарантия: как принимать обращение', 'Очень длинное название статьи без сокращения текста на маленьком телефоне', 'Что объяснить клиенту после оклейки'].map((title, i) => ({ id: i ? `qa-article-${i}` : 'qa-article', section_id: section.id, title, summary: 'Синтетическое описание для проверки переноса строк и кнопок.', type: i === 2 ? 'checklist' : 'regulation', status: 'published', minutes: 1, views_30: 0, required_ack: false, has_video: false, has_draft: false, read: false }));
 const month = '2026-11-01';
@@ -70,11 +72,16 @@ window.fetch = async (input, init) => {
       support_accounts:[],learning_config_get:{for_managers:false,for_sales:false,questions:[],version:0},
       motivation_get:{version:0,policy:qaPolicy,currency:'RUB'},learning_report:[],learning_today:{day:'2026-11-09',items:qaParams.get('learning')==='empty'?[]:[qaTask]},
       staff_home:{month,currency:'RUB',partner_name:partner.name,rate_bp:0,shift_fee_minor:0,pay_policy:qaPolicy,use_partner_motivation:true,open_shift:null,locations:[{location_id:location.id,location_name:location.name,currency:'RUB',today:'2026-11-09',my_today:null}],month_earned_minor:0,month_revenue_minor:0,month_shifts:0,shifts:[]},
-      staff_profile_save:'qa-created',team_list: [],
+      staff_profile_save:'qa-created',staff_profile_save_phone:'qa-created',account_create_phone:'qa-created-owner',staff_account_create_phone:'qa-created-manager',
+      user_set_phone_login:{phone:'79001234567',login:'79001234567',changed:true},
+      staff_access_set:null,user_set_password:null,team_set_active:null,
+      team_list:qaParams.get('access')==='filled'?[{user_id:'qa-manager',full_name:'Вымышленный управляющий с очень длинным именем и фамилией',phone:'qa.manager',active:true,location_ids:[location.id,teamLocation.id],location_names:[location.name,teamLocation.name]}]:[],
+      team_revenue_month:qaParams.get('access')==='empty'?[]:[{location_id:location.id,location_name:location.name,currency:'RUB',total_minor:12500000,days:[{day:'2026-11-15',total_minor:5000000},{day:'2026-11-14',total_minor:7500000}]},{location_id:teamLocation.id,location_name:teamLocation.name,currency:'RUB',total_minor:0,days:[]}],
+      staff_access_history:[{id:1,at:'2026-11-15T19:00:00Z',action:'staff.access',actor_name:'Вымышленный франчайзи с длинным именем',user_name:'Вымышленный сотрудник с очень длинным именем и фамилией'},{id:2,at:'2026-11-14T18:00:00Z',action:'user.password',actor_name:'Вымышленный франчайзи',user_name:'Вымышленный сотрудник'}],
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
       me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
-      partner_access: { users: [{ assignment_id: 'qa-access', user_id: uid, full_name: 'Вымышленный пользователь с длинным именем', email: 'very-long-synthetic-login@example.invalid' }], invites: [] },
+      partner_access: { users: [{ assignment_id: 'qa-access', user_id: 'qa-owner-account', full_name: 'Вымышленный пользователь с длинным именем', email: '79001234567@staff.bron.local', phone:'79001234567',can_manage:true }], invites: [] },
       staff_list: [{user_id:'qa-worker-edit',employee_kind:'trainee',internship_from:'2026-11-09',internship_until:'2026-12-08',internship_floor_minor:50000,learning_enabled:true,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
       revenue_overview: { month, rows: [detail], fact_rub_minor: 0, plan_rub_minor: null, missing_fx: [] },
       kb_home: { sections: [section, { ...section, id: 'qa-empty', title: 'Раздел для будущего наполнения', count: 0 }], recent: articles, popular: [], continue: [], drafts: 0, total: articles.length },
@@ -87,12 +94,13 @@ window.fetch = async (input, init) => {
       rating: { rows: [{rank:1,partner_id:partner.id,partner_name:partner.name,cities:location.city,is_me:false,forecast_pct:123.4,pct_to_date:90,fill_pct:100,growth_pct:20,badges:['leader','no_gaps'],points:1,currency:'RUB',fact_minor:1234567890,plan_minor:1500000000,forecast_minor:1900000000,fact_rub_minor:1234567890,forecast_rub_minor:1900000000}], month },
     };
     if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
+    if (name === 'manager_supply_snapshot' && qaParams.get('supply') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой МойСклад' }, { status: 503 });
     if (name && name in answers) return Response.json(answers[name]);
     console.warn('Missing QA response', name);
     return Response.json({ message: 'not-found', details: `Нет тестовых данных для ${name}` }, { status: 400 });
   }
   if (name === 'partner') return Response.json([partner]);
-  if (name === 'location') return Response.json([location]);
+  if (name === 'location') return Response.json(qaParams.get('access')==='filled'?[location,teamLocation]:[location]);
   if (name === 'currency') return Response.json([{ code: 'RUB', minor_unit: 2 }]);
   if (name === 'country') return Response.json([{ code: 'RU', name: 'Россия', default_currency: 'RUB' }]);
   if (name === 'article') return Response.json([{ ...articles[0], slug: 'qa', published_revision_id: 'qa-revision', published: { ...articles[0], rev_no: 1 }, revision: 1, tags: [] }]);
@@ -111,11 +119,22 @@ if (textScale === '200') {
   sizes.forEach(([key, value]) => root.style.setProperty(key, `${value}px`));
 }
 startViewport();
+if(qaParams.get('scene')==='queue') {
+  await opQueue.add({userId:uid,clientOpId:'00000000-0000-4000-8000-000000000020',kind:'revenue_total_set',
+    payload:{operation:'00000000-0000-4000-8000-000000000020',location:'00000000-0000-4000-8000-000000000030',day:'2026-11-11',total:'12300',expected_version:'empty',comment:null},
+    createdAt:'2026-11-12T10:00:00Z',attempts:1,lastError:'Сверьте суммы с актуальным днём перед повторным вводом.',lastErrorCode:'version-conflict'});
+}
 createRoot(document.getElementById('root')!).render(<App />);
 
 // Open real controls for responsive form measurements; no production data is used.
 if(qaParams.get('scene')){
- if(qaParams.get('scene')!.startsWith('lead-')){
+ if(qaParams.get('scene')==='queue'){
+  let stage=0;
+  const timer=setInterval(()=>{
+   const button=stage===0?document.querySelector<HTMLButtonElement>('[aria-label="Профиль"]'):[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()==='Локальные записи');
+   if(button){button.click();if(stage++===1)clearInterval(timer);}
+  },50);setTimeout(()=>clearInterval(timer),10_000);
+ }else if(qaParams.get('scene')!.startsWith('lead-')){
   const scene=qaParams.get('scene');let stage=0;
   const timer=setInterval(()=>{
    const buttons=[...document.querySelectorAll('button')];

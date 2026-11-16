@@ -1,0 +1,43 @@
+{
+  "Rules": [
+    {
+      "ID": "ExpireHourlyAfterOneDay",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "hourly/"
+      },
+      "Expiration": {
+        "Days": 1
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    },
+    {
+      "ID": "ExpireDailyAfterThirtyDays",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "daily/"
+      },
+      "Expiration": {
+        "Days": 30
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    },
+    {
+      "ID": "ExpireMonthlyAfterThreeHundredSixtySixDays",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "monthly/"
+      },
+      "Expiration": {
+        "Days": 366
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

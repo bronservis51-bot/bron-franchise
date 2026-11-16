@@ -1,0 +1,186 @@
+{
+  "actions": {
+    "T31.auth_on_verified_peer": {
+      "applyAuthorized": false,
+      "bound": "16 source and16 target; exact microseconds plus SHA of ALL other canonical fields; real data/digests only VPS RAM",
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t31-auth-verified-peer.mjs"
+      ],
+      "finalFreezeAudit": false,
+      "guard": "/root/bron-secrets/t31-auth-verified-peer.guard.json",
+      "max_launches": 1,
+      "mode": "READ ONLY REPEATABLE READ UTC; server5s, idle10s; actual source/target identity and target cron off/pg_net0",
+      "on_auth_failure": "record precise safe context, stop dependent branch; no further Auth retry or repair",
+      "on_network_failure": "NOT_RUN, no oldT30 retry, no alternate IP/route/Mac fallback",
+      "output": "safe counts/direction/phase/step/code/timings and technical windows only",
+      "precondition": "ONLY fresh root0600 T31 network result statusPASS, complete1MiB test, same selected peer and validated TLS config; do not wait for new coordinator ACK",
+      "tables": [
+        "auth.users"
+      ],
+      "wall_seconds": 90
+    },
+    "T31.owner_branch": {
+      "continue_T30_if_personal_input_arrives": true,
+      "not_a_network_prerequisite": true,
+      "record": "crypto status and separate owner independent-copy/second-device attestation; pending does not hold T31 report",
+      "reuse": "T30 already-authorized owner-only PHONE AdminVPS hidden key input; do not create new secret prompt or rerun setup"
+    },
+    "T31.schedule": {
+      "completed_utc": "2026-11-14T00:17:50Z",
+      "event": "schedule",
+      "no_requery_dispatch_or_change": true,
+      "revision": "9815f74d055f746f419bb103b8459f03738c73e6",
+      "run_id": 43533210497,
+      "status": "PASS_REUSED"
+    },
+    "T31.synthetic_network": {
+      "PASS": "full six-stage synthetic sequence including multirow and1MiB, exact bytes/content, actual TLS identity/readonly and clients ended",
+      "baseline_attempts": 1,
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t31-source-network.mjs"
+      ],
+      "deadline_seconds": 120,
+      "dummy_stages": [
+        "1x128",
+        "1x512",
+        "8x64",
+        "1x1024",
+        "1x4096",
+        "1x1048576"
+      ],
+      "first_failure": "stop this probe, record phase/code/timing/TCP counters, destroy timed-out stream without queued rollback",
+      "guard": "/root/bron-secrets/t31-network-helper.guard",
+      "helper_launches": 1,
+      "mss_eligibility": "ONLY128+512 PASS followed by PG_QUERY_READ_TIMEOUT at a later dummy stage; NOT connect/TLS/identity/permission failure or corrupt payload",
+      "mss_experiment": {
+        "advmss": 1200,
+        "before_image": "/root/bron-secrets/t31-network-route-before.json; exclusive root0600, fsync file and parent BEFORE route add; exact add/remove argv retained",
+        "comparison": "fresh TCP to SAME IP; repeat identical entire dummy sequence exactly once",
+        "destination": "same selected peer /32 only",
+        "forbidden": "no replacement of existing route, no default route, firewall, global MTU, persistent network config or TLS changes",
+        "improvement": "may retain temporary peer route for migration; record exact state/inverse, temporary lifecycle and no reboot persistence; cleanup separately after migration",
+        "max_adds": 1,
+        "max_modified_probes": 1,
+        "mtu": 1280,
+        "no_improvement": "remove ONLY matching added route using exact inverse, verify absent; drift/unknown=>CLEANUP_REQUIRED, no broad cleanup",
+        "precondition": "no existing exact host route; only simple observed main-table gateway/dev/src route; otherwise BLOCKED without change",
+        "signals_deadline": "helper closes own sockets and reconciles/removes matching route before exit; abrupt kill requires state reconciliation, no replay"
+      },
+      "result": "/root/bron-secrets/t31-source-network-result.json",
+      "route_hypothesis": "PMTU/MSS is NOT an established cause before comparative evidence; unchanged baseline PASS needs no route change",
+      "source": "ONE IPv4 selected from current canonical pooler DNS; fixed for baseline, experiment and Auth; direct VPS6543; preserve CA/canonical SNI/certificate and password callbacks",
+      "transactions": "READ ONLY, statement_timeout4s, local idle_in_transaction_session_timeout10s; no actual table/Auth query"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t31-source-network.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t31-source-network.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t31-auth-verified-peer.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t31-auth-verified-peer.mjs"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t31-auth-verified-peer.mjs": "33a4e8b43d900f2a09816df7a952b43509cf4d0a9b079dc97c07e78b5095ecd3",
+    "docs/runbooks/payloads/t31-source-network.mjs": "9ef0c3e8c32626b7760e307efc57f26c033affddeef43f4841e70ebb5a2f8472",
+    "tests/ops/t31-auth-verified-peer.test.mjs": "00ab8967344202528813c96ff2afcf288c7024627b908aa141987271ff7a553d",
+    "tests/ops/t31-source-network-native.mjs": "b29b87c5dfecb458251ac5c66358ee164928e6d4bda2c431ebf044d56dd9db21",
+    "tests/ops/t31-source-network-native.py": "129164f3f3d01d5571ba350824b5a56a50e3e503dd66d4275a5b9f893a5de34d",
+    "tests/ops/t31-source-network.test.mjs": "3f581c25bbd6e318700975404a8add255071bee5324af75e0ad38e8b9fcae857"
+  },
+  "format": 1,
+  "not_authorized": [
+    "source_or_target_writes",
+    "timestamp_update",
+    "source_admission_or_freeze",
+    "Supabase_Pause_Restore",
+    "full_inventory_or_restore",
+    "auditor_replacement",
+    "new_build_install_service",
+    "DNS_or_default_route_change",
+    "firewall_or_existing_route_replacement",
+    "global_or_persistent_MTU",
+    "additional_peer_or_network_retry",
+    "reverse15432_or_Mac_source_transit",
+    "backup_or_identity_copy_to_Mac_even_encrypted",
+    "reading_server_identity",
+    "new_secret_input_or_Telegrammessage",
+    "workflowdispatch_or_cronchange",
+    "PRmerge_preview_publication"
+  ],
+  "prior_evidence": {
+    "T29_receipt_sha256": "bc32f26c6b6ac23ed86712762b72c046b50d4da92d3da8b9994fccae9a2a248c",
+    "T30_receipt_note": "owner branch can legitimately update T30 receipt; use report evidence and preserve history, do not block network waiting for owner",
+    "T30_reported_receipt_sha256": "7dbc5cbae788e0340c8498badf836dd3c4e0337e78c3ff2e186f88845f8b7904",
+    "server_diagnosis": "T30 SELECT finished; idleClientRead, noXID, onlyrelationAccessShare androutinevirtualxidExclusive; own diagnostic session precisely terminated by coordinator, no datawrite"
+  },
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T31 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "record acceptance/per-action guard, inputSHAs, UTC, launch budget, route intent/beforeimage/inverse; preserve UNKNOWN, never overwrite/replay consumed actions",
+    "canonical_vps": "/root/bron-secrets/t31-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T31-state.json",
+    "log_vps": "/root/bron-secrets/t31-release.log",
+    "mode": "0600",
+    "report_without_owner_wait": true,
+    "required_output": [
+      "network status and first failed stage/code",
+      "baseline/modified step timings and safe TCP metrics",
+      "selected peer IPv4 and transport",
+      "route retained/restored/cleanup status, exact private inverse path",
+      "Auth plan or NOT_RUN/BLOCKED",
+      "owner branch pending/proved separately",
+      "full SHA of network-result and release receipts",
+      "cleanup and changed paths"
+    ]
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 artifacts",
+    "T18 backup/status",
+    "T19 owner-visible alert",
+    "T21 coldrestore",
+    "T22 actual schedule43533210497",
+    "T28 liveinventory onlyoneupdated_at diff",
+    "T29 keyREADY/previewmetadata",
+    "T30 Auth attempt closed; ownerbranch remains independently pending"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "bounded direct source synthetic response diagnosis, one conditional peer-only reversible MTU/MSS experiment, then one Auth continuation ONLY after full transport PASS",
+  "task": "T31",
+  "verification": {
+    "Auth_algorithm": "reuse T30 actualPG17.12/pg8.23.1 exact microseconds/canonical SHA/native capture PASS; only selected verifiedpeer wiring changes",
+    "TLS": "strict original CA/SNI/callback preserved in unit and actualpg8.23.1code review; actual canonical TLS on chosen peer remains runtime acceptance",
+    "kernel_route": "bounded exact plan/inverse and readbackformat unit PASS; real VPS kernel add/remove remains conditional runtime acceptance; no claim of native route modification",
+    "native": "actualPG17.12/pg8.23.1 twofresh READONLY sessions, all6syntheticstages including1MiB, server4s/idle10s, rollback/cleanup PASS",
+    "product_build_restore": "not repeated; product unchanged",
+    "unit": "network7 + fresh-result Auth admission1 PASS"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/root/bron-secrets/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

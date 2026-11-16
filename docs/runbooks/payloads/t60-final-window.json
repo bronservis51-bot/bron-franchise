@@ -1,0 +1,341 @@
+{
+  "format": 1,
+  "task": "T60",
+  "actionId": "T60.release_window",
+  "execution_authorized": true,
+  "maxSuccessorWindows": 1,
+  "state": "CONDITIONAL_ONE_ADDITIONAL_ATTEMPT_APPROVAL_REQUIRED",
+  "pins": {
+    "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+    "inputSha256": "c9e0b5fa1fd207e70f63292ad3a3c69d79218ec6b9185fafd5db0ac44ff6a4d6",
+    "barrierSha256": "0231b2ad09cb0a4fb11ff285c41b66a1274a3666ffe2889e37a49cd8ec41a1a6",
+    "basePreparedSha256": "ed0871f06237339c60218e84185b7d278e0881c5443ffddbbc2a8152e793220f",
+    "finalPreparedSha256": "a226cfa9eb96fbe9ca2276e20bffc637d04cbd2670417f18dc45f03df63f25a8",
+    "contextSha256": "564c015f97aea285659304a78437840562bf701e3ed5df55b94f04c9008c5f3b",
+    "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+    "verifyFencedSqlSha256": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "priorResultSha256": "7987d55b1323c1b4a64aeeac7e8b7050f500f9fc6cf778d973c1b9d0e3cd9aca",
+    "ownerGrantSha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "sourceTemplateSha256": "96176f31b9ccb0ca665b58ef6d0356e73586c5bb6f12c1981b28c7a9d91a27c0"
+  },
+  "pinNotes": "Legacy T45 archive pins only; new scope uses approval document and new Source template/code uses files pins.",
+  "approval": {
+    "status": "OWNER_PROOF_REQUIRED",
+    "document_sha256": "e74119aea5de271c1dc810e377246cc43af0b476d1b4e16e5239325469bc0e82",
+    "maxAuthSnapshots": 6,
+    "priorUsed": 4,
+    "sourceFrames": 2,
+    "maxAuthTimestampRows": 2,
+    "authTimestampColumns": [
+      "last_sign_in_at",
+      "updated_at"
+    ],
+    "sourceAuthoritativeAuthTimestamps": true,
+    "lastSignInAtValue": true,
+    "updatedAtValue": true,
+    "targetTimestampReconciliation": true,
+    "rawCredentials": false,
+    "macDataTransit": false,
+    "encryptedToVpsRam": true
+  },
+  "t55ReceiptSha256": "ae80d30eea394c17935cf0c53da0baacff9f9dbe75f9d8088597a2cde3e623f4",
+  "t55ResultSha256": "0d1bc7558781e152680ed2aed3e684a4582348e354a0df6f61f7d89d879290f1",
+  "source": {
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "template_name_prefix": "bron-source-reader-"
+  },
+  "transfer_budget": {
+    "directory": "/root/bron-secrets/source-auth-final-e60a2026",
+    "scope_sha256": "e74119aea5de271c1dc810e377246cc43af0b476d1b4e16e5239325469bc0e82",
+    "max_attempts": 6,
+    "prior_used": 4,
+    "source_project": "vkkqffvmztpzgygzfxhq",
+    "destination_vps": "152.228.115.115"
+  },
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "mcpRelay": {
+    "repository": "bronservis51-bot/bron-franchise",
+    "branch": "ops/t60-final-relay-20261115",
+    "requestPrefix": ".release-control/t60/",
+    "workerId": "cloud-supabase-mcp-github-relay"
+  },
+  "phase_authorizations": {
+    "prepare_final": {
+      "actionId": "T60.prepare_final",
+      "capability_ttl_seconds": 7200,
+      "source_data_reads": 0,
+      "target_metadata_probe": 1
+    },
+    "run_final": {
+      "actionId": "T60.final_https_window",
+      "applyAuthTimestampsOnly": true,
+      "maxAuthTimestampRows": 2,
+      "authTimestampColumns": [
+        "last_sign_in_at",
+        "updated_at"
+      ],
+      "sourceAuthoritativeAuthTimestamps": true,
+      "sourceFrameBudget": 2,
+      "priorSourceAuthSnapshotAttempts": 4,
+      "beforeImagePath": "/root/bron-secrets/t60-auth-before-c60a2026.json",
+      "wall_seconds": 480,
+      "targetAdmitted": false
+    },
+    "post_final": {
+      "requires": "strict final PASS and known target write outcome",
+      "source_reader_close": true,
+      "source_pause_and_provider_verification": true,
+      "web_only_private_preview": true,
+      "actual_owner_password_phone_pwa_queue_acceptance_required": true,
+      "public_switch_only_after_owner_acceptance": true,
+      "public_live_checks_required": true,
+      "no_source_reopen": true,
+      "no_repeated_closed_gates": true,
+      "new_task_id_required": false
+    }
+  },
+  "files": {
+    "docs/runbooks/payloads/t60-final-window.mjs": "accd0f04083cdd5237f77351e606cecb1914799821e0828e07d6c473eb714436",
+    "docs/runbooks/payloads/coordinator-fence-ack-t60.mjs": "8417341288ed6d2822ca768cbb68ff98c6b3633b029954b0069c00c767a03b74",
+    "docs/runbooks/payloads/t60-cloud-broker.js": "a983c0fd9c1ce2bd041efc36a62715c4ca68d7e5ac523931eb57989d8c8508c5",
+    "docs/runbooks/payloads/t60-cloud-broker-io.py": "eb788bac1d5d7c55eaa3dd7709a67fec505c2a101c4592a81567c67f9de3e61a",
+    "docs/runbooks/payloads/t60-relay-driver.py": "d4448877f944292e2125e57829bcf394e4aa11cc809bb6aa6b9aa7fbef01e925",
+    "docs/runbooks/payloads/source-final-auth-timestamps/index.ts": "d8d5b617ea5a09a306203dfc42bce5f33f08c05e7554e812a80a599623db27b9",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.mjs": "8a041e2454b6ef62f728bdfc57387964935732ce51f1045858f672e2938c79de",
+    "docs/runbooks/payloads/source-https-reader/encrypt-snapshot.d.mts": "752841780887688a7daf654b4180336a9607f92da5ca73e022d59c0d14c9ff8f",
+    "docs/runbooks/payloads/mcp-fence-result.py": "28e9b858332946333752279f8a9ef8a94a36b46ba15c62c9bc305f7535f4a5aa",
+    "docs/runbooks/payloads/t50-verify-fenced.sql": "0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15",
+    "scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
+    "docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "docs/runbooks/payloads/t59-auth-timestamps.mjs": "9b0b110d35d11ca46a367beb4088045ebfda94dec412d80dc65c82d3a3feb3dc",
+    "docs/runbooks/payloads/t60-final-window-core.mjs": "7233eb2dda14ba67501e6a7ef850af34cd52d3d8ace4a93a730f290055809faf",
+    "docs/runbooks/payloads/t60-final-https-transport.mjs": "c4c2c78720a331a8c9ff0e4be15ea22c2d368d3d7acb7e011269c68672455c2a",
+    "docs/runbooks/payloads/t60-source-transfer-budget.mjs": "de2a6309118bbfa67ed9d7569a21f2d940320816f9b31a65ae45cf99397d767f",
+    "docs/runbooks/t60-extra-frame-scope.md": "e74119aea5de271c1dc810e377246cc43af0b476d1b4e16e5239325469bc0e82",
+    "tests/ops/t59-auth-timestamps.test.mjs": "14f479f0b5945bd5253ee79d98888ff369177651e0099b4c73dd4fc95971c2a6",
+    "tests/ops/t60-final-window-core.test.mjs": "b1058adec14107a6871d3050d0d7fd4e8cbacc08ac7c4777b52b3eded1fab52e",
+    "tests/ops/t60-final-https-transport.test.mjs": "a3dff7db5fd533bbca9b4dc0b74b7365f01a5ed28a5a908545522298c4766264",
+    "tests/ops/t60-source-transfer-budget.test.mjs": "b1f12bcecb6db7b7706eda36510092997f52b4373bcab3dcf53de1b93bf257db",
+    "tests/ops/test_t60_relay_driver.py": "e8b5986f66e627d255054722536ca8f65157e4240ebfc0229bcf1a524d0abd96",
+    "tests/ops/test_t60_cloud_broker.py": "c93d29103f9a7f1c51b031036261ea0d937e056da13607492c554af49264cc72",
+    "tests/ops/t60-cloud-broker.test.mjs": "e855d0e8f1dc96fe1cc3e7106c714d26f218e5d313f645c62dbd16b9cb65a71b",
+    "docs/runbooks/t60-final-release-window.md": "be5d10bc5ae1b0b42db0bdbfaf2c6d15107a64370ceeb0c65de6ca46337614fa",
+    "tests/ops/t60-loader-transport.test.mjs": "2c65bebc0c4ef00de81be2c74a8063ace388d3fb0ff64f12f4b2c665781256b0",
+    "docs/runbooks/t59-post-final-cutover.md": "58f4291a580d0654619e2929a8cb834c2514ec7450b761a955112637cd2fc452",
+    "deploy/timeweb/Caddyfile": "22f364fe3d69190adae37338ed2bbd42a2d0e9a07d19af007a39f7b3fb3d4ca9",
+    "deploy/timeweb/Caddyfile.preview": "4e13363180893412d922cf2a6bf914179bfc8d8d621e617f2a38ca0f9d506e12",
+    "deploy/timeweb/compose.preview.override.yml": "a54cbc378e356acaacf32de6d32f06d3945a9dee6ec68a4762c801a8ceaf4710",
+    "deploy/timeweb/compose.production.override.yml": "4cf23a2d3db3613e339afb983925d8d2fa31ac2292aa8c8aaddfe9a6891c16cf",
+    "docs/runbooks/payloads/worker-reader-tombstone.ts": "bbaf7aeb0201df62a3342790315ed122a9956ac75eb4d9de2b5264c172fafe71",
+    "docs/runbooks/payloads/t59-source-transfer-budget.mjs": "8d5539b0805f5e4544ddab187b691541bd5ec50462e7840bafe56f11e63c1a04",
+    "docs/runbooks/payloads/t59-final-window.json": "c8646bd0307ff722851fc413d206c81d4b6b7aa0c2fa2d0a65f483678000413a",
+    "docs/runbooks/t59-auth-timestamps-scope-proposal.md": "97e8dcdc47a5fd33866b0c84f8276594f577923618c382d202add554dd6895d2",
+    "docs/runbooks/t60-review-delta.md": "108c780b6f47083e7bc0815ef0ecd43cf64493a4ca4ad2bf61001488f988f430"
+  },
+  "runtime_files": {
+    "/root/bron-secrets/t60-runtime/scripts/migration-audit.mjs": "e89a4bc52eee9657173b75b223ca9fd04e473ef13fcf50e5e23e44a19e500827",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/exact-query-fingerprint.mjs": "b78f2c1e1fcc2d216d30e2fb8906a1bf2e0bd799a37075ee371a7c7efecc470e",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/final-auth-window.mjs": "740452d9b5653632ada6e17f815e25906bfb69159a9b9a28683e0fa41f083524",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/http-source-admission.mjs": "7fd695b8464d853a6547b9014546a6aa1f1963d8f572f1a803e9c40559e00987",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t26-source-admission.mjs": "f7a45caa19548027a8404cd7e3ef0ec2994e39df1ac7ab304f43b9dfebcb2ab8",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t37-https-inventory.mjs": "8a7ffdf7b227a16b6b485fb154f990bfe2073408b722a98eaf438b58b9cd9e43",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs": "9b35397cb46736b3ff422de04fede26b26a10b488a237fc661d908e5cdca460d",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t59-auth-timestamps.mjs": "9b0b110d35d11ca46a367beb4088045ebfda94dec412d80dc65c82d3a3feb3dc",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-final-window-core.mjs": "7233eb2dda14ba67501e6a7ef850af34cd52d3d8ace4a93a730f290055809faf",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-final-https-transport.mjs": "c4c2c78720a331a8c9ff0e4be15ea22c2d368d3d7acb7e011269c68672455c2a",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-source-transfer-budget.mjs": "de2a6309118bbfa67ed9d7569a21f2d940320816f9b31a65ae45cf99397d767f",
+    "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t59-source-transfer-budget.mjs": "8d5539b0805f5e4544ddab187b691541bd5ec50462e7840bafe56f11e63c1a04"
+  },
+  "scope_proposal": "docs/runbooks/t60-extra-frame-scope.md",
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t60-release-receipt.json",
+    "local_mirror": "/private/tmp/bron-release-executor-20261113/T60-state.json",
+    "mode": "0600",
+    "matching_sha256_required": true
+  },
+  "not_authorized": [
+    "Any live preparation/deployment/source read/target write before actual owner decision and separately SHA-bound APPROVED Root owner proof",
+    "Any Auth column outside the two listed timestamps, more than two changed users, or changing cohort/role/schema/password/token/profile",
+    "Reset/relabel/overwrite old ledgers or guards; skip strict before/after comparison; Source reopen after COMMITTED/UNKNOWN",
+    "Preview/publication before final PASS and actual owner acceptance"
+  ],
+  "checklist": "docs/runbooks/t60-final-release-window.md",
+  "deliveries": [
+    {
+      "source": "docs/runbooks/payloads/t60-final-window.mjs",
+      "destination": "/root/bron-secrets/t60-final-window.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/coordinator-fence-ack-t60.mjs",
+      "destination": "/root/bron-secrets/coordinator-fence-ack-t60.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/source-final-auth-timestamps/index.ts",
+      "destination": "/root/bron-secrets/t60-release/source-reader-index.ts.template",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "scripts/migration-audit.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/scripts/migration-audit.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/exact-query-fingerprint.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/exact-query-fingerprint.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/final-auth-window.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/final-auth-window.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t30-auth-compact.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t30-auth-compact.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/http-source-admission.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/http-source-admission.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t26-source-admission.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t26-source-admission.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t37-https-inventory.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t37-https-inventory.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/source-final-https-reader/fence-witness.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t59-auth-timestamps.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t59-auth-timestamps.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t60-final-window-core.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-final-window-core.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t60-final-https-transport.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-final-https-transport.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t60-source-transfer-budget.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t60-source-transfer-budget.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t59-source-transfer-budget.mjs",
+      "destination": "/root/bron-secrets/t60-runtime/docs/runbooks/payloads/t59-source-transfer-budget.mjs",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    },
+    {
+      "source": "docs/runbooks/payloads/t60-final-window.json",
+      "destination": "/root/bron-secrets/t60-release/manifest.json",
+      "owner": "root:root",
+      "mode": "0600",
+      "replace_existing": false
+    }
+  ],
+  "owner_proof": {
+    "path": "/root/bron-secrets/t60-release/owner-approval.json",
+    "status_required": "APPROVED",
+    "sha256_supplied_by": "Root after actual owner decision",
+    "manifest_binding_required": true,
+    "new_manifest_after_consent": false
+  },
+  "post_final_checklist": "docs/runbooks/t59-post-final-cutover.md",
+  "previous_task": {
+    "task": "T59",
+    "manifestSha256": "c8646bd0307ff722851fc413d206c81d4b6b7aa0c2fa2d0a65f483678000413a",
+    "consumedRunGuardPreserved": true,
+    "targetWriteOutcome": "UNCHANGED",
+    "sourceFrameAttempts": 1,
+    "beforeImage": null,
+    "fenceFailure": "COORDINATOR_FENCE_ACK_TIMEOUT",
+    "originalCap": 5,
+    "spent": 4,
+    "unspent": 1
+  },
+  "transport_change": {
+    "operation": "GitHub response GET",
+    "old_per_call_seconds": 5,
+    "new_per_call_seconds": 20,
+    "capped_by_remaining_absolute_stage_deadline": true,
+    "stage_expiry_seconds": 60,
+    "ready_limit_seconds": 30,
+    "ssh_ack_seconds": 8,
+    "github_put_seconds": 5,
+    "extra_retry_loops": false,
+    "nonce_and_source_clock_checks_unchanged": true
+  },
+  "approval_delta": {
+    "only_new_owner_permission": "one additional Source-frame attempt",
+    "old_total_cap": 5,
+    "new_total_cap": 6,
+    "already_used": 4,
+    "replacement_frames": [
+      5,
+      6
+    ],
+    "auth_data_and_target_write_scope_unchanged": true
+  },
+  "review_delta": "docs/runbooks/t60-review-delta.md"
+}

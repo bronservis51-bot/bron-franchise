@@ -1,0 +1,134 @@
+{
+  "actionId": "T49.final_https_window",
+  "approval": {
+    "document_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "status": "APPROVED"
+  },
+  "checklist": "docs/runbooks/t49-successor-final-window.md",
+  "command": [
+    "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "/root/bron-secrets/t49-final-window.mjs",
+    "--manifest",
+    "/root/bron-secrets/t49-release/manifest.json",
+    "--sha256",
+    "<T49 manifest SHA>",
+    "--ready-input-sha256",
+    "<ACTUAL READY SHA>"
+  ],
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t49-final-window.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t49-final-window.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/coordinator-fence-ack-t49.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/coordinator-fence-ack-t49.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t49-release/manifest.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t49-final-window.json"
+    }
+  ],
+  "directories_root0700": [
+    "/root/bron-secrets/t49-release"
+  ],
+  "execution_authorized": true,
+  "files": {
+    "docs/runbooks/payloads/coordinator-fence-ack-t49.mjs": "0df9d1aa00a26d15e803d9f6fc4d779c85e0f14f1452a6054ea8335fbbc89b96",
+    "docs/runbooks/payloads/t49-final-window.mjs": "b5fd088279ab544e0c0ce79bbaf3aff87d3edaae61b37065ac2ba2bdee70aee6",
+    "docs/runbooks/payloads/worker-t45-verify-fenced.sql": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782",
+    "docs/runbooks/t49-successor-final-window.md": "168cccc5540df128d728049a1ff185a3510216b8d06da9b38d4a6dc6789729fc",
+    "tests/ops/t49-final-window.test.mjs": "42ec697b94de6cff163e0dff5e73f1decc328e936c09a0c759930e3feb5864ea"
+  },
+  "format": 1,
+  "maxSuccessorWindows": 1,
+  "not_authorized": [
+    "Repeat/reset/delete T45 guard/result or rerun T45",
+    "More than one successor window or more than remaining two Source snapshot claims",
+    "Extend ACK60s, fake clock/MCP/ready or use manual slow chat relay",
+    "Extend/rotate capability or expiry",
+    "Generic business delta import or any non-timestamp-only update",
+    "Source CLI/UI SQL or Edge write bypass when MCP absent",
+    "Inverse/reopen Source after target writes or COMMIT UNKNOWN",
+    "Public switch before strict final pass, Source closure/pause and actual owner acceptance"
+  ],
+  "phase_authorizations": {
+    "run_final": {
+      "actionId": "T49.final_https_window",
+      "beforeImagePath": "/root/bron-secrets/t49-auth-before-c49a2026.json",
+      "maxTimestampUpdates": 1,
+      "priorSourceAuthSnapshotAttempts": 1,
+      "sourceFrameBudget": 2,
+      "wall_seconds": 480
+    }
+  },
+  "pins": {
+    "barrierSha256": "0231b2ad09cb0a4fb11ff285c41b66a1274a3666ffe2889e37a49cd8ec41a1a6",
+    "basePreparedSha256": "ed0871f06237339c60218e84185b7d278e0881c5443ffddbbc2a8152e793220f",
+    "capabilitySha256": "920938e064729dca455bc902f98674775c70e52c5cfc265f5f537550410ebb98",
+    "contextSha256": "564c015f97aea285659304a78437840562bf701e3ed5df55b94f04c9008c5f3b",
+    "expiresUtc": "2026-11-15T04:14:51.589Z",
+    "finalPreparedSha256": "a226cfa9eb96fbe9ca2276e20bffc637d04cbd2670417f18dc45f03df63f25a8",
+    "inputSha256": "c9e0b5fa1fd207e70f63292ad3a3c69d79218ec6b9185fafd5db0ac44ff6a4d6",
+    "ownerApprovedInputSha256": "68b9789f062a5e3ad0d301afb251a5fb936f75712d6ffafddbd3fe6bda83a2a8",
+    "parentManifestSha256": "67b2bb6c7b72ef39bd66dbb2e008f177fb5b38ae9713e052ad8aee0aa5182ad8",
+    "verifyFencedSqlSha256": "fe7da8192bc58f7a95ca40851e4af15d1a7023d8b405bea08ca1da279c6e6782"
+  },
+  "priorResultSha256": "7987d55b1323c1b4a64aeeac7e8b7050f500f9fc6cf778d973c1b9d0e3cd9aca",
+  "readiness": {
+    "maxEndToEndRoundTripMs": 30000,
+    "maxReadyAgeMs": 30000,
+    "path": "/root/bron-secrets/t49-release/coordinator-ready.json",
+    "realMcpRequired": true,
+    "sameWorkerSshAndMcpOrProvenAutomation": true,
+    "sourceDataFrames": 0
+  },
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t49-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T49-state.json",
+    "matching_sha256": true,
+    "mode": "0600"
+  },
+  "source": {
+    "capability_binding": "pinned_VPS_prepare_readback",
+    "origin": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+    "projectRef": "vkkqffvmztpzgygzfxhq",
+    "protocol": "BRON_PRIVATE_SNAPSHOT_V1",
+    "template_name_prefix": "bron-source-reader-"
+  },
+  "target": {
+    "container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "image_id": "sha256:eca9f664ced0c453ae499e75bb503283831c94f2eef69fc2e69bf86f70278ddc"
+  },
+  "task": "T49",
+  "transfer_budget": {
+    "destination_vps": "152.228.115.115",
+    "directory": "/root/bron-secrets/source-transfer-budget",
+    "failed_or_uncertain_counts": true,
+    "max_attempts": 3,
+    "required_used": 1,
+    "scope_sha256": "cdc3698799331799d141cee89fe0e0f994477cfc70b8ce90d8f01ac1ec5ede69",
+    "source_project": "vkkqffvmztpzgygzfxhq"
+  },
+  "verification": {
+    "focusedTests": "6/6 PASS",
+    "independentReview": "PASS",
+    "oldT45FilesUnchanged": true,
+    "productionInvocation": "NOT_RUN"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

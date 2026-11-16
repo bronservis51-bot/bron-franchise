@@ -1,0 +1,122 @@
+{
+  "actions": {
+    "failure": "safe phase/code/partial changedPaths; no retry/repair/overwrite; inert files are not previewactivation",
+    "guard": "/root/bron-secrets/t39-stage-static.guard",
+    "helper_wall_seconds": 180,
+    "https": "3hostsrootGET before+after; directpinnedIPv4 canonicalHost/SNI strictCA/no redirects;503required; responsebodydiscarded",
+    "max_launches": 1,
+    "result": "/root/bron-secrets/t39-stage-static.result.json",
+    "task_wall_minutes": 15,
+    "watchdog_status": "do not read/copy/modify healthJSON; expectedbackgroundmtime/byteschanges allowed"
+  },
+  "active_configuration": {
+    "Caddyfile.maintenance_sha256": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "before_and_after": "exactmetadataIDs/mounts/labels/config hashes unchanged; noConfig.Env/renderedCompose",
+    "compose.maintenance.override.yml_sha256": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424",
+    "compose_project": "supabase",
+    "config_files": [
+      "/opt/bron/supabase/docker/docker-compose.yml",
+      "/opt/bron/supabase/docker/bron/compose.override.yml",
+      "/opt/bron/supabase/docker/bron/compose.rehearsal-retry.override.yml",
+      "/opt/bron/supabase/docker/bron/compose.restore.override.yml",
+      "/opt/bron/supabase/docker/bron/compose.maintenance.override.yml"
+    ],
+    "only_srv_mount": "/opt/bron/supabase/docker/bron/site/status:/srv/status:ro",
+    "working_dir": "/opt/bron/supabase/docker"
+  },
+  "checklist": "docs/runbooks/t39-stage-static.md",
+  "command": [
+    "python3",
+    "/root/bron-secrets/t39-stage-static.py",
+    "--manifest",
+    "/root/bron-secrets/t39-stage-static.json",
+    "--sha256",
+    "<exact SHA256 of this manifest>"
+  ],
+  "container_id_evidence": "T33 exact7IDs; if any changed BLOCKED, no speculative replacement or broadinventory",
+  "container_ids": {
+    "supabase-auth": "2bcaf7d6ca9dfb6354e7faf4c64f5214e437d6f9b3536d937e97637776c49513",
+    "supabase-db": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "supabase-envoy": "0e6bd75c4c74b731e5646aa3b3af73dca765dd0238c776dbdab9b26486c957ec",
+    "supabase-imgproxy": "22272064135c9f15ba6a5d3cc9d01841b27132fa0062ffb5843eeeab2f45b166",
+    "supabase-rest": "5497a7f68341d4f7618fe03e5eb29bc5ec7e2b750d01da17cb564beeacfdf803",
+    "supabase-storage": "2a9198acaadd18f6f43ba20e4b7a78ba4ccab2a7cc6a180145b23516059772dc",
+    "supabase-web-1": "62ba70c7549b0cf3d01a68a6e7c97565d1d535bcf4d7c3fa8b1f4e0475bb6e1a"
+  },
+  "copy_policy": "manifest-listedregularpublicfiles+manifest only; validate both packages/destinations beforewrites; rejectlinks/special/traversal/dotenv; sourcepublic600or644/no writebygroup/other; destfiles644/dirs755; nooverwrite/no delete/no unknownexistingcontent; matchingexisting REUSED",
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t39-stage-static.py",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t39-stage-static.py"
+    },
+    {
+      "destination": "/root/bron-secrets/t39-stage-static.json",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t39-stage-static.json"
+    }
+  ],
+  "files": {
+    "deploy/timeweb/Caddyfile.maintenance": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "deploy/timeweb/compose.maintenance.override.yml": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424",
+    "docs/runbooks/payloads/t39-stage-static.py": "953cbc6fbfdcb43d32ee44fa001d3188c158a95981ff27f94b0e8356d5740804",
+    "docs/runbooks/t39-stage-static.md": "e9a1e97f0d36b73b078babe91e758fa86b89af382eda92ee462bd990e5098d76",
+    "tests/ops/test_t39_stage_static.py": "f65ef0df1b48b9962d4a75a9dba46f3d59dfe1e63d9a2db6396244bd2918e256"
+  },
+  "format": 1,
+  "not_authorized": [
+    "T37_Edge_deploy_or_privateAuth_payload",
+    "DB_Source_Auth_businessrows",
+    "source_freeze_Pause_DML_DDL",
+    "ownerkeys_identity_backup_artifact_reads_or_copy",
+    "Mac_workingdata_backup_publicbundle_transit",
+    "active_Caddy_Compose_files_or_service_changes",
+    "container_create_restart_reload_pull_or_install",
+    "preview_APIopening_publication_PRmerge_dispatch_monitorflag_variablewrites",
+    "unknownexistingtreeoverwrite_delete",
+    "newownerinput_or_login"
+  ],
+  "packages": [
+    {
+      "content_files": 56,
+      "destination": "/opt/bron/supabase/docker/bron/site/app",
+      "manifest_sha256": "e7e9acc8c54631d54b095dd6448130d38266491ab3f810f7bb6affe046efc1c4",
+      "source": "/opt/bron/stage/release-e487ec8/app-root",
+      "source_commit": "e487ec88120056a54078c3ff1d9ff13d9245ac36"
+    },
+    {
+      "content_files": 11,
+      "destination": "/opt/bron/supabase/docker/bron/site/landing",
+      "manifest_sha256": "4c3f2b8efd9be02ecc089a1b44a5d86d7cb830e5c685c9f3246c38c494e081b8",
+      "source": "/opt/bron/stage/release-e487ec8/landing-root",
+      "source_commit": "fb5210c6de3ac6df93bad2ddf0306a1856e98b73"
+    }
+  ],
+  "receipts": {
+    "canonical_vps": "/root/bron-secrets/t39-release-receipt.json",
+    "local_mirror": "/tmp/bron-release-executor-20261113/T39-state.json",
+    "log_vps": "/root/bron-secrets/t39-stage-static.log",
+    "mode": "0600",
+    "output": "safe counts/manifestSHA/package states/config andcontainer unchanged/HTTP503/changedpaths/cleanup/SHA only; no rawmanifests,assetbodies orenv"
+  },
+  "release_status": "maintenance; T37 ownerapprovalpending; inertstaging only doesnotclosefinalaudit/owneracceptance/publication",
+  "reuse": "T12/T14/T18/T19/T21/T22/T36 closed gates; onlynewdestination verified, no rehashall5/rebuild/restore/RLS/monitor changes",
+  "runtime": "existing Python3 stdlib only, root/Linux/exactVPS; no installs",
+  "scope": "inert placement of existing T14 PUBLIC static app/landing files; active maintenance/status-only mount unchanged; no preview or database actions",
+  "task": "T39",
+  "verification": {
+    "focused_synthetic_filesystem_tests": "21PASS; no network/VPS/realdata",
+    "limit": "actual VPS staging and maintenancepostcheck not executed by coordinator",
+    "review": "independent final scope+safety review PASS; 21 synthetic tests independentlyPASS"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

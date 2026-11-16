@@ -1,20 +1,31 @@
-import pg from 'pg';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 import { readSourceLeads, reconcileLateLeads, LeadBridgeError } from './late-leads-lib.mjs';
+import { sourceServiceConfig, assertMigrationTarget } from './migration-source.mjs';
 
 loadEnv();
 const args = process.argv.slice(2);
-if (args.some(a => a !== '--apply') || args.length > 1) {
-  console.error('Usage: npm run migration:leads -- [--apply]. Default: read-only dry-run.');
+if (args.some(a => !['--apply', '--source-service'].includes(a)) || new Set(args).size !== args.length) {
+  console.error('Usage: npm run migration:leads -- [--source-service] [--apply]. Default: read-only dry-run.');
   process.exit(1);
 }
-const sourceUrl = need('SOURCE_DATABASE_URL'), targetUrl = need('TARGET_DATABASE_URL');
+const service = args.includes('--source-service');
+const sourceUrl = service ? undefined : need('SOURCE_DATABASE_URL'), targetUrl = need('TARGET_DATABASE_URL');
 const endpoint = value => { const u = new URL(value); return `${u.hostname}:${u.port || '5432'}${u.pathname}`; };
 let source, target;
 try {
-  if (endpoint(sourceUrl) === endpoint(targetUrl)) throw new LeadBridgeError('same-database-endpoint');
-  source = new pg.Client({ connectionString: sourceUrl, application_name: 'bron-late-leads-source', connectionTimeoutMillis: 15000 });
-  target = new pg.Client({ connectionString: targetUrl, application_name: 'bron-late-leads-target', connectionTimeoutMillis: 15000 });
+  let sourceConfig;
+  if (service) {
+    sourceConfig = sourceServiceConfig();
+    assertMigrationTarget(targetUrl);
+  } else {
+    if (endpoint(sourceUrl) === endpoint(targetUrl)) throw new LeadBridgeError('same-database-endpoint');
+    sourceConfig = databaseConfig(sourceUrl);
+  }
+  // The protected source rejects forced native backends before pg is imported.
+  const { default: pg } = await import('pg');
+  source = new pg.Client({ ...sourceConfig, application_name: 'bron-late-leads-source' });
+  target = new pg.Client({ ...databaseConfig(targetUrl), application_name: 'bron-late-leads-target' });
   await source.connect();
   const snapshot = await readSourceLeads(source);
   await source.end(); source = null;

@@ -1,0 +1,109 @@
+{
+  "format": 1,
+  "task": "T64",
+  "status": "AUTHORIZED_OWNER_URGENT_PRODUCT_FIXES",
+  "checklist": "docs/runbooks/t64-product-update.md",
+  "sourceCommit": "f38806ad8f8d8a2f5a82f6039f79906b7e2bf449",
+  "servingMode": "PRODUCTION_PUBLIC",
+  "maintenanceRequired": false,
+  "sourceMustRemainInactive": true,
+  "sourceQueriesAuthorized": 0,
+  "passwordResetAuthorized": false,
+  "businessRoleAssignmentsAuthorized": false,
+  "bulkPhoneRenameAuthorized": false,
+  "actualPhoneChangesByOperatorAuthorized": false,
+  "scope": [
+    "repair known internal EXECUTE gap under exact owner guards",
+    "manager-only rating navigation/route/RPC",
+    "managed phone-as-login creation and explicit existing-login editing",
+    "atomic publication of ready public client"
+  ],
+  "existingClientManifestSha256": "bad92bd51cb6a36b2af339560b23675163e1a7c68ee683db17d563693b500fac",
+  "t64a": {
+    "notStarted": "SUPERSEDED_INTO_T64",
+    "running": "WAIT_FOR_COMPLETION_WITHOUT_CHECKOUT_CHANGE",
+    "committedSameChecksum": "REUSE_RECEIPT_AND_SKIP_040000_BY_LEDGER"
+  },
+  "artifact": {
+    "repositoryPath": "docs/runbooks/payloads/t64-app-root.tar",
+    "sourceCommit": "f38806ad8f8d8a2f5a82f6039f79906b7e2bf449",
+    "files": 57,
+    "manifestSha256": "71f28fef50cb132d80091fd8e6034112eb9dfc57211a1d04e06610622e805e60",
+    "archiveSha256": "86f99096a8d027188d4c7fdd2ada70ba88e97945cf0ecf37a8103a200ec8cfef",
+    "archiveBytes": 1566720,
+    "build": {
+      "build": "2026-11-16T09:19:19.023Z"
+    }
+  },
+  "migrations": [
+    {
+      "name": "20261116040000_staff_helper_execute.sql",
+      "sha256": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c"
+    },
+    {
+      "name": "20261116050000_rating_manager_only.sql",
+      "sha256": "f5dfd4ffbf5de3309c725be7e83bcfcd69154bda4579d42d032f058b78611b80"
+    },
+    {
+      "name": "20261116060000_phone_logins.sql",
+      "sha256": "64521049ea271a7a67eedfab65d8ef35b99554b55c1b45e1b85e2e79a38b9e22"
+    }
+  ],
+  "verification": {
+    "vitest": {
+      "files": 58,
+      "tests": 416,
+      "status": "PASS"
+    },
+    "typecheck": "PASS",
+    "productionBuild": "PASS",
+    "phoneUiCases": 108,
+    "independentPrivacyChecks": 6,
+    "operatorTests": {
+      "tests": 20,
+      "status": "PASS"
+    },
+    "independentFinalPackageReview": "PASS",
+    "archiveScan": "PASS"
+  },
+  "files": {
+    "docs/overview.md": "2d11e170b24e41173f5ed30bb919182b796ed0ab778888037c0ca1f87fea2603",
+    "docs/product-and-operations.md": "25db162bf2a7833074164d502c8e944bfe41e541c8e416d52262c2fc3ee3e609",
+    "docs/product-backlog.md": "556d39675365c7fe71cf7b9d527b3da9c70e6b4613fd21fa23d4f4ec327b07cf",
+    "docs/runbooks/payloads/t64-app-root.tar": "86f99096a8d027188d4c7fdd2ada70ba88e97945cf0ecf37a8103a200ec8cfef",
+    "docs/runbooks/payloads/t64-migration-manifest.json": "d1fba1b3888455a833a02e7c700df412625f94e411c4b711d57371dbd17151db",
+    "docs/runbooks/payloads/t64-publish-pin.json": "b587dd7c06c5d57318739c7d0ffcb17e8e2bc2f67325d5ab7340d3d82aa538f2",
+    "docs/runbooks/payloads/t64-static-publish.py": "a8c2efd10ad0f0b26f10f5391d3bf6f286a342d4fdd29d30ecfe7b512005df36",
+    "docs/runbooks/payloads/t64-target-update.py": "aede445aacbea5cf2492fdf8e3b5d68a5d952a2eb285c9d73a8143cdbf2e9afd",
+    "docs/runbooks/t64-product-update.md": "f3022fcbe71db9b6850b4331d059c60dc304026f824e588f031ee00dbd511889",
+    "src/app/App.tsx": "4520a9139bb921fff04abaa0de2f578a34a7cdfe1795178e2521e0fae3666982",
+    "src/app/nav.ts": "634e271ffd9c03d0338ae954139ea5baa64478c2552cdb26e3edf08d630021d0",
+    "src/modules/manager/PartnerDialog.tsx": "30fe4fea7365dc77bb5cd40d6236fceb381c6382c3871fde08e1a0d051eff229",
+    "src/modules/manager/PartnerPage.tsx": "e13b7a035f4fa3ab064365485ff044f1a39a64eba49accc796efc2f6188848a6",
+    "src/modules/manager/api.ts": "c6fa468d80960529b9be82fa3ace0447fbf2e6eecca22f4ffe52a0eb527f6308",
+    "src/modules/staff/PhoneLoginDialog.tsx": "eaef6aec50ee086a4bdf85d451d827267af2717d3352ffc51fd1b7dcf3c7c86e",
+    "src/modules/staff/StaffPage.tsx": "b5706d8041e96fcdca07a09057ce53566837951b3a2c9487c130223177106a63",
+    "src/modules/staff/TeamAccounts.tsx": "0f1785c61d9f5828a14ddf6e5520deca4242acadf986ffdb4e2b1db41198ff82",
+    "src/platform/contract.generated.ts": "1d0a301a776fe612b2a941b9da251c3ad9cab0cb4c3f1391ee1612e5a0d658dd",
+    "src/platform/login.ts": "04de73a350a0a02d882d94272c1468fbfab1ebe0badd2088b6d6bd0874a58d27",
+    "supabase/migrations/20261116040000_staff_helper_execute.sql": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c",
+    "supabase/migrations/20261116050000_rating_manager_only.sql": "f5dfd4ffbf5de3309c725be7e83bcfcd69154bda4579d42d032f058b78611b80",
+    "supabase/migrations/20261116060000_phone_logins.sql": "64521049ea271a7a67eedfab65d8ef35b99554b55c1b45e1b85e2e79a38b9e22",
+    "supabase/tests-shim/00_supabase_shim.sql": "9671f028e4639d64e8589ae69ed1a94955a6499d0d5bfdc2072add7e8121cc37",
+    "tests/db/partner_controls.test.ts": "cc076dba7c696d27f1556b42b399c0d34e9e4e08018f90f771f7cffd1f1f43ab",
+    "tests/db/phone_logins.test.ts": "ca119bb2baa57a4eca5247e69a1bf9172c5e0b7e9691a63a15c1616cc7d37001",
+    "tests/db/rating_manager_only.test.ts": "de33ce8a97279711b0e62fd5dfd539a63f417bb80e2d1427b76caad99e6cd4b0",
+    "tests/db/staff.test.ts": "5c1caa44b6151dcb6c371b4107849c8736007073e0ee59092a09728c379163ac",
+    "tests/db/staff_helper_execute.test.ts": "74c6a3a6c76994d5a9df383436af3cdde13ad5c1b3f54f238d3e01a6cea5ad74",
+    "tests/ops/test_t64_product_update.py": "7a1f663faa6cc370f37a62cc3d3da80c21714e3d9424d5bec37fea9ac5cf6dfa",
+    "tests/ui/responsive.tsx": "1f9c5b4a230ebaac0ba7b4c89d6141e55dbb59b4dd256c589be4f205d0c66000",
+    "tests/unit/phoneLogin.test.ts": "f3d60b907e9e82d61b2c2950f43e98a79c93e7f35f357c0bcb0caef659006fae",
+    "tests/unit/ratingNavigation.test.ts": "b866a11774030a2528144a34f51dc46d471bba28a8de16c12c70455649885bdd"
+  },
+  "canonicalReceipt": "/root/bron-secrets/t64-release-receipt.json",
+  "localMirror": "/private/tmp/bron-release-executor-20261113/T64-state.json",
+  "onPass": "continue migrate -> publish -> live and legitimate UI checks; no new Root wait",
+  "onUnknown": "preserve receipts/intent; inspect durable commit and exact ledger; no blind rerun",
+  "rollback": "pinned static publisher --rollback restores previous public client; retain safe additive DB migrations and data; never reopen Source",
+  "operatorDataBoundary": "no Auth/business/backup/key content reads or transit; public client and catalog-only technical evidence allowed"
+}

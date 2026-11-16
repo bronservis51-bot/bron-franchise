@@ -1,0 +1,33 @@
+# Apply LAST, after docker-compose.yml and bron/compose.override.yml.
+# Isolated restore rehearsal only. Do not use this file for publication.
+services:
+  db:
+    # Preserve the pinned image's configuration/preload; freeze both schedulers
+    # from the temporary init-server through the final postgres process.
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - cron.launch_active_jobs=off
+      - -c
+      - pg_net.batch_size=0
+    ports: !override
+      - "127.0.0.1:15433:${POSTGRES_PORT:-5432}"
+  api-gw:
+    ports: !override []
+  studio:
+    ports: !override []
+  supavisor:
+    ports: !override []
+  web:
+    # No service depends on web. The explicit rehearsal service list omits it.
+    profiles:
+      - publish-only
+    ports: !override []
+
+networks:
+  default:
+    internal: true

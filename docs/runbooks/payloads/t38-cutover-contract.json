@@ -1,0 +1,64 @@
+{
+  "acceptance": [
+    "build-inputblob comparison no rebuild",
+    "fourURL/threeclientorigin storage/publication map evidence",
+    "currentPages/environment/PR metadata or explicit UNKNOWN",
+    "ordered draftvariables/monitor/publication/preview/rollback plan unexecuted",
+    "safeprivate report+receipt no ownerwaiting"
+  ],
+  "allowed_mutations": [
+    "clean git fast-forward/fetch publiccode",
+    "localprivate report files only"
+  ],
+  "baseline_app_commit": "e487ec88120056a54078c3ff1d9ff13d9245ac36",
+  "baseline_landing_commit": "fb5210c6de3ac6df93bad2ddf0306a1856e98b73",
+  "checklist": "docs/runbooks/t38-cutover-contract.md",
+  "files": {
+    ".github/workflows/availability.yml": "25ecc684ed2e58bd9676b9545caab941ee966b876953827d31487075d4916874",
+    ".github/workflows/pages.yml": "5a1966c216d12e734a0ee3a608808b0cca7d344d1b7cb9d9ef86f1f7954d088c",
+    "deploy/timeweb/Caddyfile": "22f364fe3d69190adae37338ed2bbd42a2d0e9a07d19af007a39f7b3fb3d4ca9",
+    "deploy/timeweb/Caddyfile.preview": "4e13363180893412d922cf2a6bf914179bfc8d8d621e617f2a38ca0f9d506e12",
+    "deploy/timeweb/compose.preview.override.yml": "a54cbc378e356acaacf32de6d32f06d3945a9dee6ec68a4762c801a8ceaf4710",
+    "deploy/timeweb/compose.production.override.yml": "4cf23a2d3db3613e339afb983925d8d2fa31ac2292aa8c8aaddfe9a6891c16cf",
+    "docs/release-gates.md": "783335023704268458359999c3f25abaa21e6f386614fc1359d2e6f97a6a8680",
+    "docs/rollout-plan.md": "a24751848be43bc9fd16e72992f8366f00004aae753640db9c6733d817cc25e4",
+    "docs/runbooks/payloads/t11-build-release.mjs": "f0f8d53fb29ce158290b187e0151c9098acf8a8fc786a09c09d2ee429ab970de",
+    "docs/runbooks/payloads/t38-publication-metadata.py": "c142d9522fa593de40612e954b15d06b2a703b92910481f202ef3de640db2fc4",
+    "docs/runbooks/t38-cutover-contract.md": "b3afde74fdf9b92f8907fc2db584e4b47e0f7f155ea3f692a4eb88deb3a00de5",
+    "src/platform/localRecovery.ts": "8779c2502ed66c236e5eede0a332122466d7bc8aaec7022f5ae509c342ae0cdf",
+    "src/platform/offline.ts": "0f4137cf5c330872fa433207ee846c10d0f4589f8232d0337f741b1454be4205",
+    "src/platform/supabase.ts": "fe0041f1bd04adc85764ade45f7a18a8efb5eac1145938d8d9ecc2bbace29867",
+    "src/platform/update.ts": "b2d007d916c0bb46bcaf94d707e7365fdacf0d2a3f03d414c5f9e29f129c8324",
+    "vite.config.ts": "442cea1199b55c5654ef8d8391aa3ab845b5d235238b6b529fbfbcb45d4624c2"
+  },
+  "format": 1,
+  "local_output_directory": "/tmp/bron-release-executor-20261113/T38",
+  "local_receipt": "/tmp/bron-release-executor-20261113/T38/T38-state.json",
+  "metadata_command": [
+    "python3",
+    "docs/runbooks/payloads/t38-publication-metadata.py"
+  ],
+  "metadata_endpoints": [
+    "repos/bronservis51-bot/bron-franchise/pages",
+    "repos/bronservis51-bot/bronservice-franchise/pages",
+    "repos/bronservis51-bot/bron-franchise/environments/github-pages",
+    "repos/bronservis51-bot/bron-franchise/pulls/12"
+  ],
+  "metadata_max_launches": 1,
+  "metadata_timeout_per_command_seconds": 15,
+  "mode": "directory0700/files0600",
+  "not_authorized": [
+    "T37deploy_or_source_rows",
+    "SSH_VPS_BD_backups_browserstorage_env_secretreads",
+    "build_install_restore_RLS_PWA_retests",
+    "workflowdispatch_merge_deploy_API_submission_variables_or_flagwrites",
+    "newowner_login_MFA_or_secret_prompt",
+    "any_customer_or_Auth_data_transit"
+  ],
+  "plan": "/tmp/bron-release-executor-20261113/T38/T38-cutover-plan.md",
+  "release_status": "maintenance; T37 ownerapprovalpending; no runtime effect",
+  "scope": "read-only local cutover-contract audit of public code and publication metadata; independent of pending T37",
+  "task": "T38",
+  "verification": "syntax and puremetadatafilter assertions PASS; no network/gh executed by coordinator",
+  "wall_minutes": 10
+}

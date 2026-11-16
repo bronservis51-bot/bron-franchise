@@ -7,6 +7,7 @@ import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
 import { restoreData } from './backup-lib.mjs';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 
 loadEnv();
 const [src] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -14,7 +15,7 @@ if (!src || !existsSync(join(src, 'data.json'))) { console.error('Укажите
 const url = need('DATABASE_URL');
 console.log(`Цель: ${new URL(url).host}`);
 if (!process.argv.includes('--confirm-wipe')) { console.error('Добавьте --confirm-wipe: бизнес-данные целевого проекта будут заменены.'); process.exit(1); }
-const client = new pg.Client({ connectionString: url });
+const client = new pg.Client(databaseConfig(url));
 await client.connect();
 try {
   await client.query('begin');

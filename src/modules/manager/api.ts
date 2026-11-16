@@ -1,6 +1,8 @@
 import { command, from, rows } from '../../platform/backend';
+import { loginEmail } from '../../platform/login';
 
 export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string;
+  preparation_stage?: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null;
   /** Ссылка контрагента в МойСклад для заказа материалов. */
   order_url: string | null }
@@ -12,15 +14,16 @@ export const partners = () => rows<Partner>(from('partner').select('*').order('n
 export const locationsOf = (partner: string) => rows<Location>(from('location').select('*').eq('partner_id', partner).order('name'));
 export const countries = () => rows<Country>(from('country').select('code, name, default_currency').order('name'));
 
-export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string }) =>
-  command<string>('partner_save', p);
+export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null }) =>
+  command<string>('partner_save_preparation', p);
 export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null }) =>
   command<string>('location_save', l);
 
-export interface Access { users: { assignment_id: string; user_id: string; full_name: string; email: string; since: string }[]; invites: { id: number; email: string; created_at: string }[] }
+export interface Access { users: { assignment_id: string; user_id: string; full_name: string; email: string; phone?: string | null; can_manage?: boolean; since: string }[]; invites: { id: number; email: string; created_at: string }[] }
 export const partnerAccess = (partner: string) => command<Access>('partner_access', { partner });
-export const accessGrant = (partner: string, email: string) => command<{ status: 'pending' | 'granted' | 'exists' }>('access_grant', { partner, email });
+export const accessGrant = (partner: string, login: string) => command<{ status: 'pending' | 'granted' | 'exists' }>('access_grant', { partner, email: loginEmail(login) });
 export const accountCreate = (partner: string, full_name: string, email: string, password: string) => command<string>('account_create', { partner, full_name, email, password });
+export const accountCreatePhone = (partner: string, full_name: string, phone: string, password: string) => command<string>('account_create_phone', { partner, full_name, phone, password });
 export const accessRevoke = (assignment: string) => command('access_revoke', { assignment });
 export const inviteCancel = (invite: number) => command('access_cancel_invite', { invite });
 

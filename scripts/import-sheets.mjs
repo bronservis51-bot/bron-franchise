@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { root } from './db-lib.mjs';
 import { loadEnv, need } from './env.mjs';
 import { importPartner } from './sheets-import-lib.mjs';
+import { databaseConfig } from './database-config.mjs';
 
 const dir = join(root, 'local/import');
 const config = JSON.parse(readFileSync(join(dir, 'partners.json'), 'utf8'));
@@ -27,7 +28,7 @@ if (local) {
 } else {
   loadEnv();
   const pg = (await import('pg')).default;
-  const client = new pg.Client({ connectionString: need('DATABASE_URL'), ssl: { rejectUnauthorized: false } });
+  const client = new pg.Client(databaseConfig(need('DATABASE_URL')));
   await client.connect();
   q = async (sql, params) => (await client.query(sql, params)).rows;
   await client.query('begin');

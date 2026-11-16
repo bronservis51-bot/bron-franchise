@@ -1,0 +1,21 @@
+# Apply LAST, after docker-compose.yml, compose.override.yml and restore override.
+# Start only web, with --no-deps --pull never. Backend isolation is preserved.
+services:
+  web:
+    pull_policy: never
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes: !override
+      - ./bron/Caddyfile.maintenance:/etc/caddy/Caddyfile:ro
+      - ./bron/site/status:/srv/status:ro
+      - bron-caddy-data:/data
+      - bron-caddy-config:/config
+    networks: !override
+      - bron-edge
+
+networks:
+  bron-edge:
+    driver: bridge
+    internal: false

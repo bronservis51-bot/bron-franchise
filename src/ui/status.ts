@@ -16,4 +16,10 @@ export const PARTNER_STATUS: Map = {
   terminated: ['договор расторгнут', 'neutral'],
 };
 
+export const PARTNER_PREPARATION: Map = {
+  contract_signed: ['Договор заключён', 'neutral'],
+  location_search: ['Поиск локации', 'warning'],
+  opening_preparation: ['Подготовка к открытию', 'warning'],
+};
+
 export const st = (m: Map, k: string): [string, Tone] => m[k] ?? [k, 'neutral'];

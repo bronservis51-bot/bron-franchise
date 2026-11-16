@@ -2,6 +2,7 @@
 import pg from 'pg';
 import { readFileSync } from 'node:fs';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 import { createMoyskladReader, readSyncConfig, parseCatalogMap, collectCatalog, replaceCatalog } from './procurement-sync-lib.mjs';
 
 loadEnv();
@@ -19,7 +20,7 @@ try {
     }
   }
   const snapshot = await collectCatalog(reader, config);
-  db = new pg.Client({ connectionString, connectionTimeoutMillis: 15_000, statement_timeout: 60_000 });
+  db = new pg.Client({ ...databaseConfig(connectionString), statement_timeout: 60_000 });
   await db.connect();
   await replaceCatalog(db, snapshot);
   console.log(`Procurement snapshot updated: ${snapshot.rows.length} items; source time ${snapshot.fetchedAt}. No orders or reservations created.`);

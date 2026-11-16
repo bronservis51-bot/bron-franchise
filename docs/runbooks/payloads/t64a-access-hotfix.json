@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "task": "T64A",
+  "status": "AUTHORIZED_OWNER_URGENT_ACCESS_REPAIR",
+  "checklist": "docs/runbooks/t64a-access-hotfix.md",
+  "sourceReads": 0,
+  "sourceMustRemainInactive": true,
+  "maintenanceRequired": false,
+  "servingMode": "PRODUCTION_PUBLIC",
+  "clientPublish": false,
+  "passwordResetAuthorized": false,
+  "businessRoleAssignmentsAuthorized": false,
+  "phoneLoginChangesAuthorized": false,
+  "migration": {
+    "name": "20261116040000_staff_helper_execute.sql",
+    "sha256": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c"
+  },
+  "existingClientManifestSha256": "bad92bd51cb6a36b2af339560b23675163e1a7c68ee683db17d563693b500fac",
+  "files": {
+    "docs/runbooks/payloads/t64a-access-hotfix.py": "6e305f8b6cc924383850385dd4b24a47043a627f7f43241b4b8b59b0b8b0ff3d",
+    "supabase/migrations/20261116040000_staff_helper_execute.sql": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c",
+    "docs/runbooks/payloads/t64a-migration-manifest.json": "fa659cabe22bf40c0f9bf8f486dbcfb4f30f08d5c2401a8bacc12fe1655c14c5",
+    "docs/runbooks/t64a-access-hotfix.md": "2e6cd7b40dff90ce984d91cef005eac8ef3545a02bafe03765efae852b197716"
+  },
+  "canonicalReceipt": "/root/bron-secrets/t64a-release-receipt.json",
+  "localMirror": "/private/tmp/bron-release-executor-20261113/T64A-state.json",
+  "onPass": "recheckpreviouslydeniedlegitimateUI;continuefullT64withoutreexecuting040000",
+  "onUnknown": "preservestate;inspectdurableCOMMITorledger;neverretryblindly"
+}

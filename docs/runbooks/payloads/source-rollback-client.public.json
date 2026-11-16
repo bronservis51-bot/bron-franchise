@@ -1,0 +1,9 @@
+{
+  "kind": "public-anon-client-config",
+  "purpose": "source-rollback-only",
+  "sourceProject": "vkkqffvmztpzgygzfxhq",
+  "sourceUrl": "https://vkkqffvmztpzgygzfxhq.supabase.co",
+  "role": "anon",
+  "legacy": true,
+  "anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZra3FmZnZtenRwemd5Z3pmeGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzkyNDQsImV4cCI6MjEwNzc1NTI0NH0.b-mcYCfISv19jNyPmzRYrQoz2M5faUc9SLl150O1Xlw"
+}

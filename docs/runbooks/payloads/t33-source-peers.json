@@ -1,0 +1,178 @@
+{
+  "actions": {
+    "T33.alternative_peers": {
+      "all_failed": "BLOCKED; Auth NOT_RUN; no fallback/route/tunnel/DNS retry",
+      "attempts_per_peer": 1,
+      "before_each_connection": "fsync per-peer STARTED into root-only result/receipt; result follows closure; no replay of unknown/consumed peer attempts",
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t33-source-peers.mjs"
+      ],
+      "first_complete_PASS": "all six stages plus rollback, full1MiB bytes/content; select this peer, stop without trying remaining peer",
+      "first_failure": "close only failed peer client then proceed to the single remaining new peer if available; never retry same peer",
+      "guard": "/root/bron-secrets/t33-network-helper.guard",
+      "max_helper_launches": 1,
+      "max_other_peers": 2,
+      "no_current_alternative": "BLOCKED without old-peer replay or newnetworksettings",
+      "probe": "reuse unchanged native-tested T31 actualREADONLY dummy128/512/8x64/1024/4096/1MiB with server4s/idle10s",
+      "result": "/root/bron-secrets/t33-source-network-result.json",
+      "source": "direct6543; unchanged protected CA/canonical SNI/certificate callback/password callback; no reverse or Mac",
+      "wall_seconds": 120
+    },
+    "T33.auth_on_verified_peer": {
+      "applyAuthorized": false,
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t33-auth-verified-peer.mjs"
+      ],
+      "condition": "ONLY fresh private T33 fullnetworkPASS; same selected successful peer, no coordinator ACK wait",
+      "data": "auth.users only;16/16 expected; exact microseconds and SHA of ALL other canonicalfields; private values/IDs/digests onlyVPS RAM",
+      "finalFreezeAudit": false,
+      "guard": "/root/bron-secrets/t33-auth-verified-peer.guard.json",
+      "max_launches": 1,
+      "mode": "READONLY RR UTC, server5s/idle10s; sourceidentity and loopback target15433/cronoff/pgnet0 verified",
+      "on_failure": "safe BLOCKED; no repeat/mutation or oldhelper retry",
+      "output": "safe counts/direction/phase/step/code/timings/windows only; non-timestamp/missing/null/target-newer is REVIEW_REQUIRED",
+      "wall_seconds": 90
+    },
+    "T33.owner_branch": {
+      "does_not_hold_network_or_report": true,
+      "no_new_secret_prompt": true,
+      "reuse": "existing T30 personally operated phone-console key input and independent-copy/second-device attestation"
+    },
+    "T33.preview_metadata": {
+      "independent_of_network": true,
+      "input": "/root/bron-secrets/t29-release-receipt.json",
+      "missing": "report field MISSING, do not inspect broad filesystem or repeat T29 probes",
+      "never_return": [
+        "environment/config rendering",
+        "owner IP",
+        "secret values or rows",
+        "entire raw receipt"
+      ],
+      "purpose": "complete exact future preview checklist from ALREADY CAPTURED T29 evidence; no fresh inventory",
+      "return_selected_safe_values": [
+        "actual ordered web Compose config-file paths, project and working directory",
+        "recorded seven service/container IDs",
+        "cached Caddy imageID/Config.User",
+        "app-root and landing-root extracted directories and manifest path/sourceCommit/base/count",
+        "recorded UID/GID/modes needed for private final workspace"
+      ],
+      "sha256": "bc32f26c6b6ac23ed86712762b72c046b50d4da92d3da8b9994fccae9a2a248c"
+    },
+    "T33.schedule": {
+      "no_requery_dispatch_or_change": true,
+      "run_id": 43533210497,
+      "status": "PASS_REUSED"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/t33-source-peers.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t33-source-peers.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t33-auth-verified-peer.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t33-auth-verified-peer.mjs"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/t33-auth-verified-peer.mjs": "f7f7514bfd21065a72f82358a6205e838a398e7ee6742c65b83d44d33919cdc9",
+    "docs/runbooks/payloads/t33-source-peers.mjs": "82be95eca2751b204d686d8b24914c61e8130b53636ca6c0f17261376f31b0fe",
+    "tests/ops/native-pg-tls.mjs": "5560261998334c6f0a265f9132f9d52b1c3246b98005a71bc49c3c821fcc8ec5",
+    "tests/ops/native-pg-tls.py": "755473a4897b05d920bbb67f5bd2068c6146fcc6924858eb587aa2181b6ad038",
+    "tests/ops/t33-auth-verified-peer.test.mjs": "9afe81705822d3e2a2e17c62853afeb1a26a1d37beb51efe7ce155381d4afd9e",
+    "tests/ops/t33-source-peers.test.mjs": "a2dd30713336757fe2c299a963e524fffcda48cb196decc4efc602e7a497b031"
+  },
+  "format": 1,
+  "input_evidence": {
+    "coordinator_dns_20261114T012726Z": [
+      "34.215.156.231",
+      "44.225.139.66",
+      "44.252.246.120"
+    ],
+    "known_failed_peer": "34.215.156.231",
+    "path": "/root/bron-secrets/t32-source-network-result.json",
+    "required": "T32 BLOCKED and exact previous host route restored, retained=false; helper checks before any source connection",
+    "selection": "use ONE fresh canonical DNS A answer set on VPS; never connect known failed peer; at most two distinct other current publicIPv4s",
+    "sha256": "6265d628f08feb0707b10f31f2575cbdf9822e7da1c217b4f00249ad0a617971"
+  },
+  "not_authorized": [
+    "retry_old34.215.156.231_or_T31_T32",
+    "morethan2newpeers_or_oneattempt_each",
+    "route_MTU_MSS_DNSsettings_firewall_tunnel_changes",
+    "source_target_datawrites_or_timestamp_reconciliation",
+    "sourcefreeze_admission_PauseRestore",
+    "fullinventory_restore_build_install_newservice",
+    "Mac_data_backup_evenencrypted_or_serveridentityread",
+    "newsecretprompt_Telegrammessage_workflowdispatch_cronchange",
+    "PRmerge_preview_publication"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T33 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "record acceptance/inputSHAs/budgets and per-peer STARTED before open; guards retained across failures",
+    "canonical_vps": "/root/bron-secrets/t33-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T33-state.json",
+    "log_vps": "/root/bron-secrets/t33-release.log",
+    "mode": "0600",
+    "output": [
+      "per-peer stage outcomes and timings/TCP metrics",
+      "selected successful peer orBLOCKED",
+      "Auth plan orNOT_RUN/BLOCKED",
+      "safe existing preview metadata requested above",
+      "owner branch pending/proved separately",
+      "full SHA network-result/release-receipt/log",
+      "cleanup and changed paths"
+    ],
+    "report_without_owner_wait": true
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 artifacts",
+    "T18 backup/status",
+    "T19 owner-visible alert",
+    "T21 coldrestore",
+    "T22 actual schedule43533210497",
+    "T22 actual schedule43533210497",
+    "T29 keyREADY/previewinputs",
+    "T30 ownerbranch pending",
+    "T31 synthetic128PASS/512timeout and noMSS experiment"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "at most two currently resolved alternative canonical IPv4 peers, one synthetic probe per new peer and one conditional Auth continuation; no route changes",
+  "task": "T33",
+  "verification": {
+    "Auth": "REUSED T30 exactµs/canonicalSHA/nativecaptures; only namespace/verifiedpeer wiring differs",
+    "focused_unit": "newpeer selection/lifecycle7 + freshAuthnetworkgate1 PASS",
+    "native_Node22_provenance": "officialnodejs.org/dist/v22.23.5 linux-x64.tar.xz SHA cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 matchesofficialTLS SHASUMS; dev-only ownedtmp executable, noinstall/PATHchange, productionuntouched",
+    "native_TLS_limit": "exactNode22 localfixture PASS does not prove VPSkernel/network/actualSupavisor; actual alternativepeer acceptance stillrequired",
+    "native_actual_TLS": "NEW actualNode22.23.5 (and24.22.1), pg8.23.1, PG17.12, TLSv1.3; actualpg_stat_ssl, canonicalSNI+CA overIP, RRRO5s/idle10,128/512/1MiB PASS; wrongCA/name actualreject; fixture/synthetickeys removed",
+    "native_pg_driver": "REUSED T31 unchanged runDummyProbe realPG17.12/pg8.23.1 twofreshROsessions sixstages1MiB/4s/10s/cleanup PASS",
+    "product_build_restore": "not repeated"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/root/bron-secrets/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t31-source-network.mjs": "9ef0c3e8c32626b7760e307efc57f26c033affddeef43f4841e70ebb5a2f8472"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}

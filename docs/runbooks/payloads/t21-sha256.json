@@ -1,0 +1,72 @@
+{
+  "checks": {
+    "db_tests": 158,
+    "native_pg17": "PASS",
+    "restore_ops_tests": 27
+  },
+  "files": {
+    "docs/runbooks/payloads/t11-restore-target.mjs": "ea01856096b144ba9e39b6bdc51e3aab6e28e69fe268fb26749e8c4b216cb5e9",
+    "scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "tests/db/migration-audit.test.ts": "a9db5c1cc520b5de244abe492ecc58de2d3bdb603169a4793201f4736613aaa4",
+    "tests/ops/restore-native-pg17.py": "c07227281d3ac2f9ba17c6237baf1d49cac0062702a5d079987e57896d04b653"
+  },
+  "format": 1,
+  "native_preflight": {
+    "engine": "PostgreSQL 17.12",
+    "exact_supabase_restore": "PENDING_T21",
+    "fixture": "tests/ops/restore-native-pg17.py",
+    "result": "PASS",
+    "scope": [
+      "identity and serial explicit default ACL to NULL retains actual sequence permissions",
+      "sequence lowercase s default has 3 owner privileges",
+      "foreign-server uppercase S default has 1 owner privilege",
+      "genuine GRANT/REVOKE/empty ACL remain distinct"
+    ]
+  },
+  "not_authorized": [
+    "change_database_acl",
+    "replace_backup_manifest",
+    "source_freeze",
+    "public_publish",
+    "change_cron",
+    "dispatch_availability"
+  ],
+  "one_run": {
+    "action_id": "T21.restore_compare",
+    "max_attempts": 1
+  },
+  "replace_vps": {
+    "backup_before_replace": true,
+    "known_before_sha256": "d63fbef0ab6fbed0bb3d09ed6d067ca5f7753d47a981bdb4c4bc8a4719468931",
+    "path": "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs",
+    "required_after_sha256": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "source": "scripts/migration-audit.mjs"
+  },
+  "reuse_evidence": [
+    "T12 Auth/RLS",
+    "T14 five release packages",
+    "T18 HTTPS backup status installation",
+    "T19 recipient/private-chat alert/monitor enabled/PR13"
+  ],
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "restore_network": "none",
+    "target_image": "supabase/postgres:17.11.0.019"
+  },
+  "scope": "auditor sequence object-type correctness and one isolated full comparison only",
+  "target_backup_manifest": {
+    "path": "/var/backups/bron-franchise/target-20261113T133022Z-c4d9bbfd/manifest.json",
+    "sha256": "a1f6a1c9f187bd586aeec5d0189adc4f6648df29acb8c68490bf4fc77541d6b9"
+  },
+  "task": "T21",
+  "verify_only_vps": {
+    "/etc/systemd/system/bron-target-watchdog.service": "5bd7dcc580656fa57d6445d8139a16dea1495e91f3adf6c1f5296f4274c91940",
+    "/opt/bron/backup/backup-s3.py": "cf6c9c0d5ac1b3f65ca1a8e1b96adf1c00b32cf3b1f5c0935651c26b597d8342",
+    "/opt/bron/backup/source-backup.py": "94c4a9411db6085ac18daae0fd18e7a5f14f2c9a82adb256e39f73039121f75d",
+    "/opt/bron/backup/target-backup.py": "0b4c6e9ef03f7d97dde50b097fb64b5729779b1f16f1304716090361ab6d8d57",
+    "/opt/bron/supabase/docker/bron/Caddyfile.maintenance": "d79a799fa4f91354b2ff49e15358db7633f95c52cbbdc62a35180366e3f2f7ff",
+    "/opt/bron/supabase/docker/bron/compose.maintenance.override.yml": "a34d2860a902b0064dbadbe4c09f1012aa2202d7f15e5763a01e86ecc09e4424"
+  }
+}

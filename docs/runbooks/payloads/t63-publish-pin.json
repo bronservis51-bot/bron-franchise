@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "task": "T63",
+  "sourceCommit": "3e46a89e7e6eba8f55bd81ef0ea175aeb97a06f8",
+  "archiveSha256": "539f054071ad3767c2ca4be7a241a83ae0d420d72e609d8574402e59d9990749",
+  "manifestSha256": "bad92bd51cb6a36b2af339560b23675163e1a7c68ee683db17d563693b500fac",
+  "migrations": [
+    {
+      "name": "20261116010000_daily_payroll.sql",
+      "sha256": "97ea41528818cebc49fc7ef88553cdcbfad671881299974c35f99295c6b3cdcd"
+    },
+    {
+      "name": "20261116020000_staff_scopes.sql",
+      "sha256": "ace1af3e7edb101e36dff6608723e26a2ff18aadf7b74fd27e4e7a6cd34266a0"
+    },
+    {
+      "name": "20261116030000_partner_preparation.sql",
+      "sha256": "3c0a29883bea205a2da495a0d52b290fc2626a8cd9d166042be9a4e674187f53"
+    }
+  ]
+}

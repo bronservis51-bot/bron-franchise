@@ -3,7 +3,7 @@ import {Link} from 'react-router';
 import {ShiftReview} from './ShiftReview';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Download, KeyRound, Pencil, UserMinus, UserPlus, UserRoundCheck } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, KeyRound, Pencil, Phone, UserMinus, UserPlus, UserRoundCheck } from 'lucide-react';
 import { command, from, rows } from '../../platform/backend';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
@@ -12,8 +12,10 @@ import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, E
 import { useToast } from '../../ui/toast';
 import { MotivationPanel } from './Motivation';
 import { TeamAccounts } from './TeamAccounts';
+import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, pctBp, phoneDigits, randomPassword, staffList, staffSetActive, userSetPassword, type StaffRow } from './api';
+import { phoneLoginDigits } from '../../platform/login';
 
 interface Loc { id: string; name: string; currency: string; status: string }
 const locationsOf = (partner: string) => rows<Loc>(from('location').select('id, name, currency, status').eq('partner_id', partner).order('name'));
@@ -38,12 +40,15 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const bp = Math.round(Number((rate || '0').replace(',', '.')) * 100);
   const m = useMutation({
     mutationFn: async () => {
+      const submittedPhone = phone;
+      const submittedPassword = password;
       const settings={employee_kind:kind,internship_from:start,internship_until:until||null,internship_floor_minor:traineeFee,learning_enabled:learningEnabled};
-      await command('staff_profile_save',{user:staff?.user_id??null,partner:partnerId,full_name:name,phone,password,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner,settings});
+      await command('staff_profile_save_phone',{user:staff?.user_id??null,partner:partnerId,full_name:name,phone:submittedPhone,password:submittedPassword,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner,settings});
+      return { phone: formatPhone(phoneDigits(submittedPhone)), password: submittedPassword };
     },
-    onSuccess: () => {
+    onSuccess: (issued) => {
       void qc.invalidateQueries({ queryKey: ['staff-list'] });
-      if (staff) { toast('Сохранено'); onClose(); } else setCreated({ phone: formatPhone(/[a-z]/i.test(phone)?phone:phoneDigits(phone)), password });
+      if (staff) { toast('Сохранено'); onClose(); } else setCreated(issued);
     },
   });
   if (created) {
@@ -59,14 +64,14 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
       </ConfirmDialog>
     );
   }
-  const valid = name.trim() && sel.length && (staff || ((phone.replace(/\D/g, '').length >= 10 || /^[a-z][a-z0-9._-]{1,39}$/.test(phone)) && password.length >= 6)) && bp >= 0 && bp <= 10000;
+  const valid = name.trim() && sel.length && (staff || (phoneLoginDigits(phone) && password.length >= 6)) && bp >= 0 && bp <= 10000;
   return (
     <ConfirmDialog open title={staff ? 'Сотрудник' : 'Новый сотрудник'} confirmLabel={staff ? 'Сохранить' : 'Добавить'} busy={m.isPending} error={m.error}
       disabled={!valid} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Дина" />}</Field>
       {!staff && (
         <div className="grid grid-2" style={{ gap: 12 }}>
-          <Field label="Телефон или короткий логин" required hint="Латинские буквы для логина или полный номер телефона">{(id) => <Input id={id} type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
+          <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{(id) => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
           <Field label="Пароль" required hint="Можно оставить предложенный">{(id) => <Input id={id} value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
         </div>
       )}
@@ -78,13 +83,13 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
       <Field label="Статус сотрудника">{id=><Select id={id} value={kind} onChange={e=>setKind(e.target.value as 'employee'|'trainee')}><option value="employee">Менеджер продаж</option><option value="trainee">Стажёр</option></Select>}</Field>
       {kind==='trainee'&&<>
         <div className="grid grid-2"><Field label="Начало стажировки">{id=><Input id={id} type="date" value={start} onChange={e=>setStart(e.target.value)}/>}</Field><Field label="Последний день" hint="Пусто — один календарный месяц">{id=><Input id={id} type="date" value={until} onChange={e=>setUntil(e.target.value)}/>}</Field></div>
-        <Field label={`Фикс стажёра за смену, ${currency}`} hint="Фикс или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
+        <Field label={`Минимум стажёра за смену, ${currency}`} hint="Минимум или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
         <p className="faint">После последнего дня действуют обычные условия ниже. Статус не закрывает доступ и не подтверждает практические навыки автоматически.</p>
       </>}
       <Checkbox label="Обучение для сотрудника включено" checked={learningEnabled} onChange={setLearningEnabled}/>
-      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="По общей схеме: фикс или процент, плюс премия" />
+      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="Минимум или процент (большее), плюс премия" />
       {!usePartner && <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label={`За выход, ${currency}`} hint="Фикс за смену">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
+        <Field label={`За выход, ${currency}`} hint="Фикс за смену суммируется с процентом">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
         <Field label="% от выручки смены">{(id) => <Input id={id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
       </div>
       }
@@ -129,6 +134,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const [month, setMonth] = useState(monthStart());
   const [edit, setEdit] = useState<StaffRow | 'new' | null>(null);
   const [pw, setPw] = useState<StaffRow | null>(null);
+  const [login, setLogin] = useState<StaffRow | null>(null);
   const [removing, setRemoving] = useState<StaffRow | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const locs = useQuery({ queryKey: ['locations', partnerId], queryFn: () => locationsOf(partnerId) });
@@ -179,11 +185,13 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     </div>
                   </div>
                   <div className="row" style={{ marginTop: 10 }}>
-                    {s.user_id!==me?.user.id && (s.active ? <>
+                    {s.user_id!==me?.user.id && s.can_manage!==false && (s.active ? <>
                       <Button size="sm" variant="ghost" onClick={() => setEdit(s)}><Pencil size={14} aria-hidden />Изменить</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setLogin(s)}><Phone size={14} aria-hidden />Телефон / логин</Button>
                       <Button size="sm" variant="ghost" onClick={() => setPw(s)}><KeyRound size={14} aria-hidden />Пароль</Button>
                       <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}><UserMinus size={14} aria-hidden />Удалить</Button>
                     </> : <Button size="sm" variant="ghost" loading={setActive.isPending} onClick={() => setActive.mutate({ user: s.user_id, active: true })}><UserRoundCheck size={14} aria-hidden />Вернуть</Button>)}
+                    {s.can_manage===false&&s.user_id!==me?.user.id&&<span className="faint">Доступ и общие условия меняет франчайзи</span>}
                     {s.shifts.length > 0 && (
                       <Button size="sm" variant="ghost" onClick={() => setOpen(open === s.user_id ? null : s.user_id)}>
                         {open === s.user_id ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}Смены
@@ -209,6 +217,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       </DataState>
       {edit && locs.data && <StaffDialog partnerId={partnerId} locs={locs.data} staff={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {pw && <PasswordReset staff={pw} onClose={() => setPw(null)} />}
+      {login && <PhoneLoginDialog user={login.user_id} name={login.full_name} currentPhone={login.phone} onClose={() => setLogin(null)} />}
       {removing && (
         <ConfirmDialog open danger title={`Удалить ${removing.full_name}?`} confirmLabel="Удалить" busy={setActive.isPending} error={setActive.error}
           onClose={() => setRemoving(null)} onConfirm={() => setActive.mutate({ user: removing.user_id, active: false })}>

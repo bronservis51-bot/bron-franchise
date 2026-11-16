@@ -1,0 +1,58 @@
+EXECUTOR_TASK T51 — native worker, fresh technical readiness phase only.
+
+Read the already accepted T51 envelope and private local T51-state.json from
+/tmp/bron-release-executor-20261113; verify its pinned commit/manifest SHA and all
+declared files in docs/runbooks/payloads/t51-mcp-result.json before any action.
+Read docs/runbooks/t51-mcp-result-and-readiness.md. Preserve T50 evidence, old T45,
+T49, Source fence and maintenance. Existing OAuth is ready; do not log in again.
+Do not rerun offline recovery of the old worker, tests, installs, builds or deploy.
+
+You must personally have callable bron-release-source execute_sql and permitted
+strict SSH; the parent executor's access is insufficient. Keep approval review and
+workspace-write restrictions. If ordinary approval rejects an action, stop rather
+than bypass. Verify existing delivered T51 helper/manifest, known host fingerprint,
+the prepared private T51 paths, a ready stock SSH ControlMaster and receipt writes
+BEFORE --prepare. Do not change proxies, keys, services, data or Source roles.
+
+The parent is already consuming your --json stdout through the pinned scoped
+collector. It will persist the one exact MCP result, publish a .ready.json marker
+after fsync, and continue draining until EOF. Do not create or edit the raw result,
+its ready marker or collector summary yourself. Do not pipe your output to a short
+consumer or stop the collector after capture. No manual chat relay or JSON editing.
+
+Once all setup is ready, run remote T51 --prepare exactly once via existing strict
+SSH master. Save its exact canonical technical request bytes in the T51 private
+directory as fresh-request.json with O_EXCL/0600/fsync/readback. The VPS timer has
+started. Immediately call native execute_sql ONCE with the exact full content of
+docs/runbooks/payloads/t50-verify-fenced.sql; SHA256 must be
+0f283284119a80520ed2c9f72273913da317961be6c6c7148b6f0c781b4bfd15.
+Only this pinned technical transaction is authorized; no Auth/business rows or
+snapshots, extra SQL, direct PostgreSQL, Edge calls, target writes or retries.
+
+After MCP returns, use the collector's fresh-recorded-result.json and .ready.json
+in the T51 private directory. Wait only for that durable ready marker if necessary,
+within the existing proof deadline; never wait for collector EOF. Verify marker
+resultSha256 matches captured file; do not infer success from the model-rendered tool
+reply. Run pinned t51-mcp-response.py with fresh-request.json, captured result and
+new response.json. If builder succeeds, immediately supply response.json as stdin
+to remote python3 -I /root/bron-secrets/t51-mcp-ready.py --complete over the SAME
+ready strict SSH master. Do not mix heredoc/script stdin with JSON or resend after
+a transport error. Every side-effectful proof command is one attempt only.
+
+Read actual result/readback metadata, preserve recorded raw result and all guards.
+If an error occurs, retain exact safe code/phase/SHA/timing; do not fabricate fields,
+retry SQL/prepare/complete or weaken clocks. Report sourceFenceCurrent as UNVERIFIED
+unless this attempt genuinely verifies it; never reinterpret T50 as PASS. Helper
+PASS alone is provisional until the parent confirms collector exactly one and no
+ambiguity at EOF. Preserve Source closed, target unchanged, maintenance active.
+
+Record private native-worker-result.json in the T51 local directory with actual
+input pins/counts/outcomes/timing and helper-result SHA, no raw reply/log contents.
+Treat any helper PASS as PROVISIONAL_HELPER_PASS. The parent creates the final
+canonical VPS receipt and matching local mirror ONLY after this worker exits and
+the collector's final summary confirms exactly one call and no ambiguity. Raw
+artifact is private technical metadata only, not a public report. Finish this
+worker after reporting T51 proof outcome; the long-lived parent executor remains
+active. No T45 or stale T49 window; final capability renewal/publication need fresh
+pinned scope. Close only your own temporary SSH master after the parent has copied
+the safe native-worker-result; no backend or unrelated process changes.

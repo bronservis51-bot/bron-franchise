@@ -8,12 +8,13 @@ import { createClient } from '@supabase/supabase-js';
 import { root } from './db-lib.mjs';
 import { exportData } from './backup-lib.mjs';
 import { loadEnv, need } from './env.mjs';
+import { databaseConfig } from './database-config.mjs';
 
 loadEnv();
 const url = need('DATABASE_URL');
 const dir = join(root, 'backups', new Date().toISOString().replace(/[:.]/g, '-'));
 mkdirSync(dir, { recursive: true, mode: 0o700 });
-const client = new pg.Client({ connectionString: url,  });
+const client = new pg.Client(databaseConfig(url));
 await client.connect();
 try {
   const dump = await exportData(client);

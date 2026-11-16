@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "task": "T61",
+  "actionId": "T61.public_acceptance",
+  "status": "AUTHORIZED_BY_OWNER_DIRECT_PRODUCTION_DIRECTIVE",
+  "workingDirectory": "/opt/bron/supabase/docker",
+  "roleActive": true,
+  "siteMode": "PRODUCTION_PUBLIC_OWNER_ACCEPTANCE",
+  "maintenanceRequired": false,
+  "waitForOwnerWhilePublic": true,
+  "roleActivityIsNotMaintenanceCondition": true,
+  "sourceMustRemainInactive": true,
+  "sourceReads": 0,
+  "sourceSnapshotAttempts": 0,
+  "directDatabaseWrites": 0,
+  "accountCreateResetDelete": false,
+  "supersedesRoutingConditions": [
+    "Any earlier Root condition requiring maintenance until executor-role closure",
+    "Historical T60 maintenanceRequired=true as a current routing instruction",
+    "Private IP preview and owner acceptance before public switch; owner explicitly changed that order"
+  ],
+  "priorEvidence": {
+    "T60FinalStatus": "PASS",
+    "T60FinalResultSha256": "6e3e2a6d296ec6ffc780c5ac2ce153d6e1b5b281c3ff2835cb68297f9310a6d8",
+    "sourceClosedProofSha256": "7f759706a93b015a310abe6ee5a89a4c2507a9a5eccd90b966b62f0f0e1abd50",
+    "sourceStatus": "INACTIVE",
+    "priorPublicSwitchChecks": "PASS",
+    "sixBackendIdsUnchanged": true
+  },
+  "composeFiles": [
+    "docker-compose.yml",
+    "bron/compose.override.yml",
+    "bron/compose.rehearsal-retry.override.yml",
+    "bron/compose.restore.override.yml",
+    "bron/compose.maintenance.override.yml"
+  ],
+  "productionOverride": "bron/compose.production.override.yml",
+  "service": "web",
+  "flags": [
+    "--no-deps",
+    "--pull",
+    "never"
+  ],
+  "startupAllowanceSeconds": 30,
+  "reuseUnchangedCaddyAndModelValidation": true,
+  "recheckAffectedLiveRoutesAndBackendInvariantsOnly": true,
+  "liveChecks": [
+    "strict TLS app and essential static routes 200",
+    "Auth settings/health 200 with existing public anon key",
+    "backup health 200/healthy/fresh",
+    "existing six backend IDs/network/loopback unchanged"
+  ],
+  "waitStatus": "PUBLIC_LIVE_PASS_OWNER_ACCEPTANCE_PENDING",
+  "ownerAcceptance": "Real UI login and one intended app operation; no fabricated business records",
+  "onCriticalLiveFailure": "Reclose web with existing maintenance chain; retain Source INACTIVE and all target data; report exact failure",
+  "neverRecloseOnlyBecause": [
+    "role is active",
+    "waiting for owner",
+    "writing or closing receipts",
+    "waiting for coordinator"
+  ],
+  "releaseRoleOnlyOnExplicitCoordinatorInstruction": true,
+  "leaveProductionActiveWhenRoleEventuallyCloses": true,
+  "preserveAllT60GuardsResultsLedgers": true,
+  "files": {
+    "deploy/timeweb/Caddyfile": "22f364fe3d69190adae37338ed2bbd42a2d0e9a07d19af007a39f7b3fb3d4ca9",
+    "deploy/timeweb/compose.production.override.yml": "4cf23a2d3db3613e339afb983925d8d2fa31ac2292aa8c8aaddfe9a6891c16cf"
+  }
+}

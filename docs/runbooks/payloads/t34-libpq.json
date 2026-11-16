@@ -1,0 +1,131 @@
+{
+  "acceptance": {
+    "failure": "exactsafe phase/code and SAFEpartial progress, owncleanup state; no manufacturedtransportPASS or repeat",
+    "source_target": "no source/target workingdata read/write, sourcefreeze/Pause/publication remainfalse; Macdatatransitfalse",
+    "success": "psql exit0, frontendTLS verified, actualRRRO/deadlines, exact first512/128/10x128/1MiB contents/count,ROLLBACK, ownclient andephemeralcredentials removed"
+  },
+  "actions": {
+    "T34.closed_gates": {
+      "latest_backup_status": "coordinator normalDNS/TLS GET14Nov02:04:48UTC(expected503): healthytrue, exact3keys, checkedage4.81m/backup64.81m accepted; this does not replace future pre-freeze freshness",
+      "reuse": "T12/T14/T18/T19/T21/T22; no rebuild/restore/Telegram/schedule work"
+    },
+    "T34.libpq_synthetic": {
+      "SQL": "fixed SYNTHETIC ONLY RR READONLY; statement5s/idle10; identity; FIRST512,128,10x128,1MiB,ROLLBACK. No actualtables/Auth/business/backup reads.",
+      "TLS": "libpq service hostcanonical+hostaddrfixedpeer, verify-full+protectedCA; frontendTLS asserted via conninfo, no misleadingbackendpg_stat_ssl assumption",
+      "activation_recipe": "launcher verifies exactT33result and helperSHA, reads ONLY currentsupabase-db ID/Image/Running; ID mustequal fixedT33ID; exclusivelywrites fsynced0600 /root/bron-secrets/source-libpq-reviewed.json from fixedcode recipe, expiry1h; records derivedSHA and launches helper. No manual substitutions.",
+      "bound": "phase7s,totalclient35s; preflight+client44s budget, bounded owncleanup; outer launcher60s; no retries or alternatepeer",
+      "cleanup": "remove only exactowncontainer name+nonce+ID; delete own ephemeralsourcecredentials; no target/backend restart; both clientRemoved andcredentialsRemoved required toclaimPASS",
+      "command": [
+        "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+        "/root/bron-secrets/t34-launch-libpq.mjs"
+      ],
+      "credentials": "ONLY existingVPS sourcefactorycallback; ephemeral private0700dir/0600pgpass/service/CA onVPS; originalcredentialfilesunchanged; correctescaping; no passwordvalue inargv/env/log/chat/Mac; inheritedPGPASSWORD/PGOPTIONS/PGSSLcleared",
+      "helper_guard": "/root/bron-secrets/source-libpq-probe.guard",
+      "if_cached_image_rejected": "report selectedimageID and Config.Volumes KEYS ONLY, no rawEnv/config/DBvolume reads; no replacement/pull/retry",
+      "interpretation": "libpq success/failure is client/path evidence, not byitself proof of a particular Node or provider defect; no Auth continuation authorized",
+      "launcher_guard": "/root/bron-secrets/t34-libpq-launcher.guard",
+      "max_launches": 1,
+      "output": "safe fixedcodes, frontendTLS/identity/completecounts, phase timings; preserve partial verified stages onfailure, never rawstdout/stderr/credentials",
+      "resource": "one disposable cached-image psql client, --rm --pullnever --networkhost --read-only --capdropALL --no-new-privileges; NO DBstartup,targetvolumes,publishedports,imagepull or persistentservice",
+      "result": "/root/bron-secrets/source-libpq-probe-result.json",
+      "shared_action_id": "SOURCE_LIBPQ_SYNTHETIC_V1"
+    },
+    "T34.owner_branch": {
+      "does_not_block_report": true,
+      "no_new_secret_prompt": true,
+      "reuse": "T30 existing personalPHONEconsole keyproof and independent-copy/second-device attestation"
+    }
+  },
+  "deliveries": [
+    {
+      "destination": "/root/bron-secrets/source-libpq-probe.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/source-libpq-probe.mjs"
+    },
+    {
+      "destination": "/root/bron-secrets/t34-launch-libpq.mjs",
+      "mode": "0600",
+      "owner": "root:root",
+      "replace_existing": false,
+      "source": "docs/runbooks/payloads/t34-launch-libpq.mjs"
+    }
+  ],
+  "files": {
+    "docs/runbooks/payloads/source-libpq-probe.mjs": "79ccda1c8565a9c0274b31ac2bab1a295f9275443b0b16eab37f40d68ad8eb02",
+    "docs/runbooks/payloads/t34-launch-libpq.mjs": "fe051680c2b28c9a087a050a96e2b5a81382159c5e2d6857f17e250aa859021b",
+    "tests/ops/source-libpq-probe-native.py": "5fb2a011d3cfd4b9fb5bf49dd9040a85810ec3ead7e958106a01b8dfe8e6298a",
+    "tests/ops/source-libpq-probe.test.mjs": "73a627a061504c230323b1796b12a3406a8536801fab5c9534e3e62d16bf7e9d",
+    "tests/ops/t34-launch-libpq.test.mjs": "75bd4c00d9df2d8d95031891c509fcaa23d3e293ea81f00a108783a7d23e1cb5"
+  },
+  "format": 1,
+  "input_evidence": {
+    "T33_receipt_sha256": "6b05775687250366aee23443bd2e247a52ba3bf4404e63d919820ee99b97d6bc",
+    "T33_result": "/root/bron-secrets/t33-source-network-result.json",
+    "T33_result_sha256": "42f1d653fc8938af78377c501c91ee9b6668b0e04cfb280e0f2713c3fc13c492",
+    "canonicalHost": "aws-1-us-west-2.pooler.supabase.com",
+    "current_target_container_id": "51071996d381fbfa6a1b6c530045881a5cee6a8c82ee482d83bbf8b47ccf8117",
+    "peer": "34.215.156.231",
+    "required": "T33 BLOCKED, both alternative peers fail single512 after128PASS; baseline transport/retainedfalse; source helper validates exact evidence before launch"
+  },
+  "not_authorized": [
+    "NodeT31_T32_T33_probe_retry",
+    "source_or_target_workingdata_or_Auth_read",
+    "source_target_DML_DDL_admission_freeze_PauseRestore",
+    "actualdata_orbackup_toMac_evenencrypted",
+    "readageidentity_newownerinput_PAT_orsecretrelocation",
+    "newimagepull_orinstall_persistentservice",
+    "targetDBstartup_orrestart_mounts_ports",
+    "routes_MTU_MSS_DNSsettings_firewall_tunnelchange",
+    "morethanone_libpqclientattempt",
+    "Telegrammessage_dispatch_cronchange_PRmerge_preview_publication"
+  ],
+  "receipts": {
+    "acceptance_message": "EXECUTOR_ACCEPTED T34 COMMIT=<pin> STATE=<local> RECEIPT=<canonical>",
+    "before_effects": "ACCEPTED/state/inputSHAs; both guards and derivedactivationSHA beforeclientstart; newtaskID never resets sharedlibpqguard",
+    "canonical_vps": "/root/bron-secrets/t34-release-receipt.json",
+    "continue_without_reply": true,
+    "local_mirror": "/tmp/bron-release-executor-20261113/T34-state.json",
+    "log_vps": "/root/bron-secrets/t34-release.log",
+    "mode": "0600",
+    "output": [
+      "libpq result/phase/code and safe partial stage counts/timings",
+      "frontendTLS/identity state",
+      "dynamicactivationSHA/currentcachedimageID",
+      "owncontainer andcredentialcleanup state",
+      "fullSHA result/receipt/log",
+      "ownerbranchstatus",
+      "changedprivatepaths; allbackendservices unchanged"
+    ],
+    "report_without_owner_wait": true
+  },
+  "runtime": {
+    "audit_runtime": "/opt/bron/audit-runtime-c128f9b",
+    "node": "/opt/bron/node-v22.23.5-linux-x64/bin/node",
+    "node_version": "22.23.5",
+    "pg_version": "8.23.1"
+  },
+  "scope": "one independent libpq TLS synthetic-only comparison on the already tested peer; no Auth or migration data",
+  "task": "T34",
+  "verification": {
+    "NodeTLS": "exactNode22.23.5/pg8.23.1/PG17.12 nativeTLS sizes1MiB positive andwrongCA/hostname negative PASS_REUSED",
+    "focused_unit": "libpq10 + fixedactivationrecipe1 PASS",
+    "limits": "nativefixture doesnotprove realVPS/Supavisor or exactcachedSupabasepsql17.11 image; actualcomparison remainsruntimeacceptance",
+    "native": "actualcachedPG17.12/psql17.12 frontendTLS verify-full canonicalhost+hostaddr, mandatorySCRAM escapedpgpasscolon/backslash, actualRRRO5s/idle10, fixed512first→128→10x128→1MiB, wrongCA/host/passwordreject, inheritedpoisonPGenvcleared, ownedfixture/client/keysremoved PASS",
+    "product": "unchanged; no new productbuild/restore required"
+  },
+  "verify_only_vps": {
+    "/opt/bron/audit-runtime-c128f9b/scripts/database-config.mjs": "1064d54299d354ec7951f40b719ce6886b78ddd00b2f2ac234c0024a8fbd55e6",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-audit.mjs": "a5306390fa06db03665caaaa988cadf472f17c349538712f03fa31f794d6bdea",
+    "/opt/bron/audit-runtime-c128f9b/scripts/migration-source.mjs": "c13f82606d1ebf4a45fd459d0d5b5354b062076b7c8bb27a47c66ee5519b347b",
+    "/root/bron-secrets/t30-auth-compact.mjs": "0e34802b3308df318a210a55bc2f379c517554fa9d73775453738adb371ae661",
+    "/root/bron-secrets/t31-source-network.mjs": "9ef0c3e8c32626b7760e307efc57f26c033affddeef43f4841e70ebb5a2f8472"
+  },
+  "vps": {
+    "host": "152.228.115.115",
+    "ssh_ed25519_fingerprint": "SHA256:8KA0F5NRZo8hIn84yT/pSclefFxk8zRg9JzuPuilYh0",
+    "strict_host_key_checking": true,
+    "user": "root"
+  }
+}
