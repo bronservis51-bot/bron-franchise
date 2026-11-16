@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "task": "T64A",
+  "migrations": [
+    {
+      "name": "20261116040000_staff_helper_execute.sql",
+      "sha256": "e3699ad1984e52810db1e97ce2cd46365d365e37e26fc5c62d20deea82cb1a8c"
+    }
+  ]
+}
