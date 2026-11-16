@@ -1,6 +1,6 @@
 // Меню по роли. Франчайзи: главная, сотрудники, финансы (вкл. роялти), база знаний. Рейтинг — только менеджеру сети.
-// Менеджер: франчайзи, заявки с сайта, роялти, рейтинг, база знаний.
-import { BookOpen, GraduationCap, Clock, Home, Inbox, Landmark, Store, ShoppingCart, Trophy, Users, Wallet } from 'lucide-react';
+// Менеджер: франчайзи, заявки с сайта, экономика (вкл. роялти), рейтинг, база знаний.
+import { BookOpen, GraduationCap, Clock, Home, Inbox, Store, ShoppingCart, Trophy, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export interface NavItem {
@@ -17,7 +17,6 @@ export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'supp
   if (role === 'manager') return [
     { to: '/', label: 'Франчайзи', icon: Store },
     { to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' },
-    { to: '/royalty', label: 'Роялти', icon: Landmark },
     { to: '/finance', label: 'Экономика', icon: Wallet },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },

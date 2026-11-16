@@ -20,8 +20,8 @@ export function SupplyFinancePage() {
   const [section, setSection] = useState<'overview' | 'royalty'>('overview');
   return <>
     <div className="chips" role="group" aria-label="Раздел экономики">
-      <button type="button" className="chip" aria-pressed={section === 'overview'} onClick={() => setSection('overview')}>Сводка франшизы</button>
-      <button type="button" className="chip" aria-pressed={section === 'royalty'} onClick={() => setSection('royalty')}>Роялти</button>
+      <button type="button" className="chip" aria-pressed={section === 'overview'} onClick={() => setSection('overview')}>Обзор</button>
+      <button type="button" className="chip" aria-pressed={section === 'royalty'} onClick={() => setSection('royalty')}>Роялти и оплаты</button>
     </div>
     {section === 'royalty' ? <RoyaltyPage /> : <FranchiseOverview />}
   </>;
@@ -37,22 +37,19 @@ function FranchiseOverview() {
   const bind = useMutation({ mutationFn: (counterparty: string) => command('manager_supply_map', { counterparty, partner: mapping[counterparty] }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['supply'] }); } });
   return <>
-    <PageHeader title="Экономика франшизы" sub="Отчёты партнёров, роялти и наши поставки — в одной сводке."
+    <PageHeader title="Экономика франшизы" sub="Выручка партнёров, роялти и поставки за выбранный месяц."
       actions={<Button onClick={() => { void q.refetch(); void rev.refetch(); void royalty.refetch(); }} loading={q.isFetching || rev.isFetching || royalty.isFetching}><RefreshCw size={16} aria-hidden />Обновить сводку</Button>} />
     <MonthNav month={month} onChange={setMonth} max={monthStart()} />
     <ActionError error={rev.error ?? royalty.error ?? bind.error} />
     <DataState query={q} skeleton={5}>{s => {
       const total = s.rows.filter(r => r.mapped_count > 0).reduce((a, r) => ({ sales: a.sales + Number(r.sales_minor), cost: a.cost + Number(r.cost_minor), profit: a.profit + Number(r.profit_minor) }), { sales: 0, cost: 0, profit: 0 });
       return <div className="stack">
-        <div className="alert tone-info"><div className="alert-body">Себестоимость и прибыль поставок доступны только менеджеру. Розничная выручка — продажи партнёра его клиентам; поставки — наши продажи партнёру.</div></div>
-        {s.fetched_at ? <p className="faint">МойСклад: снимок от {new Date(s.fetched_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} МСК. Период по {s.period_to?.slice(0, 10).split('-').reverse().join('.')}. Кнопка обновляет сводку из последнего загруженного снимка.</p>
-          : <div className="alert tone-warning">Данные МойСклад за этот месяц ещё не загружены. Продажи и себестоимость неизвестны.</div>}
-        <div className="kpis">
+        {s.fetched_at && <p className="faint">Снимок поставок от {new Date(s.fetched_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} МСК. Период по {s.period_to?.slice(0, 10).split('-').reverse().join('.')}. Кнопка обновляет сводку из последнего загруженного снимка.</p>}
+        {s.fetched_at && s.rows.some(r => r.mapped_count > 0) && <div className="kpis">
           <div className="kpi"><span className="v">{s.fetched_at ? money(total.sales) : '—'}</span><span className="l">наши продажи партнёрам, ₽</span></div>
           <div className="kpi"><span className="v">{s.fetched_at ? money(total.cost) : '—'}</span><span className="l">себестоимость отгрузок, ₽</span></div>
           <div className="kpi"><span className="v">{s.fetched_at ? money(total.profit) : '—'}</span><span className="l">валовая прибыль поставок, ₽</span></div>
-        </div>
-        <p className="faint">Итоги поставок включают привязанных контрагентов, с учётом возвратов. Валовая прибыль указана до расходов УК. Роялти и выручка показаны в валюте партнёра; поставки всегда в рублях.</p>
+        </div>}
         <div className="economics-table-wrap"><table className="economics-table">
           <thead><tr><th>Партнёр</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
           <tbody>{s.rows.map(r => {
@@ -62,7 +59,7 @@ function FranchiseOverview() {
             const gaps = points?.reduce((n, p) => n + p.missing_days.length, 0);
             const ready = s.fetched_at && r.mapped_count > 0;
             return <tr key={r.partner_id}>
-              <td><Link to={`/partners/${r.partner_id}`}>{r.partner_name}</Link><small>{r.mapped_count ? `Контрагентов: ${r.mapped_count}` : 'Нет привязки к МойСклад'}</small>{r.counterparties.length > 0 && <details><summary>Источник поставок</summary><small>{r.counterparties.join('; ')}</small></details>}</td>
+              <td><Link to={`/partners/${r.partner_id}`}>{r.partner_name}</Link>{r.counterparties.length > 0 && <details><summary>Источник поставок</summary><small>{r.counterparties.join('; ')}</small></details>}</td>
               <td>{points?.length ? money(revenue, points[0].currency) : '—'}<small>{points?.length ? gaps ? `Не заполнено ${gaps} дней по точкам` : 'Все прошедшие дни заполнены' : 'Нет отчётов по точкам'}</small></td>
               <td>{rr ? `${money(Number(rr.accrued_minor) + Number(rr.manual_minor), rr.currency)} / ${money(rr.paid_minor, rr.currency)}` : '—'}</td>
               <td>{rr ? money(Number(rr.accrued_minor) + Number(rr.manual_minor) - Number(rr.paid_minor), rr.currency) : '—'}{rr?.is_open && <small>Месяц ещё открыт</small>}</td>
