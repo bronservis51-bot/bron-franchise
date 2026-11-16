@@ -99,7 +99,7 @@ export async function command<T>(name: CommandName, args: Record<string, unknown
   setInFlight(1);
   try {
     const client = requireClient();
-    const financial = ['royalty_payment_add', 'royalty_manual_add', 'royalty_set_accrual', 'expense_save'].includes(name);
+    const financial = ['royalty_payment_add', 'royalty_manual_add', 'royalty_set_accrual', 'expense_save', 'manager_company_expense_save'].includes(name);
     const uid = financial ? (await client.auth.getSession()).data.session?.user.id ?? '' : '';
     const receipt = financial ? await operationKey(uid, name, params) : null;
     const request = client.rpc(receipt ? 'financial_operation' : name,
