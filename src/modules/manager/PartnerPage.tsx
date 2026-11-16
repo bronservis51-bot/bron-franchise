@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit3, KeyRound, Landmark, Plus, Target, UserPlus, X } from 'lucide-react';
+import { Edit3, KeyRound, Landmark, Phone, Plus, Target, UserPlus, X } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 import { PartnerCardPanel } from './PartnerCard';
@@ -14,12 +14,18 @@ import { revenueMonth, type DayRow } from '../revenue/api';
 import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type Location } from './api';
 import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog, SetPasswordDialog } from './PartnerDialog';
 import { StaffPanel } from '../staff/StaffPage';
+import { PhoneLoginDialog } from '../staff/PhoneLoginDialog';
+import { formatPhone } from '../staff/api';
+import { phoneLoginInitial } from '../../platform/login';
+import { useSession } from '../../platform/session';
 
 function AccessCard({ partnerId }: { partnerId: string }) {
+  const { me } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [pw, setPw] = useState<{ user: string; name: string } | null>(null);
+  const [login, setLogin] = useState<{ user: string; name: string; phone: string } | null>(null);
   const q = useQuery({ queryKey: ['access', partnerId], queryFn: () => partnerAccess(partnerId) });
   const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); void qc.invalidateQueries({ queryKey: ['access', partnerId] }); } });
   const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: () => void qc.invalidateQueries({ queryKey: ['access', partnerId] }) });
@@ -31,8 +37,9 @@ function AccessCard({ partnerId }: { partnerId: string }) {
             {!a.users.length && !a.invites.length && <p className="faint">Доступа пока ни у кого нет.</p>}
             {a.users.map((u) => (
               <div key={u.assignment_id} className="row between access-row">
-                <span><strong>{u.full_name}</strong><span className="faint" style={{ display: 'block' }}>{u.email}</span></span>
-                <span className="row" style={{ flexWrap: 'nowrap' }}>
+                <span><strong>{u.full_name}</strong><span className="faint" style={{ display: 'block' }}>Логин: {phoneLoginInitial(u.phone || u.email) ? formatPhone(phoneLoginInitial(u.phone || u.email)) : u.email.replace(/@access\.bron\.local$/i, '')}</span></span>
+                <span className="row">
+                  {u.user_id !== me?.user.id && u.can_manage !== false && <Button size="sm" variant="ghost" onClick={() => setLogin({ user: u.user_id, name: u.full_name, phone: u.phone || u.email })}><Phone size={14} aria-hidden />Телефон / логин</Button>}
                   <button type="button" className="icon-btn" aria-label="Новый пароль" onClick={() => setPw({ user: u.user_id, name: u.full_name })}><KeyRound size={16} /></button>
                   <Button size="sm" variant="ghost" loading={revoke.isPending} onClick={() => revoke.mutate(u.assignment_id)}>Отозвать</Button>
                 </span>
@@ -49,6 +56,7 @@ function AccessCard({ partnerId }: { partnerId: string }) {
       </DataState>
       {adding && <AccessDialog partnerId={partnerId} onClose={() => setAdding(false)} />}
       {pw && <SetPasswordDialog user={pw.user} name={pw.name} onClose={() => setPw(null)} />}
+      {login && <PhoneLoginDialog user={login.user} name={login.name} currentPhone={login.phone} onClose={() => setLogin(null)} />}
     </Card>
   );
 }

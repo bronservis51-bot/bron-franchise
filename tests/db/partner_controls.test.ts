@@ -63,9 +63,8 @@ describe('partner manager hierarchy',()=>{
  });
 });
 
-it('server omits completeness and its badges for franchisees, retains it for the network manager',async()=>{
- const owner=(await t.as<{j:{rows:Record<string,unknown>[]}}>(OWNER,'select public.rating() j'))[0].j;
- expect(owner.rows.length).toBeGreaterThan(0);for(const row of owner.rows){expect(row).not.toHaveProperty('fill_pct');expect(row.badges).toEqual([]);}
+it('ranking is unavailable to franchisees, retains full metrics for the network manager',async()=>{
+ await t.expectError(OWNER,'select public.rating()','forbidden');
  const fm=(await t.as<{j:{rows:Record<string,unknown>[]}}>(FM,'select public.rating() j'))[0].j;expect(fm.rows[0]).toHaveProperty('fill_pct');
 });
 

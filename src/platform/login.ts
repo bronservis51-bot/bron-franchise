@@ -1,6 +1,21 @@
 /** Public login identifiers are not credentials. Passwords are sent only to Auth. */
 export const LOGIN_DOMAIN = 'access.bron.local';
 
+/** Phone login for explicit account management; never guesses a phone from a name. */
+export function phoneLoginDigits(value: string): string | null {
+  const input = value.trim();
+  if (!/^\+?[\d\s()-]+$/.test(input)) return null;
+  let digits = input.replace(/\D/g, '');
+  if (/^8\d{10}$/.test(digits)) digits = `7${digits.slice(1)}`;
+  if (/^9\d{9}$/.test(digits)) digits = `7${digits}`;
+  return /^[1-9]\d{9,14}$/.test(digits) ? digits : null;
+}
+
+/** Existing service identities may contain a phone; ordinary email/short login does not. */
+export function phoneLoginInitial(value?: string | null): string {
+  return phoneLoginDigits((value ?? '').replace(/@(?:staff|access)\.bron\.local$/i, '')) ?? '';
+}
+
 export function loginEmail(value: string): string {
   const login = value.trim().toLowerCase();
   if (login.includes('@')) return login;

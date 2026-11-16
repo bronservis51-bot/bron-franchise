@@ -5,6 +5,7 @@ export const CONTRACT = {
   access_grant: { args: ['partner', 'email'], returns: 'scalar' },
   access_revoke: { args: ['assignment'], returns: 'void' },
   account_create: { args: ['partner', 'full_name', 'email', 'password'], returns: 'scalar' },
+  account_create_phone: { args: ['partner', 'full_name', 'phone', 'password'], returns: 'scalar' },
   article_acknowledge: { args: ['article'], returns: 'void' },
   article_archive: { args: ['article', 'archived'], returns: 'single' },
   article_create: { args: ['section', 'type', 'title'], returns: 'scalar' },
@@ -107,6 +108,7 @@ export const CONTRACT = {
   staff_access_history: { args: ['partner'], returns: 'scalar' },
   staff_access_set: { args: ['partner', 'user', 'manager', 'locations'], returns: 'void' },
   staff_account_create: { args: ['partner', 'full_name', 'login', 'password', 'locations', 'manager'], returns: 'scalar' },
+  staff_account_create_phone: { args: ['partner', 'full_name', 'phone', 'password', 'locations', 'manager'], returns: 'scalar' },
   staff_create: { args: ['partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee'], returns: 'scalar' },
   staff_create_terms: { args: ['partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee', 'use_partner'], returns: 'scalar' },
   staff_home: { args: ['month'], returns: 'scalar' },
@@ -115,6 +117,7 @@ export const CONTRACT = {
   staff_onboarding_set: { args: ['user', 'settings'], returns: 'void' },
   staff_open_shifts: { args: ['partner'], returns: 'scalar' },
   staff_profile_save: { args: ['user', 'partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee', 'use_partner', 'settings'], returns: 'scalar' },
+  staff_profile_save_phone: { args: ['user', 'partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee', 'use_partner', 'settings'], returns: 'scalar' },
   staff_set_active: { args: ['user', 'active'], returns: 'void' },
   staff_shift_resolve: { args: ['shift', 'action', 'cash', 'card', 'expected_revision', 'reason', 'operation'], returns: 'scalar' },
   staff_terms_set: { args: ['user', 'full_name', 'locations', 'rate_bp', 'shift_fee', 'use_partner'], returns: 'void' },
@@ -127,6 +130,7 @@ export const CONTRACT = {
   team_revenue_month: { args: ['partner', 'month'], returns: 'scalar' },
   team_set_active: { args: ['partner', 'user', 'active'], returns: 'void' },
   user_set_password: { args: ['user', 'password'], returns: 'void' },
+  user_set_phone_login: { args: ['user', 'phone'], returns: 'scalar' },
 } as const satisfies Record<string, { args: readonly string[]; returns: 'single' | 'set' | 'scalar' | 'void' }>;
 
 export type CommandName = keyof typeof CONTRACT;

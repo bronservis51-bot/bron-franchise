@@ -5,9 +5,10 @@ import { monthLabel } from '../../platform/dates';
 import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 import { planSet } from '../revenue/api';
-import { accessGrant, accountCreate, countries, locationSave, partnerSave, type Location, type Partner } from './api';
-import { randomPassword, userSetPassword } from '../staff/api';
+import { accessGrant, accountCreatePhone, countries, locationSave, partnerSave, type Location, type Partner } from './api';
+import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
+import { loginEmail, phoneLoginDigits } from '../../platform/login';
 
 export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
@@ -96,19 +97,28 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
   const qc = useQueryClient();
   const toast = useToast();
   const [mode, setMode] = useState<'create' | 'grant'>('create');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [login, setLogin] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState(randomPassword);
-  const [made, setMade] = useState<{ email: string; password: string } | null>(null);
+  const [made, setMade] = useState<{ phone: string; password: string } | null>(null);
+  const digits = phoneLoginDigits(phone);
+  let grantValid = false;
+  try { grantValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(loginEmail(login)); } catch { /* keep the form disabled */ }
   const m = useMutation({
     mutationFn: async () => {
-      if (mode === 'create') { await accountCreate(partnerId, name, email, password); return 'created' as const; }
-      return (await accessGrant(partnerId, email)).status;
+      if (mode === 'create') {
+        const submittedPhone = phone;
+        const submittedPassword = password;
+        await accountCreatePhone(partnerId, name, submittedPhone, submittedPassword);
+        return { status: 'created' as const, phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword };
+      }
+      return { status: (await accessGrant(partnerId, login)).status };
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['access', partnerId] });
-      if (r === 'created') { setMade({ email, password }); return; }
-      toast(r === 'granted' ? 'Доступ выдан' : r === 'exists' ? 'У этого пользователя уже есть доступ' : 'Приглашение сохранено');
+      if (r.status === 'created') { setMade({ phone: r.phone, password: r.password }); return; }
+      toast(r.status === 'granted' ? 'Доступ выдан' : r.status === 'exists' ? 'У этого пользователя уже есть доступ' : 'Пользователь не найден. Отмените подготовленное приглашение в карточке и затем создайте учётную запись.');
       onClose();
     },
   });
@@ -118,7 +128,7 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
         <p>Передайте франчайзи данные для входа. Пароль он сможет сменить сам в профиле.</p>
         <div className="login-card-data">
           <div><span className="faint">Сайт</span><strong>{location.origin}{location.pathname}</strong></div>
-          <div><span className="faint">Email</span><strong>{made.email}</strong></div>
+          <div><span className="faint">Телефон / логин</span><strong>{made.phone}</strong></div>
           <div><span className="faint">Пароль</span><strong className="mono">{made.password}</strong></div>
         </div>
       </ConfirmDialog>
@@ -126,16 +136,18 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
   }
   return (
     <ConfirmDialog open title="Доступ для франчайзи" confirmLabel={mode === 'create' ? 'Создать учётную запись' : 'Выдать доступ'} busy={m.isPending} error={m.error}
-      disabled={!email.includes('@') || (mode === 'create' && (!name.trim() || password.length < 6))} onClose={onClose} onConfirm={() => m.mutate()}>
+      disabled={mode === 'create' ? !digits || !name.trim() || password.length < 6 : !grantValid} onClose={onClose} onConfirm={() => m.mutate()}>
       <div className="chips" role="group" aria-label="Способ">
         <button type="button" className="chip" aria-pressed={mode === 'create'} onClick={() => setMode('create')}>Новая учётная запись</button>
         <button type="button" className="chip" aria-pressed={mode === 'grant'} onClick={() => setMode('grant')}>Уже есть в системе</button>
       </div>
       {mode === 'create' && <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>}
-      <Field label="Email франчайзи" required>{(id) => <Input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
+      {mode === 'create'
+        ? <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{(id) => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 123-45-67" />}</Field>
+        : <Field label="Телефон или прежний логин/email" required>{(id) => <Input id={id} autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} />}</Field>}
       {mode === 'create'
         ? <Field label="Пароль" hint="Можно оставить предложенный; франчайзи сменит его в профиле">{(id) => <Input id={id} value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
-        : <p className="faint">Если пользователя с таким email ещё нет, доступ назначится сам при его первом входе.</p>}
+        : <p className="faint">Для нового пользователя выберите «Новая учётная запись». Выдача доступа существующему пользователю не меняет его пароль.</p>}
     </ConfirmDialog>
   );
 }

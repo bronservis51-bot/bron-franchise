@@ -80,7 +80,7 @@ const router = createHashRouter([
       { path: 'royalty', element: <ByRole manager={<RoyaltyPage />} franchisee={<Navigate to="/finance" replace />} /> },
       { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} team={<StaffPage />} /> },
-      { path: 'rating', element: <ByRole manager={<RatingPage />} franchisee={<RatingOnly><RatingPage /></RatingOnly>} /> },
+      { path: 'rating', element: <ManagerOnly><RatingPage /></ManagerOnly> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },
       { path: 'kb/manage', element: <KbManagePage /> },
@@ -113,12 +113,6 @@ function ByRole({ manager, franchisee, team }: { manager?: ReactNode; franchisee
   const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
   const el = isManager ? manager : isTechnical ? null : isStaff ? null : isTeamManager ? team : franchisee;
   return el ? <>{el}</> : <Navigate to="/" replace />;
-}
-
-/** Рейтинг — только франчайзи в России (у иностранных нет разрешения rating.read). */
-function RatingOnly({ children }: { children: ReactNode }) {
-  const { can } = useSession();
-  return can('rating.read') ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function ManagerOnly({ children }: { children: ReactNode }) {
