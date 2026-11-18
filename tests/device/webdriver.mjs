@@ -1,16 +1,31 @@
+import { request as httpRequest } from 'node:http';
+
 const appium = 'http://127.0.0.1:4723';
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf';
 
 async function request(method, path, body, timeout = 45_000) {
-  const response = await fetch(appium + path, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeout),
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  // A cold iOS run can take longer than fetch's default response-header timeout.
+  const { status, data } = await new Promise((resolve, reject) => {
+    const req = httpRequest(appium + path, {
+      method,
+      headers: payload === undefined ? undefined : {
+        'content-type': 'application/json', 'content-length': Buffer.byteLength(payload),
+      },
+      signal: AbortSignal.timeout(timeout),
+    }, res => {
+      res.setEncoding('utf8');
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.once('error', reject);
+      res.once('end', () => resolve({ status: res.statusCode, data }));
+    });
+    req.once('error', reject);
+    req.end(payload);
   });
-  const { value } = await response.json();
-  if (!response.ok || value?.error) {
-    const error = new Error(`${method} ${path}: ${value?.message ?? response.status}`);
+  const { value } = JSON.parse(data);
+  if (status < 200 || status >= 300 || value?.error) {
+    const error = new Error(`${method} ${path}: ${value?.message ?? status}`);
     error.code = value?.error;
     throw error;
   }
