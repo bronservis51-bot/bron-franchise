@@ -328,7 +328,7 @@ const server = http.createServer(async (req, res) => {
       if (!(await isCurrentSession(claims))) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
-    if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: 'GoTrue (локальная эмуляция)' });
+    if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: 'GoTrue' });
     if (p === '/auth/v1/logout') {
       if (claims) await db.query('delete from auth.sessions where id = $1 and user_id = $2', [claims.session_id, claims.sub]);
       return send(res, 204);
