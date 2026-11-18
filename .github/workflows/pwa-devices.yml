@@ -66,6 +66,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           sudo apt-get install -y libnss3-tools
+      - name: Download Firefox for Android
+        if: matrix.platform == 'android'
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+            https://archive.mozilla.org/pub/fenix/releases/148.0/android/fenix-148.0-android-x86_64/fenix-148.0.multi.android-x86_64.apk \
+            --output "$RUNNER_TEMP/firefox-android.apk"
       - name: Run on Android Emulator
         if: matrix.platform == 'android'
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -77,9 +83,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Europe/Moscow
           script: |
-            curl --fail --silent --show-error --location --retry 3 --max-time 120 \
-              https://archive.mozilla.org/pub/fenix/releases/148.0/android/fenix-148.0-android-x86_64/fenix-148.0.multi.android-x86_64.apk \
-              --output "$RUNNER_TEMP/firefox-android.apk"
             adb install "$RUNNER_TEMP/firefox-android.apk"
             npm run test:pwa:device -- android
       - name: Boot iOS Simulator
