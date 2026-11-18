@@ -37,7 +37,7 @@ const startup = labels(['Not now', 'Continue', 'Save and continue', 'Confirm', '
 const translations = labels(['Close Translations sheet']);
 const skipTranslation = labels(['Not now'], " and @clickable = 'true'");
 const loginPage = labels(['Кабинет франчайзи']);
-const moreMenu = labels(['More']);
+const moreMenu = labels(['More', 'More Collapsed']);
 const installMenu = labels(['Add app to Home screen', 'Install']);
 const confirmPin = labels(['Add to Home screen', 'Add to home screen', 'Add automatically'],
   " and @clickable = 'true' and contains(@package, 'launcher')");
