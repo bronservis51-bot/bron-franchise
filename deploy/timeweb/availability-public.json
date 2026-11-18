@@ -1,0 +1,6 @@
+{
+  "app_url": "https://app.bronservis.ru/",
+  "api_url": "https://api.bronservis.ru",
+  "backup_status_url": "https://api.bronservis.ru/.well-known/bron-health.json",
+  "api_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzk0NTEyNzU2LCJleHAiOjE5NTIxOTI3NTZ9.XeI7BiAbctQjSrwNJTXOcACb7C7pJ1lMfFWVrs898NU"
+}

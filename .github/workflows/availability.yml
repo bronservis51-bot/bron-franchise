@@ -23,18 +23,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    outputs:
+      failed_checks: ${{ steps.public_checks.outputs.failed_checks }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Check public services
+        id: public_checks
         run: node scripts/check-availability.mjs
         env:
-          APP_URL: ${{ vars.APP_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          BRON_BACKUP_STATUS_URL: ${{ vars.BRON_BACKUP_STATUS_URL }}
+          # Optional rotation override. The checked-in fallback contains only the current public anon key.
+          BRON_AVAILABILITY_API_PUBLISHABLE_KEY: ${{ secrets.BRON_AVAILABILITY_API_PUBLISHABLE_KEY }}
   notify:
     needs: check
     if: always() && (github.event_name == 'workflow_dispatch' || (needs.check.result == 'failure' && vars.BRON_MONITORING_ENABLED == 'true'))
@@ -103,6 +104,7 @@ jobs:
           BRON_TELEGRAM_BOT_TOKEN: ${{ secrets.BRON_TELEGRAM_BOT_TOKEN }}
           BRON_TELEGRAM_CHAT_ID: ${{ secrets.BRON_TELEGRAM_CHAT_ID }}
           BRON_TELEGRAM_TEST_DELIVERY: ${{ github.event_name == 'workflow_dispatch' }}
+          BRON_FAILED_CHECKS: ${{ needs.check.outputs.failed_checks }}
         run: |
           python3 - <<'PY'
           import importlib.util, os, re
