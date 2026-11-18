@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -8,6 +8,7 @@ import { newSession } from './webdriver.mjs';
 
 const exec = promisify(execFile);
 const firefox = 'org.mozilla.firefox';
+const firefoxData = `/data/user/0/${firefox}`;
 const appName = 'Бронь Сервис';
 const adb = (...args) => exec('adb', args, { timeout: 40_000 });
 const shellQuote = value => `'${value.replaceAll("'", "'\\''")}'`;
@@ -63,11 +64,11 @@ async function waitFor(step, attempt, timeout = 30_000) {
   return result;
 }
 
-async function trustQaCertificate(ca) {
+async function prepareFirefoxProfile(ca) {
   const profile = await waitFor('finding the fresh Firefox certificate database', async () => {
-    const { stdout } = await adb('shell', 'find', `/data/user/0/${firefox}/files`, '-name', 'cert9.db')
+    const { stdout } = await adb('shell', 'find', `${firefoxData}/files`, '-name', 'cert9.db')
       .catch(() => ({ stdout: '' }));
-    const files = stdout.trim().split(/\r?\n/).filter(path => path.startsWith(`/data/user/0/${firefox}/files/`));
+    const files = stdout.trim().split(/\r?\n/).filter(path => path.startsWith(`${firefoxData}/files/`));
     if (files.length > 1) throw new Error('Android QA requires one fresh Firefox profile.');
     return files[0] && dirname(files[0]);
   });
@@ -75,20 +76,31 @@ async function trustQaCertificate(ca) {
   const local = await mkdtemp(join(tmpdir(), 'bron-fenix-'));
   const remote = `/data/local/tmp/${basename(local)}`;
   const files = ['cert9.db', 'key4.db'];
+  const userConfig = join(profile, 'user.js');
   try {
     for (const file of files) {
-      await adb('pull', `${profile}/${file}`, join(local, file));
+      await adb('pull', join(profile, file), join(local, file));
     }
     await exec('certutil', ['-A', '-d', `sql:${local}`, '-n', 'Bron local QA root', '-t', 'C,,', '-i', ca], { timeout: 10_000 });
     for (const file of files) {
       await adb('push', join(local, file), `${remote}-${file}`);
       // NSS updates both databases. Preserve Firefox's file ownership and SELinux labels.
-      await adb('shell', `cat ${shellQuote(`${remote}-${file}`)} > ${shellQuote(`${profile}/${file}`)}`);
+      await adb('shell', `cat ${shellQuote(`${remote}-${file}`)} > ${shellQuote(join(profile, file))}`);
     }
+
+    // Disable Gecko's automatic translation sheet for the Russian login in this disposable profile.
+    const { stdout } = await adb('shell', 'stat', '-c', '%u:%g', shellQuote(profile));
+    const owner = stdout.trim();
+    if (!/^\d+:\d+$/.test(owner)) throw new Error('Could not determine the Firefox profile owner.');
+    await writeFile(join(local, 'user.js'), 'user_pref("browser.translations.automaticallyPopup", false);\n');
+    await adb('push', join(local, 'user.js'), `${remote}-user.js`);
+    await adb('shell', `cat ${shellQuote(`${remote}-user.js`)} > ${shellQuote(userConfig)}`);
+    await adb('shell', 'chown', owner, shellQuote(userConfig));
+    await adb('shell', 'restorecon', shellQuote(userConfig));
   } finally {
     await Promise.allSettled([
       rm(local, { recursive: true, force: true }),
-      adb('shell', 'rm', '-f', ...files.map(file => `${remote}-${file}`)),
+      adb('shell', 'rm', '-f', ...[...files, 'user.js'].map(file => `${remote}-${file}`)),
     ]);
   }
 }
@@ -206,7 +218,7 @@ export async function installAndLaunch(url, backendUrl = url) {
       return firstElement(session, ...menu);
     }, 60_000);
     await openFirefox(endpoint);
-    await trustQaCertificate(ca);
+    await prepareFirefoxProfile(ca);
     await openFirefox(endpoint);
     await installFromFirefox(session);
     await openFromLauncher(session);
