@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { extname, resolve, sep } from 'node:path';
 import { build } from 'vite';
@@ -67,7 +68,7 @@ async function publish() {
   release = next;
   return JSON.parse(await readFile(resolve(next, 'app-version.json'), 'utf8'));
 }
-const server = createServer(async (req, res) => {
+async function serve(req, res) {
   try {
     const url = new URL(req.url, `http://${host}`);
     const path = decodeURIComponent(url.pathname);
@@ -104,9 +105,16 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     res.writeHead(error.code === 'ENOENT' ? 404 : 500).end();
   }
-});
+}
 
 try {
+  const certificatePath = process.env.BRON_DEVICE_QA_TLS_CERT;
+  const useTls = testDevice && Boolean(certificatePath);
+  const server = useTls ? createSecureServer({
+    cert: await readFile(certificatePath),
+    key: await readFile(process.env.BRON_DEVICE_QA_TLS_KEY),
+  }, serve) : createServer(serve);
+  const origin = () => `${useTls ? 'https' : 'http'}://${host}:${server.address().port}`;
   backendUrl = await backendReady;
   if (testDevice) {
     if (!testPwa) throw new Error('Device QA requires two PWA builds.');
@@ -125,12 +133,12 @@ try {
     if (landingForTest === landing) throw new Error('В анкете не найдено объявление API и KEY для локальной подмены.');
   }
   process.env.VITE_BASE_PATH = appPath;
-  process.env.VITE_SUPABASE_URL = testDevice ? `http://${host}:${server.address().port}` : backendUrl;
+  process.env.VITE_SUPABASE_URL = testDevice ? origin() : backendUrl;
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY = publishableKey;
   for (const outDir of testPwa ? [first, next] : [first]) await build({ build: { outDir, emptyOutDir: true } });
   server.on('error', (error) => { console.error(error); void stop(1); });
   const ready = () => {
-    if (process.connected) process.send({ baseURL: `http://${host}:${server.address().port}`, backendUrl });
+    if (process.connected) process.send({ baseURL: origin(), backendUrl });
   };
   if (testDevice) ready();
   else server.listen(0, host, ready);

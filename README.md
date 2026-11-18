@@ -67,9 +67,12 @@ npm run test:e2e
 Для проверки установленной PWA используйте workflow `PWA on mobile devices`.
 GitHub Actions поднимает Android Emulator и iOS Simulator на стандартных
 раннерах. На каждый прогон создаётся изолированная база с тестовыми данными.
-После добавления workflow в `main` его можно запустить в Actions через `Run workflow`.
-Для локального запуска с настроенным Appium используйте `npm run test:pwa:device -- android`
-или `npm run test:pwa:device -- ios` с `IOS_UDID` выбранного симулятора.
+Workflow автоматически запускается на pull request с изменениями PWA. После
+добавления в `main` он также доступен в Actions через `Run workflow`.
+Для локального запуска с Appium команда `npm run test:pwa:device -- android`
+требует свежий Android Emulator с образом Google APIs, Firefox, OpenSSL и
+`certutil` из `libnss3-tools`. Для iOS используйте `npm run test:pwa:device -- ios`
+с `IOS_UDID` выбранного симулятора.
 
 Проектные скиллы для Codex лежат в `.agents/skills`. Когда вы просите проверить
 релиз или подключение франчайзи, Codex может подобрать соответствующие инструкции.

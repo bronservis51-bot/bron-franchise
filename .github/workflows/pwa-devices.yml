@@ -37,7 +37,7 @@ jobs:
             runner: ubuntu-24.04
             driver: appium-uiautomator2-driver@8.7.0
           - platform: ios
-            runner: macos-15
+            runner: macos-26
             driver: appium-xcuitest-driver@10.7.0
     steps:
       - uses: actions/checkout@v4
@@ -65,32 +65,38 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo apt-get install -y libnss3-tools
       - name: Run on Android Emulator
         if: matrix.platform == 'android'
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
-          target: google_apis_playstore
+          target: google_apis
           arch: x86_64
           profile: pixel_7
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Europe/Moscow
-          script: npm run test:pwa:device -- android
+          script: |
+            curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+              https://archive.mozilla.org/pub/fenix/releases/148.0/android/fenix-148.0-android-x86_64/fenix-148.0.multi.android-x86_64.apk \
+              --output "$RUNNER_TEMP/firefox-android.apk"
+            adb install "$RUNNER_TEMP/firefox-android.apk"
+            npm run test:pwa:device -- android
       - name: Boot iOS Simulator
         if: matrix.platform == 'ios'
         env:
-          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
         run: |
           xcodebuild -version
           sudo systemsetup -settimezone Europe/Moscow
           IOS_UDID=$(xcrun simctl list devices available --json | node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const { devices } = JSON.parse(readFileSync(0, "utf8"));
-            const phones = devices["com.apple.CoreSimulator.SimRuntime.iOS-26-2"] ?? [];
+            const phones = devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"] ?? [];
             const phone = phones.find(device => device.name.startsWith("iPhone "));
-            if (!phone) throw new Error("No iPhone with the iOS 26.2 runtime");
+            if (!phone) throw new Error("No iPhone with the iOS 26.5 runtime");
             console.log(phone.udid);')
-          printf 'DEVELOPER_DIR=%s\nIOS_UDID=%s\nIOS_PLATFORM_VERSION=26.2\n' "$DEVELOPER_DIR" "$IOS_UDID" >> "$GITHUB_ENV"
+          printf 'DEVELOPER_DIR=%s\nIOS_UDID=%s\nIOS_PLATFORM_VERSION=26.5\n' "$DEVELOPER_DIR" "$IOS_UDID" >> "$GITHUB_ENV"
           xcrun simctl bootstatus "$IOS_UDID" -b
       - name: Run on iOS Simulator
         if: matrix.platform == 'ios'
