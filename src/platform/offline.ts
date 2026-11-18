@@ -124,12 +124,18 @@ export function sameJson(a: unknown, b: unknown): boolean {
   return left.length === right.length && left.every((key, i) => key === right[i] && sameJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
 }
 
+export class PendingLocalWorkError extends Error {
+  constructor() {
+    super('Есть неотправленные записи. Сначала отправьте их или сохраните копию из списка очереди.');
+  }
+}
+
 /** Sign-out checks the queue and clears drafts atomically; it never deletes queued operations. */
 export async function clearUserData(userId: string) {
   const tx = (await db()).transaction(['drafts', 'queue'], 'readwrite');
   try {
     if (await tx.objectStore('queue').index('byUser').count(userId)) {
-      throw new Error('Есть неотправленные записи. Сначала отправьте их или сохраните копию из списка очереди.');
+      throw new PendingLocalWorkError();
     }
     let cursor = await tx.objectStore('drafts').index('byUser').openCursor(userId);
     while (cursor) {

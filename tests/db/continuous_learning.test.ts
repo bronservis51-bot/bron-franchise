@@ -96,3 +96,29 @@ it('daily notice follows the assigned location and trainees do not skip into man
  expect((await t.as<{j:any}>(STAFF,'select learning_notice() j'))[0].j.day).toBe(day);
  expect((await t.as<{j:any}>(STAFF,'select learning_overview() j'))[0].j.audience).toBe('trainees');
 });
+
+it('requires a fresh pass after a lesson revision is published and approved for training', async () => {
+ const seller = '79000000011@staff.bron.local';
+ const title = 'Проверка новой редакции урока';
+ const section = (await t.admin<{id:string}>('select id from kb_section where parent_id is null order by id limit 1'))[0].id;
+ const {article_id: article} = (await t.as<{j:{article_id:string}}>(FM, "select article_create($1,'article',$2) j", [section,title]))[0].j;
+ const settings = JSON.stringify({for_sales:true,stage:'Начало работы',position:0,pass_percent:80,quiz_size:0,questions:bank.slice(0,1)});
+
+ await t.as(FM, 'select article_save_draft($1,$2,null,$3)', [article,title,'Исходный текст материала для проверки.']);
+ const original = (await t.as<{j:{revision_id:string}}>(FM, 'select article_publish($1) j', [article]))[0].j.revision_id;
+ await t.as(FM, 'select learning_lesson_save($1,null,$2,$3,0)', [article,original,settings]);
+ const attempt = (await t.as<{j:{id:string}}>(seller, 'select learning_start($1) j', [article]))[0].j.id;
+ await t.as(seller, 'select learning_attempt_read($1)', [attempt]);
+ const result = (await t.as<{j:{passed:boolean}}>(seller, "select learning_attempt_submit($1,'[0]') j", [attempt]))[0].j;
+ expect(result.passed).toBe(true);
+
+ await t.as(FM, 'select article_save_draft($1,$2,null,$3)', [article,title,'Обновлённый текст материала для проверки.']);
+ const revised = (await t.as<{j:{revision_id:string}}>(FM, 'select article_publish($1) j', [article]))[0].j.revision_id;
+ expect(revised).not.toBe(original);
+ await t.as(FM, 'select learning_lesson_save($1,null,$2,$3,1)', [article,revised,settings]);
+
+ const overview = (await t.as<{j:{items:unknown[]}}>(seller, 'select learning_overview() j'))[0].j;
+ expect(overview.items[0]).toMatchObject({article_id:article,revision_id:revised,completed:false,percent:null,due:null,active:false});
+ const repeatedResult = (await t.as<{j:unknown}>(seller, "select learning_attempt_submit($1,'[0]') j", [attempt]))[0].j;
+ expect(repeatedResult).toEqual(result);
+});

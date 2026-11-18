@@ -8,8 +8,14 @@ export function learningFixture(name:string|undefined,a:Record<string,any>,param
  if(name==='learning_visit')return Response.json(null);
  if(name==='learning_overview')return Response.json({day:'2026-11-09',audience:'sales',items:params.get('learning')==='empty'?[]:lessons});
  if(name==='learning_catalog')return Response.json(lessons);
- if(name==='learning_lesson_get')return Response.json(configs.get(a.p_article+':'+a.p_partner)??{version:0,enabled:true,for_sales:true,for_trainees:true,for_managers:true,for_franchisees:false,stage:'Первый день',position:1,pass_percent:80,quiz_size:0,questions:Array.from({length:4},()=>({...question}))});
- if(name==='learning_lesson_save'){configs.set(a.p_article+':'+a.p_partner,{...a.p_settings,version:a.p_expected_version+1});return Response.json(null);}
+ const review=params.get('learningReview');
+ const lessonKey=a.p_article+':'+a.p_partner;
+ if(name==='learning_lesson_get')return Response.json(configs.get(lessonKey)??{version:review?3:0,revision_id:review?`${a.p_article}-previous-revision`:undefined,enabled:true,for_sales:true,for_trainees:true,for_managers:true,for_franchisees:false,stage:'Первый день',position:1,pass_percent:80,quiz_size:0,questions:Array.from({length:4},()=>({...question}))});
+ if(name==='learning_lesson_save'){
+  if(review==='conflict'||(review&&(a.p_expected_version!==(configs.get(lessonKey)?.version??3)||a.p_revision!==`${a.p_article}-revision`)))return Response.json({message:'version-conflict',details:'Урок уже изменён'},{status:409});
+  configs.set(lessonKey,{...a.p_settings,version:a.p_expected_version+1,revision_id:a.p_revision});
+  return Response.json(null);
+ }
  if(name==='learning_policy_get')return Response.json({version:0,policy:{enabled:true,perfect:[3,7,14,30],passed:[1,3,7,14]}});
  if(name==='learning_policy_save')return Response.json(null);
  if(name==='learning_report')return Response.json([{user_id:'qa-worker',user_name:'Вымышленный сотрудник',day:'2026-11-09',article_id:'qa-article',article_title:lessons[0].title,read_at:'2026-11-09T10:00:00Z',completed_at:'2026-11-09T10:05:00Z',score:4,total:4,next_due:'2026-11-12'}]);

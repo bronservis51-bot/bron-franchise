@@ -4,11 +4,14 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, Download, Pencil } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
-import { formatMoneyShort, minorToDecimal } from '../../platform/money';
+import { formatMoneyShort, minorToDecimal, type MinorInput } from '../../platform/money';
+import { useSession } from '../../platform/session';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
 import { MonthNav } from '../revenue/components';
 import { ExpensesCard, type Expense } from './Expenses';
+import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceEditor } from './FinanceEditor';
+import { FINANCE_REPORT_NOTE, financeReportRows } from './financeReport';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
   payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; net_minor: number; is_open: boolean }
@@ -66,15 +69,30 @@ function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) 
   );
 }
 
-async function downloadFinance(f: Finance) {
+function financeScope(f: Finance) {
+  return f.location_id ? f.locations.find((location) => location.id === f.location_id)?.name ?? 'Точка' : 'Все точки';
+}
+
+async function financeWorkbook(f: Finance, reportOnly: boolean) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const money = (v: number) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
+  const money = (v: MinorInput) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
-  const scope = f.location_id ? f.locations.find((l) => l.id === f.location_id)?.name ?? '' : 'все точки';
+  const scope = financeScope(f);
+  const statement = { sheet: 'Доходы и расходы', columns: [{ width: 45 }, { width: 21 }], data: [
+    [head(`${f.partner_name} · ${monthLabel(f.month)} · ${scope}`)],
+    [{ value: FINANCE_REPORT_NOTE }],
+    [head('Статья'), head(`Сумма, ${f.currency}`)],
+    ...financeReportRows(f.current, f.expenses).map((entry) => [
+      { value: entry.detail ? `    ${entry.label}` : entry.label, fontWeight: entry.total ? 'bold' as const : undefined },
+      { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
+    ]),
+  ] };
+  if (reportOnly) return writeXlsxFile([statement]);
   const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'Без разбивки', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Расходы', 'Остаётся'].map(head);
   const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), money(Number(m.revenue_minor)-Number(m.cash_minor)-Number(m.card_minor)), m.plan_minor ? money(m.plan_minor) : null,
     m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(m.royalty_minor), money(m.expenses_minor), money(m.net_minor)];
   const sheets = [
+    statement,
     { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(10).fill({ width: 14 })],
       data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
     ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(10).fill({ width: 14 })],
@@ -84,15 +102,51 @@ async function downloadFinance(f: Finance) {
     ...(f.expenses.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
       data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? ''])] }] : []),
   ];
-  await writeXlsxFile(sheets).toFile(`finansy-${f.month.slice(0, 7)}.xlsx`);
+  return writeXlsxFile(sheets);
+}
+
+async function downloadFinance(f: Finance) {
+  await (await financeWorkbook(f, false)).toFile(`finansy-${f.month.slice(0, 7)}.xlsx`);
+}
+
+async function makeFinanceReportFile(f: Finance) {
+  const blob = await (await financeWorkbook(f, true)).toBlob();
+  return new File([blob], `OPiU-${f.month.slice(0, 7)}.xlsx`, { type: blob.type });
+}
+
+function FinanceStatement({ finance }: { finance: Finance }) {
+  const month = finance.current;
+  return (
+    <Card title={`Доходы и расходы — ${monthLabel(finance.month)}`} actions={<span className="faint">{finance.currency}</span>}>
+      <dl style={{ margin: 0 }}>
+        {financeReportRows(month, finance.expenses).map((row, i) => (
+          <div className="row between access-row" key={i}>
+            <dt className={row.detail ? 'faint' : undefined} style={row.detail ? { paddingInlineStart: 12 } : undefined}>
+              {row.total ? <strong>{row.label}</strong> : row.label}
+            </dt>
+            <dd style={{ margin: 0 }}><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
+          </div>
+        ))}
+      </dl>
+      <p className="faint">{FINANCE_REPORT_NOTE}</p>
+      <p className="faint">
+        {month.is_open && 'Текущий месяц ещё идёт. '}
+        {month.plan_minor ? `План ${formatMoneyShort(month.plan_minor, finance.currency)}${month.pct === null ? '' : ` · выполнено ${n(month.pct).toLocaleString('ru-RU')} %`}` : 'План не поставлен'}
+        {month.shifts > 0 && ` · закрытых смен: ${month.shifts}`}
+      </p>
+    </Card>
+  );
 }
 
 export function FinancePage() {
+  const { me } = useSession();
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(null);
   const q = useQuery({ queryKey: ['finance', month, loc], queryFn: () => command<Finance>('finance_my', { month, location: loc }), refetchInterval: 120_000 });
   const exp = useMutation({ mutationFn: () => downloadFinance(q.data!) });
   const [editing, setEditing] = useState(false);
+  const [drive, setDrive] = useState<{ finance: Finance; userId: string } | null>(null);
+  const driveSource = !q.error && q.data;
 
   return (
     <div className="home" style={{ maxWidth: 980 }}>
@@ -102,9 +156,14 @@ export function FinancePage() {
             {editing ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
           </Button>
           <Button disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Excel</Button>
+          <Button disabled={!driveSource || !me} onClick={() => { if (driveSource && me) setDrive({ finance: driveSource, userId: me.user.id }); }}>Google Drive</Button>
         </>} />
       <ActionError error={exp.error} />
-      {q.data && q.data.locations.length > 1 && (
+      {driveSource && drive && drive.userId === me?.user.id && drive.finance.month === month && drive.finance.location_id === loc && (
+        <FinanceDriveDialog period={monthLabel(drive.finance.month)} scope={financeScope(drive.finance)}
+          makeFile={() => makeFinanceReportFile(drive.finance)} onClose={() => setDrive(null)} />
+      )}
+      {q.data && q.data.locations.length > 0 && (
         <div className="chips point-chips" role="group" aria-label="Точки">
           <button type="button" className="chip" aria-pressed={loc === null} onClick={() => setLoc(null)}>Все точки</button>
           {q.data.locations.map((l) => <button key={l.id} type="button" className="chip" aria-pressed={loc === l.id} onClick={() => setLoc(l.id)}>{l.name}</button>)}
@@ -121,16 +180,7 @@ export function FinancePage() {
                 <FinanceEditor month={f.month} currency={f.currency} location={f.location_id} locations={active}
                   expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
               )}
-              <div className="kpis fin-kpis">
-                <div className="kpi"><span className="v">{formatMoneyShort(c.revenue_minor, f.currency)}</span>
-                  <span className="l">выручка за месяц</span></div>
-                <div className="kpi"><span className="v">{c.pct !== null ? `${n(c.pct).toLocaleString('ru-RU')} %` : '—'}</span>
-                  <span className="l">{c.plan_minor ? `плана ${formatMoneyShort(c.plan_minor, f.currency)}` : 'план не поставлен'}</span></div>
-                <div className="kpi"><span className="v">{formatMoneyShort(c.payroll_minor, f.currency)}</span><span className="l">зарплата сотрудников · {c.shifts} смен</span></div>
-                <div className="kpi"><span className="v">{formatMoneyShort(c.royalty_minor, f.currency)}</span><span className="l">роялти {pct(c.rate_bp)}{c.is_open ? ' · начисляется' : ''}</span></div>
-                <div className="kpi"><span className="v">{formatMoneyShort(c.expenses_minor, f.currency)}</span><span className="l">расходы{f.expenses.length ? ` · ${f.expenses.length} шт.` : ' · не внесены'}</span></div>
-                <div className={`kpi kpi-accent${n(c.net_minor) < 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(c.net_minor, f.currency)}</span><span className="l">остаётся после зарплаты, роялти и расходов</span></div>
-              </div>
+              <FinanceStatement finance={f} />
 
               {!editing && (
                 <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={active}

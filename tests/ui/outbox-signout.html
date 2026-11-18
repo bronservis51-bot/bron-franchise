@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Проверка очереди при выходе из кабинета</title>
+<output id="result">Проверка очереди при выходе из кабинета…</output>
+<iframe id="app" title="Кабинет с вымышленной сменой" width="390" height="850"></iframe>
+<script type="module">
+// VITE_SUPABASE_URL=https://fixture.example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable-key-local-only npm run dev
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const scenario = new URLSearchParams(location.search).get('scenario');
+const userId = '00000000-0000-4000-8000-000000000001';
+const operation = { userId, clientOpId: 'qa-late-op', kind: 'shift_close_versioned',
+  payload: { operation: 'qa-late-op', shift: 'qa-shift', cash: '12500', card: '2500', expected_revision: 0, comment: null },
+  createdAt: '2026-11-09T08:00:00Z', attempts: 0 };
+
+async function until(read, failure, timeout = 5000) {
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {
+    const value = read();
+    if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error(failure);
+}
+function requestResult(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+function waitForWrite(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+frame.src = '/tests/ui/responsive-app.html?role=staff&shift=open#/';
+try {
+  await until(() => frame.contentDocument.querySelector('.shift-card button:not(:disabled)'), 'Не загрузился экран сотрудника', 15000);
+  const app = frame.contentWindow;
+  const doc = app.document;
+  const database = await requestResult(app.indexedDB.open('bron-local', 2));
+  async function enqueue() {
+    const transaction = database.transaction('queue', 'readwrite');
+    transaction.objectStore('queue').put(operation);
+    await waitForWrite(transaction);
+  }
+
+  // A separate tab can write to IndexedDB without notifying the menu on this page.
+  const getAll = app.IDBIndex.prototype.getAll;
+  const count = app.IDBIndex.prototype.count;
+  let lateWrite;
+  function queueRead(method) {
+    return function (...args) {
+      if (this.objectStore.name === 'queue') {
+        if (scenario === 'late') lateWrite ??= enqueue();
+        if (scenario === 'unreadable') throw new app.DOMException('Не удалось прочитать очередь', 'UnknownError');
+      }
+      return method.apply(this, args);
+    };
+  }
+  if (scenario !== 'late') await enqueue();
+  app.IDBIndex.prototype.getAll = queueRead(getAll);
+  app.IDBIndex.prototype.count = queueRead(count);
+
+  doc.querySelector('button[aria-label="Профиль"]').click();
+  const signOut = await until(() => [...doc.querySelectorAll('[role="menuitem"]')].find(button => button.textContent.trim() === 'Выйти'), 'В меню нет выхода');
+  signOut.click();
+  if (scenario === 'late') {
+    await until(() => app.location.hash.startsWith('#/login'), 'Обычный выход при первоначально пустой очереди не завершился');
+    await lateWrite;
+  } else {
+    const message = scenario === 'unreadable' ? 'Не удалось проверить неотправленные записи' : 'Есть неотправленные записи';
+    await until(() => doc.querySelector('.toasts')?.textContent.includes(message), `После попытки выхода нет сообщения «${message}»`);
+    assert(doc.querySelector('main'), 'Кабинет закрылся при непроверенной или непустой очереди');
+  }
+  const saved = await requestResult(database.transaction('queue').objectStore('queue').get([userId, operation.clientOpId]));
+  database.close();
+  assert(saved?.payload.operation === operation.clientOpId, 'Выход удалил неотправленную запись');
+  result.dataset.status = 'passed';
+  result.textContent = 'Проверка пройдена';
+} catch (error) {
+  result.dataset.status = 'failed';
+  result.textContent = error.message;
+}
+</script>

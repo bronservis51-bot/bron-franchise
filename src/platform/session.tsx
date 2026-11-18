@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from '@tanstack/react-query';
 import { command, from, rows, toAppError } from './backend';
 import { setCurrencyMinorUnits } from './money';
-import { clearUserData } from './offline';
+import { clearUserData, PendingLocalWorkError } from './offline';
 import { setRememberDevice, snapshot, supabase } from './supabase';
 
 export interface Assignment {
@@ -125,7 +125,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const uid = me?.user.id;
-    if (uid) await clearUserData(uid); // атомарно проверяет очередь и удаляет только черновики
+    if (uid) {
+      try {
+        await clearUserData(uid);
+      } catch (cause) {
+        if (cause instanceof PendingLocalWorkError) throw cause;
+        throw new Error('Не удалось проверить неотправленные записи на устройстве. Повторите выход позже.', { cause });
+      }
+    }
     qc.clear();
     snapshot.clear();
     await supabase?.auth.signOut({ scope: 'local' });

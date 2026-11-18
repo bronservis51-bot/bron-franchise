@@ -146,3 +146,38 @@ it('allows an all-admin known layout without adding unnecessary grants to postgr
   await apply();
  }
 });
+
+it('preserves the finance, learning and CRM call paths across a native split-owner upgrade', async () => {
+ const migrated = await fixture();
+ try {
+  await migrated.exec('alter default privileges revoke execute on functions from public');
+  for (const file of migrationFiles().filter((path: string) => path.split('/').pop()! >= '20261116040000_staff_helper_execute.sql')) {
+   await migrated.exec(readFileSync(file, 'utf8'));
+  }
+  async function call<T>(email: string, sql: string, params: unknown[] = []) {
+   const {rows: [user]} = await migrated.query<{id: string}>('select id from public.app_user where email=$1', [email]);
+   return migrated.transaction(async tx => {
+    await tx.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({sub: user.id, role: 'authenticated'})]);
+    await tx.exec('set local role authenticated');
+    return (await tx.query<{result: T}>(sql, params)).rows[0].result;
+   });
+  }
+  const finance = await call<{locations: unknown[]}>(OWNER, 'select public.finance_my(current_date) as result');
+  expect(finance.locations.length).toBeGreaterThan(0);
+  const learning = await call<{audience: string}>(STAFF, 'select public.learning_overview() as result');
+  expect(learning.audience).toBe('sales');
+  const operation = crypto.randomUUID();
+  const createLead = () => call<{id: string}>('fm@demo.example.com', 'select public.lead_save($1::jsonb,null,$2) as result',
+   [JSON.stringify({name: 'Проверка сохранения'}), operation]);
+  expect((await createLead()).id).toBe(operation);
+  expect((await createLead()).id).toBe(operation);
+  for (const fn of ['app_private.fin_month(uuid,uuid[],date,boolean)', 'app_private.expense_rows(uuid,uuid[],date,boolean)']) {
+   const allowed = await migrated.query<{actor: string; allowed: boolean}>(`
+    select actor, has_function_privilege(actor, $1::regprocedure, 'EXECUTE') as allowed
+    from unnest(array['postgres','anon','authenticated']) as actor`, [fn]);
+   expect(allowed.rows).toEqual([{actor:'postgres',allowed:true},{actor:'anon',allowed:false},{actor:'authenticated',allowed:false}]);
+  }
+ } finally {
+  await migrated.close();
+ }
+}, 180_000);

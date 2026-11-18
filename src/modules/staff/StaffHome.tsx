@@ -5,10 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Check, ChevronRight, Clock, Play, Square, Wallet } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
-import { dayLabel, monthLabel, monthStart } from '../../platform/dates';
+import { dayLabel, monthLabel } from '../../platform/dates';
 import { formatMoneyShort, sumMinor } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox } from '../../ui';
+import { ActionError, Alert, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox } from '../../ui';
 import { useToast } from '../../ui/toast';
 import {onOutboxChange,queuedOps} from '../../platform/outbox';
 import { pctBp, shiftCancel, shiftClose, shiftOpen, staffHome, type Shift, type StaffHomeData } from './api';
@@ -29,10 +29,10 @@ function useTick(ms: number) {
   useEffect(() => { const h = setInterval(() => set((x) => x + 1), ms); return () => clearInterval(h); }, [ms]);
 }
 
-function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
-  shift: Shift; currency: string; rate: number; fee: number; policy?: ShiftPolicy | null; onClose: () => void; onDone: (earned: number, month: number | null) => void;
+function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDone }: {
+  userId: string; shift: Shift; currency: string; rate: number; fee: number; policy?: ShiftPolicy | null; onClose: () => void; onDone: (earned: number, month: number | null) => void;
 }) {
-  const { me } = useSession(); const qc=useQueryClient();
+  const qc = useQueryClient();
   const editing = shift.status === 'closed';
   const [cash, setCash] = useState(editing ? String(shift.cash_minor) : '');
   const [card, setCard] = useState(editing ? String(shift.card_minor) : '');
@@ -41,7 +41,8 @@ function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
   const total = sumMinor([cash || '0', card || '0']);
   const earned = calculatePay(total,rate,fee,shift.pay_policy ?? policy);
   const m = useMutation({
-    mutationFn: () => shiftClose(me!.user.id, shift.id, cash || '0', card || '0', comment.trim() || null, shift.revision),
+    networkMode: 'always',
+    mutationFn: () => shiftClose(userId, shift.id, cash || '0', card || '0', comment.trim() || null, shift.revision),
     onSuccess: (r) => onDone('queued' in r?Number(earned):Number(r.shift.earned_minor), 'queued' in r ? null : Number(r.month_earned_minor)),
     onError:()=>void qc.invalidateQueries({queryKey:['staff']}),
   });
@@ -65,41 +66,105 @@ function CloseDialog({ shift, currency, rate, fee, policy, onClose, onDone }: {
 
 export function StaffHome() {
   const { me } = useSession();
+  return me && <StaffShifts key={me.user.id} userId={me.user.id} firstName={me.user.full_name.split(' ')[0]} />;
+}
+
+type QueueSnapshot = Awaited<ReturnType<typeof queuedOps>>;
+type ShiftResult = { earned: number; month: number } |
+  { earned: number; month: null; shiftId: string; previousQueue: QueueSnapshot | undefined };
+
+function ShiftHistory({ userId, current }: { userId: string; current: StaffHomeData }) {
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const month = selectedMonth ?? current.month;
+  const history = useQuery({
+    queryKey: ['staff', 'history', userId, selectedMonth],
+    enabled: selectedMonth !== null,
+    queryFn: () => staffHome(selectedMonth),
+  });
+  return (
+    <section className="stack">
+      <h2 className="section-title">Мои смены и начисления</h2>
+      <MonthNav month={month} max={current.month} onChange={(next) => setSelectedMonth(next === current.month ? null : next)} />
+      {selectedMonth === null ? <ShiftMonth data={current} current /> : history.isPaused && !history.data
+        ? <p className="faint" role="status">Для загрузки этого месяца нужна связь.</p>
+        : <DataState query={history}>{(data) => <ShiftMonth data={data} />}</DataState>}
+    </section>
+  );
+}
+
+function ShiftMonth({ data: d, current }: { data: StaffHomeData; current?: boolean }) {
+  return (
+    <>
+      <div className="plan-card earn-card" aria-label="Начислено за месяц">
+        <div className="plan-label">Начислено за {monthLabel(d.month, false)}</div>
+        <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
+        <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
+        {current && <div className="plan-foot"><span>{d.pay_policy && !('mode' in d.pay_policy) ? 'По ступеням кассы: минимум или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>}
+      </div>
+      {d.shifts.length ? (
+        <ul className="day-list2">
+          {d.shifts.map((s) => (
+            <li key={s.id}>
+              <div className="day-row2" style={{ cursor: 'default' }}>
+                <span className="day-date2">{dayLabel(s.day)}</span>
+                <span className="day-sum2"><Money minor={s.earned_minor ?? 0} currency={d.currency} short />
+                  <span className="day-split">{s.location_name} · выручка {formatMoneyShort(s.total_minor, d.currency)}</span></span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="faint">Закрытых смен в этом месяце пока нет.</p>}
+    </>
+  );
+}
+
+function StaffShifts({ userId, firstName }: { userId: string; firstName: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   useTick(10_000);
-  const [month, setMonth] = useState<string | null>(null);
-  const q = useQuery({ queryKey: ['staff', 'home', month], queryFn: () => staffHome(month), refetchInterval: 120_000 });
+  const q = useQuery({ queryKey: ['staff', 'home', userId], queryFn: () => staffHome(null), refetchInterval: 120_000 });
   const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string }[]>('kb_to_read') });
   const [opening,setOpening]=useState<StaffHomeData['locations'][number]|null>(null);
   const [cancelling,setCancelling]=useState<Shift|null>(null);
-  const pending=useQuery({queryKey:['staff','pending',me?.user.id],enabled:!!me?.user.id,queryFn:()=>queuedOps(me!.user.id)});
+  const queueKey = ['staff', 'pending', userId];
+  const pending = useQuery({
+    queryKey: queueKey,
+    queryFn: () => queuedOps(userId),
+    networkMode: 'always',
+    structuralSharing: false,
+  });
   useEffect(()=>onOutboxChange(()=>void qc.invalidateQueries({queryKey:['staff']})),[qc]);
-  const queuedShift=(id:string)=>pending.data?.some(op=>op.payload.shift===id);
+  const queuedShift = (id: string) => pending.data?.some(op => op.payload.shift === id);
   const [closing, setClosing] = useState<Shift | null>(null);
-  const [result, setResult] = useState<{ earned: number; month: number | null } | null>(null);
+  const [result, setResult] = useState<ShiftResult | null>(null);
+  const queuedResult = result?.month === null ? result : null;
+  // A cached empty queue can predate the write. Only a later successful read can retire this result.
+  const queueResolved = queuedResult !== null && pending.isSuccess && pending.data !== queuedResult.previousQueue && !queuedShift(queuedResult.shiftId);
+  const shiftRefreshed = queueResolved && !q.isFetching;
+  useEffect(() => {
+    if (shiftRefreshed) setResult(current => current === queuedResult ? null : current);
+  }, [shiftRefreshed, queuedResult]);
+  const shownResult = queueResolved ? null : result;
+  const shiftBlocked = (id: string) => !pending.isSuccess || queuedShift(id) || (queuedResult?.shiftId === id && !shiftRefreshed);
   const open = useMutation({ mutationFn: shiftOpen, onSuccess: () => { toast('Смена открыта'); setOpening(null); setResult(null); void qc.invalidateQueries({ queryKey: ['staff'] }); } });
   const cancel = useMutation({ mutationFn: shiftCancel, onSuccess: () => {setCancelling(null);void qc.invalidateQueries({ queryKey: ['staff'] });} });
-  const first = me?.user.full_name.split(' ')[0];
 
   return (
     <div className="home">
       <header className="home-head">
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <h1>{first ? `${first}, ` : ''}{q.data?.open_shift ? 'хорошей смены!' : 'привет!'}</h1>
+        <h1>{firstName ? `${firstName}, ` : ''}{q.data?.open_shift ? 'хорошей смены!' : 'привет!'}</h1>
       </header>
 
       <DataState query={q} skeleton={4}>
         {(d) => (
           <div className="home-body">
-            {result && (
+            {shownResult && (
               <div className="earn-result" role="status">
                 <span className="ok-icon"><Check size={18} aria-hidden /></span>
                 <div>
-                  <div>{result.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(result.earned, d.currency)}</strong></div>
-                  {result.month !== null
-                    ? <div className="faint">За {monthLabel(d.month, false)} — {formatMoneyShort(result.month, d.currency)}</div>
-                    : <div className="faint">Нет сети: запись сохранена на телефоне и отправится сама</div>}
+                  <div>{shownResult.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(shownResult.earned, d.currency)}</strong></div>
+                  {shownResult.month !== null && <div className="faint">За {monthLabel(d.month, false)} — {formatMoneyShort(shownResult.month, d.currency)}</div>}
                 </div>
               </div>
             )}
@@ -109,15 +174,15 @@ export function StaffHome() {
                 <div className="faint">За {dayLabel(d.open_shift.day)}</div>
                 {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
                 <div className="shift-time"><Clock size={18} aria-hidden /> {since(d.open_shift.opened_at)}</div>
-                <Button variant="primary" block className="btn-lg" disabled={!!queuedShift(d.open_shift.id)||result?.month===null} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
+                <Button variant="primary" block className="btn-lg" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
                   <Square size={18} aria-hidden />Закрыть смену и внести выручку
                 </Button>
-                <button type="button" className="link-btn" disabled={!!queuedShift(d.open_shift.id)||result?.month===null} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
+                <button type="button" className="link-btn" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
               </section>
             ) : d.locations.length ? (
               <section className="stack">
                 {d.locations.map((l) => l.my_today ? (
-                  <button key={l.location_id} type="button" disabled={!!queuedShift(l.my_today.id)||!canCorrect(l.my_today)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
+                  <button key={l.location_id} type="button" disabled={shiftBlocked(l.my_today.id) || !canCorrect(l.my_today)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
                     <span className="ok-icon"><Check size={18} aria-hidden /></span>
                     <span>{l.location_name}: смена закрыта, заработано <strong>{formatMoneyShort(l.my_today.earned_minor ?? 0, l.currency)}</strong></span>
                     <span className="faint">{canCorrect(l.my_today) ? 'исправить в течение 5 минут' : 'для исправления обратитесь к руководителю'}</span>
@@ -132,15 +197,9 @@ export function StaffHome() {
             ) : <EmptyState title="Вам пока не назначены точки" text="Попросите франчайзи добавить вас на точку." />}
 
             <ActionError error={open.error ?? cancel.error} />
-            {d.open_shift&&queuedShift(d.open_shift.id)&&<p role="status">Итог ожидает отправки. Не закрывайте смену повторно; состояние обновится после подтверждения сервера.</p>}
-            <section className="plan-card earn-card" aria-label="Заработок за месяц">
-              <MonthNav month={d.month} max={monthStart()} onChange={value=>{setMonth(value);setResult(null);}} />
-              <div className="plan-label">Заработано за {monthLabel(d.month, false)}</div>
-              <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
-              <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
-              <div className="plan-foot"><span>{d.pay_policy && !('mode' in d.pay_policy) ? 'По ступеням кассы: минимум или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>
-            </section>
-
+            {pending.isError && <Alert tone="danger" title="Не удалось проверить очередь смен"
+              action={<Button size="sm" onClick={() => void pending.refetch()}>Повторить</Button>} />}
+            {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Не закрывайте смену повторно; состояние обновится после подтверждения сервера.</p>}
             {Boolean(toRead.data?.length) && (
               <Link to="/kb" className="read-card">
                 <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
@@ -150,31 +209,22 @@ export function StaffHome() {
               </Link>
             )}
 
-            <section>
-              <h2 className="section-title">Мои смены за {monthLabel(d.month, false)}</h2>
-              {d.shifts.length ? (
-                <ul className="day-list2">
-                  {d.shifts.map((s) => (
-                    <li key={s.id}>
-                      <div className="day-row2" style={{ cursor: 'default' }}>
-                        <span className="day-date2">{dayLabel(s.day)}</span>
-                        <span className="day-sum2"><Money minor={s.earned_minor ?? 0} currency={d.currency} short />
-                          <span className="day-split">{s.location_name} · выручка {formatMoneyShort(s.total_minor, d.currency)}</span></span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="faint">Закрытых смен в этом месяце пока нет.</p>}
-            </section>
+            <ShiftHistory userId={userId} current={d} />
           </div>
         )}
       </DataState>
       {opening&&<ConfirmDialog open title="Открыть смену?" confirmLabel="Да, начать" busy={open.isPending} error={open.error} onClose={()=>setOpening(null)} onConfirm={()=>open.mutate(opening.location_id)}><p>{opening.location_name} · {dayLabel(opening.today)}</p><p className="faint">Проверьте точку. Если открыли по ошибке, пустую смену можно отменить.</p></ConfirmDialog>}
       {cancelling&&<ConfirmDialog open title="Отменить ошибочное открытие?" confirmLabel="Отменить открытие" cancelLabel="Вернуться" busy={cancel.isPending} error={cancel.error} onClose={()=>setCancelling(null)} onConfirm={()=>cancel.mutate(cancelling.id)}><p>{cancelling.location_name} · {dayLabel(cancelling.day)}</p><p>Отменяется только пустая открытая смена. Сохранённую выручку это действие не удаляет.</p></ConfirmDialog>}
       {closing && q.data && (
-        <CloseDialog shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
+        <CloseDialog userId={userId} shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}
           onClose={() => setClosing(null)}
-          onDone={(earned, month) => { setClosing(null); setMonth(null); setResult({ earned, month }); void qc.invalidateQueries({ queryKey: ['staff'] }); }} />
+          onDone={(earned, month) => {
+            setClosing(null);
+            setResult(month === null
+              ? { earned, month, shiftId: closing.id, previousQueue: qc.getQueryData<QueueSnapshot>(queueKey) }
+              : { earned, month });
+            void qc.invalidateQueries({ queryKey: ['staff'] });
+          }} />
       )}
     </div>
   );

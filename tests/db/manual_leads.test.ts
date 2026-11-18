@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createTestDb, type TestDb } from './harness';
 let t: TestDb;
 const FM = 'fm@demo.example.com', PARTNER = 'alpha.owner@demo.example.com';
-type Row = { id: string; name: string; instagram: string; phone: string; city: string; status: string; note: string | null; pipeline_column: string | null; updated_at: string; budget: string | null; timing: string | null; place: string | null };
+type Row = { id: string; name: string; instagram: string; phone: string; city: string; status: string; note: string | null; pipeline_column: string | null; updated_at: string; deleted_at: string | null; budget: string | null; timing: string | null; place: string | null };
 const create = async (data: Record<string,unknown>, operation = randomUUID()) => (await t.as<{j:Row}>(FM, 'select public.lead_save($1::jsonb,null,$2) j', [JSON.stringify(data),operation]))[0].j;
 beforeAll(async () => { t = await createTestDb(); }, 180_000);
 describe('minimal manual CRM', () => {
@@ -16,6 +16,36 @@ describe('minimal manual CRM', () => {
   expect((await create(data,op)).id).toBe((await create(data,op)).id);
   await t.expectError(FM,'select public.lead_save($1::jsonb,null,$2)','idempotency-conflict',[JSON.stringify({...data,name:'Different'}),op]);
   await t.expectError(FM,'select public.lead_save($1::jsonb,null,$2)','validation',[JSON.stringify(data),randomUUID()]);
+ });
+ it('retries the original creation after the lead has been edited and moved', async () => {
+  const op = randomUUID(), data = {name:'  Ирина  ', note:'Запрос с телефона', column:'auto'};
+  const lead = await create(data, op);
+  const edit = {id:lead.id, name:'Ирина Петрова', note:'Согласовали встречу', column:'meeting'};
+  const changed = (await t.as<{j:Row}>(FM, 'select public.lead_save($1::jsonb,$2,$3) j', [JSON.stringify(edit),lead.updated_at,randomUUID()]))[0].j;
+
+  expect(await create({...data, name:'Ирина'}, op)).toEqual(changed);
+  await t.expectError(FM, 'select public.lead_save($1::jsonb,null,$2)', 'idempotency-conflict', [JSON.stringify({...data, name:'Ирина Петрова'}),op]);
+  expect(await t.admin("select id from audit_event where entity_id=$1 and action='lead.create'", [lead.id])).toHaveLength(1);
+ });
+ it('returns the trashed state on an exact retry and never recreates a purged lead', async () => {
+  const op = randomUUID(), data = {name:'Повтор после удаления'};
+  const lead = await create(data, op);
+  const trashed = (await t.as<{j:Row}>(FM, 'select public.lead_set_deleted($1,true,$2) j', [lead.id,lead.updated_at]))[0].j;
+  expect(trashed.deleted_at).not.toBeNull();
+  expect(await create(data, op)).toEqual(trashed);
+
+  await t.admin('delete from public.franchise_lead where id=$1', [lead.id]);
+  await t.expectError(FM, 'select public.lead_save($1::jsonb,null,$2)', 'not-found', [JSON.stringify(data),op]);
+  expect(await t.admin('select id from public.franchise_lead where id=$1', [lead.id])).toEqual([]);
+ });
+ it('keeps exact legacy retries compatible without guessing a changed original payload', async () => {
+  const op = randomUUID(), data = {name:'Заявка до миграции'};
+  await t.admin(`insert into public.franchise_lead (id,name,phone,phone_digits,contact_via,city,score,tier,source,pipeline_column)
+    values ($1,$2,'','','other','',0,'cold','manual','000')`, [op,data.name]);
+  const existing = await create(data, op);
+  expect(existing.id).toBe(op);
+  await t.as(FM, "select public.lead_move($1,'meeting',$2)", [op,existing.updated_at]);
+  await t.expectError(FM, 'select public.lead_save($1::jsonb,null,$2)', 'idempotency-conflict', [JSON.stringify(data),op]);
  });
  it('moves to every qualification and work column, preserves notes, rejects stale versions', async () => {
   let l=await create({name:'Ручная заявка',note:'Сохранить заметку'});

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Проверка выбора точки в финансах</title>
+<p id="result" role="status">Проверка финансов…</p>
+<iframe id="app" title="Кабинет с вымышленными данными" height="850"></iframe>
+<script type="module">
+// VITE_SUPABASE_URL=https://fixture.example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable-key-local-only npm run dev
+// Add VITE_GOOGLE_DRIVE_CLIENT_ID=1234567890-fixture.apps.googleusercontent.com and use ?drive=mock to test the Drive upload.
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(read) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const value = read();
+    if (value) return value;
+    await wait(25);
+  }
+  throw new Error('Экран или результат действия не появился');
+}
+const button = (root, label) => [...root.querySelectorAll('button')].find(node => node.textContent.trim() === label);
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = `/tests/ui/responsive-app.html?role=franchisee&text=${params.get('text') === '200' ? '200' : '100'}#/`;
+
+try {
+  const link = await until(() => frame.contentDocument.querySelector('a[href="#/finance"]'));
+  const app = frame.contentWindow;
+  const fetchFixture = app.fetch;
+  const scopes = [];
+  const saves = [];
+  const repeats = [];
+  const outlet = { id: 'qa-location', name: 'Торговый центр с очень длинным названием', status: 'active' };
+  const locations = [outlet];
+  if (params.get('locations') === '2') locations.push({ id: 'qa-outlet-two', name: 'Вторая торговая точка', status: 'active' });
+  const commonExpense = { id: 'qa-expense', category: 'Бухгалтерия', location_id: null, location_name: null, amount_minor: 2500, note: null };
+  app.fetch = (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/finance_my')) {
+      const { p_month: month, p_location: scope } = JSON.parse(init.body);
+      scopes.push(scope);
+      const current = { month, revenue_minor: 15000, cash_minor: 0, card_minor: 0, plan_minor: null, pct: null, payroll_minor: 0,
+        shifts: 0, rate_bp: 700, royalty_minor: 1050, expenses_minor: scope ? 0 : 2500, net_minor: scope ? 13950 : 11450, is_open: true };
+      const royalty = { rate_bp: 700, debt_minor: 0, months: [], payments: [], live: { month, revenue_minor: 15000, accrued_minor: 1050, projected_accrual_minor: 2100 } };
+      return Promise.resolve(app.Response.json({ partner_name: 'Вымышленный партнёр', currency: 'RUB', month, location_id: scope,
+        locations, current, months: [current], by_location: null, by_staff: [], expenses: scope ? [] : [{ ...commonExpense, month }],
+        expense_categories: [], prev_expenses_count: 1, royalty: scope ? null : royalty }));
+    }
+    if (url.pathname.endsWith('/rpc/expense_repeat')) {
+      repeats.push(JSON.parse(init.body));
+      return Promise.resolve(app.Response.json(1));
+    }
+    if (url.pathname.endsWith('/rpc/financial_operation')) {
+      const { p_command: command, p_args: args } = JSON.parse(init.body);
+      if (command === 'expense_save') {
+        saves.push(args);
+        return Promise.resolve(app.Response.json(commonExpense.id));
+      }
+    }
+    return fetchFixture(request, init);
+  };
+  link.click();
+  const doc = app.document;
+  const repeatLabel = 'Повторить расходы прошлого месяца';
+  const failures = [];
+  async function check(name, run) {
+    try { await run(); }
+    catch (error) { failures.push(`${name}: ${error.message}`); }
+    finally {
+      const dialog = doc.querySelector('dialog[open]');
+      if (dialog) button(dialog, 'Закрыть').click();
+    }
+  }
+  await until(() => button(doc, 'Аренда'));
+  await check('отчёт по внесённым данным', async () => {
+    const title = [...doc.querySelectorAll('h2')].find(node => node.textContent.startsWith('Доходы и расходы —'));
+    assert(title, 'отчёт о доходах и расходах не показан');
+    const report = title.closest('section');
+    const lines = [...report.querySelectorAll('dt')].map(node => node.textContent);
+    assert(lines.includes('Бухгалтерия'), 'в отчёте нет внесённой категории расходов');
+    assert(lines.includes('Остаток по внесённым данным'), 'не показан финансовый результат');
+    assert(report.textContent.includes('Отчёт составлен по внесённым данным'), 'не обозначен источник сумм');
+  });
+  await check('общий экран по умолчанию', async () => {
+    assert(scopes[0] === null, 'запрошена отдельная точка');
+    assert(button(doc, 'Все точки')?.getAttribute('aria-pressed') === 'true', 'нет выбранной кнопки «Все точки»');
+    assert(button(doc, outlet.name), 'нет кнопки отдельной точки');
+    assert(doc.querySelector('.expense-row').textContent.includes('все точки'), 'в общем списке потерялось назначение расхода');
+  });
+  await check('повтор общих расходов', async () => {
+    button(doc, repeatLabel).click();
+    await until(() => repeats[0]?.p_month);
+    assert(!('p_location' in repeats[0]), 'команда повтора больше не действует на весь кабинет');
+  });
+  await check('выбор назначения и сохранение общего расхода', async () => {
+    button(doc, 'Аренда').click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    const select = dialog.querySelector('select');
+    assert(select, 'нет выбора между общим расходом и расходом точки');
+    assert(select.value === (locations.length === 1 ? outlet.id : ''), 'изменилось начальное назначение расхода');
+    assert([...select.options].some(option => option.value === '' && option.textContent === 'Общий — на все точки'), 'нет общего назначения');
+    assert([...select.options].some(option => option.value === outlet.id && option.textContent === outlet.name), 'нет назначения отдельной точке');
+    select.value = '';
+    select.dispatchEvent(new app.Event('change', { bubbles: true }));
+    const amount = dialog.querySelector('input[inputmode=decimal]');
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(amount, '25,50');
+    amount.dispatchEvent(new app.Event('input', { bubbles: true }));
+    assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
+    await wait(0);
+    button(dialog, 'Добавить расход').click();
+    const save = await until(() => saves[0]);
+    assert(save.p_location === null && save.p_amount === '2550' && save.p_note === null, 'общий расход отправлен с неверной суммой или точкой');
+    await until(() => !dialog.isConnected);
+  });
+  await check('неверная сумма в существующем расходе', async () => {
+    const count = saves.length;
+    doc.querySelector('.expense-row').click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    const amount = dialog.querySelector('input[inputmode=decimal]');
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(amount, '25x');
+    amount.dispatchEvent(new app.Event('input', { bubbles: true }));
+    await wait(0);
+    button(dialog, 'Сохранить').click();
+    await wait(50);
+    assert(saves.length === count, 'неверный ввод отправил предыдущую сумму');
+  });
+  await check('экран отдельной точки', async () => {
+    const chip = button(doc, outlet.name);
+    assert(chip, 'переключатель точки недоступен');
+    chip.click();
+    await until(() => scopes.at(-1) === outlet.id && button(doc, 'Аренда'));
+    assert(!button(doc, repeatLabel), 'отдельная точка предлагает повторить расходы всего кабинета');
+    assert(!doc.body.textContent.includes('потом переносить кнопкой'), 'подсказка ссылается на недоступную кнопку');
+    button(doc, 'Аренда').click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    assert(dialog.querySelector('select')?.value === outlet.id, 'выбранная точка не подставилась в расход');
+  });
+  await check('сохранение отчёта для выбранной точки', async () => {
+    const upload = [];
+    const mockDrive = params.get('drive') === 'mock';
+    if (mockDrive) {
+      app.google = { accounts: { oauth2: { initTokenClient: ({ callback, scope }) => ({ requestAccessToken: () => {
+        callback({ access_token: 'synthetic-drive-access', scope });
+      } }) } } };
+      const previousFetch = app.fetch;
+      app.fetch = async (request, init) => {
+        const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+        if (url.href.startsWith('https://www.googleapis.com/upload/drive/v3/files?')) {
+          upload.push({ body: await init.body.text(), authorization: init.headers.Authorization });
+          return app.Response.json({ id: 'synthetic-drive-file' });
+        }
+        return previousFetch(request, init);
+      };
+    }
+    button(doc, 'Google Drive').click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    assert(dialog.textContent.includes(outlet.name), 'не показана точка, по которой будет сохранён отчёт');
+    assert(button(dialog, 'Скачать отчёт Excel'), 'нет локального скачивания отчёта');
+    assert(dialog.querySelector('a[href="https://drive.google.com/drive/my-drive"]'), 'нет пути для ручного сохранения');
+    if (mockDrive) {
+      const save = await until(() => {
+        const control = button(dialog, 'Сохранить в Google Drive');
+        return control && !control.disabled && control;
+      });
+      save.click();
+      await until(() => dialog.querySelector('a[href="https://drive.google.com/open?id=synthetic-drive-file"]'));
+      assert(upload.length === 1 && upload[0].authorization === 'Bearer synthetic-drive-access', 'файл не отправлен с полученным разрешением');
+      assert(upload[0].body.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') && /OPiU-\d{4}-\d{2}\.xlsx/.test(upload[0].body), 'отправлен неверный файл');
+    } else {
+      assert(!button(dialog, 'Сохранить в Google Drive'), 'предложено прямое сохранение без настройки Google');
+      let downloaded;
+      const createObjectURL = app.URL.createObjectURL;
+      const clickAnchor = app.HTMLAnchorElement.prototype.click;
+      try {
+        app.URL.createObjectURL = (file) => { downloaded = file; return createObjectURL(file); };
+        app.HTMLAnchorElement.prototype.click = function () {
+          if (!this.download) clickAnchor.call(this);
+        };
+        button(dialog, 'Скачать отчёт Excel').click();
+        const workbook = await until(() => downloaded);
+        const signature = new Uint8Array(await workbook.slice(0, 4).arrayBuffer());
+        assert(workbook.name.endsWith('.xlsx') && signature.join(',') === '80,75,3,4', 'локальное скачивание не создало книгу Excel');
+      } finally {
+        app.URL.createObjectURL = createObjectURL;
+        app.HTMLAnchorElement.prototype.click = clickAnchor;
+      }
+    }
+    assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
+  });
+  assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth, 'страница финансов шире окна');
+  assert(!failures.length, failures.join(' • '));
+  result.dataset.status = 'passed';
+  result.textContent = 'Проверок пройдено: 7';
+} catch (error) {
+  result.dataset.status = 'failed';
+  result.textContent = error.message;
+}
+</script>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Проверка истории смен и обучения сотрудника</title>
+<output id="result">Проверка личного кабинета…</output>
+<iframe id="app" title="Кабинет с вымышленными данными" width="390" height="900"></iframe>
+<script type="module">
+// VITE_SUPABASE_URL=https://fixture.example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable-key-local-only npm run dev
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+const scenario = params.get('scenario');
+const closeLabel = 'Закрыть смену и внести выручку';
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function until(read, failure, timeout = 6000) {
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {
+    const value = read();
+    if (value) return value;
+    await pause(25);
+  }
+  throw new Error(failure);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = `/tests/ui/responsive-app.html?role=staff&shift=open&text=${params.get('text') === '200' ? '200' : '100'}#/`;
+try {
+  const liveButton = await until(() => [...frame.contentDocument.querySelectorAll('.shift-card button')].find(b => b.textContent.trim() === closeLabel && !b.disabled), 'Не появилась открытая смена', 15000);
+  const app = frame.contentWindow;
+  const doc = app.document;
+  const fetchFixture = app.fetch;
+  const monthRequests = [];
+  const closed = { id: 'qa-october', revision: 1, location_id: 'qa-location', location_name: 'Вымышленная архивная точка', day: '2026-10-23', status: 'closed', opened_at: '2026-10-23T08:00:00Z', closed_at: '2026-10-23T18:00:00Z', cash_minor: 490000, card_minor: 180000, total_minor: 670000, earned_minor: 240000, rate_bp: null, shift_fee_minor: null, comment: null };
+  const course = [
+    {article_id: 'qa-article', revision_id: 'qa-revision', title: 'Позднее повторение', stage: 'Адаптация', questions: 4, due: '2026-11-20', percent: 100, completed: true, active: false},
+    {article_id: 'qa-article-1', revision_id: 'qa-revision', title: 'Ближайшее повторение', stage: 'Клиенты', questions: 2, due: '2026-11-12', percent: 100, completed: true, active: false},
+  ];
+  if (scenario === 'due') course[1].due = '2026-11-09';
+  if (scenario === 'active') {
+    course[0].due = '2026-11-09';
+    course[1].active = true;
+  }
+
+  app.fetch = (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/staff_home')) {
+      const month = JSON.parse(init.body).p_month;
+      monthRequests.push(month);
+      if (month === '2026-10-01') {
+        return Promise.resolve(app.Response.json({month, open_shift: null, locations: [], shifts: [closed], month_earned_minor: 240000, month_revenue_minor: 670000, month_shifts: 1, currency: 'RUB', use_partner_motivation: true}));
+      }
+      if (month === '2026-09-01') {
+        return Promise.resolve(app.Response.json({month, open_shift: null, locations: [], shifts: [], month_earned_minor: 0, month_revenue_minor: 0, month_shifts: 0, currency: 'RUB', use_partner_motivation: true}));
+      }
+    }
+    if (url.pathname.endsWith('/rpc/learning_overview')) return Promise.resolve(app.Response.json({day: '2026-11-09', audience: 'sales', items: course}));
+    return fetchFixture(request, init);
+  };
+
+  if (scenario === 'history') {
+    const monthButton = label => doc.querySelector(`button[aria-label="${label}"]`);
+    const previous = await until(() => monthButton('Предыдущий месяц'), 'В «Моих сменах» нельзя выбрать прошлый месяц');
+    assert(monthButton('Следующий месяц').disabled, 'Кабинет позволяет выбрать будущий месяц');
+    previous.click();
+    await until(() => doc.body.textContent.includes(closed.location_name), 'Не показана смена за прошлый месяц');
+    const plan = doc.querySelector('.earn-card');
+    assert(plan.textContent.includes('Начислено за октябрь') && /2\s?400/.test(plan.textContent), 'Начисление показано из другого месяца');
+    assert(liveButton.isConnected && !liveButton.disabled, 'Просмотр истории заблокировал текущую смену');
+    liveButton.click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'), 'Из истории не открывается закрытие текущей смены');
+    assert(!dialog.textContent.includes(closed.location_name), 'Закрытие относится к архивной смене');
+    [...dialog.querySelectorAll('button')].find(b => b.textContent.trim() === 'Отмена').click();
+    previous.click();
+    await until(() => doc.body.textContent.includes('Закрытых смен в этом месяце пока нет.'), 'Месяц без смен показывает старые записи');
+    monthButton('Следующий месяц').click();
+    await until(() => doc.body.textContent.includes(closed.location_name), 'Нельзя вернуться к закрытым сменам за октябрь');
+    monthButton('Следующий месяц').click();
+    await until(() => plan.isConnected && plan.textContent.includes('Начислено за ноябрь') || doc.querySelector('.earn-card')?.textContent.includes('Начислено за ноябрь'), 'Не вернулся текущий месяц');
+    assert(monthRequests.includes('2026-10-01') && monthRequests.includes('2026-09-01'), 'Сервер не получил выбранные месяцы');
+  } else {
+    doc.querySelector('.bottom-nav a[href="#/learning"]').click();
+    const next = await until(() => doc.querySelector('.learning-next'), 'Не появился текущий статус обучения');
+    if (scenario === 'due') {
+      assert(next.textContent.includes('Пора повторить') && next.textContent.includes(course[1].title) && next.querySelector('a[href$="qa-article-1"]'), 'Пропущен урок со сроком повтора в локальный день точки');
+    } else if (scenario === 'active') {
+      assert(next.textContent.includes('Продолжить урок') && next.textContent.includes(course[1].title), 'Незавершённый урок не получил приоритет');
+    } else {
+      assert(next.textContent.includes('12.11.2026'), 'Не показана ближайшая дата повторения');
+      assert(!next.querySelector('a'), 'Пройденный урок ошибочно предложен как следующий');
+      assert(doc.querySelector('.learning-program summary'), 'Исчезла полная программа обучения');
+    }
+  }
+  assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Содержимое выходит за ширину окна');
+  result.dataset.status = 'passed';
+  result.textContent = 'Проверка пройдена';
+} catch (error) {
+  result.dataset.status = 'failed';
+  result.textContent = error.message;
+}
+</script>

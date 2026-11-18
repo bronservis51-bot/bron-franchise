@@ -131,6 +131,21 @@ export function freeNow(value: StockValue|undefined): number|null {
   return !value||value.stock===null||value.reserve===null||value.unallocated_reserve===null?null:Math.max(value.stock-value.reserve-value.unallocated_reserve,0);
 }
 
+function hasAvailableStock(value: StockValue | undefined, requested: number): boolean {
+  if (!value || value.stock === null || value.reserve === null || value.unallocated_reserve === null) return false;
+
+  // Compare the reported decimal values at a common scale, including small reserves in exponent notation.
+  const decimals = [value.stock, value.reserve, value.unallocated_reserve, requested].map(amount => {
+    const [mantissa, exponent = '0'] = amount.toString().split('e');
+    const [whole, fraction = ''] = mantissa.split('.');
+    return { coefficient: BigInt(whole + fraction), scale: fraction.length - Number(exponent) };
+  });
+  const commonScale = Math.max(...decimals.map(decimal => decimal.scale));
+  const [stock, reserve, unallocatedReserve, quantity] = decimals.map(({ coefficient, scale }) =>
+    coefficient * 10n ** BigInt(commonScale - scale));
+  return stock >= reserve + unallocatedReserve + quantity;
+}
+
 export function validatePartner(partner:PartnerConfig, cp:Obj, discounts:Obj[]):void {
   if(uuid(cp.id)!==uuid(partner.counterparty_id)||cp.archived!==false)throw new ShopError('mapping-mismatch');
   if(partner.pricing_policy!=='price_type_only_verified'||partner.discounts_verified_absent!==true||partner.currency_minor_unit!==2
@@ -229,6 +244,10 @@ function normalizedPositions(value:unknown):NormalPosition[]{
     return{id,type,quantity:quantity(p.quantity),price:price(p.price),discount:0,vat:Number(p.vat),vatEnabled:p.vatEnabled,reserve:typeof p.reserve==='number'?p.reserve:0};
   }).sort((a,b)=>JSON.stringify({...a,reserve:0}).localeCompare(JSON.stringify({...b,reserve:0})));
 }
+// The SQL outbox and Remap responses can include zero milliseconds in the agreed moment.
+function normalizeOrderMoment(value: unknown) {
+  return typeof value === 'string' ? value.replace(/\.000$/, '') : value ?? null;
+}
 function validateFrozen(job:OrderJob,context:WorkerContext,partner:PartnerConfig):NormalPosition[]{
   const p=job.payload;
   if(uuid(p.syncId)!==uuid(job.sync_id)||metaId(p.agent,'counterparty')!==partner.counterparty_id
@@ -241,7 +260,11 @@ function validateFrozen(job:OrderJob,context:WorkerContext,partner:PartnerConfig
   const fields=new Set(['syncId','description','applicable','vatEnabled','vatIncluded','organization','agent','store','rate','positions','deliveryPlannedMoment']);
   if(Object.keys(p).some(k=>!fields.has(k)))throw new ShopError('payload-mismatch');
   cleanText(p.description,4096);
-  if(p.deliveryPlannedMoment!==undefined&&(typeof p.deliveryPlannedMoment!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(p.deliveryPlannedMoment)))throw new ShopError('payload-mismatch');
+  const deliveryMoment = normalizeOrderMoment(p.deliveryPlannedMoment);
+  if (p.deliveryPlannedMoment !== undefined &&
+      (typeof deliveryMoment !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(deliveryMoment))) {
+    throw new ShopError('payload-mismatch');
+  }
   for(const raw of array(p.positions))if(Object.keys(object(raw)).some(k=>!['assortment','quantity','price','discount','vat','vatEnabled','reserve'].includes(k)))throw new ShopError('payload-mismatch');
   const units=new Map<string,string>();for(const raw of array(job.validation.expected_units)){const r=object(raw),id=uuid(r.product_id);if(units.has(id))throw new ShopError('payload-mismatch');units.set(id,cleanText(r.uom,30));}
   if(units.size!==new Set(positions.map(pos=>pos.id)).size||positions.some(pos=>!units.has(pos.id)))throw new ShopError('payload-mismatch');
@@ -260,13 +283,11 @@ async function findExisting(ms:MsClient,syncId:string):Promise<Obj|null>{
 }
 async function verifyExisting(ms:MsClient,order:Obj,job:OrderJob):Promise<string>{
   const expected=job.payload,id=uuid(order.id);
-  // Remap serializes document moments with milliseconds even when the input omitted them.
-  const moment=(value:unknown)=>typeof value==='string'?value.replace(/\.000$/,''):value??null;
   if(uuid(order.syncId)!==job.sync_id||metaId(order.agent,'counterparty')!==metaId(expected.agent,'counterparty')
     ||metaId(order.organization,'organization')!==metaId(expected.organization,'organization')||metaId(order.store,'store')!==metaId(expected.store,'store')
     ||metaId(object(order.rate).currency,'currency')!==metaId(object(expected.rate).currency,'currency')
     ||object(order.rate).value!==object(expected.rate).value||order.vatEnabled!==expected.vatEnabled||order.vatIncluded!==expected.vatIncluded
-    ||order.description!==expected.description||moment(order.deliveryPlannedMoment)!==moment(expected.deliveryPlannedMoment))throw new ShopError('payload-mismatch');
+    ||order.description!==expected.description||normalizeOrderMoment(order.deliveryPlannedMoment)!==normalizeOrderMoment(expected.deliveryPlannedMoment))throw new ShopError('payload-mismatch');
   let positions=order.positions;
   const posObject=positions&&typeof positions==='object'&&!Array.isArray(positions)?positions as Obj:{};
   const posMeta=posObject.meta&&typeof posObject.meta==='object'?posObject.meta as Obj:{};
@@ -314,11 +335,18 @@ export async function dispatchJob(ms:MsClient,db:Backend,context:WorkerContext,j
         if(current.price_minor!==pos.price||current.vat!==pos.vat||current.vat_enabled!==pos.vatEnabled)throw new ShopError('price-changed');
       }
       const stock=await readStock(ms,context.store_id,false);
-      for(const requirement of job.validation.stock_required){const free=freeNow(stock.get(uuid(requirement.product_id)));if(free===null||free<quantity(requirement.quantity))throw new ShopError('stock-stale');}
+      for (const requirement of job.validation.stock_required) {
+        const availability = stock.get(uuid(requirement.product_id));
+        if (!hasAvailableStock(availability, quantity(requirement.quantity))) throw new ShopError('stock-stale');
+      }
     }
     // Accepted negotiated offers intentionally preserve their accepted prices. No automatic reservation occurs.
+    const deliveryMoment = normalizeOrderMoment(job.payload.deliveryPlannedMoment);
+    const payload = typeof deliveryMoment === 'string'
+      ? { ...job.payload, deliveryPlannedMoment: deliveryMoment }
+      : job.payload;
     attempted=true;
-    const response=object(await ms.createOrder(job.payload));
+    const response=object(await ms.createOrder(payload));
     const id=await verifyExisting(ms,response,job);await result('created',{order_id:id});return'created';
   }catch(error){
     const code=codeOf(error);

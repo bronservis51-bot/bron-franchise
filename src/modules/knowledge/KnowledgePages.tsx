@@ -9,7 +9,7 @@ import { formatDate, formatDateTime } from '../../platform/dates';
 import { ActionError, Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, PageHeader, Select, Tabs, Textarea } from '../../ui';
 import { Markdown } from '../../ui/markdown';
 import { useToast } from '../../ui/toast';
-import { ackStatus, getArticle, kbAnswer, kbAsk, kbCommands, kbQuestions, revisionsOf, TYPE_LABEL, QUESTION_CATEGORIES } from './api';
+import { ackStatus, getArticle, kbAnswer, kbAsk, kbCommands, kbManage, kbQuestions, revisionsOf, TYPE_LABEL, QUESTION_CATEGORIES } from './api';
 import { LearningEditor } from '../learning/Learning';
 import { SupportAccounts } from '../staff/SupportAccounts';
 import { SectionSelect } from './KbBrowse';
@@ -173,12 +173,14 @@ export function QuestionsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const [asking, setAsking] = useState(false);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, { text?: string; article?: string }>>({});
   const q = useQuery({ queryKey: ['kb', 'questions'], queryFn: kbQuestions });
+  const materials = useQuery({ queryKey: ['kb', 'manage'], queryFn: kbManage, enabled: editor && Boolean(q.data?.some(x => !x.answer && !x.article_id)) });
+  const published = (materials.data ?? []).filter(a => a.status === 'published').sort((a, b) => a.title.localeCompare(b.title, 'ru'));
   useEffect(() => { if (q.isSuccess) void qc.invalidateQueries({ queryKey: ['kb', 'inbox'] }); }, [q.isSuccess, qc]);
   const answer = useMutation({
-    mutationFn: ({ id, text }: { id: string; text: string }) => kbAnswer(id, text, null),
-    onSuccess: (_, v) => { toast('Ответ отправлен'); setDrafts({ ...drafts, [v.id]: '' }); void qc.invalidateQueries({ queryKey: ['kb'] }); },
+    mutationFn: ({ id, text, article }: { id: string; text: string; article: string | null }) => kbAnswer(id, text, article),
+    onSuccess: (_, v) => { toast('Ответ отправлен'); setDrafts(current => ({ ...current, [v.id]: {} })); void qc.invalidateQueries({ queryKey: ['kb'] }); },
   });
   return (
     <div className="home" style={{ maxWidth: 820 }}>
@@ -189,24 +191,51 @@ export function QuestionsPage() {
       <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Вопросов пока нет" text={editor ? 'Когда франчайзи спросят, вопросы появятся здесь.' : 'Не нашли ответ в базе знаний — спросите, менеджер по франшизе или технический специалист ответит.'} />)}>
         {(list) => (
           <div className="stack">
-            {list.map((x) => (
-              <Card key={x.id} className={x.unseen ? 'new-answer' : ''}>
-                <div className="faint">{editor ? `${x.user_name}${x.partner_name ? ` · ${x.partner_name}` : ''} · ` : ''}{formatDateTime(x.created_at)}{x.article_id && <> · <Link to={`/kb/articles/${x.article_id}`}>к статье</Link></>}</div>
-                <div className="row"><Badge>{QUESTION_CATEGORIES[x.category] ?? 'Другое'}</Badge><span className="faint">{x.route==='technical'?'Технический специалист':'Менеджер по франшизе'}</span>{editor && !x.answer && <Button size="sm" onClick={()=>void command('kb_question_route',{question:x.id,route:x.route==='technical'?'franchise':'technical'}).then(()=>qc.invalidateQueries({queryKey:['kb']})).catch(e=>toast(String(e)))}>Передать {x.route==='technical'?'менеджеру':'специалисту'}</Button>}</div>
-                <p style={{ margin: '6px 0', fontWeight: 600 }}>{x.question}</p>
-                {x.answer ? (
-                  <div className="answer"><div className="faint">Ответ{x.answered_at ? ` · ${formatDateTime(x.answered_at)}` : ''}{x.unseen ? ' · новый' : ''}</div><div style={{ whiteSpace: 'pre-wrap' }}>{x.answer}</div></div>
-                ) : editor ? (
-                  <div>
-                    <Textarea rows={3} aria-label="Ответ" value={drafts[x.id] ?? ''} onChange={(e) => setDrafts({ ...drafts, [x.id]: e.target.value })} placeholder="Ответ франчайзи" />
-                    <div className="row" style={{ marginTop: 8 }}>
-                      <Button variant="primary" size="sm" loading={answer.isPending && answer.variables?.id === x.id} disabled={(drafts[x.id] ?? '').trim().length < 2}
-                        onClick={() => answer.mutate({ id: x.id, text: drafts[x.id] })}>Ответить</Button>
+            {(editor ? list : [...list].sort((a, b) => Number(b.unseen) - Number(a.unseen))).map((x) => {
+              const draft = drafts[x.id];
+              const text = draft?.text ?? '';
+              const selectedArticle = x.article_id ? undefined : published.find(a => a.id === draft?.article);
+              const reply = text.trim() || (selectedArticle ? `Смотрите материал «${selectedArticle.title}».` : '');
+              return (
+                <Card key={x.id} className={x.unseen ? 'new-answer' : ''}>
+                  <div className="faint">{editor ? `${x.user_name}${x.partner_name ? ` · ${x.partner_name}` : ''} · ` : ''}{formatDateTime(x.created_at)}{!x.answer && x.article_id && <> · <Link to={`/kb/articles/${x.article_id}`}>к статье</Link></>}</div>
+                  <div className="row"><Badge>{QUESTION_CATEGORIES[x.category] ?? 'Другое'}</Badge><span className="faint">{x.route==='technical'?'Технический специалист':'Менеджер по франшизе'}</span>{editor && !x.answer && <Button size="sm" onClick={()=>void command('kb_question_route',{question:x.id,route:x.route==='technical'?'franchise':'technical'}).then(()=>qc.invalidateQueries({queryKey:['kb']})).catch(e=>toast(String(e)))}>Передать {x.route==='technical'?'менеджеру':'специалисту'}</Button>}</div>
+                  <p style={{ margin: '6px 0', fontWeight: 600 }}>{x.question}</p>
+                  {x.answer ? (
+                    <div className="answer">
+                      <div className="faint">Ответ{x.answered_at ? ` · ${formatDateTime(x.answered_at)}` : ''}{x.unseen ? ' · новый' : ''}</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{x.answer}</div>
+                      {x.article_id && <Link to={`/kb/articles/${x.article_id}`}>Открыть материал</Link>}
                     </div>
-                  </div>
-                ) : <Badge tone="warning">ждёт ответа</Badge>}
-              </Card>
-            ))}
+                  ) : editor ? (
+                    <div>
+                      <Textarea rows={3} aria-label="Ответ" value={text} onChange={(e) => {
+                        const text = e.target.value;
+                        setDrafts(current => ({ ...current, [x.id]: { ...current[x.id], text } }));
+                      }} placeholder="Ответ франчайзи" />
+                      {!x.article_id && published.length > 0 && (
+                        <Field label="Материал базы знаний (необязательно)">{id => (
+                          <Select id={id} value={selectedArticle?.id ?? ''} onChange={e => {
+                            const article = e.target.value;
+                            setDrafts(current => ({ ...current, [x.id]: { ...current[x.id], article } }));
+                          }}>
+                            <option value="">Без материала</option>
+                            {published.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                          </Select>
+                        )}</Field>
+                      )}
+                      {selectedArticle && <div style={{ overflowWrap: 'anywhere' }}>
+                        <Link to={`/kb/articles/${selectedArticle.id}`} target="_blank" rel="noopener noreferrer">{selectedArticle.title}</Link>
+                      </div>}
+                      <div className="row" style={{ marginTop: 8 }}>
+                        <Button variant="primary" size="sm" loading={answer.isPending && answer.variables?.id === x.id} disabled={reply.length < 2}
+                          onClick={() => answer.mutate({ id: x.id, text: reply, article: selectedArticle?.id ?? null })}>Ответить</Button>
+                      </div>
+                    </div>
+                  ) : <Badge tone="warning">ждёт ответа</Badge>}
+                </Card>
+              );
+            })}
           </div>
         )}
       </DataState>

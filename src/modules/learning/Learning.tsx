@@ -29,6 +29,7 @@ function LessonSettings({article,revision,partner}:{article:string;revision:stri
  const qc=useQueryClient();
  const q=useQuery({queryKey:['learning-config',article,partner],queryFn:()=>command<Config>('learning_lesson_get',{article,partner})});
  const [edit,setEdit]=useState<Config|null>(null);const value=edit??q.data;
+ const needsReview=Boolean(revision&&value?.revision_id&&revision!==value.revision_id);
  const m=useMutation({mutationFn:()=>command('learning_lesson_save',{article,partner,revision,settings:value,expected_version:value!.version}),onSuccess:async()=>{await qc.invalidateQueries({queryKey:['learning-config',article,partner]});await qc.invalidateQueries({queryKey:['learning']});setEdit(null);}});
  const patch=(x:Partial<Config>)=>setEdit({...value!,...x});
  return <div data-unsaved={edit?'true':undefined}><DataState query={q}>{()=>value&&<div className="stack">
@@ -38,10 +39,10 @@ function LessonSettings({article,revision,partner}:{article:string;revision:stri
   {!partner&&<details><summary>Дополнительные настройки урока</summary><Field label="Этап адаптации">{id=><Input id={id} value={value.stage??''} onChange={e=>patch({stage:e.target.value})}/>}</Field>
    <div className="grid grid-2"><Field label="Порядок урока">{id=><Input id={id} type="number" min="0" value={value.position??100} onChange={e=>patch({position:Number(e.target.value)})}/>}</Field><Field label="Проходной балл, %">{id=><Input id={id} type="number" min="1" max="100" value={value.pass_percent??80} onChange={e=>patch({pass_percent:Number(e.target.value)})}/>}</Field></div>
    <Field label="Вопросов в одной попытке" hint="0 — весь банк. Другое число — случайная подборка из банка; следующий урок доступен сразу.">{id=><Input id={id} type="number" min="0" value={value.quiz_size??0} onChange={e=>patch({quiz_size:Number(e.target.value)})}/>}</Field></details>}
-  {revision&&value.revision_id&&revision!==value.revision_id&&<p role="status">Материал обновлён. Проверьте вопросы по новой редакции.</p>}
+  {needsReview&&<p role="status">Материал обновлён. Проверьте вопросы по новой редакции.</p>}
   <p>{value.questions.length} вопросов {partner?'добавлено вами':'в банке'}</p>
   <QuestionsEditor value={value.questions} onChange={questions=>patch({questions})}/>
-  <Button variant="primary" disabled={!revision||!edit} loading={m.isPending} onClick={()=>m.mutate()}>Сохранить обучение</Button><ActionError error={m.error}/>{m.isSuccess&&!edit&&<p role="status">Обучение сохранено</p>}
+  <Button variant="primary" disabled={!revision||(!edit&&!needsReview)} loading={m.isPending} onClick={()=>m.mutate()}>{needsReview&&!edit?'Подтвердить вопросы':'Сохранить обучение'}</Button><ActionError error={m.error}/>{m.isSuccess&&!edit&&<p role="status">Обучение сохранено</p>}
  </div>}</DataState></div>;
 }
 
@@ -79,8 +80,11 @@ function MyLessons(){
  const q=useQuery({queryKey:['learning','overview'],queryFn:()=>command<Overview>('learning_overview')});
  useEffect(()=>{void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc]);
  return <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены" text="Уроки появятся после назначения руководителем."/>}>{d=>{
-  const next=d.items.find(l=>l.active)||d.items.find(l=>!l.completed||!l.due||l.due<=d.day)||d.items[0];
-  return <div className="stack"><Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><p>{next.questions} вопросов · После теста можно сразу перейти дальше</p><Link className="btn btn-primary" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':'Начать'}</Link></Card>
+  const next = d.items.find(l => l.active) ?? d.items.find(l => !l.completed || (l.due !== null && l.due <= d.day));
+  const nextReview = next ? undefined : d.items.map(l => l.due).filter(due => due !== null).sort()[0];
+  return <div className="stack">
+   {next ? <Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><p>{next.questions} вопросов · После теста можно сразу перейти дальше</p><Link className="btn btn-primary" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':'Начать'}</Link></Card> :
+    <Card title="Все назначенные уроки пройдены" className="learning-next">{nextReview && <p>Ближайшее повторение — {formatDate(nextReview)}.</p>}</Card>}
    <details className="learning-program"><summary>Все уроки · {d.items.filter(l=>l.completed).length} из {d.items.length} пройдено</summary><div className="stack">{d.items.map(l=><Card key={l.article_id}><div className="row between"><div className="grow"><span className="faint">{l.stage}</span><h3>{l.title}</h3><span className="faint">{l.percent!==null?`Последний результат: ${l.percent}% · повтор ${formatDate(l.due!)}`:'Ещё не пройден'}</span></div><Link className="btn" to={`/learning/lesson/${l.article_id}`}>{l.active?'Продолжить':l.completed?'Повторить':'Начать'}</Link></div></Card>)}</div></details>
   </div>;
  }}</DataState>;

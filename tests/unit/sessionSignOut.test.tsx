@@ -10,23 +10,42 @@ vi.mock('react', async importOriginal => ({
   useEffect: vi.fn(), useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn(),
 }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ clear: clearQueries }) }));
-vi.mock('../../src/platform/offline', () => ({ clearUserData: cleanup }));
+vi.mock('../../src/platform/offline', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/platform/offline')>(),
+  clearUserData: cleanup,
+}));
 vi.mock('../../src/platform/supabase', () => ({
   snapshot: { clear: clearSnapshot }, setRememberDevice: remember, supabase: { auth: { signOut } },
 }));
 vi.mock('../../src/platform/backend', () => ({ command: vi.fn(), from: vi.fn(), rows: vi.fn(), toAppError: (e: unknown) => e }));
+import { PendingLocalWorkError } from '../../src/platform/offline';
 import { SessionProvider } from '../../src/platform/session';
 
 beforeEach(() => { vi.resetAllMocks(); cleanup.mockResolvedValue(undefined); signOut.mockResolvedValue({ error: null }); });
 
 describe('sign-out preserves work if local cleanup is blocked', () => {
-  it.each(['queue read failed', 'Есть неотправленные записи'])('keeps the session and cached work after %s', async message => {
-    cleanup.mockRejectedValue(new Error(message));
-    const provider = SessionProvider({ children: null });
-    await expect(provider.props.value.signOut()).rejects.toThrow(message);
+  function expectSessionKept() {
     expect(cleanup).toHaveBeenCalledExactlyOnceWith('original-user');
     expect(signOut).not.toHaveBeenCalled(); expect(clearQueries).not.toHaveBeenCalled();
     expect(clearSnapshot).not.toHaveBeenCalled(); expect(remember).not.toHaveBeenCalled(); expect(setState).not.toHaveBeenCalled();
+  }
+
+  it('shows a local storage failure and keeps its cause and the current session', async () => {
+    const cause = new Error('queue read failed');
+    cleanup.mockRejectedValue(cause);
+    const failure = SessionProvider({ children: null }).props.value.signOut();
+    await expect(failure).rejects.toThrow('Не удалось проверить неотправленные записи на устройстве. Повторите выход позже.');
+    await expect(failure.catch((error: Error) => error.cause)).resolves.toBe(cause);
+    expectSessionKept();
+  });
+
+  it('keeps the pending-work message and current session while records are queued', async () => {
+    const queued = new PendingLocalWorkError();
+    cleanup.mockRejectedValue(queued);
+    const failure = SessionProvider({ children: null }).props.value.signOut();
+    await expect(failure).rejects.toThrow('Есть неотправленные записи');
+    await expect(failure).rejects.toBe(queued);
+    expectSessionKept();
   });
   it('finishes local sign-out only after the atomic work check succeeds', async () => {
     let release!: () => void;

@@ -22,7 +22,11 @@ function StageOptions({ auto = false }: { auto?: boolean }) { return <>
   {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
   <option value="call_back">Перезвонить</option><option value="meeting">Встреча</option>
 </>; }
-function stageValue(l: Lead) { return l.status === 'call_back' || l.status === 'meeting' ? l.status : columnFor(l); }
+function stageValue(lead: Lead) {
+  if (lead.status === 'new' && lead.pipeline_column == null) return 'auto';
+  if (lead.status === 'call_back' || lead.status === 'meeting') return lead.status;
+  return columnFor(lead);
+}
 
 export function LeadsPage() {
   const qc = useQueryClient(); const toast = useToast();
@@ -122,7 +126,15 @@ function LeadEditor({ lead: l, initialColumn, onClose, onSaved, onDeleted }: { l
   const removed = useMutation({mutationFn: () => leadSetDeleted(l!, true), onSuccess: row => { toast('Заявка удалена. Её можно восстановить из корзины'); onDeleted(row.id); }});
   const dirty = contact !== initial || phone !== (l?.phone ?? '') || city !== (l?.city ?? '') || note !== (l?.note ?? '') || column !== initialColumn;
   const save = useMutation({ mutationFn: () => { const parsed = parseLeadContact(contact); return leadSave({ id: l?.id, ...parsed, name: contact === initial && l ? l.name : parsed.name, phone, city, note, column }, l?.updated_at ?? null, operation); },
-    onSuccess: row => { toast(l ? 'Заявка сохранена' : 'Заявка добавлена'); onSaved(row); } });
+    onSuccess: row => {
+      if (row.deleted_at) {
+        toast('Заявка уже находится в корзине', 'info');
+        onDeleted(row.id);
+        return;
+      }
+      toast(l ? 'Заявка сохранена' : 'Заявка добавлена');
+      onSaved(row);
+    } });
   const busy = save.isPending || removed.isPending;
   const blocker = useBlocker(dirty || busy);
   useEffect(() => { if (blocker.state === 'blocked') { if (!busy && window.confirm('Уйти без сохранения заявки?')) blocker.proceed(); else blocker.reset(); } }, [blocker, busy]);

@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createTestDb, type TestDb } from './harness';
+import { dispatchJob, type Backend, type MsClient, type WorkerContext } from '../../supabase/functions/shop-worker/core.ts';
 // @ts-expect-error shared JS backup helper
 import { exportData, restoreData } from '../../scripts/backup-lib.mjs';
 const OWNER='alpha.owner@demo.example.com',OTHER='beta.owner@demo.example.com',MANAGER='fm@demo.example.com';
@@ -135,7 +136,7 @@ describe('personal shop and durable MS order queue',()=>{
   const status=await adminOne<any>('select jsonb_build_object(\'status\',status,\'error\',error_code) j from app_private.procurement_order_outbox');
   expect(status).toEqual({status:'blocked',error:'mapping-mismatch'});
  });
- it('accepted negotiated 8+12 offers enqueue both prices and ETA; unknown catalog price can still be quoted',async()=>{
+ it('dispatches a negotiated 8+12 offer with its accepted prices and delivery date',async()=>{
   const sub=await one<R>(OWNER,'select public.procurement_submit($1,$2::jsonb,$3,$4) j',[randomUUID(),JSON.stringify([{product_id:P,quantity:20},{product_id:UNKNOWN,quantity:2}]),'together','Отправить всё вместе']);
   const offer={counterparty_id:CP,currency:'RUB',shipment_mode:'together',valid_until:new Date(Date.now()+86400000).toISOString(),note:'Поставщик подтвердил условия',items:[
     {product_id:P,now_qty:8,later_qty:12,refused_qty:0,now_price_minor:49000,later_price_minor:51000,eta:new Date(Date.now()+7*86400000).toISOString().slice(0,10),refusal_reason:''},
@@ -147,6 +148,42 @@ describe('personal shop and durable MS order queue',()=>{
   expect(job.validation.expected_units).toEqual([{product_id:P,uom:'Лист'},{product_id:UNKNOWN,uom:'Лист'}]);
   expect(job.payload.description).toContain('под заказ 12'); expect(job.payload.description).toContain('одной поставкой'); expect(job.payload.description).toContain('Поставщик подтвердил');
   expect(job.payload.deliveryPlannedMoment.startsWith(offer.items[1].eta)).toBe(true);
+  const context = await service<WorkerContext>('select public.shop_worker_context() j');
+  const backend: Backend = {
+    async rpc<T>(name: string, args?: Record<string, unknown>) {
+      if (name !== 'shop_worker_result' || !args) throw new Error(`Unexpected RPC ${name}`);
+      return service<T>('select public.shop_worker_result($1,$2,$3,$4::jsonb) j',
+        [args.p_id, args.p_lease_token, args.p_status, JSON.stringify(args.p_data)]);
+    },
+  };
+  const orderId = randomUUID();
+  const deliveryMoment = `${offer.items[1].eta} 00:00:00`;
+  const frozenDeliveryMoment = job.payload.deliveryPlannedMoment;
+  const sent: Record<string, unknown>[] = [];
+  const ms: MsClient = {
+    async get(path) {
+      if (path === 'entity/customerorder' || path === 'entity/discount') return { meta: { size: 0 }, rows: [] };
+      if (path === `entity/counterparty/${CP}`) return {
+        id: CP, archived: false,
+        priceType: { meta: { href: `https://api.moysklad.ru/api/remap/1.2/context/companysettings/pricetype/${TYPE}`, type: 'pricetype' } },
+      };
+      if (path === `entity/product/${P}` || path === `entity/product/${UNKNOWN}`) return {
+        id: path.slice('entity/product/'.length), archived: false, uom: { name: 'Лист' }, vat: 0, vatEnabled: false,
+        productFolder: { meta: { href: `https://api.moysklad.ru/api/remap/1.2/entity/productfolder/${FOLDER}`, type: 'productfolder' } },
+      };
+      throw new Error(`Unexpected МойСклад request ${path}`);
+    },
+    async createOrder(payload) {
+      sent.push(payload);
+      const positions = payload.positions as unknown[];
+      return { ...payload, id: orderId, deliveryPlannedMoment: `${deliveryMoment}.000`, positions: { meta: { size: positions.length }, rows: positions } };
+    },
+  };
+  expect(await dispatchJob(ms, backend, context, job)).toBe('created');
+  expect(job.payload.deliveryPlannedMoment).toBe(frozenDeliveryMoment);
+  expect(sent).toEqual([{ ...job.payload, deliveryPlannedMoment: deliveryMoment }]);
+  const list = await one<{ requests: R[] }>(OWNER, 'select public.procurement_list() j');
+  expect(list.requests.find(request => request.id === accepted.id)?.integration).toMatchObject({ status: 'created', order_id: orderId });
  });
  it('no backfill is performed for accepted requests while disabled and impossible VAT cannot add hidden amounts',async()=>{
   await t.admin('update app_private.procurement_shop_settings set enabled=false');

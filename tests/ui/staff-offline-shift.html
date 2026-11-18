@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Проверка очереди закрытия смены</title>
+<output id="result">Проверка очереди закрытия смены…</output>
+<iframe id="app" title="Кабинет с вымышленной сменой" width="390" height="850"></iframe>
+<script type="module">
+// VITE_SUPABASE_URL=https://fixture.example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable-key-local-only npm run dev
+const result = document.querySelector('#result');
+const frame = document.querySelector('#app');
+const params = new URLSearchParams(location.search);
+const scenario = params.get('scenario');
+const closeLabel = 'Закрыть смену и внести выручку';
+const cancelLabel = 'Открыл по ошибке — отменить';
+const queuedMessage = 'Итог сохранён на телефоне';
+const conflictMessage = 'Смена уже изменена. Сверьте суммы.';
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function until(read, failure, timeout = 5000) {
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {
+    const value = read();
+    if (value) return value;
+    await pause(25);
+  }
+  throw new Error(failure);
+}
+
+function button(root, label) {
+  return [...root.querySelectorAll('button')].find(node => node.textContent.trim() === label);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = `/tests/ui/responsive-app.html?role=staff&shift=open&text=${params.get('text') === '200' ? '200' : '100'}#/`;
+try {
+  await until(() => button(frame.contentDocument, closeLabel), 'Не загрузился экран открытой смены', 15000);
+  const app = frame.contentWindow;
+  const doc = app.document;
+  const fetchFixture = app.fetch;
+  const attempts = [];
+  let releaseHomeRefresh;
+  const homeRefresh = new Promise(resolve => { releaseHomeRefresh = resolve; });
+  let connection = 'lost';
+  app.fetch = (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/shift_close_versioned')) {
+      attempts.push(JSON.parse(init.body));
+      if (connection === 'lost') return Promise.reject(new TypeError('Failed to fetch'));
+      if (connection === 'conflict') return Promise.resolve(app.Response.json({message: 'version-conflict', details: conflictMessage}, {status: 409}));
+    }
+    if (scenario === 'sync' && attempts.length >= 2 && url.pathname.endsWith('/rpc/staff_home')) {
+      return homeRefresh.then(() => fetchFixture(request, init));
+    }
+    return fetchFixture(request, init);
+  };
+
+  function checkGeometry(dialog) {
+    const root = doc.documentElement;
+    assert(root.scrollWidth <= root.clientWidth + 1, `Экран смены выходит за ширину ${root.clientWidth} px`);
+    if (dialog) assert(dialog.scrollWidth <= dialog.clientWidth + 1, 'Содержимое диалога выходит за его ширину');
+  }
+
+  function type(input, value) {
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event('input', {bubbles: true}));
+  }
+
+  async function closeShift(cash) {
+    const open = await until(() => {
+      const action = button(doc, closeLabel);
+      return action && !action.disabled && action;
+    }, 'Действие закрытия смены недоступно');
+    open.click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'), 'Не открылся ввод сумм смены');
+    checkGeometry(dialog);
+    const [cashInput, cardInput] = dialog.querySelectorAll('input[inputmode="decimal"]');
+    type(cashInput, cash);
+    type(cardInput, '25');
+    const save = button(dialog, 'Закрыть смену');
+    await until(() => !save.disabled, 'Нельзя подтвердить введённые суммы');
+    save.click();
+  }
+
+  function online(connected) {
+    Object.defineProperty(app.navigator, 'onLine', {configurable: true, get: () => connected});
+    app.dispatchEvent(new app.Event(connected ? 'online' : 'offline'));
+  }
+
+  function failQueueDelete() {
+    const remove = app.IDBObjectStore.prototype.delete;
+    app.IDBObjectStore.prototype.delete = function (...args) {
+      if (this.name === 'queue') throw new app.DOMException('Не удалось удалить запись', 'UnknownError');
+      return remove.apply(this, args);
+    };
+    return () => { app.IDBObjectStore.prototype.delete = remove; };
+  }
+
+  if (scenario === 'offline') online(false);
+  await closeShift('125');
+  await until(() => doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'Итог без связи не появился в локальной очереди');
+  assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Открытая смена доступна для изменений при ожидающей записи');
+
+  const discard = ['discard', 'storage', 'delete'].includes(scenario);
+  connection = discard ? 'conflict' : 'online';
+  const restoreDelete = scenario === 'flush-cleanup' ? failQueueDelete() : null;
+  if (scenario === 'offline') online(true);
+  app.dispatchEvent(new app.Event('focus'));
+
+  if (discard) {
+    await until(() => doc.body.textContent.includes(conflictMessage), 'Конфликт отправки не показан');
+    assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Конфликтная запись перестала блокировать смену');
+    button(doc, 'Посмотреть записи').click();
+    const queue = await until(() => doc.querySelector('dialog[open]')?.textContent.includes(conflictMessage) && doc.querySelector('dialog[open]'), 'Открытая очередь не показывает конфликт');
+    button(queue, 'Скачать копию записей').click();
+    const drop = button(queue, 'Копия сохранена — удалить из очереди');
+    await until(() => !drop.disabled, 'Удаление после сохранения копии недоступно');
+    if (scenario === 'delete') {
+      const restoreDelete = failQueueDelete();
+      drop.click();
+      await until(() => queue.querySelector('[role="alert"]'), 'Ошибка удаления из очереди осталась незаметной');
+      assert(queue.textContent.includes(conflictMessage), 'Неудалённая запись исчезла из очереди');
+      restoreDelete();
+    }
+    const getAll = app.IDBIndex.prototype.getAll;
+    if (scenario === 'storage') {
+      app.IDBIndex.prototype.getAll = function (...args) {
+        if (this.objectStore.name === 'queue') throw new app.DOMException('Не удалось прочитать очередь', 'UnknownError');
+        return getAll.apply(this, args);
+      };
+    }
+    drop.click();
+    if (scenario === 'storage') {
+      const alert = await until(() => doc.querySelector('main [role="alert"]'), 'Ошибка чтения очереди осталась незаметной');
+      assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Ошибка чтения очереди сняла блокировку смены');
+      assert(doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'Ошибка чтения очереди скрыла последний известный итог');
+      checkGeometry();
+      app.IDBIndex.prototype.getAll = getAll;
+      button(queue, 'Закрыть').click();
+      button(alert, 'Повторить').click();
+    } else {
+      await until(() => !button(queue, 'Копия сохранена — удалить из очереди'), 'Запись осталась в очереди после удаления');
+      button(queue, 'Закрыть').click();
+    }
+    await until(() => !button(doc, closeLabel).disabled && !button(doc, cancelLabel).disabled, 'После удаления записи смену нельзя закрыть или отменить');
+    assert(!doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'После удаления всё ещё показан локальный итог');
+    connection = 'online';
+    await closeShift('175');
+    await until(() => doc.querySelector('.earn-result')?.textContent.includes('Смена закрыта. Вы заработали'), 'Обычное закрытие не показало подтверждённый заработок');
+    assert(attempts.at(-1).p_cash === '17500' && attempts.at(-1).p_operation !== attempts[0].p_operation, 'Новое закрытие должно отправить уточнённые суммы с отдельным ключом');
+  } else {
+    if (scenario === 'sync') {
+      await until(() => !doc.querySelector('.earn-result'), 'После отправки всё ещё показан локальный итог');
+      assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Действия доступны до обновления состояния отправленной смены');
+      releaseHomeRefresh();
+    }
+    await until(() => doc.querySelector('.today-entered')?.textContent.includes('смена закрыта'), 'После отправки экран не показал закрытую смену');
+    if (restoreDelete) {
+      assert(button(doc, 'Посмотреть записи') && doc.querySelector('.today-entered').disabled, 'После ошибки удаления потеряна ожидающая запись');
+      assert(!doc.querySelector('.toasts').textContent.includes('Отправлено записей'), 'Неудалённая операция засчитана как отправленная');
+      restoreDelete();
+      app.dispatchEvent(new app.Event('focus'));
+      await until(() => !button(doc, 'Посмотреть записи'), 'Повтор не удалил отправленную операцию');
+      assert(attempts.length >= 3 && attempts[2].p_operation === attempts[0].p_operation, 'Повтор после ошибки удаления изменил ключ операции');
+    }
+    await until(() => !doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'После отправки всё ещё показан локальный итог');
+  }
+  assert(attempts.length >= 2 && attempts[0].p_operation === attempts[1].p_operation, 'Повтор отправки изменил ключ операции');
+  assert(attempts[0].p_shift === attempts[1].p_shift && attempts[0].p_expected_revision === attempts[1].p_expected_revision, 'Повтор отправки изменил смену или её версию');
+  checkGeometry();
+  result.dataset.status = 'passed';
+  result.textContent = 'Проверка пройдена';
+} catch (error) {
+  result.dataset.status = 'failed';
+  result.textContent = error.message;
+}
+</script>

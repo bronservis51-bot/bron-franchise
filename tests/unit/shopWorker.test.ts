@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import fc from 'fast-check';
 import { createBackend, createMsClient, dispatchJob, freeNow, makeHandler, readAll, readStock, resolvePrice, ShopError, syncShop,
   type Backend, type MsClient, type OrderJob, type PartnerConfig, type WorkerContext } from '../../supabase/functions/shop-worker/core.ts';
 
@@ -17,11 +18,11 @@ const cp={id:ids.cp,archived:false,priceType:ref('pricetype',ids.priceType),disc
 const currency={id:ids.currency,isoCode:'RUB',archived:false,indirect:false,multiplicity:1,rate:1};
 const fixed=Date.parse('2026-11-08T12:00:00Z');
 const page=(rows:unknown[],size=rows.length,offset=0)=>({rows,meta:{size,offset}});
-function makeJob():OrderJob{return {id:id(20),lease_token:id(21),sync_id:id(22),attempts:1,mode:'create',partner_id:ids.partner,request_id:id(23),
+function makeJob(quantity = 8):OrderJob{return {id:id(20),lease_token:id(21),sync_id:id(22),attempts:1,mode:'create',partner_id:ids.partner,request_id:id(23),
   request_version:1,config_version:1,settings_version:1,kind:'stock_checkout',quote_fetched_at:new Date(fixed).toISOString(),
-  validation:{stock_required:[{product_id:ids.product,quantity:8}],expected_units:[{product_id:ids.product,uom:'Лист'}]},payload:{syncId:id(22),description:'Заявка: отправка частями.',applicable:true,
+  validation:{stock_required:[{product_id:ids.product,quantity}],expected_units:[{product_id:ids.product,uom:'Лист'}]},payload:{syncId:id(22),description:'Заявка: отправка частями.',applicable:true,
     organization:ref('organization',ids.org),agent:ref('counterparty',ids.cp),store:ref('store',ids.store),rate:{currency:ref('currency',ids.currency),value:1},
-    vatEnabled:false,vatIncluded:true,positions:[{assortment:ref('product',ids.product),quantity:8,price:12000,discount:0,reserve:0,vat:0,vatEnabled:false}]}};}
+    vatEnabled:false,vatIncluded:true,positions:[{assortment:ref('product',ids.product),quantity,price:12000,discount:0,reserve:0,vat:0,vatEnabled:false}]}};}
 function existing(job:OrderJob):Record<string,unknown>{return {...job.payload,id:ids.order,positions:page(job.payload.positions as unknown[])};}
 function backend(){const rpc=vi.fn(async()=>null);return {rpc,db:{rpc} as Backend};}
 function source(options:{job?:OrderJob;existing?:unknown;stock?:number|null;reserve?:number|null;unallocated?:number|null;price?:number;discount?:boolean;uom?:string;vat?:number}={}){
@@ -74,6 +75,42 @@ describe('shop worker outbox delivery',()=>{
   it.each([{stock:7},{stock:null},{stock:8,reserve:1},{stock:8,unallocated:1},{stock:8,unallocated:null}])('blocks changed or unknown physical availability %j',async options=>{
     const s=source(options),b=backend();expect(await dispatchJob(s.ms,b.db,context,makeJob(),()=>fixed)).toBe('blocked');
     expect(s.createOrder).not.toHaveBeenCalled();expect(b.rpc.mock.calls.at(-1)).toMatchObject(['shop_worker_result',{p_data:{error_code:'stock-stale'}}]);
+  });
+  it('creates a checkout when fractional physical stock exactly covers the quantity', async () => {
+    const job = makeJob(0.2);
+    const s = source({ job, stock: 0.3, reserve: 0.1 });
+    const b = backend();
+    expect(await dispatchJob(s.ms, b.db, context, job, () => fixed)).toBe('created');
+    expect(s.createOrder).toHaveBeenCalledExactlyOnceWith(job.payload);
+  });
+  it('blocks a fractional checkout when even a small unallocated reserve leaves insufficient stock', async () => {
+    const job = makeJob(0.2);
+    const s = source({ job, stock: 0.2, unallocated: 1e-17 });
+    const b = backend();
+    expect(await dispatchJob(s.ms, b.db, context, job, () => fixed)).toBe('blocked');
+    expect(s.createOrder).not.toHaveBeenCalled();
+    expect(b.rpc.mock.calls.at(-1)).toMatchObject(['shop_worker_result', { p_data: { error_code: 'stock-stale' } }]);
+  });
+  it('uses the exact balance around fractional checkout boundaries', async () => {
+    await fc.assert(fc.asyncProperty(fc.record({
+      requestedThousandths: fc.integer({ min: 1, max: 100_000_000 }),
+      reservedMillionths: fc.integer({ min: 0, max: 200_000_000 }),
+      unallocatedMillionths: fc.integer({ min: 0, max: 200_000_000 }),
+      surplusMillionths: fc.constantFrom(-1, 0, 1),
+    }), async ({ requestedThousandths, reservedMillionths, unallocatedMillionths, surplusMillionths }) => {
+      const physicalMillionths = requestedThousandths * 1_000 + reservedMillionths + unallocatedMillionths + surplusMillionths;
+      const job = makeJob(requestedThousandths / 1_000);
+      const s = source({
+        job,
+        stock: physicalMillionths / 1_000_000,
+        reserve: reservedMillionths / 1_000_000,
+        unallocated: unallocatedMillionths / 1_000_000,
+      });
+      const b = backend();
+      const enoughStock = surplusMillionths >= 0;
+      expect(await dispatchJob(s.ms, b.db, context, job, () => fixed)).toBe(enoughStock ? 'created' : 'blocked');
+      expect(s.createOrder).toHaveBeenCalledTimes(enoughStock ? 1 : 0);
+    }));
   });
   it('blocks expired quotes, changed individual prices and active discount policies',async()=>{
     for(const scenario of ['stale','price','discount']){

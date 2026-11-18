@@ -15,6 +15,17 @@ describe('private supply snapshot', () => {
     const r = await t.admin<{n: number}>('select jsonb_array_length(rows) n from app_private.supply_snapshot');
     expect(r[0].n).toBe(1);
   });
+  it('keeps the newer source read when an older month refresh finishes later', async () => {
+    const store = (rows: typeof sample, readAt: string, periodEnd: string) => t.admin(
+      'select app_private.supply_store($1,$2::jsonb,$3,$4)', ['2026-09-01', JSON.stringify(rows), readAt, periodEnd],
+    );
+    await store(sample, '2026-09-17T11:00:00Z', '2026-09-17 14:00:00');
+    await store([{ ...sample[0], sales_minor: 9000, profit_minor: 5000 }], '2026-09-17T10:00:00Z', '2026-09-17 13:00:00');
+    const [snapshot] = await t.admin<{ period: string; sales: string }>(
+      "select period_to::text as period,rows->0->>'sales_minor' as sales from app_private.supply_snapshot where month='2026-09-01'",
+    );
+    expect(snapshot).toEqual({ period: '2026-09-17 14:00:00', sales: '10000' });
+  });
   it('does not expose cost data to a franchisee, employee or anonymous API', async () => {
     await t.expectError(OWNER, "select public.manager_supply_snapshot('2026-10-01')", 'forbidden');
     await t.expectError('79000000011@staff.bron.local', "select public.manager_supply_snapshot('2026-10-01')", 'forbidden');

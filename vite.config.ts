@@ -2,9 +2,10 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import type { Plugin } from 'vite';
+import { googleDriveClientId } from './src/modules/finance/financeDrive.ts';
 
-/** CSP через meta (GitHub Pages не задаёт заголовки): сеть разрешена только к собственному проекту Supabase (ADR-0003). */
-function cspPlugin(supabaseUrl: string): Plugin {
+/** CSP через meta (GitHub Pages не задаёт заголовки). */
+function cspPlugin(supabaseUrl: string, driveEnabled: boolean): Plugin {
   let origin = '';
   try {
     origin = new URL(supabaseUrl).origin;
@@ -12,11 +13,14 @@ function cspPlugin(supabaseUrl: string): Plugin {
     origin = '';
   }
   const ws = origin.replace(/^http/, 'ws');
+  const gis = driveEnabled ? ' https://accounts.google.com/gsi/' : '';
+  const gisScript = driveEnabled ? ' https://accounts.google.com/gsi/client' : '';
+  const driveApi = driveEnabled ? ' https://www.googleapis.com/upload/drive/v3/files' : '';
   const csp = [
-    "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+    "default-src 'self'", `script-src 'self'${gisScript}`, "style-src 'self' 'unsafe-inline'",
     // картинки статей — по https-ссылкам; видео — только встроенные плееры YouTube, Rutube и VK
-    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws} https://api.github.com`.trim(),
-    'frame-src https://www.youtube-nocookie.com https://rutube.ru https://vk.com https://vkvideo.ru',
+    `img-src 'self' data: blob: https: ${origin}`.trim(), `connect-src 'self' ${origin} ${ws} https://api.github.com${gis}${driveApi}`.trim(),
+    `frame-src https://www.youtube-nocookie.com https://rutube.ru https://vk.com https://vkvideo.ru${gis}`,
     "worker-src 'self'", "manifest-src 'self'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
   ].join('; ');
   return {
@@ -40,7 +44,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       { name: 'bron-release-version', generateBundle() { this.emitFile({ type: 'asset', fileName: 'app-version.json', source: JSON.stringify({ build: buildTime }) }); } },
-      cspPlugin(env.VITE_SUPABASE_URL ?? ''),
+      cspPlugin(env.VITE_SUPABASE_URL ?? '', Boolean(googleDriveClientId(env.VITE_GOOGLE_DRIVE_CLIENT_ID))),
       VitePWA({
         registerType: 'prompt', // activation and safe page reload are separate (platform/update.ts)
         injectRegister: false,

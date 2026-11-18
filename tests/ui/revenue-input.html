@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Проверка ввода выручки</title>
+<p id="result" role="status">Проверка ввода выручки…</p>
+<iframe id="app" title="Кабинет с вымышленными данными" height="850"></iframe>
+<script type="module">
+// VITE_SUPABASE_URL=https://fixture.example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable-key-local-only npm run dev
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(read) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const value = read();
+    if (value) return value;
+    await wait(25);
+  }
+  throw new Error('Экран или результат действия не появился');
+}
+function button(root, label) {
+  return [...root.querySelectorAll('button')].find(node => node.textContent.trim() === label);
+}
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+function type(input, value) {
+  const { HTMLInputElement, Event } = frame.contentWindow;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = `/tests/ui/responsive-app.html?role=franchisee&text=${params.get('text') === '200' ? '200' : '100'}#/`;
+try {
+  const open = await until(() => button(frame.contentDocument, 'Внести выручку за сегодня'));
+  const app = frame.contentWindow;
+  const fetchFixture = app.fetch;
+  const saves = [];
+  app.fetch = (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/revenue_total_set')) {
+      const payload = JSON.parse(init.body);
+      saves.push(payload);
+      return Promise.resolve(new app.Response(JSON.stringify({ id: 'qa-revenue', total_minor: payload.p_total }), {
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+    return fetchFixture(request, init);
+  };
+
+  const failures = [];
+  const cases = [
+    { name: 'исходно пустая сумма', values: [] },
+    { name: 'неверный формат после правильной суммы', values: ['12,50', '12,50x'], invalid: true },
+    { name: 'сумма выше допустимой', values: ['12,50', '1000000000,01'], invalid: true },
+    { name: 'удалённая сумма', values: ['12,50', ''] },
+    { name: 'явный ноль после ошибки', values: ['12,50', '12,50x', '0'], total: '0' },
+    { name: 'исправленная дробная сумма', values: ['1000000000,01', '12,50'], total: '1250' },
+    { name: 'максимально допустимая сумма', values: ['1000000000'], total: '100000000000' },
+  ];
+  for (const { name, values, invalid, total } of cases) {
+    const count = saves.length;
+    open.click();
+    const dialog = await until(() => app.document.querySelector('dialog[open]'));
+    const label = [...dialog.querySelectorAll('label')].find(node => node.textContent.includes('Вся выручка точки за день'));
+    const input = app.document.getElementById(label.htmlFor);
+    const save = button(dialog, 'Сохранить');
+    try {
+      for (const value of values) {
+        type(input, value);
+        await wait(0);
+      }
+      const page = app.document.documentElement;
+      assert(page.scrollWidth <= page.clientWidth, `страница шире окна (${page.scrollWidth} > ${page.clientWidth})`);
+      assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
+      save.click();
+      if (total === undefined) {
+        await wait(50);
+        assert(saves.length === count, `отправлена сумма ${saves.at(-1)?.p_total}`);
+        assert(save.disabled, 'кнопка сохранения доступна');
+        if (invalid) assert(input.getAttribute('aria-invalid') === 'true', 'поле не помечено как ошибочное');
+      } else {
+        const payload = await until(() => saves[count]);
+        assert(payload.p_total === total, `отправлена сумма ${payload.p_total}, ожидалось ${total}`);
+        assert(payload.p_comment === null, 'пустой комментарий должен оставаться необязательным');
+        await until(() => !dialog.isConnected);
+      }
+    } catch (error) {
+      failures.push(`${name}: ${error.message}`);
+    } finally {
+      if (dialog.open) button(dialog, 'Отмена')?.click();
+      await until(() => !dialog.isConnected);
+    }
+  }
+  assert(!failures.length, failures.join(' • '));
+  result.dataset.status = 'passed';
+  result.textContent = `Проверок пройдено: ${cases.length}`;
+} catch (error) {
+  result.dataset.status = 'failed';
+  result.textContent = error.message;
+}
+</script>
+</html>

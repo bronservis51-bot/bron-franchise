@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Bron Franchise MoySklad supply reports hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=bron-moysklad-sync.service
+
+[Install]
+WantedBy=timers.target
