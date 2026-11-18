@@ -35,6 +35,7 @@ const menu = [
 const startup = labels(['Not now', 'Continue', 'Save and continue', 'Confirm', 'Confirm and start browsing',
   'Agree and start browsing', 'Save and start browsing', 'Start browsing', "Don’t allow", "Don't allow"]);
 const translations = labels(['Close Translations sheet']);
+const skipTranslation = labels(['Not now'], " and @clickable = 'true'");
 const loginPage = labels(['Войти']);
 const moreMenu = labels(['More']);
 const installMenu = labels(['Add app to Home screen', 'Install']);
@@ -64,7 +65,7 @@ async function waitFor(step, attempt, timeout = 30_000) {
   return result;
 }
 
-async function prepareFirefoxProfile(ca) {
+async function trustQaCertificate(ca) {
   const profile = await waitFor('finding the fresh Firefox certificate database', async () => {
     const { stdout } = await adb('shell', 'find', `${firefoxData}/files`, '-name', 'cert9.db')
       .catch(() => ({ stdout: '' }));
@@ -76,7 +77,6 @@ async function prepareFirefoxProfile(ca) {
   const local = await mkdtemp(join(tmpdir(), 'bron-fenix-'));
   const remote = `/data/local/tmp/${basename(local)}`;
   const files = ['cert9.db', 'key4.db'];
-  const userConfig = join(profile, 'user.js');
   try {
     for (const file of files) {
       await adb('pull', join(profile, file), join(local, file));
@@ -87,20 +87,10 @@ async function prepareFirefoxProfile(ca) {
       // NSS updates both databases. Preserve Firefox's file ownership and SELinux labels.
       await adb('shell', `cat ${shellQuote(`${remote}-${file}`)} > ${shellQuote(join(profile, file))}`);
     }
-
-    // Disable Gecko's automatic translation sheet for the Russian login in this disposable profile.
-    const { stdout } = await adb('shell', 'stat', '-c', '%u:%g', shellQuote(profile));
-    const owner = stdout.trim();
-    if (!/^\d+:\d+$/.test(owner)) throw new Error('Could not determine the Firefox profile owner.');
-    await writeFile(join(local, 'user.js'), 'user_pref("browser.translations.automaticallyPopup", false);\n');
-    await adb('push', join(local, 'user.js'), `${remote}-user.js`);
-    await adb('shell', `cat ${shellQuote(`${remote}-user.js`)} > ${shellQuote(userConfig)}`);
-    await adb('shell', 'chown', owner, shellQuote(userConfig));
-    await adb('shell', 'restorecon', shellQuote(userConfig));
   } finally {
     await Promise.allSettled([
       rm(local, { recursive: true, force: true }),
-      adb('shell', 'rm', '-f', ...[...files, 'user.js'].map(file => `${remote}-${file}`)),
+      adb('shell', 'rm', '-f', ...files.map(file => `${remote}-${file}`)),
     ]);
   }
 }
@@ -112,9 +102,10 @@ async function openFirefox(endpoint) {
 
 async function installFromFirefox(session) {
   await waitFor('loading the QA login page in Firefox', async () => {
-    const translate = await firstElement(session, translations);
-    if (translate) {
-      await translate.click();
+    if (await firstElement(session, translations)) {
+      const skip = await firstElement(session, skipTranslation);
+      if (skip) await skip.click();
+      else await adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
       return;
     }
     return firstElement(session, loginPage);
@@ -218,13 +209,14 @@ export async function installAndLaunch(url, backendUrl = url) {
       return firstElement(session, ...menu);
     }, 60_000);
     await openFirefox(endpoint);
-    await prepareFirefoxProfile(ca);
+    await trustQaCertificate(ca);
     await openFirefox(endpoint);
     await installFromFirefox(session);
     await openFromLauncher(session);
     return cleanup;
   } catch (cause) {
     const nativeScreen = await session?.source().catch(() => '');
+    if (nativeScreen) await writeFile('local/device-qa/android-view.xml', nativeScreen).catch(() => undefined);
     const screenLabels = [...new Set([...String(nativeScreen).matchAll(/\b(?:text|content-desc)="([^"]+)"/g)]
       .map(([, value]) => value))].slice(0, 22).join(' | ');
     const reported = await adb('logcat', '-d', '-t', '1200', '-v', 'brief').catch(() => ({ stdout: '' }));
