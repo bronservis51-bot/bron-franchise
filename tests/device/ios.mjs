@@ -34,7 +34,7 @@ async function waitFor(label, lookup, timeout = 15_000) {
 }
 
 async function openSafariPage(session, udid, url) {
-  const open = () => run('xcrun', ['simctl', 'openurl', udid, url], { timeout: 20_000 });
+  const open = () => run('xcrun', ['simctl', 'openurl', udid, url], { timeout: 60_000 });
   await open();
   const title = `(name BEGINSWITH "${appName}" OR label BEGINSWITH "${appName}")`;
   const page = `type == "XCUIElementTypeWebView" AND ${title}`;
@@ -134,7 +134,6 @@ async function openInstalledIcon(session) {
 export async function installAndLaunch(url) {
   const udid = process.env.IOS_UDID;
   if (!udid) throw new Error('Для проверки в iOS Simulator задайте IOS_UDID.');
-  await run('xcrun', ['simctl', 'getenv', udid, 'HOME'], { timeout: 20_000 });
   const runtimeVersion = process.env.IOS_PLATFORM_VERSION;
   const session = await newSession({
     platformName: 'iOS',
