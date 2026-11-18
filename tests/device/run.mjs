@@ -55,7 +55,7 @@ async function wait(check, label, timeout) {
 let certDirectory;
 let qa;
 let appium;
-let cleanup;
+let device;
 try {
   let tls;
   if (platform === 'android') {
@@ -76,7 +76,7 @@ try {
       return response?.ok && (await response.json()).value?.ready;
     }, 'Appium readiness', 30_000),
   ]);
-  cleanup = await installAndLaunch(`${baseURL}/bron-franchise/`, backendUrl);
+  device = await installAndLaunch(`${baseURL}/bron-franchise/`, backendUrl);
 
   let lastStage;
   const state = await Promise.race([stopped, wait(async () => {
@@ -94,8 +94,13 @@ try {
   assert.equal(state.revenue[0].writes, 1, 'Exactly one revenue write must be recorded in the audit log');
   assert.equal(state.revenue[0].total, deviceQaTotal);
   console.log(`${platform}: installed PWA updated and revenue was saved exactly once.`);
+} catch (error) {
+  if (device) {
+    await device.source().then(xml => writeFile(`${logs}/${platform}-view.xml`, xml)).catch(() => undefined);
+  }
+  throw error;
 } finally {
-  try { await cleanup?.(); } finally {
+  try { await device?.close(); } finally {
     appium?.kill();
     qa?.kill();
     if (certDirectory) await rm(certDirectory, { recursive: true, force: true });

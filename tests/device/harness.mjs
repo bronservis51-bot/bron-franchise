@@ -24,7 +24,7 @@ export function createDeviceHarness(backendUrl, readRevenueProof) {
       if (action === 'block') blocked = true;
       else if (action === 'unblock') blocked = false;
       else if (action === 'publish') return send(res, await publish());
-      else if (action === 'report' && ['installed', 'queued', 'updating', 'passed', 'failed'].includes(stage)) {
+      else if (action === 'report' && ['installed', 'queued', 'updating', 'synced', 'passed', 'failed'].includes(stage)) {
         state = { stage, detail: String(detail ?? '').slice(0, 400) };
       } else return send(res, { error: 'Unknown device check action' }, 400);
       return send(res, { ok: true });

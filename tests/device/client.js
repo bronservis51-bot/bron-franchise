@@ -97,6 +97,7 @@
     await command('unblock');
     focus();
     await wait(() => !queued(), 'queued revenue delivered after reconnect');
+    await report('synced', next);
     (await wait(() => button('Обновить'), 'update action')).click();
   }
   void drive().catch(error => report('failed', error.message));

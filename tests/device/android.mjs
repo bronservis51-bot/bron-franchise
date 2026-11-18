@@ -213,7 +213,7 @@ export async function installAndLaunch(url, backendUrl = url) {
     await openFirefox(endpoint);
     await installFromFirefox(session);
     await openFromLauncher(session);
-    return cleanup;
+    return { close: cleanup, source: () => session.source() };
   } catch (cause) {
     const nativeScreen = await session?.source().catch(() => '');
     if (nativeScreen) await writeFile('local/device-qa/android-view.xml', nativeScreen).catch(() => undefined);

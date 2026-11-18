@@ -157,7 +157,7 @@ export async function installAndLaunch(url) {
     await chooseInstallAction(session);
     await confirmInstall(session);
     await openInstalledIcon(session);
-    return () => session.close();
+    return { close: () => session.close(), source: () => session.source() };
   } catch (error) {
     await session.close().catch(() => undefined);
     throw error;
