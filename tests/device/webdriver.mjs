@@ -17,8 +17,8 @@ async function request(method, path, body, timeout = 45_000) {
   return value;
 }
 
-export async function newSession(capabilities) {
-  const { sessionId } = await request('POST', '/session', { capabilities: { alwaysMatch: capabilities } }, 240_000);
+export async function newSession(capabilities, timeout = 240_000) {
+  const { sessionId } = await request('POST', '/session', { capabilities: { alwaysMatch: capabilities } }, timeout);
   if (!sessionId) throw new Error('Appium did not return a session ID.');
   const command = (method, path, body) => request(method, `/session/${sessionId}${path}`, body);
   function element(ref) {

@@ -148,7 +148,9 @@ export async function installAndLaunch(url) {
     'appium:skipLogCapture': true,
     'appium:noReset': true,
     'appium:newCommandTimeout': 180,
-  });
+    'appium:showXcodeLog': true,
+    'appium:wdaLaunchTimeout': 240_000,
+  }, 600_000);
   try {
     await openSafariPage(session, udid, url);
     await openShareSheet(session);
