@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { newSession } from './webdriver.mjs';
@@ -51,13 +52,13 @@ async function openSafariPage(session, udid, url) {
 }
 
 async function openShareSheet(session) {
-  const share = button('Share', 'ShareButton');
-  const more = button('More', 'More Options', 'MoreButton');
-  const control = await waitFor('Share или More', () => first(session, `${share} OR ${more}`));
+  const share = named('Share', 'ShareButton', 'Share Page', 'Share…');
+  const more = named('More', 'More Options', 'MoreButton', 'More Actions', 'Page Menu', 'Page Options', 'More…');
+  const control = await waitFor('Share или More', () => first(session, `${share} OR ${more}`, false));
   const names = [await control.attribute('name'), await control.attribute('label')];
   await control.click();
   if (names.some(name => /share/i.test(name))) return;
-  await (await waitFor('Share', () => first(session, share))).click();
+  await (await waitFor('Share', () => first(session, share, false))).click();
 }
 
 async function scrollShareSheet(session) {
@@ -159,6 +160,7 @@ export async function installAndLaunch(url) {
     await openInstalledIcon(session);
     return { close: () => session.close(), source: () => session.source() };
   } catch (error) {
+    await session.source().then(xml => writeFile('local/device-qa/ios-view.xml', xml)).catch(() => undefined);
     await session.close().catch(() => undefined);
     throw error;
   }
