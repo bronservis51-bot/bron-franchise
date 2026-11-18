@@ -11,6 +11,8 @@ coverage/
 .vite/
 backups/
 local-backend.log
+test-results/
+playwright-report/
 supabase/bundle*.sql
 
 supabase/.temp/

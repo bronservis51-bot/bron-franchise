@@ -8,8 +8,10 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import { createDb, readContract, root } from './db-lib.mjs';
 
+if (process.send) process.once('disconnect', () => process.exit(0));
+
 const PORT = Number(process.env.PORT ?? 54321);
-const LOCAL = join(root, 'local');
+const LOCAL = process.env.BRON_LOCAL_DATA_DIR ?? join(root, 'local');
 const DATA = join(LOCAL, 'pgdata');
 const FILES = join(LOCAL, 'files');
 mkdirSync(FILES, { recursive: true });
@@ -45,6 +47,23 @@ if (fresh) {
   console.log('Пароли записаны в local/demo-users.local.md');
 }
 
+if (process.env.BRON_DEVICE_QA === '1' && process.send) {
+  process.on('message', async message => {
+    if (message?.type !== 'device-revenue-proof') return;
+    const reply = { type: message.type };
+    try {
+      const { rows } = await db.query(`
+        select r.id, r.reported_total_minor::int as total,
+          (select count(*)::int from public.audit_event a
+           where a.entity_id = r.id and a.action = 'revenue.total') as writes
+        from public.daily_revenue r where r.comment = $1`, [message.comment]);
+      process.send({ ...reply, rows });
+    } catch (error) {
+      process.send({ ...reply, error: error.message });
+    }
+  });
+}
+
 const contract = Object.fromEntries((await readContract(db)).map((c) => [c.name, c]));
 // Команды без входа (анкета сайта франшизы lead_submit, ping) — их нет в контракте кабинета, но сайт их вызывает
 for (const r of (await db.query(`
@@ -67,14 +86,25 @@ function verify(token) {
   const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
   return claims.exp > Date.now() / 1000 ? claims : null;
 }
-async function session(userId, email) {
+async function session(userId, email, sessionId) {
+  if (!sessionId) {
+    sessionId = randomUUID();
+    await db.query('insert into auth.sessions (id, user_id) values ($1, $2)', [sessionId, userId]);
+  }
   const now = Math.floor(Date.now() / 1000);
   const user = { id: userId, aud: 'authenticated', role: 'authenticated', email, app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() };
   return {
-    access_token: sign({ sub: userId, email, role: 'authenticated', aud: 'authenticated', iat: now, exp: now + 3600, typ: 'access' }),
-    refresh_token: sign({ sub: userId, email, iat: now, exp: now + 30 * 86400, typ: 'refresh' }),
+    access_token: sign({ sub: userId, email, session_id: sessionId, role: 'authenticated', aud: 'authenticated', iat: now, exp: now + 3600, typ: 'access' }),
+    refresh_token: sign({ sub: userId, email, session_id: sessionId, iat: now, exp: now + 30 * 86400, typ: 'refresh' }),
     token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, user,
   };
+}
+
+async function isCurrentSession(claims) {
+  if (!claims?.session_id) return false;
+  const { rows } = await db.query('select 1 from auth.sessions where id = $1 and user_id = $2',
+    [claims.session_id, claims.sub]);
+  return rows.length > 0;
 }
 
 // ---------- Выполнение от имени пользователя (как PostgREST: роль + claims + заголовки) ----------
@@ -260,7 +290,8 @@ const server = http.createServer(async (req, res) => {
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks);
   const json = () => { try { return raw.length ? JSON.parse(raw.toString()) : {}; } catch { return {}; } };
-  const claims = verify((req.headers.authorization ?? '').replace(/^Bearer /i, ''));
+  const token = verify((req.headers.authorization ?? '').replace(/^Bearer /i, ''));
+  const claims = token?.typ === 'access' && token.session_id ? token : null;
   const headers = { 'x-request-id': req.headers['x-request-id'] ?? null };
   const p = url.pathname;
   try {
@@ -278,12 +309,14 @@ const server = http.createServer(async (req, res) => {
       }
       if (url.searchParams.get('grant_type') === 'refresh_token') {
         const c = verify(body.refresh_token);
-        if (!c || c.typ !== 'refresh') return send(res, 400, { code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
-        return send(res, 200, await session(c.sub, c.email));
+        if (c?.typ !== 'refresh' || !(await isCurrentSession(c))) {
+          return send(res, 400, { code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
+        }
+        return send(res, 200, await session(c.sub, c.email, c.session_id));
       }
     }
     if (p === '/auth/v1/user' && req.method === 'PUT') {
-      if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });
+      if (!(await isCurrentSession(claims))) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       const body = json();
       if (body.password) {
         await db.query(`update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')) where id = $1`, [claims.sub, body.password]);
@@ -292,11 +325,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
     if (p === '/auth/v1/user' && req.method === 'GET') {
-      if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });
+      if (!(await isCurrentSession(claims))) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
     if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: 'GoTrue (локальная эмуляция)' });
-    if (p === '/auth/v1/logout') return send(res, 204);
+    if (p === '/auth/v1/logout') {
+      if (claims) await db.query('delete from auth.sessions where id = $1 and user_id = $2', [claims.session_id, claims.sub]);
+      return send(res, 204);
+    }
     if (p.startsWith('/auth/v1/signup')) return send(res, 422, { code: 422, error_code: 'signup_disabled', msg: 'Signups not allowed for this instance' });
 
     // PostgREST
@@ -355,9 +391,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Локальный бэкенд разработки: http://localhost:${PORT}  (НЕ демо-стенд и не production)`);
-  console.log('Клиент: VITE_SUPABASE_URL=http://localhost:' + PORT + ' VITE_SUPABASE_PUBLISHABLE_KEY=local-dev-publishable-key-0000 npm run dev');
+server.listen(PORT, process.env.BRON_LOCAL_HOST, () => {
+  const { port } = server.address();
+  console.log(`Локальный бэкенд разработки: http://localhost:${port}  (НЕ демо-стенд и не production)`);
+  console.log('Клиент: VITE_SUPABASE_URL=http://localhost:' + port + ' VITE_SUPABASE_PUBLISHABLE_KEY=local-dev-publishable-key-0000 npm run dev');
+  process.send?.({ type: 'bron-local-backend-ready', port });
 });
 
 // Фоновая обработка выполняется сервером, как pg_cron в Supabase (ADR-0005)

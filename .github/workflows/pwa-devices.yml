@@ -1,0 +1,104 @@
+name: PWA on mobile devices
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [qa/pwa-device-runners]
+  pull_request:
+    paths:
+      - '.github/workflows/pwa-devices.yml'
+      - 'tests/device/**'
+      - 'tests/e2e/server.mjs'
+      - 'scripts/local-backend.mjs'
+      - 'src/platform/update.ts'
+      - 'src/platform/install.ts'
+      - 'src/platform/offline.ts'
+      - 'src/platform/outbox.ts'
+      - 'src/platform/backend.ts'
+      - 'src/platform/session.tsx'
+      - 'src/app/InstallApp.tsx'
+      - 'src/modules/revenue/**'
+      - 'public/icons/**'
+      - 'vite.config.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  installed-pwa:
+    name: Installed PWA (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            runner: ubuntu-24.04
+            driver: appium-uiautomator2-driver@8.7.0
+          - platform: ios
+            runner: macos-15
+            driver: appium-xcuitest-driver@10.7.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Appium and device driver
+        env:
+          DRIVER: ${{ matrix.driver }}
+        run: |
+          export APPIUM_HOME="$RUNNER_TEMP/bron-appium-home"
+          printf 'APPIUM_HOME=%s\n' "$APPIUM_HOME" >> "$GITHUB_ENV"
+          npm install --prefix "$RUNNER_TEMP/bron-appium" --no-audit --no-fund appium@3.6.0
+          appium_bin="$RUNNER_TEMP/bron-appium/node_modules/.bin"
+          printf '%s\n' "$appium_bin" >> "$GITHUB_PATH"
+          "$appium_bin/appium" driver install --source=npm "$DRIVER"
+      - name: Enable KVM
+        if: matrix.platform == 'android'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run on Android Emulator
+        if: matrix.platform == 'android'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis_playstore
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Europe/Moscow
+          script: npm run test:pwa:device -- android
+      - name: Boot iOS Simulator
+        if: matrix.platform == 'ios'
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          xcodebuild -version
+          sudo systemsetup -settimezone Europe/Moscow
+          IOS_UDID=$(xcrun simctl list devices available --json | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const { devices } = JSON.parse(readFileSync(0, "utf8"));
+            const phones = devices["com.apple.CoreSimulator.SimRuntime.iOS-26-2"] ?? [];
+            const phone = phones.find(device => device.name.startsWith("iPhone "));
+            if (!phone) throw new Error("No iPhone with the iOS 26.2 runtime");
+            console.log(phone.udid);')
+          printf 'DEVELOPER_DIR=%s\nIOS_UDID=%s\n' "$DEVELOPER_DIR" "$IOS_UDID" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$IOS_UDID" -b
+      - name: Run on iOS Simulator
+        if: matrix.platform == 'ios'
+        run: npm run test:pwa:device -- ios
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pwa-device-${{ matrix.platform }}
+          path: local/device-qa/
+          if-no-files-found: ignore
+          retention-days: 7

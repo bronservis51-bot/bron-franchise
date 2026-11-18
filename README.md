@@ -39,6 +39,42 @@ npm run local:backend    # локальный бэкенд разработки 
 
 Во втором терминале создайте `.env.development.local` с `VITE_SUPABASE_URL=http://localhost:54321` и `VITE_SUPABASE_PUBLISHABLE_KEY=local-dev-publishable-key-0000`, затем запустите `npm run dev`. Пароли демо-пользователей — в `local/demo-users.local.md` (этот файл не коммитится).
 
+### Браузерные проверки перед выпуском
+
+После `npm ci` один раз установите Chromium и WebKit для Playwright и получите исходники лендинга.
+
+```bash
+npx playwright install chromium webkit
+git clone https://github.com/bronservis51-bot/bronservice-franchise.git local/e2e-landing
+npm run test:e2e
+```
+
+Если лендинг уже скачан, укажите его каталог через `BRON_LANDING_PATH`.
+Каждый профиль получает отдельную временную PGlite с тестовыми данными и локальные порты.
+
+| Проект | Что проверяет |
+| --- | --- |
+| `mobile-chromium` | Pixel 7, Chromium. Доставка анкеты менеджеру и однократный учёт выручки при повторе закрытия смены |
+| `mobile-webkit` | iPhone 13, WebKit. Те же сценарии с мобильным профилем и тач-вводом |
+| `pwa-chromium` | Две сборки в режиме приложения Chromium. Обновление с сохранением черновика, очереди и сессии |
+
+Для одного профиля выполните `npm run test:e2e -- --project=mobile-webkit` и подставьте
+нужное имя. GitHub Actions запускает все три профиля на pull request и при изменении
+`main`. Проверка берёт актуальный `main` лендинга. При изменении текста или полей анкеты
+сверяйте также его ревизию. Запуск с домашнего экрана iPhone и Android требует
+[прогона на мобильной ОС](docs/runbooks/deploy.md#проверка-установки-pwa).
+
+Для проверки установленной PWA используйте workflow `PWA on mobile devices`.
+GitHub Actions поднимает Android Emulator и iOS Simulator на стандартных
+раннерах. На каждый прогон создаётся изолированная база с тестовыми данными.
+После добавления workflow в `main` его можно запустить в Actions через `Run workflow`.
+Для локального запуска с настроенным Appium используйте `npm run test:pwa:device -- android`
+или `npm run test:pwa:device -- ios` с `IOS_UDID` выбранного симулятора.
+
+Проектные скиллы для Codex лежат в `.agents/skills`. Когда вы просите проверить
+релиз или подключение франчайзи, Codex может подобрать соответствующие инструкции.
+Браузерные тесты запускаются командой выше или по событиям GitHub Actions.
+
 ## Публикация
 
 Обновление существующей системы: [docs/runbooks/deploy.md](docs/runbooks/deploy.md).
