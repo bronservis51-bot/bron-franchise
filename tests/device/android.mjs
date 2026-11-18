@@ -33,6 +33,7 @@ const menu = [
 ];
 const startup = labels(['Not now', 'Continue', 'Save and continue', 'Confirm', 'Confirm and start browsing',
   'Agree and start browsing', 'Save and start browsing', 'Start browsing', "Don’t allow", "Don't allow"]);
+const translations = labels(['Close Translations sheet']);
 const loginPage = labels(['Войти']);
 const moreMenu = labels(['More']);
 const installMenu = labels(['Add app to Home screen', 'Install']);
@@ -98,7 +99,14 @@ async function openFirefox(endpoint) {
 }
 
 async function installFromFirefox(session) {
-  await waitFor('loading the QA login page in Firefox', () => firstElement(session, loginPage), 45_000);
+  await waitFor('loading the QA login page in Firefox', async () => {
+    const translate = await firstElement(session, translations);
+    if (translate) {
+      await translate.click();
+      return;
+    }
+    return firstElement(session, loginPage);
+  }, 45_000);
   const openMenu = await waitFor('finding the Firefox menu', () => firstElement(session, ...menu));
   await openMenu.click();
   const action = await waitFor('finding the Firefox web app action or More menu',
