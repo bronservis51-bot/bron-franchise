@@ -12,6 +12,7 @@ on:
       - '.github/workflows/ci.yml'
       - 'scripts/check-availability.mjs'
       - 'deploy/timeweb/backup-alert-telegram.py'
+      - 'deploy/timeweb/availability-public.json'
       - 'tests/ops/availability-status.test.mjs'
       - 'tests/ops/test_backup_alert_telegram.py'
   workflow_dispatch:

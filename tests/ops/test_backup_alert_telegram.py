@@ -21,7 +21,7 @@ CHAT_ID = '123456789'
 
 
 class TelegramAlertTests(unittest.TestCase):
-    def invoke(self, response=None, error=None):
+    def invoke(self, response=None, error=None, *, test_delivery=False):
         opener = mock.MagicMock()
         context = opener.open.return_value.__enter__.return_value = mock.Mock()
         context.getcode.return_value = 200
@@ -34,7 +34,11 @@ class TelegramAlertTests(unittest.TestCase):
              mock.patch.object(alert, 'read_config', return_value=(TOKEN, CHAT_ID)), \
              mock.patch.object(alert.urllib.request, 'build_opener', return_value=opener) as build, \
              mock.patch('sys.stdout', output):
-            code = alert.main()
+            if test_delivery:
+                alert.send(TOKEN, CHAT_ID, test=True)
+                code = 0
+            else:
+                code = alert.main()
         self.assertNotIn(TOKEN, output.getvalue())
         self.assertNotIn('https://', output.getvalue())
         return code, output.getvalue(), opener, build
@@ -58,6 +62,34 @@ class TelegramAlertTests(unittest.TestCase):
         self.assertTrue(https._context.check_hostname)
         self.assertEqual(https._context.verify_mode, ssl.CERT_REQUIRED)
         self.assertIsInstance(redirect, alert.NoRedirect)
+
+    def test_monitoring_message_lists_only_the_specific_allowlisted_failed_checks(self):
+        with mock.patch.dict(os.environ, {'BRON_FAILED_CHECKS': 'auth,data,auth,untrusted.example.invalid'}):
+            code, _, opener, _ = self.invoke()
+        self.assertEqual(code, 0)
+        text = json.loads(opener.open.call_args.args[0].data)['text']
+        self.assertIn('Вход, API данных', text)
+        self.assertEqual(text.count('Вход'), 1)
+        self.assertNotIn('резервной копии', text)
+        self.assertNotIn('untrusted.example.invalid', text)
+
+    def test_monitoring_reports_a_backup_failure_and_missing_check_output_separately(self):
+        for failed, expected in [('backup', 'Свежесть резервной копии'),
+                                 ('', 'Результат проверки недоступен'),
+                                 ('x' * 512 + ',auth', 'Результат проверки недоступен')]:
+            with self.subTest(failed=failed[:10]), mock.patch.dict(os.environ, {'BRON_FAILED_CHECKS': failed}):
+                code, _, opener, _ = self.invoke()
+                self.assertEqual(code, 0)
+                self.assertIn(expected, json.loads(opener.open.call_args.args[0].data)['text'])
+
+    def test_manual_test_message_never_claims_an_operational_failure(self):
+        with mock.patch.dict(os.environ, {'BRON_FAILED_CHECKS': 'backup,auth'}):
+            code, _, opener, _ = self.invoke(test_delivery=True)
+        self.assertEqual(code, 0)
+        text = json.loads(opener.open.call_args.args[0].data)['text']
+        self.assertIn('тестовое уведомление', text)
+        self.assertNotIn('Тревога', text)
+        self.assertNotIn('Свежесть резервной копии', text)
 
     def test_api_rejection_and_wrong_recipient_fail_without_response_content(self):
         for response in ({'ok': False, 'description': TOKEN},

@@ -13,6 +13,14 @@ import urllib.request
 CONFIG = Path('/root/bron-secrets/telegram-alert.json')
 EVENT = 'BRON_TARGET_BACKUP_OR_HEALTH_FAILURE'
 MAX_BYTES = 65536
+CHECK_NAMES = {
+    'frontend': 'Веб-приложение',
+    'auth': 'Вход',
+    'data': 'API данных',
+    'landing': 'Приём заявок',
+    'backup': 'Свежесть резервной копии',
+    'api_config': 'Настройка мониторинга API',
+}
 
 
 class AlertError(RuntimeError):
@@ -53,9 +61,18 @@ def read_config(path):
 
 def send(token, chat_id, *, test=False):
     now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-    text = (('«Бронь Сервис»: тестовое уведомление через GitHub Actions.\nВремя: ' if test else
-             'Тревога «Бронь Сервис»: проверка сервера или резервной копии завершилась ошибкой. '
-             'Требуется проверить состояние сервера.\nВремя: ') + now)
+    failures = os.environ.get('BRON_FAILED_CHECKS')
+    if test:
+        message = '«Бронь Сервис»: тестовое уведомление через GitHub Actions.'
+    elif failures is None:
+        message = ('Тревога «Бронь Сервис»: проверка сервера или резервной копии завершилась ошибкой. '
+                   'Требуется проверить состояние сервера.')
+    else:
+        failed = set(failures.split(',')) if len(failures) <= 128 else set()
+        labels = [label for code, label in CHECK_NAMES.items() if code in failed]
+        detail = ', '.join(labels) if labels else 'Результат проверки недоступен'
+        message = f'Тревога «Бронь Сервис». {detail}.'
+    text = f'{message}\nВремя: {now}'
     request = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage',
         data=json.dumps({'chat_id': chat_id, 'text': text}, ensure_ascii=False).encode('utf-8'),
         headers={'Content-Type': 'application/json', 'Accept': 'application/json'}, method='POST')

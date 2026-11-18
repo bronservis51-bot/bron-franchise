@@ -1,6 +1,10 @@
 // No real submissions, passwords or personal data. A honeypot exercises the landing contract without inserting a lead.
-import {writeFileSync} from 'node:fs';
+import {appendFileSync,readFileSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+
+const APP_URL='https://app.bronservis.ru/';
+const API_URL='https://api.bronservis.ru';
+const BACKUP_STATUS_URL=`${API_URL}/.well-known/bron-health.json`;
 
 function utcTime(value){
  if(typeof value!=='string')return NaN;
@@ -33,15 +37,33 @@ async function backupJson(response){
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function checkAvailability(env=process.env,fetchImpl=fetch){
- const url=env.VITE_SUPABASE_URL, key=env.VITE_SUPABASE_PUBLISHABLE_KEY;
- const appUrl=new URL(env.APP_URL || 'https://bronservis51-bot.github.io/bron-franchise/');
- if(appUrl.protocol!=='https:'||appUrl.username||appUrl.password||appUrl.search||appUrl.hash)throw Error('APP_URL must be a public HTTPS application base URL');
- if(!appUrl.pathname.endsWith('/'))appUrl.pathname+='/';
- if(!url?.startsWith('https://')||!key||key.startsWith('sb_secret_'))throw Error('Public connection variables are missing or invalid');
- const backupUrl=new URL(env.BRON_BACKUP_STATUS_URL||'/.well-known/bron-health.json',url);
- if(env.BRON_BACKUP_STATUS_URL&&backupUrl.href!=='https://api.bronservis.ru/.well-known/bron-health.json')
-  throw Error('BRON_BACKUP_STATUS_URL must be the fixed Russian public health endpoint');
+function isLegacyAnonKey(key){
+ if(typeof key!=='string'||key.length>4096||!/^[-\w]+\.[-\w]+\.[-\w]+$/.test(key))return false;
+ const [header,payload]=key.split('.');
+ try{
+  return JSON.parse(Buffer.from(header,'base64url').toString('utf8'))?.alg==='HS256'&&
+    JSON.parse(Buffer.from(payload,'base64url').toString('utf8'))?.role==='anon';
+ }
+ catch{return false;}
+}
+
+function isPublicApiKey(key){
+ return typeof key==='string'&&key.length<=4096&&(/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)||isLegacyAnonKey(key));
+}
+
+function fallbackApiKey(config){
+ if(config?.app_url===APP_URL&&config.api_url===API_URL&&config.backup_status_url===BACKUP_STATUS_URL&&isLegacyAnonKey(config.api_anon_key)){
+  return config.api_anon_key;
+ }
+}
+
+function readPublicConfig(){
+ try{return JSON.parse(readFileSync(new URL('../deploy/timeweb/availability-public.json',import.meta.url),'utf8'));}
+ catch{return null;}
+}
+
+export async function checkAvailability(env=process.env,fetchImpl=fetch,publicConfig=null){
+ const key=env.BRON_AVAILABILITY_API_PUBLISHABLE_KEY||fallbackApiKey(publicConfig);
  async function check(target,init,valid,statuses){
   const start=Date.now();
   try{
@@ -50,20 +72,27 @@ export async function checkAvailability(env=process.env,fetchImpl=fetch){
    return {ok:(statuses?statuses.includes(r.status):r.ok)&&valid(body),http:r.status,ms:Date.now()-start};
   }catch{return{ok:false,http:0,ms:Date.now()-start};}
  }
- const headers={apikey:key,'Content-Type':'application/json'};
- const [frontend,auth,data,landing,backup]=await Promise.all([
-  check(new URL('app-version.json',appUrl),{},b=>typeof b?.build==='string'&&Number.isFinite(Date.parse(b.build))),
-  check(`${url}/auth/v1/health`,{headers},b=>b?.name==='GoTrue'),
-  check(`${url}/rest/v1/rpc/ping`,{method:'POST',headers,body:'{}'},b=>b==='ok'),
-  check(`${url}/rest/v1/rpc/lead_submit`,{method:'POST',headers,body:JSON.stringify({p_lead:{website:'availability-check'}})},b=>b?.ok===true),
-  check(backupUrl,{},validBackupStatus,[200,503]),
- ]);
- return {checked_at:new Date().toISOString(),checks:{frontend,auth,data,landing,backup}};
+ const probes={
+  frontend:check(new URL('app-version.json',APP_URL),{},b=>typeof b?.build==='string'&&Number.isFinite(Date.parse(b.build))),
+  backup:check(BACKUP_STATUS_URL,{},validBackupStatus,[200,503]),
+ };
+ if(isPublicApiKey(key)){
+  const headers={apikey:key,'Content-Type':'application/json'};
+  probes.auth=check(`${API_URL}/auth/v1/health`,{headers},b=>b?.name==='GoTrue');
+  probes.data=check(`${API_URL}/rest/v1/rpc/ping`,{method:'POST',headers,body:'{}'},b=>b==='ok');
+  probes.landing=check(`${API_URL}/rest/v1/rpc/lead_submit`,{method:'POST',headers,body:JSON.stringify({p_lead:{website:'availability-check'}})},b=>b?.ok===true);
+ }else{
+  probes.api_config=Promise.resolve({ok:false,http:0,ms:0});
+ }
+ const checks=Object.fromEntries(await Promise.all(Object.entries(probes).map(async ([name,result])=>[name,await result])));
+ const failed_checks=Object.keys(checks).filter(name=>!checks[name].ok);
+ return {checked_at:new Date().toISOString(),checks,failed_checks};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- const report=await checkAvailability();
+ const report=await checkAvailability(process.env,fetch,readPublicConfig());
  writeFileSync(process.env.STATUS_OUTPUT??'/tmp/bron-status.json',JSON.stringify(report,null,2)+'\n');
+ if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,`failed_checks=${report.failed_checks.join(',')}\n`);
  console.log(JSON.stringify(report));
- if(Object.values(report.checks).some(v=>!v.ok))process.exitCode=1;
+ if(report.failed_checks.length)process.exitCode=1;
 }
