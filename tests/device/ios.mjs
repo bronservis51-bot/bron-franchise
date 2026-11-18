@@ -135,13 +135,18 @@ export async function installAndLaunch(url) {
   const udid = process.env.IOS_UDID;
   if (!udid) throw new Error('Для проверки в iOS Simulator задайте IOS_UDID.');
   await run('xcrun', ['simctl', 'getenv', udid, 'HOME'], { timeout: 20_000 });
+  const runtimeVersion = process.env.IOS_PLATFORM_VERSION;
   const session = await newSession({
     platformName: 'iOS',
+    ...(runtimeVersion ? { 'appium:platformVersion': runtimeVersion } : {}),
     'appium:automationName': 'XCUITest',
     'appium:bundleId': safari,
     'appium:udid': udid,
     'appium:language': 'en',
     'appium:locale': 'en_US',
+    // Keep the CI simulator booted by simctl, without restarting it through Simulator.app.
+    'appium:isHeadless': true,
+    'appium:skipLogCapture': true,
     'appium:noReset': true,
     'appium:newCommandTimeout': 180,
   });

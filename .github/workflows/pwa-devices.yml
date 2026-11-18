@@ -90,7 +90,7 @@ jobs:
             const phone = phones.find(device => device.name.startsWith("iPhone "));
             if (!phone) throw new Error("No iPhone with the iOS 26.2 runtime");
             console.log(phone.udid);')
-          printf 'DEVELOPER_DIR=%s\nIOS_UDID=%s\n' "$DEVELOPER_DIR" "$IOS_UDID" >> "$GITHUB_ENV"
+          printf 'DEVELOPER_DIR=%s\nIOS_UDID=%s\nIOS_PLATFORM_VERSION=26.2\n' "$DEVELOPER_DIR" "$IOS_UDID" >> "$GITHUB_ENV"
           xcrun simctl bootstatus "$IOS_UDID" -b
       - name: Run on iOS Simulator
         if: matrix.platform == 'ios'
