@@ -132,9 +132,18 @@ async function installFromFirefox(session) {
 
 async function openFromLauncher(session) {
   await adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
-  const findIcon = () => firstElement(session, launcherIcon);
-  let icon = await until(findIcon, 5_000);
-  if (!icon) {
+  const openIcon = async () => {
+    const icon = await firstElement(session, launcherIcon);
+    if (!icon) return;
+    try {
+      await icon.click();
+      return true;
+    } catch (error) {
+      if (error.code !== 'stale element reference') throw error;
+    }
+  };
+  let opened = await until(openIcon, 6_000);
+  if (!opened) {
     const { stdout } = await adb('shell', 'wm', 'size');
     const display = [...stdout.matchAll(/(?:Physical|Override) size: (\d+)x(\d+)/g)].at(-1);
     if (!display) throw new Error('Could not determine Android display size for the launcher.');
@@ -143,12 +152,11 @@ async function openFromLauncher(session) {
     const y = String(Math.round(height * 0.55));
     for (const nextPage of [true, true, true, false, false, false, false]) {
       await adb('shell', 'input', 'swipe', x(nextPage ? 0.83 : 0.17), y, x(nextPage ? 0.17 : 0.83), y, '350');
-      icon = await until(findIcon, 1_800);
-      if (icon) break;
+      opened = await until(openIcon, 1_800);
+      if (opened) break;
     }
   }
-  if (!icon) throw new Error(`Could not find «${appName}» on the Android Home screen.`);
-  await icon.click();
+  if (!opened) throw new Error(`Could not open «${appName}» from the Android Home screen.`);
 }
 
 export async function installAndLaunch(url, backendUrl = url) {
