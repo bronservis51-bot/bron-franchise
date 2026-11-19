@@ -1,19 +1,17 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { Eye, EyeOff } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
 import { Button, Checkbox, Field, Input } from '../ui';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
-import { onAvailableUpdate } from '../platform/update';
+import { AppUpdateBanner } from './AppUpdateBanner';
 import { loginEmail } from '../platform/login';
 import { InstallButton } from './InstallApp';
 
 export function LoginPage() {
   const { status, signIn } = useSession();
   const navigate = useNavigate();
-  const [updateApp, setUpdateApp] = useState<(() => Promise<void>) | null>(null);
-  useEffect(() => onAvailableUpdate(fn => setUpdateApp(() => fn)), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,7 +52,7 @@ export function LoginPage() {
       </aside>
       <main className="login-panel">
         <div className="inner">
-          {updateApp && <Button size="sm" onClick={() => void updateApp().catch(e => setError({ text: e.message, detail: '' }))}>Обновить приложение</Button>}
+          <AppUpdateBanner />
           <ServerStatus s={server} onRetry={recheck} />
           <div className="card"><div className="card-body">{form()}</div></div>
           <div style={{ marginTop: 12 }}><InstallButton /></div>

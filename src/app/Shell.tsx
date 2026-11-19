@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudOff, KeyRound, LogOut, Smartphone, User, WifiOff, X } from 'lucide-react';
-import { onAvailableUpdate } from '../platform/update';
-import { AppError, command, commandsInFlight } from '../platform/backend';
+import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
@@ -12,6 +11,7 @@ import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
+import { AppUpdateBanner } from './AppUpdateBanner';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
 import { sameJson, type QueuedOperation } from '../platform/offline';
@@ -151,9 +151,6 @@ export function Shell() {
   const mainRef = useRef<HTMLElement>(null);
   const { ops, error: queueError } = useOutbox(me?.user.id, online);
   const [queueOpen, setQueueOpen] = useState(false);
-  const [updateApp,setUpdateApp]=useState<(() => Promise<void>) | null>(null);
-  const toast=useToast();
-  useEffect(()=>onAvailableUpdate(fn=>setUpdateApp(()=>fn)),[]);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = can('kb.edit') ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
@@ -191,10 +188,7 @@ export function Shell() {
           {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
           <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} />
         </header>
-        {updateApp && <div className="alert tone-info" role="status" style={{margin:'12px 24px 0'}}><div className="alert-body">Доступна новая версия приложения.</div><Button size="sm" onClick={()=>{
-          if (ops.length || commandsInFlight() || document.querySelector('dialog[open], [role="dialog"], [data-unsaved="true"]')) { toast('Завершите ввод и отправку записей перед обновлением.'); return; }
-          void updateApp().catch(e => toast(e instanceof Error ? e.message : 'Не удалось обновить приложение'));
-        }}>Обновить</Button></div>}
+        <AppUpdateBanner hasQueuedWork={ops.length > 0} />
         {!online && (
           <div className="alert tone-warning" role="status" style={{ margin: '12px 24px 0' }}>
             <WifiOff size={18} aria-hidden />

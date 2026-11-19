@@ -10,16 +10,20 @@ export function mayReload(flags: { visible: boolean; commands: number; dialog: b
   return flags.visible && flags.commands === 0 && !flags.dialog && !flags.editing && !flags.pending;
 }
 async function safeToReload() {
+  const pending = await hasPendingLocalWork();
   const editing = !!document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') ||
     [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('form input:not([type="checkbox"]):not([type="radio"]), form textarea')].some(e => !!e.value);
   return mayReload({ visible: document.visibilityState === 'visible', commands: commandsInFlight(),
-    dialog: !!document.querySelector('dialog[open],[role="dialog"],[data-unsaved="true"]'), editing, pending: await hasPendingLocalWork() });
+    dialog: !!document.querySelector('dialog[open],[role="dialog"],[data-unsaved="true"]'), editing, pending });
 }
+
+export const updateBlockedMessage = 'Завершите ввод и отправку записей перед обновлением.';
 
 /** Same release for Safari, installed PWA and desktop. No auth, queue or draft is removed. */
 export function startAppUpdates() {
   if (!('serviceWorker' in navigator)) return;
   let registration: ServiceWorkerRegistration | undefined; let checking = false; let lastCheck = 0; let target = ''; let reloading = false;
+  let applying: Promise<void> | null = null;
   const base = import.meta.env.BASE_URL;
   const waitForInstall = async () => {
     const worker = registration?.installing ?? registration?.waiting;
@@ -35,15 +39,18 @@ export function startAppUpdates() {
       worker.addEventListener('statechange', changed); changed();
     });
   };
-  const apply = async () => {
+  const applyUpdate = async () => {
     if (reloading) return;
-    if (!(await safeToReload())) throw new Error('Завершите ввод и отправку записей перед обновлением.');
-    await registration?.update(); await waitForInstall();
-    if (!(await safeToReload())) return;
+    if (!(await safeToReload())) throw new Error(updateBlockedMessage);
+    try { await registration?.update(); }
+    catch { throw new Error('Не удалось проверить новую версию. Проверьте подключение и повторите.'); }
+    await waitForInstall();
+    if (!(await safeToReload())) throw new Error(updateBlockedMessage);
     reloading = true;
     try { sessionStorage.setItem('bron.update-attempt', JSON.stringify({ target, at: Date.now() })); } catch { /* no storage needed */ }
     location.reload();
   };
+  const apply = () => applying ??= applyUpdate().finally(() => { applying = null; });
   const check = async () => {
     if (checking || !navigator.onLine || document.visibilityState !== 'visible' || Date.now() - lastCheck < 30_000) return;
     checking = true; lastCheck = Date.now();
