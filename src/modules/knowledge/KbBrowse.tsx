@@ -100,10 +100,10 @@ function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
   return (
     <>
       <section className="kb-search-panel" aria-label="Поиск по базе знаний">
-        <label className="kb-search-heading" htmlFor="kb-q">Найдём ответ на ваш вопрос</label>
+        <label className="kb-search-heading" htmlFor="kb-q">Поиск по базе знаний</label>
         <div className="kb-search-box" role="search">
           <Search size={22} aria-hidden />
-          <input id="kb-q" type="search" className="kb-search-input" placeholder="Например: как провести собеседование"
+          <input id="kb-q" type="search" className="kb-search-input" placeholder="Например, смена"
             value={q} onChange={(e) => update('q', e.target.value)} autoComplete="off" maxLength={200}
             aria-describedby="kb-search-hint" aria-controls={active ? 'kb-search-results' : undefined} />
           {q && <button type="button" className="kb-search-clear" onClick={() => { update('q', ''); document.getElementById('kb-q')?.focus(); }}>Очистить</button>}
@@ -165,10 +165,11 @@ function SectionTiles({ nodes }: { nodes: (SectionNode & { children: SectionNode
           <SectionIcon icon={s.icon} size={22} />
           <span className="kb-tile-main">
             <span className="kb-tile-title">{s.title}</span>
-            {s.description && <span className="kb-tile-desc">{s.description}</span>}
-            {s.children.length > 0 && <span className="kb-tile-subs">{s.children.map((c) => c.title).join(' · ')}</span>}
+            {s.children.length > 0
+              ? <span className="kb-tile-subs">{s.children.map((c) => c.title).join(', ')}</span>
+              : s.description && <span className="kb-tile-desc">{s.description}</span>}
           </span>
-          <span className="kb-tile-count" aria-label={`${s.count} опубликованных материалов`}>{s.count || 'Скоро'}</span>
+          <span className="kb-tile-count" aria-label={`Опубликовано материалов: ${s.count}`}>{s.count || 'Пусто'}</span>
         </Link>
       ))}
     </div>
@@ -191,7 +192,7 @@ export function KbHomePage() {
 
   return (
     <div className="kb">
-      <PageHeader title="База знаний" sub="Бронь Сервис · от запуска до ежедневной работы"
+      <PageHeader title="База знаний"
         actions={editor ? (
           <>
             <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Вопросы{inbox.data?.unanswered ? ` (${inbox.data.unanswered})` : ''}</LinkButton>
@@ -247,7 +248,7 @@ export function KbHomePage() {
               </div>
               {editor && Boolean(misses.data?.length) && (
                 <Card title="Искали и не нашли" icon={<SearchX size={18} />}>
-                  <p className="faint">Запросы франчайзи и сотрудников без результатов за 60 дней — темы для новых статей.</p>
+                  <p className="faint">Запросы без результатов за 60 дней.</p>
                   <div className="chips" style={{ marginBottom: 0 }}>{misses.data!.map((m) => <span key={m.query} className="chip" style={{ cursor: 'default' }}>{m.query}{m.times > 1 ? ` ×${m.times}` : ''}</span>)}</div>
                 </Card>
               )}
@@ -337,9 +338,9 @@ export function SectionPage() {
               )}
               {list.length > 0 ? (
                 <Card bodyless><ul className="kb-list">{list.map((a) => <ArticleItem key={a.id} a={a} editor={editor} />)}</ul></Card>
-              ) : p.children.length === 0 && <EmptyState title="Материалы этого раздела готовятся" text="Если вопрос нужен для работы сейчас, передайте его менеджеру."
-                action={<Button onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />}
-              {!editor && <p className="faint" style={{ marginTop: 12 }}>Не нашли нужное? <button type="button" className="link-btn" onClick={() => setAsking(true)}>Задайте вопрос менеджеру</button></p>}
+              ) : p.children.length === 0 && <EmptyState title="В этом разделе пока нет материалов"
+                action={<Button onClick={() => setAsking(true)}>Задать вопрос</Button>} />}
+              {!editor && (list.length > 0 || p.children.length > 0) && <p className="faint" style={{ marginTop: 12 }}><button type="button" className="link-btn" onClick={() => setAsking(true)}>Задать вопрос менеджеру</button></p>}
               {creating && <NewArticleDialog section={p.section.id} onClose={() => setCreating(false)} onCreated={(aid) => navigate(`/kb/articles/${aid}/edit`)} />}
               {editing && <SectionEditDialog section={p.section} onClose={() => setEditing(false)} onDeleted={() => navigate('/kb')} />}
               {asking && <AskDialog initial={`${p.section.title}: `} onClose={() => setAsking(false)} />}
@@ -545,7 +546,7 @@ export function KbManagePage() {
   return (
     <div className="kb">
       <Crumbs items={[{ to: '/kb', label: 'База знаний' }, { label: 'Управление' }]} />
-      <PageHeader title="Управление базой знаний" sub="Все статьи, их читаемость и оценки; структура разделов" actions={<LinkButton to="/learning/manage">Обучение сотрудников</LinkButton>} />
+      <PageHeader title="Управление базой знаний" actions={<LinkButton to="/learning/manage">Обучение сотрудников</LinkButton>} />
       <div className="tabs" role="tablist" aria-label="Управление">
         <button type="button" role="tab" aria-selected={tab === 'articles'} onClick={() => setTab('articles')}>Статьи</button>
         <button type="button" role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Разделы</button>
@@ -582,7 +583,6 @@ export function KbManagePage() {
       ) : (
         <>
           <div className="row" style={{ marginBottom: 12 }}><Button variant="primary" onClick={() => setEdit('new')}><FolderTree size={16} aria-hidden />Новый раздел</Button></div>
-          <p className="faint">Два уровня: раздел и подраздел. Хорошая структура — 5–9 разделов верхнего уровня по задачам франчайзи («Оклейка», «Оборудование», «Клиенты»), а не по отделам компании.</p>
           <DataState query={secs}>
             {() => (
               <Card bodyless>

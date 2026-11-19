@@ -324,6 +324,10 @@ function ProcurementWorkspace() {
   const currentCatalog = catalog.data && !catalogBlocked ? { ...catalog.data, stale: catalog.data.stale || !catalog.data.fetched_at || clock - new Date(catalog.data.fetched_at).getTime() > 5 * 60_000 || !!catalog.error || !navigator.onLine } : undefined;
   const request = list.data?.requests.find(r => r.id === selected);
   const refresh = async () => { await qc.invalidateQueries({ queryKey: ['procurement'] }); };
+  const refreshManually = () => {
+    if (!navigator.onLine) { toast('Нет сети. Проверьте подключение и повторите.'); return; }
+    void refresh();
+  };
   const action = async (a: ProcurementAction, data: unknown) => {
     if (!request) return;
     setBusy(true); setError(null);
@@ -358,8 +362,9 @@ function ProcurementWorkspace() {
   const needsAttention = list.data?.requests.filter(r => isManager ? r.status === 'submitted' : r.status === 'offered').length ?? 0;
   const tabs: { id: 'catalog' | 'cart' | 'requests' | 'demand'; label: string }[] = isManager ? [{ id: 'requests', label: `Заявки${needsAttention ? ` · ${needsAttention}` : ''}` }, { id: 'demand', label: 'К закупке' }, { id: 'catalog', label: 'Каталог' }] : [{ id: 'catalog', label: 'Каталог' }, { id: 'cart', label: `Корзина${draft.items.length ? ` · ${draft.items.length}` : ''}` }, { id: 'requests', label: `Мои заказы${needsAttention ? ` · ${needsAttention}` : ''}` }];
   const blocked = list.error && ['forbidden', 'unauthenticated'].includes(toAppError(list.error).code);
+  const refreshing = catalog.isFetching || list.isFetching;
   return <div className="procurement" data-testid="procurement-page" data-unsaved={draft.items.length ? 'true' : undefined}>
-    <PageHeader title={isManager ? 'Закупки партнёров' : 'Материалы'} actions={<Button size="sm" aria-label="Обновить каталог и заказы" title="Обновить" onClick={() => void refresh()} disabled={busy}><RefreshCw size={18} aria-hidden /></Button>} />
+    <PageHeader title={isManager ? 'Закупки партнёров' : 'Материалы'} actions={<Button size="sm" aria-label={refreshing ? 'Обновляем каталог и заказы' : 'Обновить каталог и заказы'} title="Обновить" onClick={refreshManually} disabled={busy} loading={refreshing}>{!refreshing && <RefreshCw size={18} aria-hidden />}</Button>} />
     {!isManager && <PersonalStoreLink />}
     <div className="procurement-top"><Tabs tabs={tabs} value={tab} onChange={v => { setTab(v); setSelected(null); setError(null); }} label="Закупки" /></div>
     {!navigator.onLine && <div className="procurement-note warning" role="status">Нет сети. Черновик остаётся на этом устройстве; отправка и подтверждение недоступны.</div>}

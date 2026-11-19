@@ -288,6 +288,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .alert { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); border-radius: var(--radius); border: 1px solid transparent; }
 .alert .alert-body { flex: 1; min-width: 0; }
+.app-update { align-items: center; flex-wrap: wrap; }
+.app-update .alert-body { flex-basis: 14rem; }
+.main > .app-update { margin: 12px 24px 0; }
+.login-panel .app-update { margin-bottom: 12px; }
 .alert.tone-danger { border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
 .alert.tone-warning { border-color: color-mix(in srgb, var(--warning) 25%, transparent); }
 .alert.tone-info { border-color: color-mix(in srgb, var(--info) 25%, transparent); }
