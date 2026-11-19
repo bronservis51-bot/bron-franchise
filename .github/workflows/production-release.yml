@@ -188,8 +188,9 @@ jobs:
           awk -v host="$PRODUCTION_TAILSCALE_HOST" 'NF { count++; if ($1 != host || $2 != "ssh-ed25519" || NF != 3) bad=1 } END { exit (count != 1 || bad) }' "$ssh_dir/known_hosts"
           # The Action supplies --accept-routes when connecting. Disable them before SSH.
           sudo -n /usr/local/bin/tailscale set --accept-routes=false
+          # Keep access to the daemon's Unix socket and block the proxy's direct IP fallback.
           ssh -F /dev/null -T -i "$ssh_dir/id_ed25519" \
-            -o 'ProxyCommand=sudo -n /usr/local/bin/tailscale nc %h %p' \
+            -o 'ProxyCommand=sudo -n /usr/bin/unshare --net -- /usr/local/bin/tailscale nc %h %p' \
             -o BatchMode=yes -o IdentitiesOnly=yes -o ForwardAgent=no -o ClearAllForwardings=yes \
             -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
