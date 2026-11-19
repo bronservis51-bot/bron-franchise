@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -19,6 +20,7 @@ SPEC = importlib.util.spec_from_file_location('console_diagnostic', SCRIPT)
 diag = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(diag)
 sha = lambda data: hashlib.sha256(data).hexdigest()
+ISOLATED_SYS = SimpleNamespace(platform=sys.platform, flags=SimpleNamespace(isolated=True))
 
 
 class DiagnosticTests(unittest.TestCase):
@@ -234,6 +236,7 @@ class DiagnosticTests(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             for name in ('getuid', 'geteuid', 'getgid', 'getegid'):
                 stack.enter_context(mock.patch.object(os, name, return_value=0))
+            stack.enter_context(mock.patch.object(diag, 'sys', ISOLATED_SYS))
             stack.enter_context(mock.patch.object(diag, 'SELF', diag.__file__))
             evaluate = stack.enter_context(mock.patch.object(diag, 'evaluate', return_value=value))
             stack.enter_context(mock.patch.object(os, 'dup2', side_effect=AssertionError('NO_STDIO_REDIRECT')))
@@ -256,6 +259,7 @@ class DiagnosticTests(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             for name in ('getuid', 'geteuid', 'getgid', 'getegid'):
                 stack.enter_context(mock.patch.object(os, name, return_value=0))
+            stack.enter_context(mock.patch.object(diag, 'sys', ISOLATED_SYS))
             stack.enter_context(mock.patch.object(diag, 'SELF', diag.__file__))
             stack.enter_context(mock.patch.object(diag, 'evaluate', side_effect=KeyboardInterrupt()))
             output = io.StringIO()

@@ -2,15 +2,36 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location('t51_response', ROOT / 'docs/runbooks/payloads/t51-mcp-response.py')
-m = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(m)
+PAYLOADS = Path('docs/runbooks/payloads')
+T51_REVISION = '029e0e006a168f7919fa0a3032b9a0f3da813be4'
 START = 1794716000000
+
+
+def load_t51_response():
+    # Later relay tasks changed the shared decoder. Use the historical bytes
+    # that the T51 response builder still validates against its original pin.
+    decoder = subprocess.check_output(
+        ['git', 'show', f'{T51_REVISION}:{(PAYLOADS / "mcp-fence-result.py").as_posix()}'],
+        cwd=ROOT,
+    )
+    with tempfile.TemporaryDirectory(prefix='bron-t51-fixture-') as directory:
+        fixture = Path(directory)
+        (fixture / 'mcp-fence-result.py').write_bytes(decoder)
+        for name in ('t51-mcp-response.py', 't51-mcp-ready.py'):
+            (fixture / name).write_bytes((ROOT / PAYLOADS / name).read_bytes())
+        spec = importlib.util.spec_from_file_location('t51_response', fixture / 't51-mcp-response.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+
+m = load_t51_response()
 
 
 def request():
