@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -I
 """Publish one trusted CI package on the existing target, using the T64 exchange and ledger."""
+import base64
 import ctypes
 import datetime as dt
 import fcntl
@@ -29,6 +30,9 @@ DOCKER = '/usr/bin/docker'
 PYTHON = '/usr/bin/python3'
 APP = 'https://app.bronservis.ru'
 API = 'https://api.bronservis.ru'
+AUTH = API + '/auth/v1/health'
+PING = API + '/rest/v1/rpc/ping'
+LEAD = API + '/rest/v1/rpc/lead_submit'
 MANIFEST = 'release-manifest.json'
 CORE = ('index.html', 'app-version.json', 'manifest.webmanifest', 'sw.js', MANIFEST)
 MIGRATION_PATTERN = r'^([0-9]{4}|[0-9]{14})_[a-zA-Z0-9_-]+\.sql$'
@@ -285,6 +289,10 @@ def migration_sql(ledger, pending):
     return ('\n'.join(parts) + '\n').encode()
 
 
+def immutable_asset(name):
+    return name.startswith('assets/') or re.fullmatch(r'workbox-[a-fA-F0-9]{8,64}\.js', name) is not None
+
+
 def existing_assets(live):
     found = {}
     total = 0
@@ -299,12 +307,28 @@ def existing_assets(live):
             total += len(value)
             if len(found) > MAX_FILES or total > LIMIT:
                 raise Blocked('OLD_ASSET_BOUND')
+    for path in live.glob('workbox-*.js'):
+        if immutable_asset(path.name):
+            value = read_file(path)
+            found[path.name] = value
+            total += len(value)
+            if len(found) > MAX_FILES or total > LIMIT:
+                raise Blocked('OLD_ASSET_BOUND')
     return found
 
 
-def stage(path, files):
-    path.mkdir(mode=0o755)
-    path.chmod(0o755)
+def asset_additions(existing, incoming):
+    if any(not immutable_asset(name) for name in incoming):
+        raise Blocked('RETAIN_OUTSIDE_ASSETS')
+    if any(name in existing and existing[name] != value for name, value in incoming.items()):
+        raise Blocked('SAME_ASSET_PATH_DIFFERENT_CONTENT')
+    additions = {name: value for name, value in incoming.items() if name not in existing}
+    if len(existing) + len(additions) > MAX_FILES or sum(map(len, existing.values())) + sum(map(len, additions.values())) > LIMIT:
+        raise Blocked('RETAINED_ASSET_BOUND')
+    return additions
+
+
+def stage_files(path, files, *, atomic_additions=False):
     for name, value in files.items():
         target = path / relative(name)
         parent = path
@@ -313,24 +337,47 @@ def stage(path, files):
             if not parent.exists():
                 parent.mkdir(mode=0o755)
                 parent.chmod(0o755)
+                sync_dir(parent.parent)
             checked_directory(parent)
-        write_new(target, value, 0o644)
-        if read_file(target) != value:
-            raise Blocked('STAGE_READBACK')
+        written = parent / ('.asset-' + uuid4().hex) if atomic_additions else target
+        try:
+            write_new(written, value, 0o644)
+            if read_file(written) != value:
+                raise Blocked('STAGE_READBACK')
+            if atomic_additions:
+                rename_atomic(written, target, 1)  # RENAME_NOREPLACE
+        finally:
+            if atomic_additions:
+                written.unlink(missing_ok=True)
     sync_dir(path)
     sync_dir(path.parent)
 
 
-def exchange(first, second):
+def stage(path, files):
+    path.mkdir(mode=0o755)
+    path.chmod(0o755)
+    stage_files(path, files)
+
+
+def prepare_rollback_assets(live, additions):
+    # With both sets present before SQL, inverse exchange needs no file copies.
+    stage_files(live, additions, atomic_additions=True)
+
+
+def rename_atomic(first, second, flags):
     libc = ctypes.CDLL(None, use_errno=True)
     function = getattr(libc, 'renameat2', None)
     if function is None:
         raise Blocked('ATOMIC_EXCHANGE_UNAVAILABLE')
     function.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     function.restype = ctypes.c_int
-    if function(-100, os.fsencode(first), -100, os.fsencode(second), 2):
-        raise Blocked('ATOMIC_EXCHANGE_FAILED')
+    if function(-100, os.fsencode(first), -100, os.fsencode(second), flags):
+        raise Blocked('ATOMIC_RENAME_FAILED')
     sync_dir(first.parent)
+
+
+def exchange(first, second):
+    rename_atomic(first, second, 2)  # RENAME_EXCHANGE
 
 
 def command(arguments, *, stdin=None, timeout=30):
@@ -392,8 +439,32 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def download(url, limit):
-    request = Request(url, headers={'Cache-Control': 'no-cache'})
+def public_key(key):
+    if not isinstance(key, str) or not 0 < len(key) <= 4096:
+        return False
+    if re.fullmatch(r'sb_publishable_[a-zA-Z0-9_-]+', key):
+        return True
+    if not re.fullmatch(r'[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+', key):
+        return False
+    try:
+        header, payload, _signature = key.split('.')
+        header, payload = [document(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4)))
+                           for part in (header, payload)]
+        return header.get('alg') == 'HS256' and payload.get('role') == 'anon'
+    except (Blocked, ValueError):
+        return False
+
+
+def download(url, limit, *, key=None, body=None):
+    headers = {'Cache-Control': 'no-cache'}
+    if key is not None:
+        if url not in (AUTH, PING, LEAD):
+            raise Blocked('PUBLIC_PROBE_ORIGIN')
+        if not public_key(key):
+            raise Blocked('PUBLIC_PROBE_KEY_INVALID')
+        headers['apikey'] = key
+        headers['Content-Type'] = 'application/json'
+    request = Request(url, data=body, headers=headers)
     try:
         with build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=8) as response:
             value = response.read(limit + 1)
@@ -404,7 +475,23 @@ def download(url, limit):
         raise Blocked('PUBLIC_RESPONSE_UNAVAILABLE') from None
 
 
-def public_health(files):
+def probe_services(key):
+    probes = (
+        ('AUTH', AUTH, None, lambda value: isinstance(value, dict) and value.get('name') == 'GoTrue'),
+        ('DATA', PING, b'{}', lambda value: value == 'ok'),
+        ('LANDING', LEAD, b'{"p_lead":{"website":"availability-check"}}',
+         lambda value: isinstance(value, dict) and value.get('ok') is True),
+    )
+    for name, url, body, valid in probes:
+        try:
+            response = json.loads(download(url, 65536, key=key, body=body), object_pairs_hook=unique_object)
+            if not valid(response):
+                raise Blocked('USABILITY_PROBE_RESPONSE')
+        except (Blocked, ValueError):
+            raise Blocked('PUBLIC_' + name + '_PROBE') from None
+
+
+def public_health(files, probe_key):
     for name, value in files.items():
         endpoint = '/' if name == 'index.html' else '/' + quote(name)
         if download(APP + endpoint, len(value)) != value:
@@ -417,6 +504,7 @@ def public_health(files):
             raise Blocked('PUBLIC_HEALTH_STALE')
     if health.get('healthy') is not True:
         raise Blocked('PUBLIC_HEALTH_UNHEALTHY')
+    probe_services(probe_key)
 
 
 def live_core(site):
@@ -424,21 +512,22 @@ def live_core(site):
     return {name: read_file(live / name) for name in CORE}
 
 
-def publish_frontend(site, state, package, *, before_switch=lambda: None, after_switch=lambda: None):
+def publish_frontend(site, state, package, *, probe_key, before_switch=lambda: None, after_switch=lambda: None):
     live = checked_directory(site / 'app')
     prior = live_core(site)
     if document(prior[MANIFEST]).get('sourceCommit') != package['expected']:
         raise Blocked('EXPECTED_LIVE_SOURCE_MISMATCH')
     files = dict(package['site'])
-    retained = []
-    for name, value in existing_assets(live).items():
-        if name in files and value != files[name]:
-            raise Blocked('SAME_ASSET_PATH_DIFFERENT_CONTENT')
-        if name not in files:
-            files[name] = value
-            retained.append(name)
+    old_assets = existing_assets(live)
+    candidate_assets = {name: value for name, value in files.items() if immutable_asset(name)}
+    retained = asset_additions(candidate_assets, old_assets)
+    additions = asset_additions(old_assets, candidate_assets)
+    new_chunk = next((name for name in additions if name.startswith('assets/') and name.endswith('.js')), None)
+    new_chunk_probe = {new_chunk: additions[new_chunk]} if new_chunk else {}
+    files.update(retained)
     before = site / ('.app-before-release-' + package['source'][:12] + '-' + uuid4().hex)
     stage(before, files)
+    prepare_rollback_assets(live, additions)
     note = {'source_sha': package['source'], 'previous_source_sha': package['expected'], 'before': before.name,
             'old_manifest_sha256': digest(prior[MANIFEST]), 'new_manifest_sha256': digest(files[MANIFEST]),
             'retained_assets': len(retained)}
@@ -452,7 +541,8 @@ def publish_frontend(site, state, package, *, before_switch=lambda: None, after_
         if live_core(site)[MANIFEST] != files[MANIFEST]:
             raise Blocked('LIVE_MANIFEST_READBACK')
         after_switch()
-        public_health({name: files[name] for name in (*CORE, *retained[:1])})
+        public_files = {name: files[name] for name in (*CORE, *tuple(retained)[:1])}
+        public_health({**public_files, **new_chunk_probe}, probe_key)
         result = {**note, 'status': 'PUBLISHED'}
         receipt(state, 'latest.json', result)
         return result
@@ -471,8 +561,9 @@ def publish_frontend(site, state, package, *, before_switch=lambda: None, after_
         except Exception:
             raise Blocked('PUBLISH_OR_ROLLBACK_INSPECTION_REQUIRED') from None
         try:
-            public_health(prior)
+            public_health({**prior, **new_chunk_probe}, probe_key)
         except Exception:
+            receipt(state, 'latest.json', {**note, 'status': 'FRONTEND_ROLLED_BACK_PUBLIC_UNVERIFIED'})
             raise Blocked('FRONTEND_ROLLED_BACK_PUBLIC_UNVERIFIED') from None
         receipt(state, 'latest.json', {**note, 'status': 'FRONTEND_ROLLED_BACK'})
         raise Blocked('FRONTEND_ROLLED_BACK') from None
@@ -482,12 +573,14 @@ def trusted_config():
     checked_directory(CONFIG.parent, private=True)
     config = document(read_file(CONFIG, limit=65536, private=True))
     keys = {'site_root', 'state_dir', 'backup_program', 'restore_receipt', 'restore_receipt_sha256',
-            'target_db_id', 'target_db_image'}
+            'target_db_id', 'target_db_image', 'public_probe_key'}
     if (set(config) != keys or not matches(SHA, config['target_db_id'])
             or not matches(SHA, config['restore_receipt_sha256'])
             or not isinstance(config['target_db_image'], str) or not config['target_db_image'].startswith('sha256:')
             or not matches(SHA, config['target_db_image'][7:])):
         raise Blocked('CONFIG_INVALID')
+    if not public_key(config['public_probe_key']):
+        raise Blocked('PUBLIC_PROBE_KEY_INVALID')
     return config
 
 
@@ -498,7 +591,7 @@ def readiness(config, site):
     read_file(backup)
     command([PYTHON, '-I', str(backup), '--check-age'])
     containers = inspect_target(config, site)
-    public_health(live_core(site))
+    public_health(live_core(site), config['public_probe_key'])
     return containers
 
 
@@ -554,7 +647,8 @@ def main():
             if inspect_target(config, site) != containers:
                 raise Blocked('TARGET_CONTAINERS_CHANGED')
 
-        return publish_frontend(site, state, package, before_switch=apply_migrations, after_switch=check_target)
+        return publish_frontend(site, state, package, probe_key=config['public_probe_key'],
+                                before_switch=apply_migrations, after_switch=check_target)
 
 
 def interrupted(_signal_number, _frame):

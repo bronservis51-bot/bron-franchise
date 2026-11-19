@@ -1,3 +1,5 @@
+import base64
+import datetime as dt
 import hashlib
 import importlib.util
 import io
@@ -20,6 +22,7 @@ API = 'https://api.bronservis.ru'
 BASE = '0013_order_link.sql'
 NEXT = '20261119000004_released.sql'
 OLD_ASSET = b'chunk for a previously opened tab'
+PROBE_KEY = 'sb_publishable_testing_only'
 
 
 def sha(data):
@@ -33,7 +36,8 @@ def json_bytes(data):
 def site(source):
     files = {'index.html': b'<html></html>', 'app-version.json': b'{}',
              'manifest.webmanifest': b'{"scope":"/","start_url":"/"}', 'sw.js': b'/* */',
-             'assets/app-B8Kj1H7q.js': b'new chunk'}
+             f'workbox-{source[:8]}.js': b'worker import',
+             f'assets/app-{source[:8]}.js': b'app chunk'}
     files['release-manifest.json'] = json_bytes({'format': 1, 'sourceCommit': source, 'base': '/', 'apiOrigin': API,
         'files': [{'file': name, 'bytes': len(value), 'sha256': sha(value)} for name, value in files.items()]})
     return files
@@ -99,13 +103,23 @@ class ReleaseTests(unittest.TestCase):
             before['assets/app-OldChunk.js'] = OLD_ASSET
             release.stage(live, before)
             new = site(NEW)
-            with patch.object(release, 'public_health', side_effect=[release.Blocked('UNHEALTHY'), None]):
+            def verify_prepared():
+                self.assertEqual(release.live_core(root)['release-manifest.json'], before['release-manifest.json'])
+                self.assertEqual((live / 'assets/app-bbbbbbbb.js').read_bytes(), new['assets/app-bbbbbbbb.js'])
+                self.assertEqual((live / 'workbox-bbbbbbbb.js').read_bytes(), new['workbox-bbbbbbbb.js'])
+            with patch.object(release, 'public_health', side_effect=[release.Blocked('UNHEALTHY'), None]) as probe:
                 with self.assertRaisesRegex(release.Blocked, 'FRONTEND_ROLLED_BACK'):
-                    release.publish_frontend(root, root, {'source': NEW, 'expected': OLD, 'site': new})
+                    release.publish_frontend(root, root, {'source': NEW, 'expected': OLD, 'site': new},
+                                             probe_key=PROBE_KEY, before_switch=verify_prepared)
+            for check in probe.call_args_list:
+                self.assertEqual(check.args[0]['assets/app-bbbbbbbb.js'], new['assets/app-bbbbbbbb.js'])
             self.assertEqual(json.loads((live / 'release-manifest.json').read_bytes())['sourceCommit'], OLD)
             self.assertEqual((live / 'assets/app-OldChunk.js').read_bytes(), OLD_ASSET)
+            self.assertEqual((live / 'assets/app-bbbbbbbb.js').read_bytes(), new['assets/app-bbbbbbbb.js'])
+            self.assertTrue((live / 'workbox-aaaaaaaa.js').is_file())
+            self.assertTrue((live / 'workbox-bbbbbbbb.js').is_file())
             with patch.object(release, 'public_health'):
-                release.publish_frontend(root, root, {'source': NEW, 'expected': OLD, 'site': new})
+                release.publish_frontend(root, root, {'source': NEW, 'expected': OLD, 'site': new}, probe_key=PROBE_KEY)
             self.assertEqual(json.loads((live / 'release-manifest.json').read_bytes())['sourceCommit'], NEW)
             self.assertEqual((live / 'assets/app-OldChunk.js').read_bytes(), OLD_ASSET)
 
@@ -117,8 +131,87 @@ class ReleaseTests(unittest.TestCase):
             def unexpected_migrate():
                 self.fail('Migration ran before the expected live source was checked')
             with self.assertRaisesRegex(release.Blocked, 'EXPECTED_LIVE_SOURCE_MISMATCH'):
-                release.publish_frontend(root, root, pending, before_switch=unexpected_migrate)
+                release.publish_frontend(root, root, pending, probe_key=PROBE_KEY, before_switch=unexpected_migrate)
             self.assertEqual({entry.name for entry in root.iterdir()}, {'app'})
+
+    def test_failed_rollback_asset_preparation_blocks_sql_and_keeps_live_core(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            previous = site(OLD)
+            release.stage(root / 'app', previous)
+            package = {'source': NEW, 'expected': OLD, 'site': site(NEW)}
+            def unexpected_migrate():
+                self.fail('Migration ran with incomplete rollback assets')
+            with patch.object(release, 'prepare_rollback_assets', side_effect=release.Blocked('ASSET_SETUP_FAILED')):
+                with self.assertRaisesRegex(release.Blocked, 'ASSET_SETUP_FAILED'):
+                    release.publish_frontend(root, root, package, probe_key=PROBE_KEY, before_switch=unexpected_migrate)
+            self.assertEqual(release.live_core(root)['release-manifest.json'], previous['release-manifest.json'])
+            self.assertEqual((root / 'app/workbox-aaaaaaaa.js').read_bytes(), previous['workbox-aaaaaaaa.js'])
+
+    def test_existing_immutable_asset_collision_blocks_before_sql(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            previous = site(OLD)
+            release.stage(root / 'app', previous)
+            candidate = {**site(NEW), 'assets/app-aaaaaaaa.js': b'changed existing hash'}
+            def unexpected_migrate():
+                self.fail('Migration ran despite an immutable asset collision')
+            with self.assertRaisesRegex(release.Blocked, 'SAME_ASSET_PATH_DIFFERENT_CONTENT'):
+                release.publish_frontend(root, root, {'source': NEW, 'expected': OLD, 'site': candidate},
+                                         probe_key=PROBE_KEY, before_switch=unexpected_migrate)
+            self.assertEqual(release.live_core(root)['release-manifest.json'], previous['release-manifest.json'])
+
+    def test_canonical_service_probes_and_noninserting_honeypot(self):
+        cases = {'/auth/v1/health': {'name': 'GoTrue'}, '/rest/v1/rpc/ping': 'ok',
+                 '/rest/v1/rpc/lead_submit': {'ok': True}}
+        with patch.object(release, 'download', side_effect=[json_bytes(response) for response in cases.values()]) as download:
+            release.probe_services(PROBE_KEY)
+        self.assertEqual([call.args[0] for call in download.call_args_list], [API + path for path in cases])
+        self.assertEqual([call.kwargs['key'] for call in download.call_args_list], [PROBE_KEY] * 3)
+        self.assertEqual([call.kwargs.get('body') for call in download.call_args_list],
+                         [None, b'{}', b'{"p_lead":{"website":"availability-check"}}'])
+        with patch.object(release, 'download', side_effect=[json_bytes(cases['/auth/v1/health']), b'"not-ok"']):
+            with self.assertRaisesRegex(release.Blocked, 'PUBLIC_DATA_PROBE'):
+                release.probe_services(PROBE_KEY)
+        with patch.object(release, 'build_opener') as open_connection:
+            with self.assertRaisesRegex(release.Blocked, 'PUBLIC_PROBE_ORIGIN'):
+                release.download('https://wrong.example.test/auth/v1/health', 1024, key=PROBE_KEY)
+            open_connection.assert_not_called()
+
+    def test_accepts_only_public_key_shapes(self):
+        def jwt(alg, role):
+            tokens = [json_bytes({'alg': alg}), json_bytes({'role': role}), b'synthetic']
+            return '.'.join(base64.urlsafe_b64encode(token).decode().rstrip('=') for token in tokens)
+        self.assertTrue(release.public_key(PROBE_KEY))
+        self.assertTrue(release.public_key(jwt('HS256', 'anon')))
+        for key in ('sb_secret_testing_only', jwt('HS256', 'service_role'), jwt('none', 'anon'), 'bad.jwt.data'):
+            with self.subTest(key=key):
+                self.assertFalse(release.public_key(key))
+
+    def test_persistent_api_failure_rolls_back_on_disk_and_records_public_verification_split(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            live = root / 'app'
+            release.stage(live, site(OLD))
+            package = {'source': NEW, 'expected': OLD, 'site': site(NEW)}
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
+            def failed_auth(url, _limit, **options):
+                if url.startswith(release.APP + '/'):
+                    path = url.removeprefix(release.APP + '/') or 'index.html'
+                    return (live / path).read_bytes()
+                if url == API + '/.well-known/bron-health.json':
+                    return json_bytes({'checked_at': now, 'last_backup_utc': now, 'healthy': True})
+                if url == release.AUTH and options.get('key') == PROBE_KEY:
+                    return b'{"name":"Unhealthy"}'
+                self.fail('Unexpected endpoint in failed Auth release probe')
+            with patch.object(release, 'download', side_effect=failed_auth) as download:
+                with self.assertRaisesRegex(release.Blocked, 'FRONTEND_ROLLED_BACK_PUBLIC_UNVERIFIED'):
+                    release.publish_frontend(root, root, package, probe_key=PROBE_KEY)
+            self.assertEqual([call.args[0] for call in download.call_args_list].count(release.AUTH), 2)
+            self.assertEqual(release.live_core(root)['release-manifest.json'], site(OLD)['release-manifest.json'])
+            self.assertTrue((live / 'assets/app-aaaaaaaa.js').is_file())
+            self.assertTrue((live / 'assets/app-bbbbbbbb.js').is_file())
+            self.assertEqual(json.loads((root / 'latest.json').read_bytes())['status'], 'FRONTEND_ROLLED_BACK_PUBLIC_UNVERIFIED')
 
     def test_forced_command_rejects_shell_and_arguments(self):
         wrapper = PATH.with_name('production-release-ssh.sh')
