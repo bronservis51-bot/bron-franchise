@@ -219,3 +219,35 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(command=command, args=args):
                 result = subprocess.run(['/bin/sh', str(wrapper), *args], env={'SSH_ORIGINAL_COMMAND': command}, check=False)
                 self.assertEqual(result.returncode, 64)
+
+    def test_docker_without_healthcheck_is_allowed_for_web_but_not_database(self):
+        location = Path('/synthetic/site')
+        database, web = 'supabase-db', 'supabase-web-1'
+        names = (database, web, *release.BACKENDS)
+        ids = {name: str(i) * 64 for i, name in enumerate(names, start=1)}
+        image = 'sha256:' + 'a' * 64
+        states = {name: {'Running': True} for name in names}
+        states[database]['Health'] = {'Status': 'healthy'}
+        mounts = [{'Destination': '/srv', 'Type': 'bind', 'Source': str(location), 'RW': False}]
+
+        def docker_inspect(arguments):
+            template, name = arguments[-2:]
+            state = states[name]
+            record = {'id': ids[name], 'image': image, 'mounts': mounts if name == web else [], 'user': ''}
+            if '.State.Health' in template:
+                # Docker's Go template fails lookup when .State has no Health entry.
+                if 'Health' not in state:
+                    raise release.Blocked('TARGET_COMMAND_FAILED')
+                record.update(running=state['Running'], health=state['Health']['Status'])
+            else:
+                self.assertIn('{{json .State}}', template)
+                record['state'] = state
+            return json_bytes(record)
+
+        config = {'target_db_id': ids[database], 'target_db_image': image}
+        with patch.object(release, 'command', side_effect=docker_inspect):
+            self.assertEqual(release.inspect_target(config, location), tuple(ids[name] for name in names))
+            for state in ({'Running': True}, {'Running': True, 'Health': {'Status': 'unhealthy'}}):
+                with self.subTest(state=state), self.assertRaisesRegex(release.Blocked, 'TARGET_DB_IDENTITY_OR_HEALTH'):
+                    states[database] = state
+                    release.inspect_target(config, location)
