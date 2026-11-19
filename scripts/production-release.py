@@ -393,12 +393,16 @@ def command(arguments, *, stdin=None, timeout=30):
 
 
 def inspect(identifier):
-    metadata = ('{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},'
-                '"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}},'
+    metadata = ('{"id":{{json .Id}},"image":{{json .Image}},"state":{{json .State}},'
                 '"mounts":{{json .Mounts}},"user":{{json .Config.User}}}')
     record = document(command([DOCKER, 'inspect', '--type', 'container', '--format', metadata, identifier]))
-    if not matches(SHA, record.get('id')) or record.get('running') is not True:
+    state = record.pop('state', None)
+    if not matches(SHA, record.get('id')) or not isinstance(state, dict) or state.get('Running') is not True:
         raise Blocked('TARGET_CONTAINER_UNAVAILABLE')
+    health = state.get('Health')
+    if health is not None and not isinstance(health, dict):
+        raise Blocked('TARGET_CONTAINER_HEALTH_SHAPE')
+    record['health'] = health.get('Status') if health is not None else None
     return record
 
 
