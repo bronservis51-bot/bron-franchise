@@ -35,6 +35,9 @@ describe('резервная копия и восстановление', () => 
     await src.query(`insert into app_private.revenue_day_off(location_id,day,marked_by)
       select l.id, app_private.local_today(l.id)-1, u.id from public.location l, public.app_user u
       where l.code='ALPHA-1' and u.email='alpha.owner@demo.example.com'`);
+    await src.query(`insert into app_private.partner_launch_task(partner_id,task,completed_by)
+      select p.id,'island_brief',u.id from public.partner p, public.app_user u
+      where p.code='ALPHA' and u.email='alpha.owner@demo.example.com'`);
     const dump = await exportData(src);
     // Older private-table backups must receive defaults for columns added later.
     for (const key of ['for_trainees','for_franchisees','stage','position','pass_percent','quiz_size']) delete dump.private_tables.learning_config[0][key];
@@ -44,6 +47,7 @@ describe('резервная копия и восстановление', () => 
     expect(dump.private_tables.procurement_event).toHaveLength(1);
     expect(dump.private_tables.procurement_incoming).toHaveLength(1);
     expect(dump.private_tables.revenue_day_off).toHaveLength(1);
+    expect(dump.private_tables.partner_launch_task).toHaveLength(1);
 
     // Новая установка: только миграции, пользователи созданы заново (новые id)
     const dst = await createDb({ seed: false });
@@ -59,6 +63,8 @@ describe('резервная копия и восстановление', () => 
     const restoredOwner = (await dst.query(`select id from public.app_user where email='alpha.owner@demo.example.com'`)).rows[0].id;
     const restoredDayOff = (await dst.query(`select to_jsonb(d) as day_off from app_private.revenue_day_off d`)).rows[0].day_off;
     expect(restoredDayOff).toEqual({ ...dump.private_tables.revenue_day_off[0], marked_by: restoredOwner });
+    const restoredLaunchTask = (await dst.query('select to_jsonb(t) as task from app_private.partner_launch_task t')).rows[0].task;
+    expect(restoredLaunchTask).toEqual({ ...dump.private_tables.partner_launch_task[0], completed_by: restoredOwner });
     expect(restored.id).toBe(request.id);
     expect(restored.items).toEqual(request.items);
     expect(restored.created_by).toBe(restoredOwner);

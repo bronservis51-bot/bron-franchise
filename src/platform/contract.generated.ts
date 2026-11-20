@@ -75,6 +75,8 @@ export const CONTRACT = {
   partner_card: { args: ['partner'], returns: 'scalar' },
   partner_document_add: { args: ['partner', 'kind', 'title', 'path', 'size', 'mime', 'signed_on'], returns: 'scalar' },
   partner_document_delete: { args: ['id'], returns: 'scalar' },
+  partner_launch_get: { args: ['partner'], returns: 'scalar' },
+  partner_launch_task_set: { args: ['partner', 'task', 'completed'], returns: 'scalar' },
   partner_order_url_set: { args: ['partner', 'url'], returns: 'void' },
   partner_profile_save: { args: ['partner', 'data'], returns: 'void' },
   partner_save: { args: ['id', 'name', 'country', 'contact_name', 'contact_phone', 'contact_email', 'status'], returns: 'scalar' },
