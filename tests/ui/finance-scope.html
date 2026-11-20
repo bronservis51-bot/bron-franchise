@@ -73,7 +73,11 @@ try {
     catch (error) { failures.push(`${name}: ${error.message}`); }
     finally {
       const dialog = doc.querySelector('dialog[open]');
-      if (dialog) button(dialog, 'Закрыть').click();
+      if (dialog) {
+        button(dialog, 'Закрыть')?.click();
+        await wait(0);
+        button(dialog, 'Отбросить изменения')?.click();
+      }
     }
   }
   await until(() => button(doc, 'Аренда'));

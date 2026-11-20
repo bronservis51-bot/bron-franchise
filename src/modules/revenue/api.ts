@@ -36,7 +36,6 @@ export const revenueSave = async (userId: string, location: string, day: string,
 export const revenueDelete = (location: string, day: string, employee: string | null) => command('revenue_delete', { location, day, employee });
 export const planSet = (location: string, month: string, amount: string) => command('revenue_plan_set', { location, month, amount });
 
-export const WEEKDAY = ['', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
 export const WEEKDAY_SHORT = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 export const revenueTotalSet = async (userId: string, location: string, day: string, total: string, expected_version: string, comment: string | null) => {

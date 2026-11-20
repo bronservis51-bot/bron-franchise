@@ -144,8 +144,15 @@ if(qaParams.get('scene')){
    }else clearInterval(timer);
   },50);setTimeout(()=>clearInterval(timer),10_000);
  }else{
+ const resolving=qaParams.get('scene')==='resolve';
  const desired=qaParams.get('scene')==='close'?'Закрыть смену и внести выручку':'Разобрать';
- const timer=setInterval(()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()===desired);if(button){clearInterval(timer);button.click();}},50);
+ const timer=setInterval(()=>{
+  const buttons=[...document.querySelectorAll('button')];
+  const section=resolving&&buttons.find(b=>b.textContent?.trim()==='Смены и начисления'&&b.getAttribute('aria-pressed')==='false');
+  if(section){section.click();return;}
+  const button=buttons.find(b=>b.textContent?.trim()===desired);
+  if(button){clearInterval(timer);button.click();}
+ },50);
  setTimeout(()=>clearInterval(timer),10000);
  }
 }

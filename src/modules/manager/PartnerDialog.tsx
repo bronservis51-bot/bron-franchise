@@ -10,12 +10,17 @@ import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
 import { loginEmail, phoneLoginDigits } from '../../platform/login';
 
+function formChanged<T extends Record<string, string>>(original: T, draft: T) {
+  return Object.keys(original).some(key => original[key] !== draft[key]);
+}
+
 export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
   const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity });
-  const [f, setF] = useState({ name: partner?.name ?? '', country: partner?.country ?? 'RU', contact_name: partner?.contact_name ?? '',
+  const [original] = useState(() => ({ name: partner?.name ?? '', country: partner?.country ?? 'RU', contact_name: partner?.contact_name ?? '',
     contact_phone: partner?.contact_phone ?? '', contact_email: partner?.contact_email ?? '', status: partner?.status ?? 'active',
-    preparation_stage: partner?.preparation_stage ?? '' });
+    preparation_stage: partner?.preparation_stage ?? '' }));
+  const [f, setF] = useState(original);
   const m = useMutation({
     mutationFn: () => partnerSave({ id: partner?.id ?? null, ...f, preparation_stage: f.preparation_stage || null }),
     onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
@@ -23,7 +28,7 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
     <ConfirmDialog open title={partner ? 'Данные франчайзи' : 'Новый франчайзи'} confirmLabel="Сохранить" busy={m.isPending} error={m.error}
-      disabled={!f.name.trim()} onClose={onClose} onConfirm={() => m.mutate()}>
+      disabled={!f.name.trim()} dirty={formChanged(original, f)} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Название" required hint="Например: Виктор (Волгоград)">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Страна" hint={partner ? 'Страну и валюту после создания не меняют' : 'Определяет валюту'}>{(id) => (
@@ -54,8 +59,9 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
 
 export function LocationDialog({ partnerId, location, onClose }: { partnerId: string; location?: Location; onClose: () => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: location?.name ?? '', city: location?.city ?? '', address: location?.address ?? '',
-    status: location?.status ?? 'active', opened_on: location?.opened_on ?? '' });
+  const [original] = useState(() => ({ name: location?.name ?? '', city: location?.city ?? '', address: location?.address ?? '',
+    status: location?.status ?? 'active', opened_on: location?.opened_on ?? '' }));
+  const [f, setF] = useState(original);
   const m = useMutation({
     mutationFn: () => locationSave({ id: location?.id ?? null, partner: partnerId, ...f, opened_on: f.opened_on || null }),
     onSuccess: () => { void qc.invalidateQueries(); onClose(); },
@@ -63,7 +69,7 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
     <ConfirmDialog open title={location ? 'Точка' : 'Новая точка'} confirmLabel="Сохранить" busy={m.isPending} error={m.error}
-      disabled={!f.name.trim() || !f.city.trim()} onClose={onClose} onConfirm={() => m.mutate()}>
+      disabled={!f.name.trim() || !f.city.trim()} dirty={formChanged(original, f)} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Название точки" required hint="Например: Волгоград Европа">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Город" required>{(id) => <Input id={id} value={f.city} onChange={set('city')} />}</Field>
@@ -80,15 +86,21 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
 export function PlanDialog({ location, month, currency, current, onClose }: { location: Location; month: string; currency: string; current: number | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [amount, setAmount] = useState(current ? String(current) : '');
+  const initialAmount = current ? String(current) : '';
+  const [amount, setAmount] = useState(initialAmount);
+  const [amountValid, setAmountValid] = useState(true);
   const m = useMutation({
     mutationFn: () => planSet(location.id, month, amount || '0'),
     onSuccess: () => { toast('План сохранён'); void qc.invalidateQueries({ queryKey: ['revenue'] }); onClose(); },
   });
+  const submit = () => { if (amountValid && !m.isPending) m.mutate(); };
   return (
-    <ConfirmDialog open title={`План: ${location.name}`} confirmLabel="Сохранить план" busy={m.isPending} error={m.error} onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">План выручки на {monthLabel(month)}. Франчайзи увидит его на главном экране. Пусто или 0 — снять план.</p>
-      <Field label={`Сумма, ${currency}`}>{(id) => <MoneyInput id={id} value={amount} onChange={setAmount} currency={currency} onEnter={() => m.mutate()} />}</Field>
+    <ConfirmDialog open title={`План: ${location.name}`} confirmLabel="Сохранить план" busy={m.isPending} error={m.error}
+      disabled={!amountValid} dirty={!amountValid || (amount || '0') !== (initialAmount || '0')} onClose={onClose} onConfirm={submit}>
+      <p className="muted">{monthLabel(month)}. Чтобы снять план, оставьте поле пустым или укажите 0.</p>
+      <Field label={`Сумма, ${currency}`} error={!amountValid ? 'Укажите сумму, например 1250,50.' : undefined}>{(id, describedBy) => (
+        <MoneyInput id={id} describedBy={describedBy} value={amount} onChange={setAmount} currency={currency} onValidityChange={setAmountValid} onEnter={submit} />
+      )}</Field>
     </ConfirmDialog>
   );
 }

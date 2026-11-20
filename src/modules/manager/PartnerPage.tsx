@@ -83,7 +83,7 @@ function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
           </section>
           {plan && <PlanDialog location={l} month={month} currency={l.currency} current={m.plan_minor} onClose={() => setPlan(false)} />}
           {editLoc && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
-          {edit && <RevenueDialog location={l.id} currency={l.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
+          {edit && <RevenueDialog location={l.id} locationName={l.name} currency={l.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
         </div>
       )}
     </DataState>

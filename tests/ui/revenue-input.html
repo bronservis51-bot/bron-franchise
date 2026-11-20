@@ -50,16 +50,33 @@ try {
   };
 
   const failures = [];
+  open.click();
+  const draftDialog = await until(() => app.document.querySelector('dialog[open]'));
+  const draftInput = draftDialog.querySelector('input[inputmode=decimal]');
+  type(draftInput, '12,50x');
+  await wait(0);
+  button(draftDialog, 'Отмена').click();
+  const resume = await until(() => button(draftDialog, 'Продолжить ввод'));
+  assert(draftDialog.isConnected, 'закрытие сразу потеряло черновик');
+  resume.click();
+  await wait(0);
+  assert(draftInput.value === '12,50x', 'при возврате потерялся введённый текст');
+  button(draftDialog, 'Отмена').click();
+  (await until(() => button(draftDialog, 'Отбросить изменения'))).click();
+  await until(() => !draftDialog.isConnected);
+  assert(saves.length === 0, 'отмена отправила выручку');
+  assert(!app.document.querySelector('main')?.textContent.includes('Сравнение с прошлым месяцем'), 'устаревший блок остался на главной');
+
   const cases = [
     { name: 'исходно пустая сумма', values: [] },
     { name: 'неверный формат после правильной суммы', values: ['12,50', '12,50x'], invalid: true },
     { name: 'сумма выше допустимой', values: ['12,50', '1000000000,01'], invalid: true },
     { name: 'удалённая сумма', values: ['12,50', ''] },
     { name: 'явный ноль после ошибки', values: ['12,50', '12,50x', '0'], total: '0' },
-    { name: 'исправленная дробная сумма', values: ['1000000000,01', '12,50'], total: '1250' },
+    { name: 'переход к комментарию перед сохранением', values: ['1000000000,01', '12,50'], total: '1250', byKeyboard: true },
     { name: 'максимально допустимая сумма', values: ['1000000000'], total: '100000000000' },
   ];
-  for (const { name, values, invalid, total } of cases) {
+  for (const { name, values, invalid, total, byKeyboard } of cases) {
     const count = saves.length;
     open.click();
     const dialog = await until(() => app.document.querySelector('dialog[open]'));
@@ -74,6 +91,11 @@ try {
       const page = app.document.documentElement;
       assert(page.scrollWidth <= page.clientWidth, `страница шире окна (${page.scrollWidth} > ${page.clientWidth})`);
       assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
+      if (byKeyboard) {
+        input.dispatchEvent(new app.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        assert(app.document.activeElement === dialog.querySelector('input:not([inputmode=decimal])'), 'клавиатура не перевела фокус к комментарию');
+        assert(saves.length === count && dialog.isConnected, 'переход к следующему полю отправил выручку');
+      }
       save.click();
       if (total === undefined) {
         await wait(50);
@@ -89,7 +111,11 @@ try {
     } catch (error) {
       failures.push(`${name}: ${error.message}`);
     } finally {
-      if (dialog.open) button(dialog, 'Отмена')?.click();
+      if (dialog.open) {
+        button(dialog, 'Отмена')?.click();
+        await wait(0);
+        button(dialog, 'Отбросить изменения')?.click();
+      }
       await until(() => !dialog.isConnected);
     }
   }

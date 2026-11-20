@@ -8,10 +8,13 @@ import {Button,Card,Checkbox,ConfirmDialog,DataState,Field,Input,MoneyInput,Sele
 import type {Shift} from './api';
 
 type OpenShift=Shift&{user_name:string;location_name:string;currency:string;today:string;can_resolve:boolean;can_close:boolean};
+export function useOpenShifts(partner: string) {
+  return useQuery({ queryKey: ['staff', 'open-shifts', partner], queryFn: () => command<OpenShift[]>('staff_open_shifts', { partner }) });
+}
 /** Deliberate supervisor recovery; never auto-closes forgotten shifts or invents totals. */
 export function ShiftReview({partner}:{partner:string}){
  const qc=useQueryClient();const [selected,setSelected]=useState<OpenShift|null>(null);
- const q=useQuery({queryKey:['staff','open-shifts',partner],queryFn:()=>command<OpenShift[]>('staff_open_shifts',{partner})});
+ const q=useOpenShifts(partner);
  return <><DataState query={q}>{list=>list.length>0&&<Card title="Незакрытые смены"><div className="stack">{list.map(s=><div className="access-row row between" key={s.id}><div><strong>{s.user_name} · {dayLabel(s.day)}</strong><p className="faint">{s.location_name}{s.day<s.today?' · прошлая дата — нужна проверка':''}</p></div>{s.can_resolve&&<Button onClick={()=>setSelected(s)}>Разобрать</Button>}</div>)}</div></Card>}</DataState>
  {selected&&<Resolve shift={selected} onClose={()=>setSelected(null)} onDone={()=>{setSelected(null);void qc.invalidateQueries({queryKey:['staff']});void qc.invalidateQueries({queryKey:['staff-list']});void qc.invalidateQueries({queryKey:['revenue']});void qc.invalidateQueries({queryKey:['finance']});}}/>}
  </>;

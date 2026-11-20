@@ -1,5 +1,5 @@
 // Расходы франчайзи за месяц: быстрые кнопки категорий, своя категория, расход по точке или общий, повтор прошлого месяца.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Pencil, Plus } from 'lucide-react';
 import { command } from '../../platform/backend';
@@ -25,6 +25,8 @@ function ExpenseDialog({ month, currency, locations, draft, onClose }: {
   const toast = useToast();
   const [d, setD] = useState(draft);
   const [amountValid, setAmountValid] = useState(true);
+  const locationInput = useRef<HTMLSelectElement>(null);
+  const noteInput = useRef<HTMLInputElement>(null);
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
   const refresh = () => void qc.invalidateQueries({ queryKey: ['finance'] });
   const m = useMutation({
@@ -39,25 +41,28 @@ function ExpenseDialog({ month, currency, locations, draft, onClose }: {
       refresh(); onClose();
     },
   });
+  const canSave = Boolean(d.category.trim() && amountValid && d.amount && d.amount !== '0');
+  const submit = () => { if (canSave && !m.isPending && !del.isPending) m.mutate(); };
+  const dirty = !amountValid || d.category !== draft.category || d.amount !== draft.amount || d.location !== draft.location || d.note !== draft.note;
   return (
     <ConfirmDialog open title={d.id ? 'Изменить расход' : `Расход за ${monthLabel(month, false)}`} confirmLabel={d.id ? 'Сохранить' : 'Добавить расход'} cancelLabel="Закрыть"
-      busy={m.isPending} error={m.error ?? del.error} disabled={!d.category.trim() || !amountValid || !d.amount || d.amount === '0'} onClose={onClose} onConfirm={() => m.mutate()}>
+      busy={m.isPending || del.isPending} error={m.error ?? del.error} disabled={!canSave} dirty={dirty} onClose={onClose} onConfirm={submit}>
       <Field label="Категория" required>{(id) => (
         <Input id={id} value={d.category} onChange={(e) => set({ category: e.target.value })} placeholder="Например: аренда склада" maxLength={60} autoFocus={!draft.category} />
       )}</Field>
-      <Field label={`Сумма за месяц, ${currency}`} required>{(id) => (
-        <MoneyInput id={id} value={d.amount} onChange={(v) => set({ amount: v })} onValidityChange={setAmountValid} currency={currency} />
+      <Field label={`Сумма за месяц, ${currency}`} error={!amountValid ? 'Укажите сумму, например 12,50.' : undefined} required>{(id, describedBy) => (
+        <MoneyInput id={id} describedBy={describedBy} value={d.amount} onChange={(v) => set({ amount: v })} onValidityChange={setAmountValid} onEnter={() => (locationInput.current ?? noteInput.current)?.focus()} enterKeyHint="next" currency={currency} />
       )}</Field>
       {locations.length > 0 && (
-        <Field label="Точка" hint="Общий расход учитывается только в «Все точки»">{(id) => (
-          <Select id={id} value={d.location ?? ''} onChange={(e) => set({ location: e.target.value || null })}>
+        <Field label="Точка" hint="Общий расход учитывается только в «Все точки»">{(id, describedBy) => (
+          <Select id={id} ref={locationInput} aria-describedby={describedBy} value={d.location ?? ''} onChange={(e) => set({ location: e.target.value || null })}>
             <option value="">Общий — на все точки</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </Select>
         )}</Field>
       )}
-      <Field label="Комментарий">{(id) => <Input id={id} value={d.note} onChange={(e) => set({ note: e.target.value })} placeholder="Необязательно" maxLength={500} />}</Field>
-      {d.id && <Button variant="ghost" size="sm" loading={del.isPending} onClick={() => del.mutate()}>Удалить расход</Button>}
+      <Field label="Комментарий">{(id) => <Input id={id} ref={noteInput} value={d.note} onChange={(e) => set({ note: e.target.value })} placeholder="Необязательно" maxLength={500} />}</Field>
+      {d.id && <Button variant="ghost" size="sm" loading={del.isPending} disabled={m.isPending} onClick={() => del.mutate()}>Удалить расход</Button>}
     </ConfirmDialog>
   );
 }
