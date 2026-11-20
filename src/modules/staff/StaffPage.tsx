@@ -161,17 +161,18 @@ function StaffDialog({ partnerId, locations, staff, initialSection = 'profile', 
             {staff && !validProfile && !locations.error && <p className="hint">Проверьте поля в разделе «Основное».</p>}
           </>}</DataState>
         </div>
-        {staff && !staff.active && section === 'profile' && <KV items={[
-          ['Точки', staff.location_names.join(', ') || 'Точки не назначены'],
-          ['Обучение', staff.learning_enabled === false ? 'Выключено' : 'Включено'],
-          ...(staff.employee_kind === 'trainee' ? [['Статус', 'Стажёр'], ['Начало стажировки', staff.internship_from ? dayLabel(staff.internship_from) : null],
-            ['Последний день', staff.internship_until ? dayLabel(staff.internship_until) : null]] as [string, string | null][] : []),
-        ]} />}
-        {staff && !staff.active && section === 'pay' && <DataState query={locations} skeleton={2}>{() => <KV items={[
-          ['Оплата', payTerms(staff, currency)],
-          ...(staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined
-            ? [['Минимум за смену на стажировке', formatMoneyShort(staff.internship_floor_minor, currency)]] as [string, string][] : []),
-        ]} />}</DataState>}
+        {staff && !staff.active && section !== 'login' && <div style={{ containerType: 'inline-size' }}>
+          {section === 'profile' ? <KV items={[
+            ['Точки', staff.location_names.join(', ') || 'Точки не назначены'],
+            ['Обучение', staff.learning_enabled === false ? 'Выключено' : 'Включено'],
+            ...(staff.employee_kind === 'trainee' ? [['Статус', 'Стажёр'], ['Начало стажировки', staff.internship_from ? dayLabel(staff.internship_from) : null],
+              ['Последний день', staff.internship_until ? dayLabel(staff.internship_until) : null]] as [string, string | null][] : []),
+          ]} /> : <DataState query={locations} skeleton={2}>{() => <KV items={[
+            ['Оплата', payTerms(staff, currency)],
+            ...(staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined
+              ? [['Минимум за смену на стажировке', formatMoneyShort(staff.internship_floor_minor, currency)]] as [string, string][] : []),
+          ]} />}</DataState>}
+        </div>}
         {staff && section === 'login' && <div className="stack">
           <div style={{ overflowWrap: 'anywhere' }}>
             <div className="faint">Логин</div>
