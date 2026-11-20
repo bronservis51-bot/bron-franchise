@@ -37,7 +37,7 @@ async function privateTablesInOrder(db) {
   const tables = (await db.query(`select c.relname as name from pg_class c
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='app_private' and c.relkind='r'
-      and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme','learning_config','learning_task')
+      and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme','learning_config','learning_task','revenue_day_off')
         or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid

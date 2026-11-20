@@ -15,6 +15,7 @@ import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type 
 import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog, SetPasswordDialog } from './PartnerDialog';
 import { StaffPanel } from '../staff/StaffPage';
 import { PhoneLoginDialog } from '../staff/PhoneLoginDialog';
+import { TeamAccounts } from '../staff/TeamAccounts';
 import { formatPhone } from '../staff/api';
 import { phoneLoginInitial } from '../../platform/login';
 import { useSession } from '../../platform/session';
@@ -83,7 +84,8 @@ function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
           </section>
           {plan && <PlanDialog location={l} month={month} currency={l.currency} current={m.plan_minor} onClose={() => setPlan(false)} />}
           {editLoc && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
-          {edit && <RevenueDialog location={l.id} locationName={l.name} currency={l.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
+          {edit && <RevenueDialog location={l.id} locationName={l.name} currency={l.currency} day={edit.day} existing={edit.row}
+            dayOff={m.days_off?.includes(edit.day)} canMarkOff={l.status === 'active' && (!m.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
         </div>
       )}
     </DataState>
@@ -134,6 +136,7 @@ export function PartnerPage() {
             <div className="stack">
               <PartnerCardPanel partner={partner} />
               <AccessCard partnerId={partner.id} />
+              <TeamAccounts partner={partner.id} />
             </div>
           </div>
           {editing && <PartnerDialog partner={partner} onClose={() => setEditing(false)} />}

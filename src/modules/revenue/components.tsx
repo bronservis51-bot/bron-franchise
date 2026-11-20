@@ -48,6 +48,7 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
   const [expanded, setExpanded] = useState(false);
   const byDay = new Map(m.days.map((d) => [d.day, d]));
   const missing = new Set(m.missing_days);
+  const daysOff = new Set(m.days_off);
   const monthEnd = shiftDay(m.month, m.days_in_month - 1);
   const last = m.today < monthEnd ? m.today : monthEnd;
   // Все дни месяца до сегодня: внесённые и пропущенные, новые сверху
@@ -60,7 +61,8 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
       {(expanded ? days : days.slice(0,7)).map((d) => {
         const r = byDay.get(d);
         const miss = missing.has(d);
-        if (!r && !miss && d !== m.today) return null;
+        const dayOff = daysOff.has(d);
+        if (!r && !miss && !dayOff && d !== m.today) return null;
         const can = editable(d);
         return (
           <li key={d}>
@@ -77,7 +79,7 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
                   {r.reported_total_minor != null && Number(r.total_minor) > Number(r.reported_total_minor) && <span className="day-split" role="status">Сумма смен больше ранее указанного итога — проверьте день</span>}
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
-              ) : <span className="day-sum2 day-empty">{miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
+              ) : <span className="day-sum2 day-empty">{dayOff ? 'Выходной' : miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
               {can && <ChevronRight size={16} className="day-chev" aria-hidden />}
             </button>
           </li>

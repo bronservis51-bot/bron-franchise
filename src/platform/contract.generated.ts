@@ -86,6 +86,7 @@ export const CONTRACT = {
   procurement_list: { args: [], returns: 'scalar' },
   procurement_submit: { args: ['operation', 'items', 'shipment_mode', 'note'], returns: 'scalar' },
   rating: { args: ['month'], returns: 'scalar' },
+  revenue_day_off_set: { args: ['location', 'day', 'day_off'], returns: 'void' },
   revenue_delete: { args: ['location', 'day', 'employee'], returns: 'void' },
   revenue_month: { args: ['location', 'month'], returns: 'scalar' },
   revenue_overview: { args: ['month'], returns: 'scalar' },

@@ -31,12 +31,13 @@ export function FinanceEditor({ month, currency, location, locations, expenses, 
               {locations.map((l) => <button key={l.id} type="button" className="chip" aria-pressed={point === l.id} onClick={() => setPoint(l.id)}>{l.name}</button>)}
             </div>
           )}
-          <p className="faint">Нажмите на день, чтобы внести или исправить выручку. Текущий месяц можно править целиком, прошлый — до 5-го числа; позже — через менеджера по франшизе.</p>
+          <p className="faint">Откройте день, чтобы исправить выручку или отметить выходной. Текущий месяц можно править целиком, прошлый — до 5-го числа. Позже обратитесь к менеджеру по франшизе.</p>
           <DataState query={q} skeleton={4}>
             {(m) => (
               <>
                 <DayList m={m} onPick={(day, row) => setEdit({ day, row })} />
-                {edit && <RevenueDialog location={m.location_id} locationName={m.location_name} currency={m.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
+                {edit && <RevenueDialog location={m.location_id} locationName={m.location_name} currency={m.currency} day={edit.day} existing={edit.row}
+                  dayOff={m.days_off?.includes(edit.day)} canMarkOff={m.status === 'active' && (!m.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
               </>
             )}
           </DataState>
