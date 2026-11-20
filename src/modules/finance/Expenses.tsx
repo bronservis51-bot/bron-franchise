@@ -1,10 +1,10 @@
 // Расходы франчайзи за месяц: быстрые кнопки категорий, своя категория, расход по точке или общий, повтор прошлого месяца.
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Pencil, Plus } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { monthLabel } from '../../platform/dates';
-import { formatMoneyShort } from '../../platform/money';
+import { formatMoneyShort, toBigInt, type MinorInput } from '../../platform/money';
 import { ActionError, Button, Card, ConfirmDialog, Field, Input, Money, MoneyInput, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 
@@ -67,15 +67,17 @@ function ExpenseDialog({ month, currency, locations, draft, onClose }: {
   );
 }
 
-export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, total, bare }: {
+export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, total, royalty, royaltyHistory, bare }: {
   month: string; currency: string; location: string | null; locations: { id: string; name: string }[];
-  expenses: Expense[]; own: string[]; prevCount: number; total: number;
+  expenses: Expense[]; own: string[]; prevCount: number; total: MinorInput; royalty: MinorInput;
+  royaltyHistory?: ReactNode;
   /** Без своей карточки — внутри панели редактирования. */
   bare?: boolean;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const hasRoyalty = toBigInt(royalty) !== 0n;
   const extra = own.filter((c) => !EXPENSE_CATEGORIES.includes(c)).slice(0, 6);
   const showExpenseScope = locations.length > 1 || (location === null && locations.length > 0);
   const open = (category: string) => setDraft({ id: null, category, amount: '', location: location ?? (locations.length === 1 ? locations[0].id : null), note: '' });
@@ -97,7 +99,7 @@ export function ExpensesCard({ month, currency, location, locations, expenses, o
           <ActionError error={repeat.error} />
         </>
       )}
-      {expenses.length ? (
+      {(expenses.length > 0 || hasRoyalty) && (
         <ul className="expense-list">
           {expenses.map((e) => (
             <li key={e.id}>
@@ -110,15 +112,21 @@ export function ExpensesCard({ month, currency, location, locations, expenses, o
               </button>
             </li>
           ))}
+          {hasRoyalty && <li><div className="expense-row expense-royalty">
+            <span className="expense-main">Роялти по ставке</span>
+            <Money minor={royalty} currency={currency} short strong />
+          </div></li>}
         </ul>
-      ) : <p className="faint" style={{ marginTop: 8 }}>Нажмите на категорию, чтобы внести расход.{location === null && ' Аренду и интернет удобно вносить раз в месяц — потом переносить кнопкой «Повторить».'}</p>}
+      )}
+      {expenses.length === 0 && <p className="faint" style={{ marginTop: 8 }}>Нажмите на категорию, чтобы внести расход.{location === null && ' Аренду и интернет удобно вносить раз в месяц — потом переносить кнопкой «Повторить».'}</p>}
       {expenses.length > 0 && <p className="faint" style={{ marginTop: 6 }}>Нажмите на расход, чтобы изменить сумму или удалить его.</p>}
+      {royaltyHistory}
       {draft && <ExpenseDialog month={month} currency={currency} locations={locations} draft={draft} onClose={() => setDraft(null)} />}
     </>
   );
   if (bare) return body;
   return (
-    <Card title={`Расходы — ${monthLabel(month)}`} actions={expenses.length > 0 ? <strong className="num">{formatMoneyShort(total, currency)}</strong> : undefined}>
+    <Card title={`Расходы — ${monthLabel(month)}`} actions={expenses.length > 0 || hasRoyalty ? <Money minor={total} currency={currency} short strong /> : undefined}>
       {body}
     </Card>
   );

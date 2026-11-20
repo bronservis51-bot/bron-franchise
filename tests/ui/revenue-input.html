@@ -35,6 +35,7 @@ frame.src = `/tests/ui/responsive-app.html?role=franchisee&text=${params.get('te
 try {
   let open = await until(() => button(frame.contentDocument, 'Внести выручку за сегодня'));
   const app = frame.contentWindow;
+  assert(!button(app.document.querySelector('main'), 'Отчёт за месяц'), 'На главной осталась кнопка скачивания отчёта');
   const fetchFixture = app.fetch;
   const saves = [];
   const daysOff = new Set();

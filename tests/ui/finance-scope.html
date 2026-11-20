@@ -44,8 +44,11 @@ try {
         shifts: 0, rate_bp: 700, royalty_minor: 1050, expenses_minor: scope ? 0 : 2500, net_minor: scope ? 13950 : 11450, is_open: true };
       const closedMonth = new Date(month);
       closedMonth.setUTCMonth(closedMonth.getUTCMonth() - 1);
-      const royalty = { rate_bp: 700, debt_minor: 12500, payments: [], live: { month, revenue_minor: 15000, accrued_minor: 1050, projected_accrual_minor: 2100 },
-        months: [{ month: closedMonth.toISOString().slice(0, 10), revenue_minor: 12345678901, rate_bp: 700, accrued_minor: 864197523, manual_minor: -120000, paid_minor: 0, debt_minor: 12500, is_open: false }] };
+      const previousMonth = closedMonth.toISOString().slice(0, 10);
+      const royalty = { rate_bp: 700, debt_minor: 12500,
+        payments: [{ month: previousMonth, paid_on: month, amount_minor: 4800, note: 'Оплата подтверждена' }],
+        live: { month, revenue_minor: 15000, accrued_minor: 1050, projected_accrual_minor: 2100 },
+        months: [{ month: previousMonth, revenue_minor: 12345678901, rate_bp: 700, accrued_minor: 864197523, manual_minor: -120000, paid_minor: 4800, debt_minor: 12500, is_open: false }] };
       const byLocation = scope ? null : locations.map(location => ({ ...current, location_id: location.id, location_name: location.name }));
       return Promise.resolve(app.Response.json({ partner_name: 'Вымышленный партнёр', currency: 'RUB', month, location_id: scope,
         locations, current, months: [current], by_location: byLocation, by_staff: [], expenses: scope ? [] : [{ ...commonExpense, month }],
@@ -81,9 +84,35 @@ try {
     }
   }
   await until(() => button(doc, 'Аренда'));
+  const royaltyHistory = () => [...doc.querySelectorAll('summary')].find(item => item.textContent === 'Начисления и оплаты роялти');
+  await check('роялти внутри расходов', async () => {
+    assert(![...doc.querySelectorAll('h2')].some(title => title.textContent === 'Роялти'), 'роялти показано отдельным блоком');
+    const history = royaltyHistory();
+    assert(history?.closest('section')?.querySelector('h2')?.textContent.startsWith('Расходы'), 'история роялти не входит в расходы');
+    assert(!history.parentElement.open, 'история роялти открыта при загрузке');
+    const expenses = history.closest('section');
+    const labels = [...expenses.querySelectorAll('li')];
+    const royalty = labels.find(item => item.textContent.trim().startsWith('Роялти'));
+    const money = (text) => text.replace(/\s/g, '');
+    assert(royalty && !royalty.querySelector('button') && money(royalty.textContent).includes('10,50₽'), 'начисление должно быть отдельной строкой расхода без редактирования');
+    assert(money(expenses.querySelector('.card-header').textContent).includes('35,50₽'), 'итог расходов должен включать начисление один раз');
+    history.click();
+    try {
+      assert(history.parentElement.open && history.parentElement.textContent.includes('Оплата подтверждена'), 'оплаты недоступны в истории расходов');
+    } finally { history.parentElement.open = false; }
+    for (const table of doc.querySelectorAll('[aria-label^="Финансы по "] table')) {
+      const headers = [...table.querySelectorAll('th')].map(th => th.textContent);
+      assert(!headers.includes('Роялти'), 'в сводной таблице осталась колонка роялти');
+      const data = table.querySelector('tbody tr').children[headers.indexOf('Расходы')];
+      assert(money(data.textContent) === '35,50₽', 'сводная таблица потеряла начисление в расходах');
+    }
+    assert(!doc.querySelector('.fin-legend').textContent.includes('Роялти'), 'у роялти остался отдельный ряд на графике');
+  });
   await check('читаемые таблицы финансов', async () => {
-    const monthly = doc.querySelector('.finance-details');
+    const monthly = doc.querySelector('[aria-label="Финансы по месяцам"]').closest('details');
     monthly.open = true;
+    const history = royaltyHistory()?.parentElement;
+    if (history) history.open = true;
     await doc.fonts.ready;
     try {
       const regions = [...doc.querySelectorAll('.table-wrap')];
@@ -104,7 +133,10 @@ try {
         }
       }
       assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'таблица расширила страницу');
-    } finally { monthly.open = false; }
+    } finally {
+      monthly.open = false;
+      if (history) history.open = false;
+    }
   });
   await check('отчёт по внесённым данным', async () => {
     const title = [...doc.querySelectorAll('h2')].find(node => node.textContent.startsWith('Доходы и расходы —'));
@@ -165,6 +197,8 @@ try {
     await until(() => scopes.at(-1) === outlet.id && button(doc, 'Аренда'));
     assert(!button(doc, repeatLabel), 'отдельная точка предлагает повторить расходы всего кабинета');
     assert(!doc.body.textContent.includes('потом переносить кнопкой'), 'подсказка ссылается на недоступную кнопку');
+    assert(!royaltyHistory(), 'у точки открылась общая история начислений и оплат');
+    assert([...doc.querySelectorAll('.expense-list li')].some(item => item.textContent.trim().startsWith('Роялти')), 'начисление точки исчезло из расходов');
     button(doc, 'Аренда').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
     assert(dialog.querySelector('select')?.value === outlet.id, 'выбранная точка не подставилась в расход');
@@ -224,7 +258,7 @@ try {
   assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth, 'страница финансов шире окна');
   assert(!failures.length, failures.join(' • '));
   result.dataset.status = 'passed';
-  result.textContent = 'Проверок пройдено: 7';
+  result.textContent = 'Проверок пройдено: 8';
 } catch (error) {
   result.dataset.status = 'failed';
   result.textContent = error.message;

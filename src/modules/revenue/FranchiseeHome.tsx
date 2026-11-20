@@ -1,13 +1,12 @@
 // Главная франчайзи: план по точкам, выручка и статус дней месяца.
 import { useEffect, useState } from 'react';
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { CalendarX, Check, Download, Plus } from 'lucide-react';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { CalendarX, Check, Plus } from 'lucide-react';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
-import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
+import { Button, DataState, EmptyState, Money } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
 import { revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
-import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
@@ -118,7 +117,6 @@ export function FranchiseeHome() {
   const todayRow = m?.days.find((d) => d.day === m.today);
   const todayOff = m?.days_off?.includes(m.today);
   const isCurrent = month === monthStart();
-  const report = useMutation({ mutationFn: (d: MonthDetail) => downloadMonthReport(d) });
 
   return (
     <div className="home">
@@ -163,11 +161,7 @@ export function FranchiseeHome() {
                     </div>
                   )}
                   <section>
-                    <div className="row between" style={{ marginBottom: 8 }}>
-                      <h2 className="section-title" style={{ margin: 0 }}>Дни месяца</h2>
-                      <Button size="sm" variant="ghost" loading={report.isPending} onClick={() => report.mutate(d)}><Download size={15} aria-hidden />Отчёт за месяц</Button>
-                    </div>
-                    <ActionError error={report.error} />
+                    <h2 className="section-title">Дни месяца</h2>
                     <DayList m={d} onPick={(day, row) => setEdit({ day, row, dayOff: d.days_off?.includes(day) })} />
                   </section>
                 </>

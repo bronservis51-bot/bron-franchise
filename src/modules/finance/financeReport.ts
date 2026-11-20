@@ -10,6 +10,10 @@ interface ReportTotals {
   net_minor: MinorInput;
 }
 
+export function financeExpensesMinor(totals: Pick<ReportTotals, 'expenses_minor' | 'royalty_minor'>) {
+  return toBigInt(totals.expenses_minor) + toBigInt(totals.royalty_minor);
+}
+
 export function financeReportRows(totals: ReportTotals, expenses: readonly { category: string; amount_minor: MinorInput }[]) {
   const categories = new Map<string, bigint>();
   for (const row of expenses) {
@@ -19,12 +23,12 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly { cat
   const royalties = toBigInt(totals.royalty_minor);
   const recordedExpenses = toBigInt(totals.expenses_minor);
   return [
-    { label: 'Выручка', minor: toBigInt(totals.revenue_minor), detail: false, total: true },
-    { label: 'Начисленная зарплата', minor: -payroll, detail: false, total: false },
-    { label: 'Роялти по ставке', minor: -royalties, detail: false, total: false },
-    { label: 'Внесённые расходы', minor: -recordedExpenses, detail: false, total: false },
-    ...[...categories].sort(([a], [b]) => a.localeCompare(b, 'ru')).map(([label, amount]) => ({ label, minor: -amount, detail: true, total: false })),
-    { label: 'Всего расходов', minor: -(payroll + royalties + recordedExpenses), detail: false, total: true },
-    { label: 'Остаток по внесённым данным', minor: toBigInt(totals.net_minor), detail: false, total: true },
+    { label: 'Выручка', minor: toBigInt(totals.revenue_minor), indent: 0, total: true },
+    { label: 'Всего расходов', minor: -(payroll + financeExpensesMinor(totals)), indent: 0, total: true },
+    { label: 'Начисленная зарплата', minor: -payroll, indent: 1, total: false },
+    { label: 'Роялти по ставке', minor: -royalties, indent: 1, total: false },
+    { label: 'Внесённые расходы', minor: -recordedExpenses, indent: 1, total: false },
+    ...[...categories].sort(([a], [b]) => a.localeCompare(b, 'ru')).map(([label, amount]) => ({ label, minor: -amount, indent: 2, total: false })),
+    { label: 'Остаток по внесённым данным', minor: toBigInt(totals.net_minor), indent: 0, total: true },
   ];
 }

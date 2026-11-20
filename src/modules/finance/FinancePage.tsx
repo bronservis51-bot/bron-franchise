@@ -1,23 +1,24 @@
-// Финансы франчайзи: выручка, зарплата сотрудников, роялти, расходы и что остаётся — по всем точкам или по одной; помесячно, с долгом и оплатами.
+// Финансы франчайзи: выручка, зарплата, расходы и остаток по всем точкам или по одной.
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Download, Pencil } from 'lucide-react';
-import { command } from '../../platform/backend';
+import { AppError, command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
-import { formatMoneyShort, minorToDecimal, type MinorInput } from '../../platform/money';
+import { formatMoneyShort, minorToDecimal, toBigInt, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
+import { revenueMonth } from '../revenue/api';
 import { MonthNav } from '../revenue/components';
+import { revenueMonthSheet } from '../revenue/monthReport';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceEditor } from './FinanceEditor';
-import { FINANCE_REPORT_NOTE, financeReportRows } from './financeReport';
+import { FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows } from './financeReport';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
   payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; net_minor: number; is_open: boolean }
 interface Ledger { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean }
-interface Royalty { rate_bp: number; debt_minor: number; live: { month: string; revenue_minor: number; accrued_minor: number; projected_accrual_minor: number };
-  months: Ledger[]; payments: { month: string; amount_minor: number; paid_on: string; note: string | null }[] }
+interface Royalty { debt_minor: number; months: Ledger[]; payments: { month: string; amount_minor: number; paid_on: string; note: string | null }[] }
 interface Finance {
   partner_name: string; currency: string; month: string; location_id: string | null;
   locations: { id: string; name: string; status: string }[];
@@ -31,20 +32,19 @@ interface Finance {
 const pct = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 const n = (v: number | string) => Number(v);
 
-/** Помесячно: на что разошлась выручка — остаток, зарплата, роялти, расходы (столбцы с разбивкой, подсказка при наведении). */
+/** Помесячное распределение выручки. */
 function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...months.map((m) => n(m.revenue_minor)));
   const parts = (m: Fin) => [
     { key: 'net', label: 'Остаётся', v: Math.max(0, n(m.net_minor)) },
     { key: 'payroll', label: 'Зарплата', v: n(m.payroll_minor) },
-    { key: 'royalty', label: 'Роялти', v: n(m.royalty_minor) },
-    { key: 'expenses', label: 'Расходы', v: n(m.expenses_minor) },
+    { key: 'expenses', label: 'Расходы', v: Number(financeExpensesMinor(m)) },
   ];
   return (
-    <figure className="fin-chart viz-root" aria-label="Выручка по месяцам: остаётся, зарплата, роялти, расходы">
+    <figure className="fin-chart viz-root" aria-label="Выручка по месяцам: остаётся, зарплата, расходы">
       <div className="fin-legend" aria-hidden>
-        <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw royalty" />Роялти</span><span><i className="sw expenses" />Расходы</span>
+        <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw expenses" />Расходы</span>
       </div>
       <div className="fin-bars" onMouseLeave={() => setHover(null)}>
         {months.map((m, i) => (
@@ -83,24 +83,39 @@ async function financeWorkbook(f: Finance, reportOnly: boolean) {
     [{ value: FINANCE_REPORT_NOTE }],
     [head('Статья'), head(`Сумма, ${f.currency}`)],
     ...financeReportRows(f.current, f.expenses).map((entry) => [
-      { value: entry.detail ? `    ${entry.label}` : entry.label, fontWeight: entry.total ? 'bold' as const : undefined },
+      { value: entry.label, indent: entry.indent, fontWeight: entry.total ? 'bold' as const : undefined },
       { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
     ]),
   ] };
   if (reportOnly) return writeXlsxFile([statement]);
-  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'Без разбивки', 'План', 'Выполнение', 'Зарплата', 'Роялти', 'Расходы', 'Остаётся'].map(head);
+  const pointIds = f.location_id ? [f.location_id] : f.locations.map((point) => point.id);
+  const dailyRevenue = await Promise.all(pointIds.map((id) => revenueMonth(id, f.month)));
+  const totalsByPoint = new Map(f.by_location?.map((point) => [point.location_id, point]));
+  const match = dailyRevenue.every((detail, index) => {
+    const pointId = pointIds[index];
+    const total = f.location_id ? f.current : totalsByPoint.get(pointId);
+    return total && detail.month === f.month && detail.location_id === pointId
+      && toBigInt(detail.fact_minor) === toBigInt(total.revenue_minor)
+      && toBigInt(detail.cash_minor) === toBigInt(total.cash_minor)
+      && toBigInt(detail.card_minor) === toBigInt(total.card_minor);
+  });
+  if (!match) throw new AppError('version-conflict', 'Выручка изменилась. Скачайте отчёт ещё раз.', '', '');
+  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'Без разбивки', 'План', 'Выполнение', 'Зарплата', 'Расходы', 'Остаётся'].map(head);
   const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), money(Number(m.revenue_minor)-Number(m.cash_minor)-Number(m.card_minor)), m.plan_minor ? money(m.plan_minor) : null,
-    m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(m.royalty_minor), money(m.expenses_minor), money(m.net_minor)];
+    m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor)];
+  const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? '']);
+  if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push(['Роялти по ставке', scope, money(f.current.royalty_minor), '']);
   const sheets = [
     statement,
-    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(10).fill({ width: 14 })],
+    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(9).fill({ width: 14 })],
       data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
-    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(10).fill({ width: 14 })],
+    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(9).fill({ width: 14 })],
       data: [[head('Точка'), ...cols.slice(1)], ...f.by_location.map((l) => row(l.location_name, l))] }] : []),
     ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 16 }],
       data: [['Сотрудник', 'Смен', 'Выручка смен', 'Заработок'].map(head), ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor)])] }] : []),
-    ...(f.expenses.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
-      data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? ''])] }] : []),
+    ...(expenseRows.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
+      data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...expenseRows] }] : []),
+    ...(dailyRevenue.length ? [revenueMonthSheet(dailyRevenue)] : []),
   ];
   return writeXlsxFile(sheets);
 }
@@ -121,7 +136,7 @@ function FinanceStatement({ finance }: { finance: Finance }) {
       <dl style={{ margin: 0 }}>
         {financeReportRows(month, finance.expenses).map((row, i) => (
           <div className="row between access-row" key={i}>
-            <dt className={row.detail ? 'faint' : undefined} style={row.detail ? { paddingInlineStart: 12 } : undefined}>
+            <dt className={row.indent === 2 ? 'faint' : undefined} style={row.indent ? { paddingInlineStart: row.indent * 12 } : undefined}>
               {row.total ? <strong>{row.label}</strong> : row.label}
             </dt>
             <dd style={{ margin: 0 }}><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
@@ -140,13 +155,22 @@ function FinanceStatement({ finance }: { finance: Finance }) {
 
 export function FinancePage() {
   const { me } = useSession();
+  const qc = useQueryClient();
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(null);
   const q = useQuery({ queryKey: ['finance', month, loc], queryFn: () => command<Finance>('finance_my', { month, location: loc }), refetchInterval: 120_000 });
-  const exp = useMutation({ mutationFn: () => downloadFinance(q.data!) });
+  const exp = useMutation({
+    mutationFn: downloadFinance,
+    networkMode: 'always',
+    onError: (error, report) => {
+      if (error instanceof AppError && error.code === 'version-conflict') {
+        return qc.invalidateQueries({ queryKey: ['finance', report.month, report.location_id], exact: true });
+      }
+    },
+  });
   const [editing, setEditing] = useState(false);
   const [drive, setDrive] = useState<{ finance: Finance; userId: string } | null>(null);
-  const driveSource = !q.error && q.data;
+  const availableFinance = !q.error && q.data;
 
   return (
     <div className="home" style={{ maxWidth: 980 }}>
@@ -155,11 +179,11 @@ export function FinancePage() {
           <Button variant={editing ? 'primary' : 'secondary'} aria-pressed={editing} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
             {editing ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
           </Button>
-          <Button disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Excel</Button>
-          <Button disabled={!driveSource || !me} onClick={() => { if (driveSource && me) setDrive({ finance: driveSource, userId: me.user.id }); }}>Google Drive</Button>
+          <Button disabled={!availableFinance} loading={exp.isPending} onClick={() => { if (availableFinance) exp.mutate(availableFinance); }}><Download size={16} aria-hidden />Excel</Button>
+          <Button disabled={!availableFinance || !me} onClick={() => { if (availableFinance && me) setDrive({ finance: availableFinance, userId: me.user.id }); }}>Google Drive</Button>
         </>} />
       <ActionError error={exp.error} />
-      {driveSource && drive && drive.userId === me?.user.id && drive.finance.month === month && drive.finance.location_id === loc && (
+      {availableFinance && drive && drive.userId === me?.user.id && drive.finance.month === month && drive.finance.location_id === loc && (
         <FinanceDriveDialog period={monthLabel(drive.finance.month)} scope={financeScope(drive.finance)}
           makeFile={() => makeFinanceReportFile(drive.finance)} onClose={() => setDrive(null)} />
       )}
@@ -178,13 +202,18 @@ export function FinancePage() {
             <div className="stack">
               {editing && (
                 <FinanceEditor month={f.month} currency={f.currency} location={f.location_id} locations={active}
-                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
+                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} royalty={c.royalty_minor}
+                  total={financeExpensesMinor(c)} />
               )}
               <FinanceStatement finance={f} />
 
               {!editing && (
                 <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={active}
-                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} total={n(c.expenses_minor)} />
+                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} royalty={c.royalty_minor}
+                  total={financeExpensesMinor(c)}
+                  royaltyHistory={f.royalty && (f.royalty.months.length > 0 || f.royalty.payments.length > 0) && (
+                    <RoyaltyHistory r={f.royalty} currency={f.currency} />
+                  )} />
               )}
 
               <Card title="За полгода">
@@ -193,14 +222,13 @@ export function FinancePage() {
                   <summary>Таблица по месяцам</summary>
                   <div className="table-wrap" role="region" aria-label="Финансы по месяцам" tabIndex={0} style={{ marginTop: 12 }}>
                     <table className="table">
-                      <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
+                      <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                       <tbody>{[...f.months].reverse().map((m) => (
                         <tr key={m.month}><td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">Текущий месяц</div>}</td>
                           <td className="r num">{formatMoneyShort(m.revenue_minor, f.currency)}</td>
                           <td className="r">{m.pct !== null ? `${n(m.pct).toLocaleString('ru-RU')} %` : '—'}</td>
                           <td className="r num">{formatMoneyShort(m.payroll_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(m.royalty_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(m.expenses_minor, f.currency)}</td>
+                          <td className="r num">{formatMoneyShort(financeExpensesMinor(m), f.currency)}</td>
                           <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
                       ))}</tbody>
                     </table>
@@ -212,15 +240,14 @@ export function FinancePage() {
                 <Card title={`По точкам — ${monthLabel(f.month)}`} bodyless>
                   <div className="table-wrap" role="region" aria-label="Финансы по точкам" tabIndex={0}>
                     <table className="table">
-                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
+                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                       <tbody>{f.by_location.map((l) => (
                         <tr key={l.location_id} className="clickable" onClick={() => setLoc(l.location_id)}>
                           <td><strong>{l.location_name}</strong></td>
                           <td className="r num">{formatMoneyShort(l.revenue_minor, f.currency)}</td>
                           <td className="r">{l.pct !== null ? `${n(l.pct).toLocaleString('ru-RU')} %` : '—'}</td>
                           <td className="r num">{formatMoneyShort(l.payroll_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(l.royalty_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(l.expenses_minor, f.currency)}</td>
+                          <td className="r num">{formatMoneyShort(financeExpensesMinor(l), f.currency)}</td>
                           <td className="r num"><strong>{formatMoneyShort(l.net_minor, f.currency)}</strong></td>
                         </tr>
                       ))}</tbody>
@@ -239,10 +266,6 @@ export function FinancePage() {
                   ))}
                 </Card>
               )}
-
-              {f.royalty ? <RoyaltySection r={f.royalty} currency={f.currency} /> : (
-                <p className="faint">Долг и оплаты роялти считаются по франчайзи целиком — выберите «Все точки», чтобы их увидеть.</p>
-              )}
             </div>
           );
         }}
@@ -251,13 +274,13 @@ export function FinancePage() {
   );
 }
 
-function RoyaltySection({ r, currency }: { r: Royalty; currency: string }) {
+function RoyaltyHistory({ r, currency }: { r: Royalty; currency: string }) {
   return (
-    <Card title="Роялти">
-      <div className="kpis" style={{ marginTop: 0 }}>
-        <div className="kpi"><span className="v">{formatMoneyShort(r.live.accrued_minor, currency)}</span><span className="l">начислено за {monthLabel(r.live.month, false)} на сейчас</span></div>
-        <div className="kpi"><span className="v">≈ {formatMoneyShort(Math.round(n(r.live.projected_accrual_minor) / 100) * 100, currency)}</span><span className="l">к концу месяца при текущем темпе</span></div>
-        <div className={`kpi${n(r.debt_minor) > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(r.debt_minor, currency)}</span><span className="l">долг за закрытые месяцы</span></div>
+    <details className="finance-details">
+      <summary>Начисления и оплаты роялти</summary>
+      <div className="row between access-row">
+        <span>Долг за закрытые месяцы</span>
+        <Money minor={r.debt_minor} currency={currency} short strong />
       </div>
       <div className="table-wrap" role="region" aria-label="Роялти по месяцам" tabIndex={0}>
         <table className="table">
@@ -286,7 +309,6 @@ function RoyaltySection({ r, currency }: { r: Royalty; currency: string }) {
           ))}
         </>
       )}
-      <p className="faint" style={{ marginTop: 8 }}>Оплату отмечает менеджер по франшизе, когда деньги поступили. Корректировки — исправления начисления менеджером.</p>
-    </Card>
+    </details>
   );
 }

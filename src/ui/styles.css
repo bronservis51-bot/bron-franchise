@@ -689,7 +689,6 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
 .sw.net, .seg.net { background: var(--series-1); }
 .sw.payroll, .seg.payroll { background: var(--series-2); }
-.sw.royalty, .seg.royalty { background: var(--series-3); }
 .sw.expenses, .seg.expenses { background: var(--series-4); }
 .fin-bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; height: 200px; align-items: end; border-bottom: 1px solid var(--border); position: relative; }
 .fin-col { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; outline: none; cursor: default; }
@@ -777,7 +776,9 @@ tr.clickable:hover td { background: var(--surface-2); }
 .chip-outline { border-style: dashed; }
 .expense-list { list-style: none; margin: 8px 0 0; padding: 0; }
 .expense-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; background: none; border: 0;
-  border-top: 1px solid var(--border); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  border-top: 1px solid var(--border); color: inherit; font: inherit; text-align: left; }
+button.expense-row { cursor: pointer; }
+button.expense-row, .expense-royalty { display: grid; grid-template-columns: minmax(0, 1fr) auto 15px; }
 .expense-list li:first-child .expense-row { border-top: 0; }
 .expense-main { display: flex; flex-direction: column; min-width: 0; }
 
