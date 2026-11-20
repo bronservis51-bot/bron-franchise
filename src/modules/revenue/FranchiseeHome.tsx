@@ -6,7 +6,6 @@ import { BookOpen, CalendarX, Check, ChevronRight, Download, Landmark, Plus, Tre
 import { command } from '../../platform/backend';
 import { dayLabel, formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
-import { useSession } from '../../platform/session';
 import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
 import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type LocationMonth, type MonthDetail } from './api';
@@ -16,11 +15,6 @@ import { OrderCard } from '../orders/OrderLink';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
-
-function greeting() {
-  const h = new Date().getHours();
-  return h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
-}
 
 function Insights({ m }: { m: MonthDetail }) {
   const prev = Number(m.prev_same_period_minor);
@@ -45,7 +39,7 @@ function Insights({ m }: { m: MonthDetail }) {
   );
 }
 
-interface RoyaltyLive { currency: string; rate_bp: number; debt_minor: number; live: { month: string; accrued_minor: number; projected_accrual_minor: number } }
+interface RoyaltyLive { currency: string; debt_minor: number; live: { month: string; accrued_minor: number } }
 
 function RoyaltyCard() {
   const q = useQuery({ queryKey: ['royalty', 'my'], queryFn: () => command<RoyaltyLive>('royalty_my'), refetchInterval: 120_000 });
@@ -55,8 +49,8 @@ function RoyaltyCard() {
     <Link to="/finance" className="read-card royalty-live">
       <span className="todo-icon"><Landmark size={18} aria-hidden /></span>
       <span className="todo-main">
-        <span className="todo-title">Роялти за {monthLabel(r.live.month, false)}: {formatMoneyShort(r.live.accrued_minor, r.currency)} сейчас</span>
-        <span className="todo-meta">{(r.rate_bp / 100).toLocaleString('ru-RU')} % от выручки · к концу месяца ≈ {formatMoneyShort(Math.round(Number(r.live.projected_accrual_minor) / 100) * 100, r.currency)}{Number(r.debt_minor) > 0 ? ` · долг ${formatMoneyShort(r.debt_minor, r.currency)}` : ' · долга нет'}</span>
+        <span className="todo-title">Начислено роялти за {monthLabel(r.live.month, false)}: {formatMoneyShort(r.live.accrued_minor, r.currency)}</span>
+        <span className="todo-meta">{Number(r.debt_minor) > 0 ? `Долг за закрытые месяцы: ${formatMoneyShort(r.debt_minor, r.currency)}` : 'Долга за закрытые месяцы нет'}</span>
       </span>
       <ChevronRight size={16} className="todo-chevron" aria-hidden />
     </Link>
@@ -118,7 +112,7 @@ function AllPoints({ points, month, onPick, onEnter }: {
       </section>
       <RoyaltyCard />
       <section>
-        <h2 className="section-title">Дни месяца — все точки</h2>
+        <h2 className="section-title">Дни месяца по всем точкам</h2>
         {!ready ? <p className="faint">Загружаем…</p> : !list.length ? <EmptyState title="В этом месяце записей нет" /> : (
           <ul className="day-list2">
             {list.map(([day, x]) => (
@@ -142,7 +136,6 @@ function AllPoints({ points, month, onPick, onEnter }: {
 }
 
 export function FranchiseeHome() {
-  const { me } = useSession();
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(() => { try { return localStorage.getItem(LOC_KEY); } catch { return null; } });
   const [edit, setEdit] = useState<{ day: string; row?: DayRow } | null>(null);
@@ -164,7 +157,7 @@ export function FranchiseeHome() {
     <div className="home">
       <header className="home-head">
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <h1>{greeting()}{me ? `, ${me.user.full_name.split(' ')[0]}` : ''}</h1>
+        <h1>Выручка</h1>
       </header>
 
       <OrderCard />

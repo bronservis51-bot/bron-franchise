@@ -463,7 +463,6 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .login-brand .p2 { position: absolute; left: 40px; bottom: 30px; color: rgb(255 255 255 / 14%); }
 .login-brand .big-mark { position: absolute; right: -60px; bottom: 80px; color: rgb(255 255 255 / 5%); }
 .login-brand h1 { font-size: 34px; color: #fff; margin-top: 56px; line-height: 1.15; }
-.login-brand p { color: #a7a8ae; max-width: 360px; margin-top: 14px; }
 .login-panel { min-width: 0; padding: 40px; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
 .login-panel .inner { min-width: 0; width: min(760px, 100%); }
 @media (max-width: 960px) {
@@ -636,7 +635,7 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .on-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 25%, transparent); }
 .shift-time { display: flex; align-items: center; gap: 6px; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .earn-line { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--success-weak); margin-bottom: 4px; font-size: var(--fs-l); }
-.earn-line > span:nth-child(2) { flex: 1; }
+.earn-line > span:first-child { flex: 1; }
 .earn-result { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 16px; background: var(--success-weak); border: 1px solid color-mix(in srgb, var(--success) 30%, transparent); }
 .mini-plan { padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); display: grid; gap: 6px; }
 .muted-card { opacity: .65; }

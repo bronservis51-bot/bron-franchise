@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarX, ChevronRight, Plus, Sparkles } from 'lucide-react';
+import { CalendarX, ChevronRight } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Badge, Button, DataState, EmptyState, PageHeader } from '../../ui';
@@ -34,11 +34,11 @@ export function NetworkPage() {
 
   return (
     <>
-      <PageHeader title="Франчайзи" sub="Выручка и план по каждой точке сети"
+      <PageHeader title="Франчайзи"
         actions={<>
           <Link to="/finance" className="btn btn-secondary">Экономика франшизы</Link>
-          <Button onClick={() => setSuggest(true)}><Sparkles size={16} aria-hidden />Предложить план</Button>
-          <Button variant="primary" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить франчайзи</Button>
+          <Button onClick={() => setSuggest(true)}>Предложить план</Button>
+          <Button variant="primary" onClick={() => setAdding(true)}>Добавить франчайзи</Button>
         </>} />
       <MonthNav month={month} onChange={setMonth} max={monthStart()} />
       <DataState query={q} skeleton={6} empty={(o) => (o.rows.length ? null : <EmptyState title="Пока нет ни одной точки" text="Добавьте франчайзи и его точки." />)}>
@@ -51,12 +51,12 @@ export function NetworkPage() {
           return (
             <>
               <div className="kpis">
-                <div className="kpi"><span className="v">{formatMoneyShort(Math.round(Number(o.fact_rub_minor ?? 0) / 100) * 100, 'RUB')}</span><span className="l">выручка сети, в рублях</span></div>
-                <div className="kpi"><span className="v">{o.plan_rub_minor ? formatMoneyShort(Math.round(Number(o.plan_rub_minor) / 100) * 100, 'RUB') : '—'}</span><span className="l">план сети, в рублях</span></div>
+                <div className="kpi"><span className="v">{formatMoneyShort(Math.round(Number(o.fact_rub_minor ?? 0) / 100) * 100, 'RUB')}</span><span className="l">выручка сети</span></div>
+                <div className="kpi"><span className="v">{o.plan_rub_minor ? formatMoneyShort(Math.round(Number(o.plan_rub_minor) / 100) * 100, 'RUB') : '—'}</span><span className="l">план сети</span></div>
                 <div className="kpi"><span className="v">{pct === null ? '—' : `${pct.toLocaleString('ru-RU')} %`}</span><span className="l">выполнение плана</span></div>
                 <div className={`kpi${missing ? ' warn' : ''}`}><span className="v">{missing}</span><span className="l">точек с невнесёнными днями</span></div>
               </div>
-              {o.missing_fx.length > 0 && <p className="faint">Нет курса к рублю для: {o.missing_fx.join(', ')} — эти точки не вошли в итог в рублях.</p>}
+              {o.missing_fx.length > 0 && <p className="faint">Точки с валютами {o.missing_fx.join(', ')} не вошли в итог в рублях. Для них нет курса.</p>}
               <div className="net-table" role="table" aria-label="Точки сети">
                 <div className="net-tr net-th" role="row">
                   <span role="columnheader">Точка</span><span role="columnheader" className="r">План</span><span role="columnheader" className="r">Факт</span>
@@ -87,11 +87,11 @@ export function NetworkPage() {
         }}
       </DataState>
       {withoutPoints.length > 0 && <section className="stack" style={{marginTop:24}}>
-        <h2 className="section-title">Партнёры без добавленных точек</h2>
+        <h2 className="section-title">Франчайзи без точек</h2>
         {withoutPoints.map(p => <Link key={p.id} to={`/partners/${p.id}`} className="read-card">
           <span className="todo-main"><span className="todo-title">{p.name}</span>
             {p.preparation_stage && <span className="todo-meta">{st(PARTNER_PREPARATION, p.preparation_stage)[0]}</span>}
-            <span className="todo-meta">Кабинет создан. Добавьте точку, чтобы начать учёт выручки.</span></span><ChevronRight size={18} aria-hidden />
+          </span><ChevronRight size={18} aria-hidden />
         </Link>)}
       </section>}
       {adding && <PartnerDialog onClose={() => setAdding(false)} onSaved={(id) => navigate(`/partners/${id}`)} />}
