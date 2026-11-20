@@ -46,7 +46,6 @@ export function LoginPage() {
         <div style={{ position: 'relative' }}>
           <LogoFull height={52} />
           <h1>Кабинет Бронь Сервис</h1>
-          <p>Для франчайзи и сотрудников сети.</p>
         </div>
         <div className="faint" style={{ position: 'relative', color: '#6f7076' }}>© Бронь Сервис</div>
       </aside>
@@ -66,7 +65,7 @@ export function LoginPage() {
   function form() {
     return (
           <form onSubmit={submit} noValidate>
-            <Field label="Логин" required hint="Ваш личный логин. Сотрудники могут входить по номеру телефона">
+            <Field label="Логин" required hint="Сотрудники могут войти по номеру телефона.">
               {(id) => <Input id={id} type="text" autoCapitalize="none" spellCheck={false} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
             </Field>
             <Field label="Пароль" required>
@@ -78,14 +77,14 @@ export function LoginPage() {
                 </button>
               </div>}
             </Field>
-            <Checkbox label="Запомнить это устройство" hint="Только на личном устройстве: на общем компьютере сессия закончится при закрытии вкладки."
+            <Checkbox label="Запомнить это устройство" hint="Включайте только на личном устройстве. Без отметки сессия завершится при закрытии вкладки."
               checked={remember} onChange={setRemember} />
             {error && <ErrorBox e={error} />}
             <div style={{ marginTop: 16 }}>
               <Button type="submit" variant="primary" block loading={busy} disabled={!email || !password}>Войти</Button>
             </div>
             <details className="forgot"><summary>Забыли пароль?</summary>
-              <p className="faint">Сотрудник — попросите франчайзи: он задаст новый пароль в разделе «Сотрудники». Франчайзи — напишите менеджеру по франшизе: он задаст новый пароль в вашей карточке. Сменить пароль на свой можно в профиле после входа.</p>
+              <p className="faint">Сотрудникам пароль меняет франчайзи в разделе «Сотрудники». Франчайзи может запросить новый пароль у менеджера по франшизе. После входа пароль можно сменить в профиле.</p>
             </details>
           </form>
     );
@@ -101,13 +100,13 @@ function ErrorBox({ e }: { e: { text: string; detail: string } }) {
 }
 
 function ServerStatus({ s, onRetry }: { s: ReturnType<typeof useServerCheck>[0]; onRetry: () => void }) {
-  if (s.state === 'ok') return s.ms > 4000 ? <p className="faint" style={{ marginBottom: 12 }}>Сервер отвечает медленно ({(s.ms / 1000).toFixed(1)} с) — вход может занять время.</p> : null;
+  if (s.state === 'ok') return s.ms > 4000 ? <p className="faint" style={{ marginBottom: 12 }}>Сервер ответил за {(s.ms / 1000).toFixed(1)} с. Вход может занять больше времени.</p> : null;
   if (s.state === 'checking') return null;
   return (
     <div className="alert tone-warning" role="status" style={{ marginBottom: 16 }}>
       <div className="alert-body">
         <strong>{s.reason}</strong>
-        <div>Вход можно попробовать. Если не получается — откройте «Помощь при сбое» ниже формы.</div>
+        <div>Попробуйте войти. Если не получится, откройте «Помощь при сбое».</div>
         <div className="faint" style={{ marginTop: 4 }}>Код: {s.connection.auth.code} / {s.connection.data.code}</div>
       </div>
       <button type="button" className="btn btn-sm" onClick={onRetry}>Проверить снова</button>

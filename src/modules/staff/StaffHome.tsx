@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Check, ChevronRight, Clock, Play, Square, Wallet } from 'lucide-react';
+import { BookOpen, Check, ChevronRight, Clock } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
 import { dayLabel, monthLabel } from '../../platform/dates';
@@ -49,15 +49,15 @@ function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDo
   return (
     <ConfirmDialog open title={editing ? 'Исправить смену' : 'Закрыть смену'} confirmLabel={editing ? 'Сохранить' : 'Закрыть смену'} busy={m.isPending} error={m.error}
       disabled={cash===''||card===''||!cashValid||!cardValid||(total===0n&&!zero)} onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">{dayLabel(shift.day)}. Внесите выручку за смену{shift.location_name ? ` — ${shift.location_name}` : ''}.</p>
+      <p className="muted">{dayLabel(shift.day)}{shift.location_name ? `, ${shift.location_name}` : ''}</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Наличные">{(id) => <MoneyInput id={id} value={cash} onChange={setCash} requireExplicitValue onValidityChange={setCashValid} currency={currency} placeholder="0" />}</Field>
         <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} requireExplicitValue onValidityChange={setCardValid} currency={currency} placeholder="0" />}</Field>
       </div>
       {total===0n&&<Checkbox label="Подтверждаю: продаж за эту смену не было" checked={zero} onChange={setZero}/>}
-      {editing&&<p className="faint">Исправить выручку можно в течение 5 минут после первой сдачи. Изменение сохранится в истории; позже обратитесь к руководителю. Новая смена и второе начисление не создаются.</p>}
+      {editing&&<p className="faint">Выручку можно исправить в течение 5 минут после первой сдачи. Правка сохранится в истории без повторного начисления. Позже обратитесь к руководителю.</p>}
       <div className="day-total-line"><span>Выручка смены</span><Money minor={total} currency={currency} strong /></div>
-      <div className="earn-line"><Wallet size={18} aria-hidden /><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
+      <div className="earn-line"><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
       <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Больше из гарантированного минимума и процента от выручки, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
       <Field label="Комментарий">{(id) => <Input id={id} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />}</Field>
     </ConfirmDialog>
@@ -66,7 +66,7 @@ function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDo
 
 export function StaffHome() {
   const { me } = useSession();
-  return me && <StaffShifts key={me.user.id} userId={me.user.id} firstName={me.user.full_name.split(' ')[0]} />;
+  return me && <StaffShifts key={me.user.id} userId={me.user.id} />;
 }
 
 type QueueSnapshot = Awaited<ReturnType<typeof queuedOps>>;
@@ -118,7 +118,7 @@ function ShiftMonth({ data: d, current }: { data: StaffHomeData; current?: boole
   );
 }
 
-function StaffShifts({ userId, firstName }: { userId: string; firstName: string }) {
+function StaffShifts({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   useTick(10_000);
@@ -153,7 +153,7 @@ function StaffShifts({ userId, firstName }: { userId: string; firstName: string 
     <div className="home">
       <header className="home-head">
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <h1>{firstName ? `${firstName}, ` : ''}{q.data?.open_shift ? 'хорошей смены!' : 'привет!'}</h1>
+        <h1>Смена</h1>
       </header>
 
       <DataState query={q} skeleton={4}>
@@ -164,7 +164,7 @@ function StaffShifts({ userId, firstName }: { userId: string; firstName: string 
                 <span className="ok-icon"><Check size={18} aria-hidden /></span>
                 <div>
                   <div>{shownResult.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(shownResult.earned, d.currency)}</strong></div>
-                  {shownResult.month !== null && <div className="faint">За {monthLabel(d.month, false)} — {formatMoneyShort(shownResult.month, d.currency)}</div>}
+                  {shownResult.month !== null && <div className="faint">За {monthLabel(d.month, false)}: {formatMoneyShort(shownResult.month, d.currency)}</div>}
                 </div>
               </div>
             )}
@@ -175,7 +175,7 @@ function StaffShifts({ userId, firstName }: { userId: string; firstName: string 
                 {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
                 <div className="shift-time"><Clock size={18} aria-hidden /> {since(d.open_shift.opened_at)}</div>
                 <Button variant="primary" block className="btn-lg" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
-                  <Square size={18} aria-hidden />Закрыть смену и внести выручку
+                  Закрыть смену и внести выручку
                 </Button>
                 <button type="button" className="link-btn" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
               </section>
@@ -189,7 +189,7 @@ function StaffShifts({ userId, firstName }: { userId: string; firstName: string 
                   </button>
                 ) : (
                   <Button key={l.location_id} variant="primary" block className="btn-lg" disabled={open.isPending} onClick={() => setOpening(l)}>
-                    <Play size={18} aria-hidden />Открыть смену{d.locations.length > 1 ? ` — ${l.location_name}` : ''}
+                    Открыть смену{d.locations.length > 1 ? ` (${l.location_name})` : ''}
                   </Button>
                 ))}
 
@@ -199,7 +199,7 @@ function StaffShifts({ userId, firstName }: { userId: string; firstName: string 
             <ActionError error={open.error ?? cancel.error} />
             {pending.isError && <Alert tone="danger" title="Не удалось проверить очередь смен"
               action={<Button size="sm" onClick={() => void pending.refetch()}>Повторить</Button>} />}
-            {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Не закрывайте смену повторно; состояние обновится после подтверждения сервера.</p>}
+            {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Дождитесь подтверждения сервера. Экран обновится сам.</p>}
             {Boolean(toRead.data?.length) && (
               <Link to="/kb" className="read-card">
                 <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
