@@ -23,7 +23,7 @@
     <button type="button" id="measure">Измерить текущий экран</button>
     <button type="button" id="matrix">Проверить все размеры</button>
   </header>
-  <p>Настоящие компоненты приложения, роль франчайзи, вымышленные данные. Проверка ждёт содержимое раздела и шрифты; измеряет ширину документа и размер полей. Таблицы и канбан могут прокручиваться внутри своих контейнеров.</p>
+  <p>Настоящие компоненты приложения и вымышленные данные. Проверка ждёт содержимое раздела и шрифты, затем измеряет ширину документа и размер полей. Таблицы и канбан могут прокручиваться внутри своих контейнеров.</p>
   <p>Матрица: 5 разделов × 9 размеров × текст 100% и 200%. Она не заменяет проверку клавиатуры, жестов и масштаба на физическом телефоне.</p>
   <div class="frame-scroll" aria-label="Контейнер выбранного размера"><iframe id="preview" title="Основные разделы: приложение с вымышленными данными"></iframe></div>
   <output id="result" aria-live="polite"></output>
@@ -32,7 +32,7 @@
   <script>
     const frame=document.getElementById('preview'),byId=id=>document.getElementById(id);
     const routes={
-      '/':{ready:'.order-card',minControls:0},
+      '/':{ready:'.home-body',minControls:0},
       '/order':{ready:'.order-options',minControls:0},
       '/staff':{ready:'.staff-summary',minControls:0},
       '/rating':{ready:'.rating-row',minControls:0},
@@ -43,7 +43,7 @@
     const selected=()=>({route:byId('route').value,width:Number(byId('width').value),text:byId('text').value});
     function source(test){
       // A unique query value forces an actual navigation even for the same route.
-      const params=new URLSearchParams({role:'franchisee',knowledge:'1',text:test.text,layoutCase:String(++navigation)});
+      const params=new URLSearchParams({role:test.route==='/rating'?'manager':'franchisee',knowledge:'1',text:test.text,layoutCase:String(++navigation)});
       return '/tests/ui/responsive-app.html?'+params+'#'+test.route;
     }
     function geometry(doc){

@@ -36,7 +36,6 @@ export function NetworkPage() {
     <>
       <PageHeader title="Франчайзи"
         actions={<>
-          <Link to="/finance" className="btn btn-secondary">Экономика франшизы</Link>
           <Button onClick={() => setSuggest(true)}>Предложить план</Button>
           <Button variant="primary" onClick={() => setAdding(true)}>Добавить франчайзи</Button>
         </>} />

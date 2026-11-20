@@ -47,7 +47,7 @@ export function RoyaltyPage() {
               )}
             </div>
             {!all && s.rows.some((r) => r.is_open) && <p className="faint">Это текущий месяц: роялти ещё начисляются и войдут в долг после окончания месяца.</p>}
-            <div className="table-wrap card">
+            <div className="table-wrap card" role="region" aria-label="Роялти по франчайзи" tabIndex={0}>
               <table className="table royalty-table">
                 <thead>
                   <tr>

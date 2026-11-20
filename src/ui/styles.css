@@ -219,6 +219,9 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .table th { color: var(--text-2); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
 .table td.r, .table th.r { text-align: right; }
+.table :is(th, td.r, td.num, td.table-month), .economics-table th, .economics-table td:not(:first-child) { white-space: nowrap; }
+.table td.danger-text { display: table-cell; }
+.economics-table td small { white-space: normal; }
 .table tfoot td { font-weight: 650; border-bottom: 0; }
 
 /* Кнопки */
@@ -527,7 +530,6 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .topbar-title { font-weight: 650; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-btn { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch); padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
 .user-btn:hover { background: var(--surface-2); }
-.user-name { font-weight: 600; font-size: var(--fs-s); }
 @media (max-width: 960px) {
   .bottom-nav.cols-2 { grid-template-columns: repeat(2, 1fr); }
   .bottom-nav.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -803,7 +805,6 @@ tr.clickable:hover td { background: var(--surface-2); }
 .fin-editor .day-list2 { margin-top: 8px; }
 
 /* Заказ из наличия и предзаказ */
-.order-card { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
 .order-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .order-option { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; padding: 24px; }
 .order-option h2, .order-option p { margin: 0; }
@@ -929,7 +930,6 @@ tr.clickable:hover td { background: var(--surface-2); }
 }
 
 /* Clear separation of the primary action from point selection. */
-.home > .order-card { margin-bottom: 22px; }
 .team-accounts { margin-bottom: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; }
 .team-accounts summary { cursor: pointer; font-weight: 650; }
 .team-accounts > p { margin: 12px 0; }

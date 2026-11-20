@@ -104,7 +104,7 @@ function BootScreen() {
 
 function Home() {
   const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
-  return isManager ? <NetworkPage /> : isTechnical ? <QuestionsPage /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
+  return isManager ? <NetworkPage /> : isTechnical ? <QuestionsPage home /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
 }
 
 /** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */

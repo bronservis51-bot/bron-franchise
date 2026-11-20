@@ -65,13 +65,13 @@ export function RoyaltyPartnerPage() {
             </div>
             <div className="grid grid-main">
               <Card title="По месяцам" bodyless>
-                <div className="table-wrap">
+                <div className="table-wrap" role="region" aria-label="Роялти франчайзи по месяцам" tabIndex={0}>
                   <table className="table">
                     <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
                     <tbody>
                       {r.months.map((m) => (
                         <tr key={m.month}>
-                          <td>{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
+                          <td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
                           <td className="r num">{formatMoneyShort(m.revenue_minor, r.currency)}</td>
                           <td className="r">{pct(m.rate_bp)}</td>
                           <td className="r num">{formatMoneyShort(m.accrued_minor, r.currency)}</td>

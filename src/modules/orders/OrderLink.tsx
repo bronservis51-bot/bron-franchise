@@ -1,7 +1,7 @@
 // Резервные каналы закупки во время подключения единого раздела.
 // Ссылка персональная (ссылка контрагента): при первом переходе франчайзи подтверждает, что не будет ею делиться.
 import { useState, type MouseEvent } from 'react';
-import { Link } from 'react-router';
+import { NavLink } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
 import { command, toAppError } from '../../platform/backend';
@@ -48,26 +48,12 @@ function useOrderOpen(url: string | null) {
   return { onClick, dialog };
 }
 
-/** Выбор закупки доступен и до назначения персональной ссылки. */
-export function OrderCard() {
-  return (
-      <Link className="read-card order-card" to="/order">
-        <span className="todo-icon"><ShoppingCart size={18} aria-hidden /></span>
-        <span className="todo-main">
-          <span className="todo-title">Заказать материалы</span>
-          <span className="todo-meta">Из наличия или под заказ</span>
-        </span>
-        <ChevronRight size={16} className="todo-chevron" aria-hidden />
-      </Link>
-  );
-}
-
 /** Кнопка в шапке — оба способа закупки с любого экрана франчайзи. */
 export function OrderTopButton() {
   return (
-      <Link className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов">
+      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов">
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
-      </Link>
+      </NavLink>
   );
 }
 

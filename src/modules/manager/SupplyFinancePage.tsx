@@ -78,7 +78,7 @@ function FranchiseOverview() {
           <CompanyExpenses month={month} expenses={e.company_expenses} totals={e.company_expense_totals} />
           <Card title="Расходы и зарплаты франчайзи">
             <p className="faint">Суммы показаны по партнёрам и в валюте каждого партнёра. Зарплаты — по закрытым сменам.</p>
-            <div className="economics-table-wrap"><table className="economics-table">
+            <div className="economics-table-wrap" role="region" aria-label="Расходы и зарплаты франчайзи" tabIndex={0}><table className="economics-table">
               <thead><tr><th>Партнёр</th><th>Зарплаты</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
               <tbody>{e.partners.map(p => <tr key={p.partner_id}>
                 <td><Link to={`/partners/${p.partner_id}`}>{p.partner_name}</Link></td>
@@ -89,7 +89,7 @@ function FranchiseOverview() {
             <p className="faint">Здесь нет данных по отдельным сотрудникам. Не внесённые расходы не считаются нулевыми подтверждёнными затратами.</p>
           </Card>
         </>}</DataState>
-        <div className="economics-table-wrap"><table className="economics-table">
+        <div className="economics-table-wrap" role="region" aria-label="Розница, роялти и поставки по франчайзи" tabIndex={0}><table className="economics-table">
           <thead><tr><th>Партнёр</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
           <tbody>{s.rows.map(r => {
             const points = rev.data?.rows.filter(p => p.partner_id === r.partner_id);
