@@ -10,6 +10,7 @@ import { PARTNER_PREPARATION, PARTNER_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
 import { DayList, MonthNav, PlanCard } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
+import { PartnerLaunchPreview } from '../revenue/LaunchChecklist';
 import { revenueMonth, type DayRow } from '../revenue/api';
 import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type Location } from './api';
 import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog, SetPasswordDialog } from './PartnerDialog';
@@ -118,6 +119,7 @@ export function PartnerPage() {
             </>} />
           <div className="grid grid-main">
             <div className="stack">
+              {partner.preparation_stage && <PartnerLaunchPreview partner={partner.id} />}
               <div className="row between">
                 <div className="chips" role="group" aria-label="Точка" style={{ marginBottom: 0 }}>
                   {(locs.data ?? []).map((l) => (

@@ -4,8 +4,10 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { CalendarX, Check, Plus } from 'lucide-react';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
-import { Button, DataState, EmptyState, Money } from '../../ui';
+import { useSession } from '../../platform/session';
+import { Button, DataState, EmptyState, ErrorState, Money, PageHeader, Skeleton } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
+import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
 import { revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { RevenueDialog } from './RevenueDialog';
 
@@ -102,6 +104,12 @@ function AllPoints({ points, month, onPick, onEnter }: {
 }
 
 export function FranchiseeHome() {
+  const { me } = useSession();
+  const ownedPartners = new Set(me?.assignments
+    .filter(a => a.role === 'franchisee' && a.scope_type === 'partner' && a.scope_id)
+    .map(a => a.scope_id));
+  const partner = ownedPartners.size === 1 ? ownedPartners.values().next().value : undefined;
+  const launch = usePartnerLaunch(partner);
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(() => { try { return localStorage.getItem(LOC_KEY); } catch { return null; } });
   const [edit, setEdit] = useState<{ day: string; row?: DayRow; dayOff?: boolean } | null>(null);
@@ -117,6 +125,15 @@ export function FranchiseeHome() {
   const todayRow = m?.days.find((d) => d.day === m.today);
   const todayOff = m?.days_off?.includes(m.today);
   const isCurrent = month === monthStart();
+
+  // A launch refresh must not unmount a revenue form with unsaved input.
+  if (!edit && !enter) {
+    if (partner && launch.data && !launch.isError) return <LaunchChecklist partner={partner} launch={launch.data} />;
+    if (launch.isLoading) return <div className="home"><Skeleton lines={4} /></div>;
+    if (launch.isError && overview.isSuccess && !points.length) return <div className="home">
+      <PageHeader title="Главная" /><ErrorState error={launch.error} onRetry={() => void launch.refetch()} />
+    </div>;
+  }
 
   return (
     <div className="home">

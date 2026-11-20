@@ -4,9 +4,8 @@ import { Navigate } from 'react-router';
 import { command, from, rows } from '../../platform/backend';
 import { useSession, type Me } from '../../platform/session';
 import { dayLabel, monthStart } from '../../platform/dates';
-import { formatMoneyShort } from '../../platform/money';
-import { Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, PageHeader, Select } from '../../ui';
-import { StaffHome } from './StaffHome';
+import { Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, Money, PageHeader, Select } from '../../ui';
+import { MonthlyDetails, StaffHome } from './StaffHome';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, randomPassword, staffList, userSetPassword } from './api';
 import { phoneLoginDigits } from '../../platform/login';
@@ -33,21 +32,28 @@ export function TeamAccessPage() {
 
 export function TeamHome() {
   const { me, can } = useSession();
-  const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee_manager')?.scope_id;
+  const partner = me?.assignments.find(assignment => assignment.scope_type === 'partner' && assignment.role === 'franchisee_manager')?.scope_id;
+  const [month, setMonth] = useState(monthStart());
+  if (can('shift.work')) return <StaffHome pointRevenue={partner ? selected => <TeamRevenue partner={partner} month={selected} /> : undefined} />;
   return <div className="home">
-    {can('shift.work') ? <StaffHome /> : <PageHeader title="Главная" />}
-    {partner && <TeamRevenue partner={partner} />}
+    <PageHeader title="Главная" />
+    {partner && <Card title="Итоги месяца" className="team-monthly">
+      <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+      <TeamRevenue partner={partner} month={month} />
+    </Card>}
   </div>;
 }
-function TeamRevenue({partner}:{partner:string}) {
-  const [month,setMonth]=useState(monthStart());
-  const q=useQuery({queryKey:['team-revenue',partner,month],queryFn:()=>command<RevenuePoint[]>('team_revenue_month',{partner,month})});
-  return <section className="stack"><h2>Выручка моих точек</h2><MonthNav month={month} onChange={setMonth} max={monthStart()}/>
-    <DataState query={q}>{points=>points.length?points.map(p=><Card key={p.location_id}>
-      <div className="row between"><strong>{p.location_name}</strong><strong className="num">{formatMoneyShort(p.total_minor,p.currency)}</strong></div>
-      <details><summary>По дням · {p.days.length} отчётов</summary><ul className="list">{p.days.map(d=><li key={d.day} className="row between"><span>{dayLabel(d.day)}</span><span className="num">{formatMoneyShort(d.total_minor,p.currency)}</span></li>)}</ul></details>
-      {!p.days.length&&<p className="faint">Выручка за этот месяц ещё не внесена.</p>}
-    </Card>):<p className="faint">Франчайзи ещё не назначил точки управления.</p>}</DataState>
+function TeamRevenue({ partner, month }: { partner: string; month: string }) {
+  const q = useQuery({ queryKey: ['team-revenue', partner, month], queryFn: () => command<RevenuePoint[]>('team_revenue_month', { partner, month }) });
+  return <section className="team-point-revenue">
+    <h3>Выручка моих точек</h3>
+    <DataState query={q}>{points => points.length ? points.map(point => (
+      <MonthlyDetails key={point.location_id} label={point.location_name} total={point.total_minor} currency={point.currency}>
+        {point.days.length > 0 ? <ul className="list">{point.days.map(day => (
+          <li key={day.day} className="row between"><span>{dayLabel(day.day)}</span><Money minor={day.total_minor} currency={point.currency} short /></li>
+        ))}</ul> : <p className="faint">За этот месяц нет выручки.</p>}
+      </MonthlyDetails>
+    )) : <p className="faint">Франчайзи ещё не назначил точки управления.</p>}</DataState>
   </section>;
 }
 export function TeamAccounts({ partner, standalone = false }: { partner: string; standalone?: boolean }) {

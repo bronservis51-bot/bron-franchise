@@ -65,8 +65,8 @@ export function LoginPage() {
   function form() {
     return (
           <form onSubmit={submit} noValidate>
-            <Field label="Логин" required hint="Сотрудники могут войти по номеру телефона.">
-              {(id) => <Input id={id} type="text" autoCapitalize="none" spellCheck={false} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
+            <Field label="Логин" required hint="Вход по телефону доступен, если номер сохранён как логин.">
+              {(id, describedBy) => <Input id={id} aria-describedby={describedBy} type="text" autoCapitalize="none" spellCheck={false} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}
             </Field>
             <Field label="Пароль" required>
               {(id) => <div className="password-field">
@@ -85,6 +85,7 @@ export function LoginPage() {
             </div>
             <details className="forgot"><summary>Забыли пароль?</summary>
               <p className="faint">Сотрудникам пароль меняет франчайзи в разделе «Сотрудники». Франчайзи может запросить новый пароль у менеджера по франшизе. После входа пароль можно сменить в профиле.</p>
+              <p className="faint">Менеджеру по франшизе восстановить доступ поможет администратор системы после проверки личности.</p>
             </details>
           </form>
     );

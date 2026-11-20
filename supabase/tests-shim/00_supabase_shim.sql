@@ -48,7 +48,26 @@ create table auth.identities (
 
 create table auth.sessions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create table auth.mfa_amr_claims (
+  session_id uuid not null references auth.sessions(id) on delete cascade,
+  authentication_method text not null,
+  primary key (session_id, authentication_method)
+);
+
+create table auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null
+);
+
+create table auth.one_time_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  token_type text not null
 );
 
 -- Как в Supabase: идентификатор пользователя из claims запроса.

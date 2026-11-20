@@ -634,6 +634,17 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .link-btn { border: 0; background: none; padding: 6px 0; color: var(--text-2); font: inherit; font-size: var(--fs-s); text-decoration: underline; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .shift-card { border-radius: 20px; padding: 18px 20px; background: var(--success-weak); border: 1px solid color-mix(in srgb, var(--success) 30%, transparent); display: grid; gap: 10px; }
 .shift-label { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.team-monthly .month-nav { margin-bottom: 12px; }
+.team-monthly .month-nav-label { text-align: center; }
+.team-point-revenue h3 { margin: 16px 0 8px; font-size: var(--fs); }
+.monthly-details { border-top: 1px solid var(--border); min-width: 0; }
+.monthly-details summary { display: grid; grid-template-columns: minmax(0, 1fr) 16px; align-items: center; gap: 8px; min-height: var(--touch); padding: 8px 0; cursor: pointer; list-style: none; }
+.monthly-details summary::-webkit-details-marker { display: none; }
+.monthly-details-values { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.monthly-details-values > span { flex: 1 1 12ch; min-width: 0; }
+.monthly-details-values > .num { margin-inline-start: auto; }
+.monthly-details[open] summary svg { transform: rotate(180deg); }
+.monthly-details[open] { padding-bottom: 8px; }
 .on-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 25%, transparent); }
 .shift-time { display: flex; align-items: center; gap: 6px; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .earn-line { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--success-weak); margin-bottom: 4px; font-size: var(--fs-l); }
