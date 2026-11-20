@@ -1,4 +1,4 @@
-import type { ShiftPolicy } from './Motivation';
+import type { PayPolicy, ShiftPolicy } from './Motivation';
 import { command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
@@ -12,8 +12,15 @@ export interface StaffHomeData {
   month_earned_minor: number; month_revenue_minor: number; month_shifts: number;
   shifts: Shift[];
 }
+export type StaffPosition = 'trainee' | 'sales_manager' | 'manager';
+export interface StaffAccess { view_staff: boolean; create_staff: boolean; procurement: boolean }
+export type CustomShiftPay = PayPolicy & { name: string };
+
 export interface StaffRow {
   can_manage?: boolean; is_manager?: boolean;
+  position?: StaffPosition;
+  access?: StaffAccess;
+  custom_pay?: CustomShiftPay | null;
   employee_kind?: 'employee'|'trainee'; internship_from?:string|null; internship_until?:string|null; internship_floor_minor?:number; learning_enabled?:boolean;
   user_id: string; full_name: string; phone: string; active: boolean; use_partner_motivation?: boolean; location_ids: string[]; location_names: string[];
   rate_bp: number; shift_fee_minor: number; open_shift: { id: string; location_name: string; opened_at: string } | null;

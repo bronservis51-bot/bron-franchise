@@ -123,3 +123,40 @@ describe('финансы по всем точкам и по отдельной �
     }
   });
 });
+
+describe('finance projection for Google reports', () => {
+  it('includes app totals, omits demo partners and only opens to the reporting role', async () => {
+    const query = 'select * from app_private.google_finance_rows($1, $2)';
+    const [{ from_date: from, through }] = await t.admin<{ from_date: string; through: string }>(
+      "select (app_private.current_month() - interval '1 month')::date::text as from_date, current_date::text as through");
+    await expect(t.as(MANAGER, query, [from, through])).rejects.toThrow(/permission denied/);
+    await expect(t.as(OWNER, query, [from, through])).rejects.toThrow(/permission denied/);
+    const previous = await t.admin<{ partner_id: string }>(query, [from, through]);
+    expect(previous.some((row) => row.partner_id === partner)).toBe(false);
+    await t.admin('update public.partner set is_demo = false where id = $1', [partner]);
+    await t.db.exec(`create role google_report_fixture; grant usage on schema app_private to google_report_fixture;
+      grant execute on function app_private.google_finance_rows(date,date) to google_report_fixture;`);
+    try {
+      const rows = await t.db.transaction(async (tx) => {
+        await tx.exec('set local role google_report_fixture');
+        return (await tx.query<{ partner_id: string; month: string; kind: string; amount: string; currency: string }>(query, [from, through])).rows;
+      });
+      const included = rows.filter((row) => row.partner_id === partner);
+      expect(included.length).toBeGreaterThan(0);
+      expect(rows.length).toBe(previous.length + included.length);
+      expect([...new Set(included.map((row) => row.currency))]).toEqual(['KZT']);
+      const expected = await finance(from);
+      const revenue = included.filter((row) => row.kind === 'revenue' && row.month === from);
+      expect(revenue.reduce((sum, row) => sum + Number(row.amount), 0)).toBe(expected.current.revenue_minor);
+      const partial = (await t.admin<{ partner_id: string; kind: string; amount: string }>(query, [from, from]))
+        .filter((row) => row.partner_id === partner);
+      const [{ bp }] = await t.admin<{ bp: number }>('select app_private.rate_bp($1,$2) as bp', [partner, from]);
+      const partialRevenue = partial.filter((row) => row.kind === 'revenue').reduce((sum, row) => sum + Number(row.amount), 0);
+      expect(partialRevenue).toBeGreaterThan(0);
+      expect(Number(partial.find((row) => row.kind === 'royalty')?.amount)).toBe(Math.round(partialRevenue * bp / 10000));
+    } finally {
+      await t.admin('update public.partner set is_demo = true where id = $1', [partner]);
+      await t.db.exec('drop owned by google_report_fixture; drop role google_report_fixture');
+    }
+  });
+});

@@ -77,3 +77,11 @@ export function requireClient(): SupabaseClient {
   if (!supabase) throw new Error('Supabase не настроен');
   return supabase;
 }
+
+/** Подтверждение паролем не должно подменять активную сессию кабинета. */
+export function createPasswordConfirmationClient(): SupabaseClient {
+  return createClient(config.supabaseUrl, config.supabaseKey, {
+    auth: { storageKey: `bron.confirm.${crypto.randomUUID()}`, persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: tracedFetch },
+  });
+}

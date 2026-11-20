@@ -8,8 +8,8 @@ import {Button,Card,Checkbox,ConfirmDialog,DataState,Field,Input,MoneyInput,Sele
 import type {Shift} from './api';
 
 type OpenShift=Shift&{user_name:string;location_name:string;currency:string;today:string;can_resolve:boolean;can_close:boolean};
-export function useOpenShifts(partner: string) {
-  return useQuery({ queryKey: ['staff', 'open-shifts', partner], queryFn: () => command<OpenShift[]>('staff_open_shifts', { partner }) });
+export function useOpenShifts(partner: string, enabled = true) {
+  return useQuery({ queryKey: ['staff', 'open-shifts', partner], enabled, queryFn: () => command<OpenShift[]>('staff_open_shifts', { partner }) });
 }
 /** Deliberate supervisor recovery; never auto-closes forgotten shifts or invents totals. */
 export function ShiftReview({partner}:{partner:string}){

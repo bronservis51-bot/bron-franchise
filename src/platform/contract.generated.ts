@@ -64,6 +64,7 @@ export const CONTRACT = {
   manager_company_expense_delete: { args: ['id'], returns: 'void' },
   manager_company_expense_save: { args: ['id', 'month', 'category', 'amount', 'note'], returns: 'scalar' },
   manager_economy: { args: ['month'], returns: 'scalar' },
+  manager_set_my_phone_login: { args: ['phone', 'previous_session'], returns: 'scalar' },
   manager_supply_map: { args: ['counterparty', 'partner'], returns: 'void' },
   manager_supply_snapshot: { args: ['month'], returns: 'scalar' },
   me: { args: [], returns: 'scalar' },

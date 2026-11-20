@@ -9,6 +9,7 @@ import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
 import { TeamAccessPage, TeamHome } from '../modules/staff/TeamAccounts';
 import { LoginPage, SetupPage } from './LoginPage';
+import { canOpenStaffDirectory, canOrderMaterials, type PermissionCheck } from './nav';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,12 +74,12 @@ const router = createHashRouter([
       { path: 'learning', element: <LearningPage /> },
       { path: 'learning/manage', element: <LearningManagePage /> },
       { path: 'learning/lesson/:id', element: <LearningLessonPage /> },
-      { path: 'order', element: <ByRole franchisee={<OrderPage />} team={<OrderPage />} /> },
+      { path: 'order', element: <PartnerRoute delegated={canOrderMaterials}><OrderPage /></PartnerRoute> },
       { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
       { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
       { path: 'royalty', element: <Navigate to="/finance" replace /> },
       { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
-      { path: 'staff', element: <ByRole franchisee={<StaffPage />} team={<StaffPage />} /> },
+      { path: 'staff', element: <PartnerRoute delegated={canOpenStaffDirectory}><StaffPage /></PartnerRoute> },
       { path: 'team-access', element: <ByRole franchisee={<TeamAccessPage />} /> },
       { path: 'rating', element: <ManagerOnly><RatingPage /></ManagerOnly> },
       { path: 'kb/questions', element: <QuestionsPage /> },
@@ -109,15 +110,21 @@ function Home() {
 }
 
 /** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
-function ByRole({ manager, franchisee, team }: { manager?: ReactNode; franchisee?: ReactNode; team?: ReactNode }) {
+function ByRole({ manager, franchisee }: { manager?: ReactNode; franchisee?: ReactNode }) {
   const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
-  const el = isManager ? manager : isTechnical ? null : isStaff ? null : isTeamManager ? team : franchisee;
+  const el = isManager ? manager : isTechnical || isStaff || isTeamManager ? null : franchisee;
   return el ? <>{el}</> : <Navigate to="/" replace />;
 }
 
 function ManagerOnly({ children }: { children: ReactNode }) {
   const { isManager } = useSession();
   return isManager ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+function PartnerRoute({ children, delegated }: { children: ReactNode; delegated: (can: PermissionCheck) => boolean }) {
+  const { isManager, isTechnical, isStaff, isTeamManager, can } = useSession();
+  if (isManager || isTechnical || ((isStaff || isTeamManager) && !delegated(can))) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function Guard() {

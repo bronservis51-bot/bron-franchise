@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Bron Franchise Google finance workbooks hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=bron-google-finance.service
+
+[Install]
+WantedBy=timers.target

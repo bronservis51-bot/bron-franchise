@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { CloudOff, KeyRound, LogOut, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
+import { phoneLoginDigits } from '../platform/login';
+import { changeManagerPhoneLogin } from '../platform/managerLogin';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOps } from '../platform/outbox';
-import { navFor, type NavItem } from './nav';
+import { canOpenStaffDirectory, canOrderMaterials, navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
@@ -86,10 +88,48 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
+  const { me, reload } = useSession();
+  const toast = useToast();
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const digits = phoneLoginDigits(phone);
+  const submit = async () => {
+    if (!me || !digits || !password || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const changed = await changeManagerPhoneLogin(me.user, digits, password);
+      toast(changed ? 'Логин для входа изменён' : 'Этот номер уже используется для вашего входа');
+      onClose();
+      void reload().catch(() => toast('Обновите страницу, чтобы увидеть новый логин.'));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setPassword('');
+      setBusy(false);
+    }
+  };
+  return (
+    <ConfirmDialog open title="Сменить логин" confirmLabel="Сохранить логин" busy={busy} error={error}
+      disabled={!digits || !password} dirty={Boolean(phone)} onClose={onClose} onConfirm={submit}>
+      <p className="muted">В следующий раз войдите с новым номером и текущим паролем. Другие сеансы завершатся.</p>
+      <Field label="Номер телефона для входа" required hint="Укажите номер с кодом страны.">{(id, describedBy) =>
+        <Input id={id} aria-describedby={describedBy} type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} required />}
+      </Field>
+      <Field label="Текущий пароль" required>{id =>
+        <Input id={id} type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />}
+      </Field>
+    </ConfirmDialog>
+  );
+}
+
 function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean }) {
-  const { me, signOut } = useSession();
+  const { me, isManager, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
+  const [phone, setPhone] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const installState = useInstallState();
   const ref = useRef<HTMLDivElement>(null);
@@ -116,6 +156,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
+          {isManager && <button role="menuitem" onClick={() => { setOpen(false); setPhone(true); }}><Phone size={16} aria-hidden />Сменить логин</button>}
           {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
           <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
@@ -123,6 +164,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
         </div>
       )}
       {pw && <PasswordDialog onClose={() => setPw(false)} />}
+      {isManager && phone && <ManagerLoginDialog onClose={() => setPhone(false)} />}
       {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
     </div>
   );
@@ -149,7 +191,8 @@ export function Shell() {
   const online = useOnline();
   const loc = useLocation();
   const role = isManager ? 'manager' : isTechnical ? 'support' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
-  const nav = navFor(role).filter((n) => n.to !== '/rating' || can('rating.read'));
+  const nav = navFor(role, canOpenStaffDirectory(can)).filter((n) => n.to !== '/rating' || can('rating.read'));
+  const showOrder = role === 'franchisee' || ((role === 'staff' || role === 'team') && canOrderMaterials(can));
   const mainRef = useRef<HTMLElement>(null);
   const { ops, error: queueError } = useOutbox(me?.user.id, online);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -187,7 +230,7 @@ export function Shell() {
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
-          {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
+          {showOrder && <OrderTopButton />}
           <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
         <AppUpdateBanner hasQueuedWork={ops.length > 0} />

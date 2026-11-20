@@ -1,12 +1,12 @@
 // Экран сотрудника: открыть смену → закрыть с выручкой → сразу видно, сколько заработал. Выручку и план точки сотрудник не видит.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Clock } from 'lucide-react';
+import { Check, ChevronDown, Clock } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
-import { dayLabel, monthLabel } from '../../platform/dates';
-import { formatMoneyShort, sumMinor } from '../../platform/money';
+import { dayLabel, monthLabel, monthStart } from '../../platform/dates';
+import { formatMoneyShort, sumMinor, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Alert, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox } from '../../ui';
+import { ActionError, Alert, Button, Card, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 import {onOutboxChange,queuedOps} from '../../platform/outbox';
 import { pctBp, shiftCancel, shiftClose, shiftOpen, staffHome, type Shift, type StaffHomeData } from './api';
@@ -73,66 +73,103 @@ function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDo
   );
 }
 
-export function StaffHome() {
+type PointRevenue = (month: string) => ReactNode;
+
+export function StaffHome({ pointRevenue }: { pointRevenue?: PointRevenue } = {}) {
   const { me } = useSession();
-  return me && <StaffShifts key={me.user.id} userId={me.user.id} />;
+  return me && <StaffShifts key={me.user.id} userId={me.user.id} pointRevenue={pointRevenue} />;
 }
 
 type QueueSnapshot = Awaited<ReturnType<typeof queuedOps>>;
 type ShiftResult = { earned: number; month: number } |
   { earned: number; month: null; shiftId: string; previousQueue: QueueSnapshot | undefined };
 
-function ShiftHistory({ userId, current }: { userId: string; current: StaffHomeData }) {
+function ShiftHistory({ userId, current, pointRevenue }: { userId: string; current?: StaffHomeData; pointRevenue?: PointRevenue }) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const month = selectedMonth ?? current.month;
+  const currentMonth = current?.month ?? monthStart();
+  const month = selectedMonth ?? currentMonth;
   const history = useQuery({
     queryKey: ['staff', 'history', userId, selectedMonth],
     enabled: selectedMonth !== null,
     queryFn: () => staffHome(selectedMonth),
   });
-  return (
+  const compact = Boolean(pointRevenue);
+  const content = (
+    <>
+      <MonthNav month={month} max={currentMonth} onChange={(next) => setSelectedMonth(next === currentMonth ? null : next)} />
+      {selectedMonth === null ? current && <ShiftMonth data={current} current compact={compact} /> : history.isPaused && !history.data
+        ? <p className="faint" role="status">Для загрузки этого месяца нужна связь.</p>
+        : <DataState query={history}>{(data) => <ShiftMonth data={data} compact={compact} />}</DataState>}
+      {pointRevenue?.(month)}
+    </>
+  );
+  return compact ? <Card title="Итоги месяца" className="team-monthly">{content}</Card> : (
     <section className="stack">
       <h2 className="section-title">Мои смены и начисления</h2>
-      <MonthNav month={month} max={current.month} onChange={(next) => setSelectedMonth(next === current.month ? null : next)} />
-      {selectedMonth === null ? <ShiftMonth data={current} current /> : history.isPaused && !history.data
-        ? <p className="faint" role="status">Для загрузки этого месяца нужна связь.</p>
-        : <DataState query={history}>{(data) => <ShiftMonth data={data} />}</DataState>}
+      {content}
     </section>
   );
 }
 
-function ShiftMonth({ data: d, current }: { data: StaffHomeData; current?: boolean }) {
+export function MonthlyDetails({ label, total, currency, children }: {
+  label: string; total: MinorInput; currency: string; children: ReactNode;
+}) {
+  return <details className="monthly-details">
+    <summary>
+      <span className="monthly-details-values"><span>{label}</span><Money minor={total} currency={currency} short strong /></span>
+      <ChevronDown size={16} aria-hidden />
+    </summary>
+    {children}
+  </details>;
+}
+
+function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; current?: boolean; compact: boolean }) {
+  const shiftCount = `${d.month_shifts} ${d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'}`;
+  const activity = <>{shiftCount} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</>;
+  const terms = current && (d.pay_policy && !('mode' in d.pay_policy) ? 'По ступеням кассы: минимум или процент, плюс премия'
+    : [d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : '',
+      d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''].filter(Boolean).join(' + '));
+  const shifts = d.shifts.length ? (
+    <ul className="day-list2">
+      {d.shifts.map((s) => (
+        <li key={s.id}>
+          <div className="day-row2" style={{ cursor: 'default' }}>
+            <span className="day-date2">{dayLabel(s.day)}</span>
+            <span className="day-sum2">
+              <Money minor={s.earned_minor ?? 0} currency={d.currency} short />
+              <span className="day-split">{s.location_name} · выручка {formatMoneyShort(s.total_minor, d.currency)}</span>
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : <p className="faint">Закрытых смен в этом месяце пока нет.</p>;
+  if (compact) return <MonthlyDetails label="Мои начисления" total={d.month_earned_minor} currency={d.currency}>
+    {d.month_shifts > 0 && <p className="faint">{activity}</p>}
+    {terms && <p className="faint">{terms}</p>}
+    {shifts}
+  </MonthlyDetails>;
   return (
     <>
       <div className="plan-card earn-card" aria-label="Начислено за месяц">
         <div className="plan-label">Начислено за {monthLabel(d.month, false)}</div>
         <div className="plan-fact">{formatMoneyShort(d.month_earned_minor, d.currency)}</div>
-        <div className="plan-of">{d.month_shifts} {d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'} · выручка смен {formatMoneyShort(d.month_revenue_minor, d.currency)}</div>
-        {current && <div className="plan-foot"><span>{d.pay_policy && !('mode' in d.pay_policy) ? 'По ступеням кассы: минимум или процент, плюс премия' : <>{d.shift_fee_minor ? `${formatMoneyShort(d.shift_fee_minor, d.currency)} за выход` : ''}{d.shift_fee_minor && d.rate_bp ? ' + ' : ''}{d.rate_bp ? `${pctBp(d.rate_bp)} от выручки` : ''}</>}</span></div>}
+        <div className="plan-of">{activity}</div>
+        {terms && <div className="plan-foot"><span>{terms}</span></div>}
       </div>
-      {d.shifts.length ? (
-        <ul className="day-list2">
-          {d.shifts.map((s) => (
-            <li key={s.id}>
-              <div className="day-row2" style={{ cursor: 'default' }}>
-                <span className="day-date2">{dayLabel(s.day)}</span>
-                <span className="day-sum2"><Money minor={s.earned_minor ?? 0} currency={d.currency} short />
-                  <span className="day-split">{s.location_name} · выручка {formatMoneyShort(s.total_minor, d.currency)}</span></span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="faint">Закрытых смен в этом месяце пока нет.</p>}
+      {shifts}
     </>
   );
 }
 
-function StaffShifts({ userId }: { userId: string }) {
+function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: PointRevenue }) {
   const qc = useQueryClient();
   const toast = useToast();
   useTick(10_000);
   const q = useQuery({ queryKey: ['staff', 'home', userId], queryFn: () => staffHome(null), refetchInterval: 120_000 });
-  const [opening,setOpening]=useState<StaffHomeData['locations'][number]|null>(null);
+  const [opening, setOpening] = useState<{ locationId: string; chooseLocation?: boolean } | null>(null);
+  const available = q.data?.locations.filter((location) => !location.my_today) ?? [];
+  const openingLocation = available.find((location) => location.location_id === opening?.locationId);
   const [cancelling,setCancelling]=useState<Shift|null>(null);
   const queueKey = ['staff', 'pending', userId];
   const pending = useQuery({
@@ -164,56 +201,73 @@ function StaffShifts({ userId }: { userId: string }) {
         <h1>Смена</h1>
       </header>
 
-      <DataState query={q} skeleton={4}>
-        {(d) => (
-          <div className="home-body">
-            {shownResult && (
-              <div className="earn-result" role="status">
-                <span className="ok-icon"><Check size={18} aria-hidden /></span>
-                <div>
-                  <div>{shownResult.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(shownResult.earned, d.currency)}</strong></div>
-                  {shownResult.month !== null && <div className="faint">За {monthLabel(d.month, false)}: {formatMoneyShort(shownResult.month, d.currency)}</div>}
+      <div className="home-body">
+        <DataState query={q} skeleton={4}>
+          {(d) => (
+            <>
+              {shownResult && (
+                <div className="earn-result" role="status">
+                  <span className="ok-icon"><Check size={18} aria-hidden /></span>
+                  <div>
+                    <div>{shownResult.month===null?'Итог сохранён на телефоне. Расчётный заработок':'Смена закрыта. Вы заработали'} <strong>{formatMoneyShort(shownResult.earned, d.currency)}</strong></div>
+                    {shownResult.month !== null && <div className="faint">За {monthLabel(d.month, false)}: {formatMoneyShort(shownResult.month, d.currency)}</div>}
+                  </div>
                 </div>
-              </div>
-            )}
-            {d.open_shift ? (
-              <section className="shift-card" aria-label="Открытая смена">
-                <div className="shift-label"><span className="on-dot" />На смене · {d.open_shift.location_name}</div>
-                <div className="faint">За {dayLabel(d.open_shift.day)}</div>
-                {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
-                <div className="shift-time"><Clock size={18} aria-hidden /> {since(d.open_shift.opened_at)}</div>
-                <Button variant="primary" block className="btn-lg" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
-                  Закрыть смену и внести выручку
-                </Button>
-                <button type="button" className="link-btn" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
-              </section>
-            ) : d.locations.length ? (
-              <section className="stack">
-                {d.locations.map((l) => l.my_today ? (
-                  <button key={l.location_id} type="button" disabled={shiftBlocked(l.my_today.id) || !canCorrect(l.my_today)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
-                    <span className="ok-icon"><Check size={18} aria-hidden /></span>
-                    <span>{l.location_name}: смена закрыта, заработано <strong>{formatMoneyShort(l.my_today.earned_minor ?? 0, l.currency)}</strong></span>
-                    <span className="faint">{canCorrect(l.my_today) ? 'исправить в течение 5 минут' : 'для исправления обратитесь к руководителю'}</span>
-                  </button>
-                ) : (
-                  <Button key={l.location_id} variant="primary" block className="btn-lg" disabled={open.isPending} onClick={() => setOpening(l)}>
-                    Открыть смену{d.locations.length > 1 ? ` (${l.location_name})` : ''}
+              )}
+              {d.open_shift ? (
+                <section className="shift-card" aria-label="Открытая смена">
+                  <div className="shift-label"><span className="on-dot" />На смене · {d.open_shift.location_name}</div>
+                  <div className="faint">За {dayLabel(d.open_shift.day)}</div>
+                  {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
+                  <div className="shift-time"><Clock size={18} aria-hidden /> {since(d.open_shift.opened_at)}</div>
+                  <Button variant="primary" block className="btn-lg" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ ...d.open_shift!, location_name: d.open_shift!.location_name })}>
+                    Закрыть смену и внести выручку
                   </Button>
-                ))}
+                  <button type="button" className="link-btn" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
+                </section>
+              ) : d.locations.length ? (
+                <section className="stack" aria-label="Смены сегодня">
+                  {pointRevenue && available.length > 0 && (
+                    <Button variant="primary" block className="btn-lg" disabled={open.isPending}
+                      onClick={() => setOpening(available.length === 1 ? { locationId: available[0].location_id } : { locationId: '', chooseLocation: true })}>
+                      Открыть смену
+                    </Button>
+                  )}
+                  {d.locations.map((l) => l.my_today ? (
+                    <button key={l.location_id} type="button" disabled={shiftBlocked(l.my_today.id) || !canCorrect(l.my_today)} className="today-entered" onClick={() => setClosing({ ...l.my_today!, location_name: l.location_name })}>
+                      <span className="ok-icon"><Check size={18} aria-hidden /></span>
+                      <span>{l.location_name}: смена закрыта, заработано <strong>{formatMoneyShort(l.my_today.earned_minor ?? 0, l.currency)}</strong></span>
+                      <span className="faint">{canCorrect(l.my_today) ? 'исправить в течение 5 минут' : 'для исправления обратитесь к руководителю'}</span>
+                    </button>
+                  ) : !pointRevenue && (
+                    <Button key={l.location_id} variant="primary" block className="btn-lg" disabled={open.isPending} onClick={() => setOpening({ locationId: l.location_id })}>
+                      Открыть смену{d.locations.length > 1 ? ` (${l.location_name})` : ''}
+                    </Button>
+                  ))}
+                </section>
+              ) : <EmptyState title="Вам пока не назначены точки" text="Попросите франчайзи добавить вас на точку." />}
 
-              </section>
-            ) : <EmptyState title="Вам пока не назначены точки" text="Попросите франчайзи добавить вас на точку." />}
+              <ActionError error={open.error ?? cancel.error} />
+              {pending.isError && <Alert tone="danger" title="Не удалось проверить очередь смен"
+                action={<Button size="sm" onClick={() => void pending.refetch()}>Повторить</Button>} />}
+              {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Дождитесь подтверждения сервера. Экран обновится сам.</p>}
 
-            <ActionError error={open.error ?? cancel.error} />
-            {pending.isError && <Alert tone="danger" title="Не удалось проверить очередь смен"
-              action={<Button size="sm" onClick={() => void pending.refetch()}>Повторить</Button>} />}
-            {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Дождитесь подтверждения сервера. Экран обновится сам.</p>}
-
-            <ShiftHistory userId={userId} current={d} />
-          </div>
-        )}
-      </DataState>
-      {opening&&<ConfirmDialog open title="Открыть смену?" confirmLabel="Да, начать" busy={open.isPending} error={open.error} onClose={()=>setOpening(null)} onConfirm={()=>open.mutate(opening.location_id)}><p>{opening.location_name} · {dayLabel(opening.today)}</p><p className="faint">Проверьте точку. Если открыли по ошибке, пустую смену можно отменить.</p></ConfirmDialog>}
+              {!pointRevenue && <ShiftHistory userId={userId} current={d} />}
+            </>
+          )}
+        </DataState>
+        {pointRevenue && <ShiftHistory userId={userId} current={q.data} pointRevenue={pointRevenue} />}
+      </div>
+      {opening && <ConfirmDialog open title="Открыть смену?" confirmLabel="Да, начать" busy={open.isPending} error={open.error}
+        disabled={!openingLocation} onClose={() => setOpening(null)} onConfirm={() => { if (openingLocation) open.mutate(openingLocation.location_id); }}>
+        {opening.chooseLocation && <Field label="Точка" required>{id => (
+          <Select id={id} value={opening.locationId} onChange={e => setOpening({ ...opening, locationId: e.target.value })}>
+            <option value="">Выберите точку</option>
+            {available.map(location => <option key={location.location_id} value={location.location_id}>{location.location_name}</option>)}
+          </Select>
+        )}</Field>}
+        {openingLocation && <p>{opening.chooseLocation ? dayLabel(openingLocation.today) : `${openingLocation.location_name} · ${dayLabel(openingLocation.today)}`}</p>}
+      </ConfirmDialog>}
       {cancelling&&<ConfirmDialog open title="Отменить ошибочное открытие?" confirmLabel="Отменить открытие" cancelLabel="Вернуться" busy={cancel.isPending} error={cancel.error} onClose={()=>setCancelling(null)} onConfirm={()=>cancel.mutate(cancelling.id)}><p>{cancelling.location_name} · {dayLabel(cancelling.day)}</p><p>Отменяется только пустая открытая смена. Сохранённую выручку это действие не удаляет.</p></ConfirmDialog>}
       {closing && q.data && (
         <CloseDialog userId={userId} shift={closing} currency={q.data.currency} policy={q.data.pay_policy} rate={closing.rate_bp ?? q.data.rate_bp} fee={closing.shift_fee_minor ?? q.data.shift_fee_minor}

@@ -11,13 +11,16 @@ import {createLeadFixture} from './lead-fixture';
 import { opQueue } from '../../src/platform/offline';
 
 const uid = '00000000-0000-4000-8000-000000000001';
+const qaParams = new URLSearchParams(window.location.search);
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
 const user = { id: uid, aud: 'authenticated', role: 'authenticated', email: 'qa@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
 const exp = Math.floor(Date.now() / 1000) + 3600;
 const encode = (v: unknown) => btoa(JSON.stringify(v)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: uid, exp, role: 'authenticated' })}.synthetic-qa`;
+const authSession = { access_token: token, refresh_token: 'synthetic-qa-only', token_type: 'bearer', expires_at: exp, expires_in: 3600, user };
 localStorage.removeItem('bron.remember-device');
-sessionStorage.setItem('bron.auth', JSON.stringify({ access_token: token, refresh_token: 'synthetic-qa-only', token_type: 'bearer', expires_at: exp, expires_in: 3600, user }));
+if (qaParams.get('login') === 'fresh') sessionStorage.removeItem('bron.auth');
+else sessionStorage.setItem('bron.auth', JSON.stringify(authSession));
 const partner = { id: 'qa-partner', name: 'Франчайзи с очень длинным названием города и несколькими торговыми точками', country: 'RU', currency: 'RUB', status: 'active', preparation_stage: 'opening_preparation', contact_name: 'Вымышленный владелец', contact_phone: null, contact_email: 'long-contact-address-for-responsive-test@example.invalid', order_url: null };
 const location = { id: 'qa-location', name: 'Торговый центр с очень длинным названием', partner_id: partner.id, city: 'Вымышленный город', currency: 'RUB', status: 'active', opened_on: null, address: null };
 const teamLocation = {...location,id:'qa-location-rotation',name:'Вторая точка для подмен и ротации с очень длинным названием'};
@@ -37,7 +40,6 @@ const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }] };
-const qaParams = new URLSearchParams(window.location.search);
 const leadFixture=createLeadFixture(qaParams);
 if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
@@ -46,7 +48,12 @@ if (qaParams.get('role') === 'franchisee') {
 const originalFetch = window.fetch;
 if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
  const team=qaParams.get('role')==='team';
- me.assignments=[{id:'qa-worker',role:team?'franchisee_manager':'franchisee_staff',role_name:team?'Управляющий':'Менеджер продаж',scope_type:'partner',scope_id:partner.id,scope_name:partner.name,permissions:['kb.read','shift.work',...(team?['staff.manage']:[])]}];
+ const permissions = ['kb.read', 'shift.work'];
+ if (team && !['staff-view', 'staff-create', 'procurement-order'].some(flag => qaParams.has(flag))) permissions.push('staff.manage');
+ if (qaParams.get('staff-view') === 'allow' || (team && qaParams.get('staff-view') !== 'deny')) permissions.push('staff.view');
+ if (qaParams.get('staff-create') === 'allow' || (team && qaParams.get('staff-create') !== 'deny')) permissions.push('staff.create');
+ if (qaParams.get('procurement-order') === 'allow' || (team && qaParams.get('procurement-order') !== 'deny')) permissions.push('procurement.order');
+ me.assignments=[{id:'qa-worker',role:team?'franchisee_manager':'franchisee_staff',role_name:team?'Управляющий':'Менеджер продаж',scope_type:'partner',scope_id:partner.id,scope_name:partner.name,permissions}];
 }
 if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
 const qaPolicy={floor_minor:100000,tiers:[{from_minor:0,rate_bp:1700,bonus_minor:0},{from_minor:500000,rate_bp:1800,bonus_minor:0},{from_minor:600000,rate_bp:1900,bonus_minor:0},{from_minor:800000,rate_bp:2000,bonus_minor:0},{from_minor:1000000,rate_bp:2200,bonus_minor:20000},{from_minor:1300000,rate_bp:2300,bonus_minor:20000},{from_minor:1800000,rate_bp:2500,bonus_minor:30000}]};
@@ -54,7 +61,12 @@ const qaTask={id:'qa-task',article_id:'qa-article',revision_id:'qa-revision',tit
 const shiftFixture=createShiftFixture(qaParams,location,partner,qaPolicy);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, locationOrigin());
-  if (url.pathname.includes('/auth/v1/')) return Response.json(url.pathname.endsWith('/user') ? user : {});
+  if (url.pathname.includes('/auth/v1/')) {
+    if (qaParams.get('login') === 'fresh' && url.pathname.endsWith('/token') && url.searchParams.get('grant_type') === 'password') {
+      return Response.json(authSession);
+    }
+    return Response.json(url.pathname.endsWith('/user') ? user : {});
+  }
   if (!url.pathname.includes('/rest/v1/')) return originalFetch(input, init);
   const name = url.pathname.split('/').pop();
   const knowledgeResponse = knowledgeFixture(url, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);

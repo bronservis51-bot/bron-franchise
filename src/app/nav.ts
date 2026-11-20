@@ -1,6 +1,6 @@
 // Меню по роли. Франчайзи: главная, сотрудники, финансы (вкл. роялти), база знаний. Рейтинг — только менеджеру сети.
 // Менеджер: франчайзи, заявки с сайта, экономика (вкл. роялти), рейтинг, база знаний.
-import { BookOpen, GraduationCap, Clock, Home, Inbox, Store, Trophy, Users, Wallet } from 'lucide-react';
+import { BookOpen, GraduationCap, Home, Inbox, Trophy, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 
 export interface NavItem {
@@ -12,25 +12,31 @@ export interface NavItem {
 }
 
 const training: NavItem = {to:'/learning',label:'Обучение',icon:GraduationCap,badge:'learning'};
+const home: NavItem = { to: '/', label: 'Главная', icon: Home };
+const staff: NavItem = { to: '/staff', label: 'Сотрудники', icon: Users };
 
-export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'support'): NavItem[] {
+export type PermissionCheck = (permission: string) => boolean;
+export const canOpenStaffDirectory = (can: PermissionCheck) => can('staff.manage') || can('staff.view') || can('staff.create');
+export const canOrderMaterials = (can: PermissionCheck) => can('procurement.order');
+
+export function navFor(role: 'manager' | 'franchisee' | 'staff' | 'team' | 'support', staffDirectory = false): NavItem[] {
   if (role === 'manager') return [
-    { to: '/', label: 'Франчайзи', icon: Store },
+    home,
     { to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' },
     { to: '/finance', label: 'Экономика', icon: Wallet },
     { to: '/rating', label: 'Рейтинг', icon: Trophy },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
-  if (role === 'support') return [{to:'/',label:'Вопросы',icon:Inbox,badge:'kb'},{to:'/kb',label:'Знания',icon:BookOpen}];
-  if (role === 'team') return [training, { to: '/', label: 'Главная', icon: Home }, { to: '/staff', label: 'Сотрудники', icon: Users }, { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' }];
-  if (role === 'staff') return [
-    { to: '/', label: 'Смена', icon: Clock },
+  if (role === 'support') return [{ ...home, badge: 'kb' }, { to: '/kb', label: 'Знания', icon: BookOpen }];
+  if (role === 'team' || role === 'staff') return [
+    home,
     training,
-    { to: '/kb', label: 'База знаний', icon: BookOpen, badge: 'kb' },
+    ...(staffDirectory ? [staff] : []),
+    { to: '/kb', label: role === 'staff' ? 'База знаний' : 'Знания', icon: BookOpen, badge: role === 'team' ? 'kb' : undefined },
   ];
   return [
-    { to: '/', label: 'Главная', icon: Home },
-    { to: '/staff', label: 'Сотрудники', icon: Users },
+    home,
+    staff,
     { to: '/finance', label: 'Финансы', icon: Wallet },
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
