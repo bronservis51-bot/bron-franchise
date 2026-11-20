@@ -139,13 +139,13 @@ function LeadEditor({ lead: l, initialColumn, onClose, onSaved, onDeleted }: { l
   const blocker = useBlocker(dirty || busy);
   useEffect(() => { if (blocker.state === 'blocked') { if (!busy && window.confirm('Уйти без сохранения заявки?')) blocker.proceed(); else blocker.reset(); } }, [blocker, busy]);
   useBeforeUnload(useCallback(e => { if (dirty || busy) { e.preventDefault(); e.returnValue = ''; } }, [dirty, busy]));
-  const close = () => { if (busy) return; if (deleting) { setDeleting(false); return; } if (!dirty || window.confirm('Закрыть без сохранения изменений?')) onClose(); };
+  const close = () => { if (busy) return; if (deleting) setDeleting(false); else onClose(); };
   const details: [string, string][] = l ? [
     ...(l.budget ? [['Бюджет', ANSWERS.budget[l.budget]] as [string,string]] : []), ...(l.timing ? [['Открытие', ANSWERS.timing[l.timing]] as [string,string]] : []),
     ...(l.place ? [['Место', ANSWERS.place[l.place]] as [string,string]] : []), ...(l.manage ? [['Управление', ANSWERS.manage[l.manage]] as [string,string]] : []),
     ...(l.experience ? [['Опыт', ANSWERS.experience[l.experience]] as [string,string]] : []), ...(l.comment ? [['Комментарий', l.comment] as [string,string]] : []),
   ] : [];
-  return <ConfirmDialog open title={deleting ? 'Удалить заявку?' : l ? 'Заявка' : 'Новая заявка'} confirmLabel={deleting ? 'Удалить' : l ? 'Сохранить' : 'Добавить'} danger={deleting} busy={busy} error={deleting ? removed.error : save.error} disabled={!deleting && (!contact.trim() || !!l && !dirty)} onClose={close} onConfirm={() => deleting ? removed.mutate() : save.mutate()}>
+  return <ConfirmDialog open title={deleting ? 'Удалить заявку?' : l ? 'Заявка' : 'Новая заявка'} confirmLabel={deleting ? 'Удалить' : l ? 'Сохранить' : 'Добавить'} danger={deleting} busy={busy} error={deleting ? removed.error : save.error} dirty={!deleting && dirty} disabled={!deleting && (!contact.trim() || !!l && !dirty)} onClose={close} onConfirm={() => deleting ? removed.mutate() : save.mutate()}>
     {deleting ? <><p><strong>{l?.name}</strong></p><p>Заявка исчезнет из канбана. Восстановить её можно через «Корзина».</p>{dirty && <p>Несохранённые изменения будут отменены.</p>}</> : <div className="lead-editor" data-unsaved={dirty || undefined}>
       <Field label="Instagram или имя" required>{id => <Input id={id} autoFocus value={contact} maxLength={100} placeholder="@nik или имя" autoCapitalize="none" spellCheck={false} onChange={e => setContact(e.target.value)} />}</Field>
       {l?.instagram && <a className="lead-contact-link" href={`https://www.instagram.com/${l.instagram}/`} target="_blank" rel="noopener noreferrer"><AtSign size={17} aria-hidden />Открыть Instagram</a>}

@@ -224,9 +224,10 @@ export function Money({ minor, currency, strong, short }: { minor: MinorInput; c
 }
 
 /** Ввод суммы в рублях/тенге/лирах с запятой; наружу — минорные единицы строкой (без float). */
-export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, onValidityChange, requireExplicitValue = false }: {
+export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, enterKeyHint = 'done', onValidityChange, describedBy, requireExplicitValue = false }: {
   id: string; value: string; onChange: (minor: string) => void; currency: string; invalid?: boolean; placeholder?: string;
-  inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void; onValidityChange?: (valid:boolean) => void; requireExplicitValue?:boolean;
+  inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void; enterKeyHint?: ComponentProps<'input'>['enterKeyHint'];
+  onValidityChange?: (valid:boolean) => void; describedBy?: string; requireExplicitValue?:boolean;
 }) {
   const show = (v: string) => (v && (v !== '0' || requireExplicitValue) ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
   const [text, setText] = useState(() => show(value));
@@ -237,8 +238,8 @@ export function MoneyInput({ id, value, onChange, currency, invalid, placeholder
     if (cur === null || cur.toString() !== (value || '0')) { setText(show(value)); setBad(false); }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Input id={id} ref={inputRef} inputMode="decimal" enterKeyHint={onEnter ? 'done' : undefined} placeholder={placeholder} value={text} aria-invalid={bad || invalid || undefined}
-      onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } } : undefined}
+    <Input id={id} ref={inputRef} inputMode="decimal" enterKeyHint={onEnter ? enterKeyHint : undefined} placeholder={placeholder} value={text} aria-invalid={bad || invalid || undefined} aria-describedby={describedBy}
+      onKeyDown={onEnter ? (e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onEnter(); } } : undefined}
       onChange={(e) => {
         setText(e.target.value);
         if(requireExplicitValue&&e.target.value.trim()===''){setBad(false);onValidityChange?.(false);onChange('');return;}
@@ -260,13 +261,16 @@ export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
 }
 
 /** Подтверждение необратимого/финансового действия с итогом операции (UX-06). */
-export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, children, busy, error, disabled, className = '' }: {
+export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, children, busy, error, disabled, dirty, className = '' }: {
   open: boolean; title: string; summary?: [string, ReactNode][]; confirmLabel?: string; cancelLabel?: string; danger?: boolean;
   onConfirm?: () => void; onClose: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
-  className?: string;
+  className?: string; dirty?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const lastField = useRef<HTMLElement | null>(null);
+  const restoreFocus = useRef(false);
   const titleId = useId();
+  const [discard, setDiscard] = useState(false);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -277,21 +281,50 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel 
       d.querySelector<HTMLElement>('.dialog-head')?.focus({preventScroll:true});
       if (scroll && y !== undefined) scroll.scrollTop=y;
     }
-    if (!open && d.open) d.close();
+    if (!open) {
+      if (d.open) d.close();
+      setDiscard(false);
+    }
   }, [open]);
+  useEffect(() => {
+    if (discard) ref.current?.querySelector<HTMLElement>('.dialog-head')?.focus({ preventScroll: true });
+    else if (restoreFocus.current) {
+      restoreFocus.current = false;
+      if (lastField.current?.isConnected) lastField.current.focus();
+      else ref.current?.querySelector<HTMLElement>('.dialog-head')?.focus({ preventScroll: true });
+    }
+  }, [discard]);
+  const resume = () => {
+    restoreFocus.current = true;
+    setDiscard(false);
+  };
+  const requestClose = () => {
+    if (busy) return;
+    if (discard) resume();
+    else if (dirty) setDiscard(true);
+    else onClose();
+  };
   return (
-    <dialog ref={ref} className={`dialog ${className}`} onClose={onClose} onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }} aria-labelledby={titleId}>
-      <div className="dialog-head" tabIndex={-1} autoFocus><h2 id={titleId}>{title}</h2></div>
-      <div className="dialog-body">
-        {summary && (
-          <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>
-        )}
-        {children && <div style={{ marginTop: summary ? 16 : 0 }}>{children}</div>}
-        <ActionError error={error} />
+    <dialog ref={ref} className={`dialog ${className}`} onClose={onClose} onCancel={(e) => { e.preventDefault(); requestClose(); }} aria-labelledby={titleId}>
+      <div className="dialog-head" tabIndex={-1} autoFocus><h2 id={titleId}>{discard ? 'Отбросить изменения?' : title}</h2></div>
+      <div className="dialog-body" onFocusCapture={e => { if (e.target instanceof HTMLElement) lastField.current = e.target; }}>
+        <div hidden={discard}>
+          {summary && (
+            <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>
+          )}
+          {children && <div style={{ marginTop: summary ? 16 : 0 }}>{children}</div>}
+          <ActionError error={error} />
+        </div>
+        {discard && <p>Введённые данные ещё не сохранены.</p>}
       </div>
       <div className="dialog-foot">
-        <Button onClick={onClose} disabled={busy}>{cancelLabel}</Button>
-        {confirmLabel && onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>}
+        {discard ? <>
+          <Button onClick={resume}>Продолжить ввод</Button>
+          <Button variant="danger" onClick={onClose}>Отбросить изменения</Button>
+        </> : <>
+          <Button onClick={requestClose} disabled={busy}>{cancelLabel}</Button>
+          {confirmLabel && onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>}
+        </>}
       </div>
     </dialog>
   );

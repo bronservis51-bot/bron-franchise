@@ -1,5 +1,5 @@
 // Экран сотрудника: открыть смену → закрыть с выручкой → сразу видно, сколько заработал. Выручку и план точки сотрудник не видит.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Clock } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
@@ -32,10 +32,14 @@ function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDo
 }) {
   const qc = useQueryClient();
   const editing = shift.status === 'closed';
-  const [cash, setCash] = useState(editing ? String(shift.cash_minor) : '');
-  const [card, setCard] = useState(editing ? String(shift.card_minor) : '');
+  const initialCash = editing ? String(shift.cash_minor) : '';
+  const initialCard = editing ? String(shift.card_minor) : '';
+  const [cash, setCash] = useState(initialCash);
+  const [card, setCard] = useState(initialCard);
   const [cashValid,setCashValid]=useState(true); const [cardValid,setCardValid]=useState(true); const [zero,setZero]=useState(false);
   const [comment, setComment] = useState(shift.comment ?? '');
+  const cardInput = useRef<HTMLInputElement>(null);
+  const commentInput = useRef<HTMLInputElement>(null);
   const total = sumMinor([cash || '0', card || '0']);
   const earned = calculatePay(total,rate,fee,shift.pay_policy ?? policy);
   const m = useMutation({
@@ -44,20 +48,27 @@ function CloseDialog({ userId, shift, currency, rate, fee, policy, onClose, onDo
     onSuccess: (r) => onDone('queued' in r?Number(earned):Number(r.shift.earned_minor), 'queued' in r ? null : Number(r.month_earned_minor)),
     onError:()=>void qc.invalidateQueries({queryKey:['staff']}),
   });
+  const canSave = cash !== '' && card !== '' && cashValid && cardValid && (total !== 0n || zero);
+  const submit = () => { if (canSave && !m.isPending) m.mutate(); };
+  const dirty = cash !== initialCash || card !== initialCard || !cashValid || !cardValid || zero || comment !== (shift.comment ?? '');
   return (
     <ConfirmDialog open title={editing ? 'Исправить смену' : 'Закрыть смену'} confirmLabel={editing ? 'Сохранить' : 'Закрыть смену'} busy={m.isPending} error={m.error}
-      disabled={cash===''||card===''||!cashValid||!cardValid||(total===0n&&!zero)} onClose={onClose} onConfirm={() => m.mutate()}>
+      disabled={!canSave} dirty={dirty} onClose={onClose} onConfirm={submit}>
       <p className="muted">{dayLabel(shift.day)}{shift.location_name ? `, ${shift.location_name}` : ''}</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label="Наличные">{(id) => <MoneyInput id={id} value={cash} onChange={setCash} requireExplicitValue onValidityChange={setCashValid} currency={currency} placeholder="0" />}</Field>
-        <Field label="Картой">{(id) => <MoneyInput id={id} value={card} onChange={setCard} requireExplicitValue onValidityChange={setCardValid} currency={currency} placeholder="0" />}</Field>
+        <Field label="Наличные" required error={!cashValid ? 'Укажите сумму наличными.' : undefined}>{(id, describedBy) => (
+          <MoneyInput id={id} describedBy={describedBy} value={cash} onChange={setCash} requireExplicitValue onValidityChange={setCashValid} onEnter={() => cardInput.current?.focus()} enterKeyHint="next" currency={currency} placeholder="0" />
+        )}</Field>
+        <Field label="Картой" required error={!cardValid ? 'Укажите сумму по карте.' : undefined}>{(id, describedBy) => (
+          <MoneyInput id={id} inputRef={el => { cardInput.current = el; }} describedBy={describedBy} value={card} onChange={setCard} requireExplicitValue onValidityChange={setCardValid} onEnter={() => commentInput.current?.focus()} enterKeyHint="next" currency={currency} placeholder="0" />
+        )}</Field>
       </div>
       {total===0n&&<Checkbox label="Подтверждаю: продаж за эту смену не было" checked={zero} onChange={setZero}/>}
       {editing&&<p className="faint">Выручку можно исправить в течение 5 минут после первой сдачи. Правка сохранится в истории без повторного начисления. Позже обратитесь к руководителю.</p>}
       <div className="day-total-line"><span>Выручка смены</span><Money minor={total} currency={currency} strong /></div>
       <div className="earn-line"><span>Вы заработаете</span><Money minor={earned} currency={currency} strong /></div>
       <p className="faint">{(shift.pay_policy ?? policy) && !('mode' in (shift.pay_policy ?? policy)!) ? 'Больше из гарантированного минимума и процента от выручки, плюс премия' : <>{fee ? `${formatMoneyShort(fee, currency)} за выход` : ''}{fee && rate ? ' + ' : ''}{rate ? `${pctBp(rate)} от выручки` : ''}</>}</p>
-      <Field label="Комментарий">{(id) => <Input id={id} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />}</Field>
+      <Field label="Комментарий">{(id) => <Input id={id} ref={commentInput} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />}</Field>
     </ConfirmDialog>
   );
 }

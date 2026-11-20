@@ -643,10 +643,6 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .muted-card { opacity: .65; }
 .login-card-data { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); margin: 12px 0; }
 .login-card-data > div { display: grid; }
-.insights { display: grid; gap: 8px; }
-.insight { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); font-size: var(--fs-s); }
-.insight.up svg { color: var(--success); }
-.insight.down svg { color: var(--danger); }
 .my-rank { display: flex; gap: 14px; align-items: center; padding: 16px; border-radius: 18px; background: var(--metal-dark); color: #fff; margin: 8px 0 16px; }
 .my-rank .faint { color: #b9babf; }
 .my-rank-num { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; background: var(--metal); color: var(--brand-black); font-size: 26px; font-weight: 800; flex: none; }

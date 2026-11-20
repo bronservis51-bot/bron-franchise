@@ -36,7 +36,7 @@ export function FinanceEditor({ month, currency, location, locations, expenses, 
             {(m) => (
               <>
                 <DayList m={m} onPick={(day, row) => setEdit({ day, row })} />
-                {edit && <RevenueDialog location={m.location_id} currency={m.currency} day={edit.day} existing={edit.row} staff={m.staff} onClose={() => setEdit(null)} />}
+                {edit && <RevenueDialog location={m.location_id} locationName={m.location_name} currency={m.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
               </>
             )}
           </DataState>

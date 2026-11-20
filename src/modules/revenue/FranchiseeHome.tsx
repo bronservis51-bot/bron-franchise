@@ -1,40 +1,17 @@
 // Главная франчайзи: план месяца по точке или по всем точкам сразу, ввод выручки за сегодня, сравнение с прошлым месяцем, роялти сейчас, дни месяца.
 import { useEffect, useState } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { CalendarX, Check, Download, Plus, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarX, Check, Download, Plus } from 'lucide-react';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
-import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type LocationMonth, type MonthDetail } from './api';
+import { revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
-
-function Insights({ m }: { m: MonthDetail }) {
-  const prev = Number(m.prev_same_period_minor);
-  const cur = Number(m.same_period_minor);
-  const delta = prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null;
-  const wd = [...m.weekday_avg].sort((a, b) => Number(b.avg_minor) - Number(a.avg_minor));
-  if (delta === null && wd.length < 7) return null;
-  return (
-    <div className="insights">
-      {delta !== null && (
-        <div className={`insight ${delta >= 0 ? 'up' : 'down'}`}>
-          {delta >= 0 ? <TrendingUp size={18} aria-hidden /> : <TrendingDown size={18} aria-hidden />}
-          <span><strong>{delta > 0 ? '+' : ''}{delta.toLocaleString('ru-RU')} %</strong> к тому же периоду прошлого месяца</span>
-        </div>
-      )}
-      {wd.length === 7 && (
-        <div className="insight">
-          <span>Сильный день — <strong>{WEEKDAY[wd[0].dow]}</strong> (в среднем {formatMoneyShort(Math.round(Number(wd[0].avg_minor) / 100) * 100, m.currency)}), слабый — {WEEKDAY[wd[6].dow]}</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
 function AllPoints({ points, month, onPick, onEnter }: {
@@ -171,7 +148,6 @@ export function FranchiseeHome() {
                       <div className="alert-body">Не внесена выручка: {d.missing_days.slice(-5).map((x) => formatDate(x).slice(0, 5)).join(', ')}{d.missing_days.length > 5 ? ` и ещё ${d.missing_days.length - 5}` : ''}. Нажмите на день ниже, чтобы внести.</div>
                     </div>
                   )}
-                  <details><summary>Сравнение с прошлым месяцем</summary><Insights m={d} /></details>
                   <section>
                     <div className="row between" style={{ marginBottom: 8 }}>
                       <h2 className="section-title" style={{ margin: 0 }}>Дни месяца</h2>
@@ -187,8 +163,8 @@ export function FranchiseeHome() {
           </div>
         )}
       </DataState>
-      {enter && <RevenueDialog location={enter.p.location_id} currency={enter.p.currency} day={enter.d.today} existing={enter.row} staff={enter.d.staff} onClose={() => setEnter(null)} />}
-      {edit && current && <RevenueDialog location={current.location_id} currency={current.currency} day={edit.day} existing={edit.row} staff={m?.staff} onClose={() => setEdit(null)} />}
+      {enter && <RevenueDialog location={enter.p.location_id} locationName={enter.p.location_name} currency={enter.p.currency} day={enter.d.today} existing={enter.row} onClose={() => setEnter(null)} />}
+      {edit && current && <RevenueDialog location={current.location_id} locationName={current.location_name} currency={current.currency} day={edit.day} existing={edit.row} onClose={() => setEdit(null)} />}
     </div>
   );
 }

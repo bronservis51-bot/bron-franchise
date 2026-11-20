@@ -1,20 +1,19 @@
-// Сотрудники франчайзи: добавить, изменить оплату и точки, сменить пароль, удалить; ведомость заработка за месяц.
-import {Link} from 'react-router';
-import {ShiftReview} from './ShiftReview';
+import { Link } from 'react-router';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Download, KeyRound, Pencil, Phone, UserMinus, UserPlus, UserRoundCheck } from 'lucide-react';
+import { Download, Plus } from 'lucide-react';
 import { command, from, rows } from '../../platform/backend';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Badge, Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
+import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 import { MotivationPanel } from './Motivation';
+import { ShiftReview, useOpenShifts } from './ShiftReview';
 import { TeamAccounts } from './TeamAccounts';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
-import { formatPhone, pctBp, phoneDigits, randomPassword, staffList, staffSetActive, userSetPassword, type StaffRow } from './api';
+import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 
 interface Loc { id: string; name: string; currency: string; status: string }
@@ -24,88 +23,152 @@ function StaffDialog({ partnerId, locs, staff, onClose }: { partnerId: string; l
   const qc = useQueryClient();
   const toast = useToast();
   const currency = locs[0]?.currency ?? 'RUB';
+  const activeLocs = locs.filter((l) => l.status === 'active');
+  const availableLocs = locs.filter((l) => l.status === 'active' || staff?.location_ids.includes(l.id));
+  const initialLocations = staff?.location_ids ?? (activeLocs.length === 1 ? [activeLocs[0].id] : []);
+  const [initialPassword] = useState(randomPassword);
   const [name, setName] = useState(staff?.full_name ?? '');
-  const [usePartner,setUsePartner]=useState(staff?.use_partner_motivation ?? true);
-  const [kind,setKind]=useState(staff?.employee_kind??'employee');
-  const [start,setStart]=useState(staff?.internship_from??new Date().toLocaleDateString('en-CA'));
-  const [until,setUntil]=useState(staff?.internship_until??'');
-  const [traineeFee,setTraineeFee]=useState(String(staff?.internship_floor_minor??50000));
-  const [learningEnabled,setLearningEnabled]=useState(staff?.learning_enabled??true);
+  const [usePartner, setUsePartner] = useState(staff?.use_partner_motivation ?? true);
+  const [kind, setKind] = useState(staff?.employee_kind ?? 'employee');
+  const [start, setStart] = useState(staff?.internship_from ?? '');
+  const [until, setUntil] = useState(staff?.internship_until ?? '');
+  const [traineeFee, setTraineeFee] = useState(String(staff?.internship_floor_minor ?? 50000));
+  const [validTraineeFee, setValidTraineeFee] = useState(true);
+  const [learningEnabled, setLearningEnabled] = useState(staff?.learning_enabled ?? true);
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState(randomPassword);
-  const [sel, setSel] = useState<string[]>(staff?.location_ids ?? (locs.length === 1 ? [locs[0].id] : []));
+  const [password, setPassword] = useState(initialPassword);
+  const [sel, setSel] = useState(initialLocations);
   const [rate, setRate] = useState(staff ? String(staff.rate_bp / 100).replace('.', ',') : '');
   const [fee, setFee] = useState(staff ? String(staff.shift_fee_minor) : '');
+  const [validFee, setValidFee] = useState(true);
   const [created, setCreated] = useState<{ phone: string; password: string } | null>(null);
-  const bp = Math.round(Number((rate || '0').replace(',', '.')) * 100);
+  const digits = phoneLoginDigits(phone);
+  const percent = Number(rate.trim().replace(',', '.'));
+  const validRate = (!rate.trim() || /^\d+(?:[,.]\d{0,2})?$/.test(rate.trim())) && percent >= 0 && percent <= 100;
+  const validDates = !until || !start || until >= start;
+  const selectedLocations = sel.filter((id) => availableLocs.some((l) => l.id === id));
+  const valid = Boolean(name.trim() && selectedLocations.length && (staff || (digits && password.length >= 6))
+    && (usePartner || (validFee && validRate)) && (kind !== 'trainee' || (validDates && validTraineeFee)));
+  const dirty = name !== (staff?.full_name ?? '') || phone !== '' || password !== initialPassword
+    || sel.length !== initialLocations.length || sel.some((id) => !initialLocations.includes(id))
+    || kind !== (staff?.employee_kind ?? 'employee') || learningEnabled !== (staff?.learning_enabled ?? true)
+    || (kind === 'trainee' && (start !== (staff?.internship_from ?? '') || until !== (staff?.internship_until ?? '')
+      || traineeFee !== String(staff?.internship_floor_minor ?? 50000) || !validTraineeFee))
+    || usePartner !== (staff?.use_partner_motivation ?? true)
+    || (!usePartner && (percent !== (staff?.rate_bp ?? 0) / 100 || Number(fee) !== (staff?.shift_fee_minor ?? 0) || !validFee || !validRate));
   const m = useMutation({
     mutationFn: async () => {
-      const submittedPhone = phone;
       const submittedPassword = password;
-      const settings={employee_kind:kind,internship_from:start,internship_until:until||null,internship_floor_minor:traineeFee,learning_enabled:learningEnabled};
-      await command('staff_profile_save_phone',{user:staff?.user_id??null,partner:partnerId,full_name:name,phone:submittedPhone,password:submittedPassword,locations:sel,rate_bp:bp,shift_fee:fee||'0',use_partner:usePartner,settings});
-      return { phone: formatPhone(phoneDigits(submittedPhone)), password: submittedPassword };
+      const settings = { employee_kind: kind, internship_from: start || null, internship_until: until || null,
+        internship_floor_minor: traineeFee, learning_enabled: learningEnabled };
+      await command('staff_profile_save_phone', {
+        user: staff?.user_id ?? null, partner: partnerId, full_name: name.trim(), phone, password: submittedPassword,
+        locations: selectedLocations, use_partner: usePartner,
+        rate_bp: usePartner ? staff?.rate_bp ?? 0 : Math.round(percent * 100),
+        shift_fee: usePartner ? String(staff?.shift_fee_minor ?? 0) : fee || '0',
+        settings,
+      });
+      if (!staff && digits) setCreated({ phone: formatPhone(digits), password: submittedPassword });
     },
-    onSuccess: (issued) => {
-      void qc.invalidateQueries({ queryKey: ['staff-list'] });
-      if (staff) { toast('Сохранено'); onClose(); } else setCreated(issued);
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
+      void qc.invalidateQueries({ queryKey: ['team', partnerId] });
+      void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] });
+      if (staff) { toast('Карточка сотрудника сохранена'); onClose(); }
     },
   });
-  if (created) {
-    return (
-      <ConfirmDialog open title="Сотрудник добавлен" confirmLabel="Готово" onClose={onClose} onConfirm={onClose}>
-        <p>Передайте сотруднику данные для входа. Пароль больше нигде не показывается — при необходимости задайте новый.</p>
-        <div className="login-card-data">
-          <div><span className="faint">Сайт</span><strong>{location.origin}{location.pathname}</strong></div>
-          <div><span className="faint">Телефон</span><strong>{created.phone}</strong></div>
-          <div><span className="faint">Пароль</span><strong className="mono">{created.password}</strong></div>
-        </div>
-        <Button size="sm" onClick={() => void navigator.clipboard?.writeText(`Вход в кабинет «Бронь Сервис»: ${location.origin}${location.pathname}\nТелефон: ${created.phone}\nПароль: ${created.password}`).then(() => toast('Скопировано'))}>Скопировать для отправки</Button>
-      </ConfirmDialog>
-    );
-  }
-  const valid = name.trim() && sel.length && (staff || (phoneLoginDigits(phone) && password.length >= 6)) && bp >= 0 && bp <= 10000;
+  if (created) return <StaffCredentials title="Сотрудник добавлен" {...created} onClose={onClose} />;
   return (
-    <ConfirmDialog open title={staff ? 'Сотрудник' : 'Новый сотрудник'} confirmLabel={staff ? 'Сохранить' : 'Добавить'} busy={m.isPending} error={m.error}
-      disabled={!valid} onClose={onClose} onConfirm={() => m.mutate()}>
-      <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Дина" />}</Field>
+    <ConfirmDialog open title={staff ? `Карточка — ${staff.full_name}` : 'Новый сотрудник'} confirmLabel={staff ? 'Сохранить' : 'Добавить сотрудника'} busy={m.isPending} error={m.error}
+      disabled={!valid} dirty={dirty} onClose={onClose} onConfirm={() => m.mutate()}>
+      <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Дина" maxLength={160} />}</Field>
       {!staff && (
         <div className="grid grid-2" style={{ gap: 12 }}>
-          <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{(id) => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
-          <Field label="Пароль" required hint="Можно оставить предложенный">{(id) => <Input id={id} value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
+          <Field label="Телефон для входа" required hint="Полный номер с кодом страны" error={phone && !digits ? 'Проверьте номер телефона' : undefined}>{(id, describedBy) =>
+            <Input id={id} aria-describedby={describedBy} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
+          <Field label="Пароль" required hint="Можно оставить предложенный" error={password.length < 6 ? 'Минимум 6 символов' : undefined}>{(id, describedBy) =>
+            <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
         </div>
       )}
-      <Field label="Точки, где работает" required>{() => (
-        <div>{locs.filter((l) => l.status === 'active').map((l) => (
-          <Checkbox key={l.id} label={l.name} checked={sel.includes(l.id)} onChange={(v) => setSel(v ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
+      <Field label="Точки, где работает" required error={selectedLocations.length ? undefined : 'Выберите хотя бы одну точку'}>{() => (
+        <div role="group" aria-label="Точки, где работает">{availableLocs.map((l) => (
+          <Checkbox key={l.id} label={l.name} hint={l.status === 'closed' ? 'Закрытая точка' : undefined}
+            checked={sel.includes(l.id)} onChange={(v) => setSel(v ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
         ))}</div>
       )}</Field>
-      <Field label="Статус сотрудника">{id=><Select id={id} value={kind} onChange={e=>setKind(e.target.value as 'employee'|'trainee')}><option value="employee">Менеджер продаж</option><option value="trainee">Стажёр</option></Select>}</Field>
-      {kind==='trainee'&&<>
-        <div className="grid grid-2"><Field label="Начало стажировки">{id=><Input id={id} type="date" value={start} onChange={e=>setStart(e.target.value)}/>}</Field><Field label="Последний день" hint="Пусто — один календарный месяц">{id=><Input id={id} type="date" value={until} onChange={e=>setUntil(e.target.value)}/>}</Field></div>
-        <Field label={`Минимум стажёра за смену, ${currency}`} hint="Минимум или процент, выбирается большее; премия сверху. Проценты — по ступеням франчайзи.">{id=><MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee}/>}</Field>
-        <p className="faint">После последнего дня действуют обычные условия ниже. Статус не закрывает доступ и не подтверждает практические навыки автоматически.</p>
+      <Field label="Статус сотрудника">{id => <Select id={id} value={kind} onChange={e => {
+        setKind(e.target.value as 'employee' | 'trainee');
+        setValidTraineeFee(true);
+      }}>
+        <option value="employee">Обычный сотрудник</option><option value="trainee">Стажёр</option>
+      </Select>}</Field>
+      {kind === 'trainee' && <>
+        <div className="grid grid-2">
+          <Field label="Начало стажировки" hint="По умолчанию сегодня по времени точки">{id => <Input id={id} type="date" value={start} onChange={e => setStart(e.target.value)} />}</Field>
+          <Field label="Последний день" hint="По умолчанию один календарный месяц" error={validDates ? undefined : 'Проверьте даты стажировки'}>{(id, describedBy) =>
+            <Input id={id} aria-describedby={describedBy} type="date" min={start || undefined} value={until} onChange={e => setUntil(e.target.value)} />}</Field>
+        </div>
+        <Field label={`Минимум стажёра за смену, ${currency}`} hint="Начисляется большее из минимума и процента, затем прибавляется премия."
+          error={validTraineeFee ? undefined : 'Введите корректную сумму'}>{id =>
+          <MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee} onValidityChange={setValidTraineeFee} />}</Field>
       </>}
-      <Checkbox label="Обучение для сотрудника включено" checked={learningEnabled} onChange={setLearningEnabled}/>
-      <Checkbox label="Ступенчатая мотивация франчайзи" checked={usePartner} onChange={setUsePartner} hint="Минимум или процент (большее), плюс премия" />
+      <Checkbox label="Обучение включено" checked={learningEnabled} onChange={setLearningEnabled} />
+      <Field label={kind === 'trainee' ? 'Условия оплаты после стажировки' : 'Условия оплаты'}
+        hint={usePartner ? 'Общая схема франчайзи. Из минимума и процента берётся большее, затем прибавляется премия.' : 'Фикс за смену суммируется с процентом.'}>
+        {(id, describedBy) => <Select id={id} aria-describedby={describedBy} value={usePartner ? 'partner' : 'individual'} onChange={e => {
+          setUsePartner(e.target.value === 'partner');
+          setValidFee(true);
+        }}><option value="partner">Общая схема франчайзи</option><option value="individual">Фикс за смену + процент</option></Select>}
+      </Field>
       {!usePartner && <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label={`За выход, ${currency}`} hint="Фикс за смену суммируется с процентом">{(id) => <MoneyInput id={id} value={fee} onChange={setFee} currency={currency} placeholder="0" />}</Field>
-        <Field label="% от выручки смены">{(id) => <Input id={id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
-      </div>
-      }
-      <p className="faint">Новая оплата действует для смен, открытых после изменения; закрытые смены не пересчитываются.</p>
+        <Field label={`За выход, ${currency}`} error={validFee ? undefined : 'Введите корректную сумму'}>{(id) =>
+          <MoneyInput id={id} value={fee} onChange={setFee} onValidityChange={setValidFee} currency={currency} placeholder="0" />}</Field>
+        <Field label="% от выручки смены" error={validRate ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
+          <Input id={id} aria-describedby={describedBy} aria-invalid={!validRate || undefined} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
+      </div>}
+      {staff && <p className="faint">Новая оплата применяется к сменам, открытым после сохранения.</p>}
     </ConfirmDialog>
   );
 }
 
-function PasswordReset({ staff, onClose }: { staff: StaffRow; onClose: () => void }) {
+function StaffCredentials({ title, phone, password, onClose }: { title: string; phone: string; password: string; onClose: () => void }) {
   const toast = useToast();
+  const [copyError, setCopyError] = useState(false);
+  const site = `${location.origin}${location.pathname}`;
+  const copy = async () => {
+    setCopyError(false);
+    try {
+      await navigator.clipboard.writeText(`Вход в кабинет «Бронь Сервис»: ${site}\nЛогин: ${phone}\nПароль: ${password}`);
+      toast('Данные для входа скопированы');
+    } catch {
+      setCopyError(true);
+    }
+  };
+  return (
+    <ConfirmDialog open title={title} cancelLabel="Готово" onClose={onClose}>
+      <p>Передайте сотруднику данные для входа. Пароль показан только сейчас.</p>
+      <div className="login-card-data">
+        <div><span className="faint">Сайт</span><strong>{site}</strong></div>
+        <div><span className="faint">Логин</span><strong>{phone}</strong></div>
+        <div><span className="faint">Пароль</span><strong className="mono">{password}</strong></div>
+      </div>
+      <Button size="sm" onClick={() => void copy()}>Скопировать данные для входа</Button>
+      {copyError && <p role="status">Скопируйте данные вручную.</p>}
+    </ConfirmDialog>
+  );
+}
+
+function PasswordReset({ partnerId, staff, onClose }: { partnerId: string; staff: StaffRow; onClose: () => void }) {
+  const qc = useQueryClient();
   const [pw, setPw] = useState(randomPassword);
-  const m = useMutation({ mutationFn: () => userSetPassword(staff.user_id, pw), onSuccess: () => { toast(`Новый пароль для ${staff.full_name}: ${pw}`); onClose(); } });
+  const [issued, setIssued] = useState<string | null>(null);
+  const m = useMutation({ mutationFn: async () => { const password = pw; await userSetPassword(staff.user_id, password); setIssued(password); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] }); } });
+  if (issued) return <StaffCredentials title="Пароль изменён" phone={formatPhone(staff.phone)} password={issued} onClose={onClose} />;
   return (
     <ConfirmDialog open title={`Новый пароль — ${staff.full_name}`} confirmLabel="Задать пароль" busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">Вход по телефону {formatPhone(staff.phone)}. Сообщите сотруднику новый пароль.</p>
-      <Field label="Пароль" hint="Минимум 6 символов">{(id) => <Input id={id} value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>
+      <p>Логин сотрудника: {formatPhone(staff.phone)}.</p>
+      <Field label="Пароль" hint="Минимум 6 символов">{(id, describedBy) => <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>
     </ConfirmDialog>
   );
 }
@@ -126,105 +189,168 @@ async function downloadPayroll(list: StaffRow[], month: string, currency: string
   ]).toFile(`vedomost-${month.slice(0, 7)}.xlsx`);
 }
 
-/** Список сотрудников франчайзи с ведомостью — для франчайзи и для менеджера в карточке франчайзи. */
+const staffSections = [
+  { id: 'team', label: 'Команда' },
+  { id: 'shifts', label: 'Смены и начисления' },
+  { id: 'pay', label: 'Оплата' },
+] as const;
+
+const staffStatuses = [
+  { id: 'active', label: 'Работают' },
+  { id: 'closed', label: 'Доступ закрыт' },
+] as const;
+
+/** Список сотрудников и ведомость для франчайзи и для менеджера в карточке франчайзи. */
 export function StaffPanel({ partnerId }: { partnerId: string }) {
-  const {me}=useSession();
+  const { me } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
+  const [section, setSection] = useState<(typeof staffSections)[number]['id']>('team');
+  const [status, setStatus] = useState<(typeof staffStatuses)[number]['id']>('active');
+  const [search, setSearch] = useState('');
   const [month, setMonth] = useState(monthStart());
   const [edit, setEdit] = useState<StaffRow | 'new' | null>(null);
   const [pw, setPw] = useState<StaffRow | null>(null);
   const [login, setLogin] = useState<StaffRow | null>(null);
-  const [removing, setRemoving] = useState<StaffRow | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [access, setAccess] = useState<StaffRow | null>(null);
   const locs = useQuery({ queryKey: ['locations', partnerId], queryFn: () => locationsOf(partnerId) });
   const q = useQuery({ queryKey: ['staff-list', partnerId, month], queryFn: () => staffList(partnerId, month) });
+  const openShifts = useOpenShifts(partnerId);
+  const overdueShifts = openShifts.data?.filter(shift => shift.day < shift.today).length ?? 0;
+  const canAdd = locs.data?.some((l) => l.status === 'active');
+  const currency = locs.data?.[0]?.currency ?? 'RUB';
   const setActive = useMutation({
     mutationFn: ({ user, active }: { user: string; active: boolean }) => staffSetActive(user, active),
-    onSuccess: (_, v) => { toast(v.active ? 'Сотрудник возвращён' : 'Сотрудник удалён, вход закрыт'); setRemoving(null); void qc.invalidateQueries({ queryKey: ['staff-list'] }); },
+    onSuccess: (_, { active }) => {
+      toast(active ? 'Доступ возвращён' : 'Доступ закрыт');
+      setAccess(null);
+      void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
+      void qc.invalidateQueries({ queryKey: ['team', partnerId] });
+      void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] });
+    },
   });
-  const currency = locs.data?.[0]?.currency ?? 'RUB';
-  const exp = useMutation({ mutationFn: () => downloadPayroll((q.data ?? []).filter((s) => s.month_shifts > 0), month, currency) });
-  const active = (q.data ?? []).filter((s) => s.active);
-  const total = (q.data ?? []).reduce((a, s) => a + Number(s.month_earned_minor), 0);
+  const payroll = (q.data ?? []).filter((s) => s.month_shifts > 0);
+  const exp = useMutation({ mutationFn: () => downloadPayroll(payroll, month, currency) });
+  const term = search.trim().toLocaleLowerCase('ru-RU');
+  const digits = /^[+\d()\s.-]+$/.test(term) ? (phoneLoginDigits(term) ?? term.replace(/\D/g, '')) : '';
+  const visibleStaff = (q.data ?? []).filter((s) => s.active === (status === 'active') && (
+    !term || [s.full_name, s.phone, ...s.location_names].some((value) => value.toLocaleLowerCase('ru-RU').includes(term))
+    || (digits && s.phone.replace(/\D/g, '').includes(digits))
+  ));
+  const changeAccess = (staff: StaffRow) => { setActive.reset(); setAccess(staff); };
 
   return (
-    <>
-      <div className="row" style={{marginBottom:16}}><Link className="btn" to={`/learning/manage?partner=${partnerId}`}>Обучение сотрудников</Link></div>
-      <ShiftReview partner={partnerId}/>
-      <TeamAccounts partner={partnerId} />
-      <MotivationPanel partner={partnerId} />
-      <div className="row between" style={{ marginBottom: 8 }}>
-        <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-        <div className="row">
-          <Button size="sm" onClick={() => exp.mutate()} loading={exp.isPending} disabled={!q.data?.some((s) => s.month_shifts)}><Download size={15} aria-hidden />Ведомость</Button>
-          <Button variant="primary" onClick={() => setEdit('new')} disabled={!locs.data?.length}><UserPlus size={16} aria-hidden />Добавить</Button>
+    <div className="stack">
+      <Chips options={[...staffSections]} value={section} onChange={setSection} label="Разделы сотрудников" />
+      {section === 'team' && <section className="stack" aria-label="Команда">
+        <div className="row between">
+          <Button variant="primary" onClick={() => setEdit('new')} disabled={!canAdd}><Plus size={16} aria-hidden />Добавить сотрудника</Button>
+          <Link className="btn btn-ghost" to={`/learning/manage?partner=${partnerId}`}>Обучение сотрудников</Link>
         </div>
-      </div>
-      <ActionError error={exp.error} />
-      <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Сотрудников пока нет" text="Добавьте продавца: он будет сам открывать и закрывать смены, вносить выручку и видеть свой заработок." />)}>
-        {(list) => (
-          <>
+        {locs.isSuccess && !canAdd && <p className="faint">Нет действующих точек для нового сотрудника.</p>}
+        <ActionError error={locs.error} />
+        {overdueShifts > 0 && <Button size="sm" onClick={() => setSection('shifts')}>Незакрытые смены за прошлые дни: {overdueShifts}</Button>}
+        <Field label="Найти сотрудника">{id => <Input id={id} type="search" value={search} placeholder="Имя, телефон или точка" onChange={e => setSearch(e.target.value)} />}</Field>
+        <Chips options={[...staffStatuses]} value={status} onChange={setStatus} label="Статус доступа" />
+        <TeamAccounts partner={partnerId} />
+        <DataState query={q}>{(list) => (
+          visibleStaff.length ? <div className="stack">
+            {visibleStaff.map((staff) => {
+              const canManage = staff.user_id !== me?.user.id && staff.can_manage !== false;
+              return <Card key={staff.user_id} className={staff.active ? '' : 'muted-card'}>
+                <div className="row between staff-summary" style={{ alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="row">
+                      <strong>{staff.full_name}</strong>
+                      {staff.is_manager && <Badge tone="neutral">Управляющий</Badge>}
+                      {staff.employee_kind === 'trainee' && <Badge tone="info">{staff.internship_until ? `Стажёр до ${dayLabel(staff.internship_until)}` : 'Стажёр'}</Badge>}
+                      {staff.open_shift && <Badge tone="success">На смене · {staff.open_shift.location_name}</Badge>}
+                    </div>
+                    <div className="faint">{[formatPhone(staff.phone), staff.location_names.join(', ') || 'Точки не назначены'].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  {canManage && (staff.active
+                    ? <Button size="sm" onClick={() => setEdit(staff)}>Изменить</Button>
+                    : <Button size="sm" onClick={() => changeAccess(staff)}>Вернуть доступ</Button>)}
+                </div>
+                {canManage && staff.active && <details style={{ marginTop: 8 }}>
+                  <summary>Доступ</summary>
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <Button size="sm" variant="ghost" onClick={() => setLogin(staff)}>Изменить телефон</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPw(staff)}>Задать пароль</Button>
+                    <Button size="sm" variant="ghost" onClick={() => changeAccess(staff)}>Закрыть доступ</Button>
+                  </div>
+                </details>}
+                {!canManage && staff.user_id !== me?.user.id && <p className="faint">Доступ и условия меняет франчайзи</p>}
+              </Card>;
+            })}
+          </div> : <EmptyState title={term ? 'Сотрудники не найдены' : !list.length ? 'Сотрудников пока нет' : status === 'active' ? 'Нет сотрудников с открытым доступом' : 'Нет сотрудников с закрытым доступом'}
+            action={term ? <Button size="sm" onClick={() => setSearch('')}>Сбросить поиск</Button> : undefined} />
+        )}</DataState>
+      </section>}
+      {section === 'shifts' && <section className="stack" aria-label="Смены и начисления">
+        <ShiftReview partner={partnerId} />
+        <div className="row between">
+          <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+          <Button size="sm" onClick={() => exp.mutate()} loading={exp.isPending} disabled={!payroll.length}>
+            <Download size={15} aria-hidden />Скачать ведомость Excel
+          </Button>
+        </div>
+        <ActionError error={exp.error} />
+        <DataState query={q}>{() => payroll.length ? (
+          <div className="stack">
             <div className="kpis">
-              <div className="kpi"><span className="v">{active.length}</span><span className="l">сотрудников</span></div>
-              <div className="kpi"><span className="v">{formatMoneyShort(total, currency)}</span><span className="l">начислено за месяц</span></div>
+              <div className="kpi"><span className="v">{formatMoneyShort(payroll.reduce((a, s) => a + Number(s.month_earned_minor), 0), currency)}</span><span className="l">начислено за месяц</span></div>
             </div>
-            <div className="stack">
-              {list.map((s) => (
-                <Card key={s.user_id} className={s.active ? '' : 'muted-card'}>
-                  <div className="row between staff-summary" style={{ alignItems: 'flex-start' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="row"><strong>{s.full_name}</strong>{s.employee_kind==='trainee'&&<Badge tone="info">стажёр до {s.internship_until}</Badge>}
-                        {!s.active ? <Badge tone="neutral">удалён</Badge> : s.open_shift ? <Badge tone="success">на смене · {s.open_shift.location_name}</Badge> : null}</div>
-                      <div className="faint">{formatPhone(s.phone)} · {s.location_names.join(', ')}</div>
-                      <div className="faint">{s.use_partner_motivation ? 'По ступенчатой системе франчайзи' : <>{s.shift_fee_minor ? `${formatMoneyShort(s.shift_fee_minor, currency)} за выход` : ''}{s.shift_fee_minor && s.rate_bp ? ' + ' : ''}{s.rate_bp ? `${pctBp(s.rate_bp)} от выручки` : ''}{!s.shift_fee_minor && !s.rate_bp ? 'оплата не задана' : ''}</>}</div>
-                    </div>
-                    <div className="staff-totals">
-                      <div className="num"><strong>{formatMoneyShort(s.month_earned_minor, currency)}</strong></div>
-                      <div className="faint">{s.month_shifts} смен · выручка {formatMoneyShort(s.month_revenue_minor, currency)}</div>
-                    </div>
-                  </div>
-                  <div className="row" style={{ marginTop: 10 }}>
-                    {s.user_id!==me?.user.id && s.can_manage!==false && (s.active ? <>
-                      <Button size="sm" variant="ghost" onClick={() => setEdit(s)}><Pencil size={14} aria-hidden />Изменить</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setLogin(s)}><Phone size={14} aria-hidden />Телефон / логин</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setPw(s)}><KeyRound size={14} aria-hidden />Пароль</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}><UserMinus size={14} aria-hidden />Удалить</Button>
-                    </> : <Button size="sm" variant="ghost" loading={setActive.isPending} onClick={() => setActive.mutate({ user: s.user_id, active: true })}><UserRoundCheck size={14} aria-hidden />Вернуть</Button>)}
-                    {s.can_manage===false&&s.user_id!==me?.user.id&&<span className="faint">Доступ и общие условия меняет франчайзи</span>}
-                    {s.shifts.length > 0 && (
-                      <Button size="sm" variant="ghost" onClick={() => setOpen(open === s.user_id ? null : s.user_id)}>
-                        {open === s.user_id ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}Смены
-                      </Button>
-                    )}
-                  </div>
-                  {open === s.user_id && (
-                    <ul className="list" style={{ marginTop: 8 }}>
-                      {s.shifts.map((x) => (
-                        <li key={x.id} className="row between access-row">
-                          <span>{dayLabel(x.day)} · {x.location_name}<span className="faint" style={{ display: 'block' }}>
-                            {new Date(x.opened_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}–{new Date(x.closed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · выручка {formatMoneyShort(x.total_minor, currency)}</span></span>
-                          <strong className="num">{formatMoneyShort(x.earned_minor, currency)}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Card>
-              ))}
-            </div>
-          </>
-        )}
-      </DataState>
+            {payroll.map((staff) => <Card key={staff.user_id}>
+              <div className="row between staff-summary">
+                <div style={{ minWidth: 0 }}><strong>{staff.full_name}</strong>
+                  <div className="faint">Смены: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
+                </div>
+                <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency)}</strong>
+              </div>
+              {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>Смены за месяц</summary>
+                <ul className="list">{staff.shifts.map((shift) => <li key={shift.id} className="row between access-row">
+                  <span>{dayLabel(shift.day)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
+                    {new Date(shift.opened_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}–{new Date(shift.closed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
+                  </span></span>
+                  <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
+                </li>)}</ul>
+              </details>}
+            </Card>)}
+          </div>
+        ) : <EmptyState title="За этот месяц нет закрытых смен" />}</DataState>
+      </section>}
+      <div hidden={section !== 'pay'}>
+        <section className="stack" aria-label="Оплата">
+          <MotivationPanel partner={partnerId} />
+          <DataState query={q}>{(list) => {
+            const activeStaff = list.filter((staff) => staff.active);
+            return activeStaff.length ? <Card title="Условия сотрудников"><ul className="list">
+              {activeStaff.map((staff) => <li key={staff.user_id} className="row between access-row">
+                <div style={{ minWidth: 0 }}>
+                  <strong>{staff.full_name}</strong>
+                  <div className="faint">{staff.use_partner_motivation
+                    ? 'Общая схема франчайзи'
+                    : [staff.shift_fee_minor && `${formatMoneyShort(staff.shift_fee_minor, currency)} за смену`, staff.rate_bp && `${pctBp(staff.rate_bp)} от выручки`].filter(Boolean).join(' + ') || 'Фикс и процент равны нулю'}</div>
+                  {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined && <div className="faint">
+                    Минимум за смену на стажировке: {formatMoneyShort(staff.internship_floor_minor, currency)}
+                  </div>}
+                </div>
+                {staff.user_id !== me?.user.id && staff.can_manage !== false && <Button size="sm" onClick={() => setEdit(staff)}>Изменить</Button>}
+              </li>)}
+            </ul></Card> : <EmptyState title="Нет сотрудников с открытым доступом" />;
+          }}</DataState>
+        </section>
+      </div>
       {edit && locs.data && <StaffDialog partnerId={partnerId} locs={locs.data} staff={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
-      {pw && <PasswordReset staff={pw} onClose={() => setPw(null)} />}
+      {pw && <PasswordReset partnerId={partnerId} staff={pw} onClose={() => setPw(null)} />}
       {login && <PhoneLoginDialog user={login.user_id} name={login.full_name} currentPhone={login.phone} onClose={() => setLogin(null)} />}
-      {removing && (
-        <ConfirmDialog open danger title={`Удалить ${removing.full_name}?`} confirmLabel="Удалить" busy={setActive.isPending} error={setActive.error}
-          onClose={() => setRemoving(null)} onConfirm={() => setActive.mutate({ user: removing.user_id, active: false })}>
-          <p className="muted">Вход закроется сразу. Смены и выручка сохранятся в истории, вернуть сотрудника можно в любой момент.</p>
-        </ConfirmDialog>
-      )}
-    </>
+      {access && <ConfirmDialog open danger={access.active} title={`${access.active ? 'Закрыть' : 'Вернуть'} доступ?`} confirmLabel={access.active ? 'Закрыть доступ' : 'Вернуть доступ'}
+        busy={setActive.isPending} error={setActive.error} onClose={() => setAccess(null)} onConfirm={() => setActive.mutate({ user: access.user_id, active: !access.active })}>
+        <p><strong>{access.full_name}</strong></p>
+        <p>{access.active ? 'Сотрудник сразу потеряет доступ к кабинету. Смены и начисления сохранятся.' : 'Сотрудник сможет снова войти в кабинет.'}</p>
+      </ConfirmDialog>}
+    </div>
   );
 }
 
@@ -233,7 +359,7 @@ export function StaffPage() {
   const partnerId = me?.assignments.find((a) => a.scope_type === 'partner')?.scope_id;
   return (
     <>
-      <PageHeader title="Сотрудники" sub="Продавцы сами открывают и закрывают смены и видят свой заработок. Вы назначаете точки и условия оплаты." />
+      <PageHeader title="Сотрудники" />
       {partnerId ? <StaffPanel partnerId={partnerId} /> : <EmptyState title="Нет франчайзи" />}
     </>
   );
