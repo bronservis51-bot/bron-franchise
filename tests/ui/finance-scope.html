@@ -42,9 +42,13 @@ try {
       scopes.push(scope);
       const current = { month, revenue_minor: 15000, cash_minor: 0, card_minor: 0, plan_minor: null, pct: null, payroll_minor: 0,
         shifts: 0, rate_bp: 700, royalty_minor: 1050, expenses_minor: scope ? 0 : 2500, net_minor: scope ? 13950 : 11450, is_open: true };
-      const royalty = { rate_bp: 700, debt_minor: 0, months: [], payments: [], live: { month, revenue_minor: 15000, accrued_minor: 1050, projected_accrual_minor: 2100 } };
+      const closedMonth = new Date(month);
+      closedMonth.setUTCMonth(closedMonth.getUTCMonth() - 1);
+      const royalty = { rate_bp: 700, debt_minor: 12500, payments: [], live: { month, revenue_minor: 15000, accrued_minor: 1050, projected_accrual_minor: 2100 },
+        months: [{ month: closedMonth.toISOString().slice(0, 10), revenue_minor: 12345678901, rate_bp: 700, accrued_minor: 864197523, manual_minor: -120000, paid_minor: 0, debt_minor: 12500, is_open: false }] };
+      const byLocation = scope ? null : locations.map(location => ({ ...current, location_id: location.id, location_name: location.name }));
       return Promise.resolve(app.Response.json({ partner_name: 'Вымышленный партнёр', currency: 'RUB', month, location_id: scope,
-        locations, current, months: [current], by_location: null, by_staff: [], expenses: scope ? [] : [{ ...commonExpense, month }],
+        locations, current, months: [current], by_location: byLocation, by_staff: [], expenses: scope ? [] : [{ ...commonExpense, month }],
         expense_categories: [], prev_expenses_count: 1, royalty: scope ? null : royalty }));
     }
     if (url.pathname.endsWith('/rpc/expense_repeat')) {
@@ -73,6 +77,31 @@ try {
     }
   }
   await until(() => button(doc, 'Аренда'));
+  await check('читаемые таблицы финансов', async () => {
+    const monthly = doc.querySelector('.finance-details');
+    monthly.open = true;
+    await doc.fonts.ready;
+    try {
+      const regions = [...doc.querySelectorAll('.table-wrap')];
+      assert(regions.length === (locations.length > 1 ? 3 : 2), 'нет одной из таблиц финансов');
+      const debt = doc.querySelector('.table td.danger-text');
+      assert(debt && app.getComputedStyle(debt).display === 'table-cell', 'долг вышел из своей колонки');
+      for (const region of regions) {
+        const cells = region.querySelectorAll('th, td.r');
+        assert(cells.length > 0, 'нет ячеек таблицы');
+        for (const cell of cells) {
+          const range = doc.createRange();
+          range.selectNodeContents(cell);
+          const lines = new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top)));
+          assert(lines.size === 1, 'разорван заголовок или сумма: ' + cell.textContent);
+        }
+        if (region.scrollWidth > region.clientWidth + 1) {
+          assert(app.getComputedStyle(region).overflowX === 'auto' && region.tabIndex === 0, 'широкая таблица недоступна для прокрутки');
+        }
+      }
+      assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'таблица расширила страницу');
+    } finally { monthly.open = false; }
+  });
   await check('отчёт по внесённым данным', async () => {
     const title = [...doc.querySelectorAll('h2')].find(node => node.textContent.startsWith('Доходы и расходы —'));
     assert(title, 'отчёт о доходах и расходах не показан');

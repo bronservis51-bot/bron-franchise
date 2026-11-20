@@ -1,10 +1,8 @@
 // Экран сотрудника: открыть смену → закрыть с выручкой → сразу видно, сколько заработал. Выручку и план точки сотрудник не видит.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Check, ChevronRight, Clock } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
-import { command } from '../../platform/backend';
 import { dayLabel, monthLabel } from '../../platform/dates';
 import { formatMoneyShort, sumMinor } from '../../platform/money';
 import { useSession } from '../../platform/session';
@@ -123,7 +121,6 @@ function StaffShifts({ userId }: { userId: string }) {
   const toast = useToast();
   useTick(10_000);
   const q = useQuery({ queryKey: ['staff', 'home', userId], queryFn: () => staffHome(null), refetchInterval: 120_000 });
-  const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string }[]>('kb_to_read') });
   const [opening,setOpening]=useState<StaffHomeData['locations'][number]|null>(null);
   const [cancelling,setCancelling]=useState<Shift|null>(null);
   const queueKey = ['staff', 'pending', userId];
@@ -200,14 +197,6 @@ function StaffShifts({ userId }: { userId: string }) {
             {pending.isError && <Alert tone="danger" title="Не удалось проверить очередь смен"
               action={<Button size="sm" onClick={() => void pending.refetch()}>Повторить</Button>} />}
             {d.open_shift && pending.data?.some(op => op.payload.shift === d.open_shift?.id && !op.lastError) && <p role="status">Итог ожидает отправки. Дождитесь подтверждения сервера. Экран обновится сам.</p>}
-            {Boolean(toRead.data?.length) && (
-              <Link to="/kb" className="read-card">
-                <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
-                <span className="todo-main"><span className="todo-title">Нужно прочитать: {toRead.data!.length}</span>
-                  <span className="todo-meta">{toRead.data!.map((a) => a.title).join(', ')}</span></span>
-                <ChevronRight size={16} className="todo-chevron" aria-hidden />
-              </Link>
-            )}
 
             <ShiftHistory userId={userId} current={d} />
           </div>

@@ -105,7 +105,7 @@ function UserMenu({ pending, onLocalWork }: { pending: number; onLocalWork: () =
   return (
     <div style={{ position: 'relative' }} ref={ref}>
       <button className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span className="user-name hide-mobile">{me?.user.full_name}</span><User size={20} aria-hidden />
+        <User size={20} aria-hidden />
       </button>
       {open && (
         <div className="menu" role="menu">

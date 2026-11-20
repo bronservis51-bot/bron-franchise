@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { command, from, rows } from '../../platform/backend';
 import { useSession } from '../../platform/session';
@@ -7,7 +6,6 @@ import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, Card, Checkbox, ConfirmDialog, DataState, Field, Input, PageHeader, Select } from '../../ui';
 import { StaffHome } from './StaffHome';
-import { OrderCard } from '../orders/OrderLink';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, randomPassword, staffList, userSetPassword, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
@@ -19,9 +17,10 @@ type RevenuePoint = {location_id:string; location_name:string; currency:string; 
 export function TeamHome() {
   const { me, can } = useSession();
   const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee_manager')?.scope_id;
-  return <div className="home"><PageHeader title={me?.user.full_name ?? 'Главная'} /><OrderCard />
-    {can('shift.work') && <StaffHome />}{partner && <TeamRevenue partner={partner} />}
-    <div className="stack"><Link className="read-card" to="/staff">Сотрудники</Link><Link className="read-card" to="/kb">База знаний</Link></div></div>;
+  return <div className="home">
+    {can('shift.work') ? <StaffHome /> : <PageHeader title="Главная" />}
+    {partner && <TeamRevenue partner={partner} />}
+  </div>;
 }
 function TeamRevenue({partner}:{partner:string}) {
   const [month,setMonth]=useState(monthStart());

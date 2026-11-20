@@ -150,7 +150,7 @@ export function FinancePage() {
 
   return (
     <div className="home" style={{ maxWidth: 980 }}>
-      <PageHeader title="Финансы" sub="Выручка, зарплата сотрудников, роялти, ваши расходы и что остаётся. Выручка, зарплата и роялти считаются сами."
+      <PageHeader title="Финансы"
         actions={<>
           <Button variant={editing ? 'primary' : 'secondary'} aria-pressed={editing} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
             {editing ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
@@ -189,27 +189,30 @@ export function FinancePage() {
 
               <Card title="За полгода">
                 <MonthsChart months={f.months} currency={f.currency} />
-                <details className="finance-details"><summary>Таблица по месяцам</summary><div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table className="table">
-                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
-                    <tbody>{[...f.months].reverse().map((m) => (
-                      <tr key={m.month}><td>{monthLabel(m.month)}{m.is_open && <span className="faint"> · идёт</span>}</td>
-                        <td className="r num">{formatMoneyShort(m.revenue_minor, f.currency)}</td>
-                        <td className="r">{m.pct !== null ? `${n(m.pct).toLocaleString('ru-RU')} %` : '—'}</td>
-                        <td className="r num">{formatMoneyShort(m.payroll_minor, f.currency)}</td>
-                        <td className="r num">{formatMoneyShort(m.royalty_minor, f.currency)}</td>
-                        <td className="r num">{formatMoneyShort(m.expenses_minor, f.currency)}</td>
-                        <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
-                    ))}</tbody>
-                  </table>
-                </div></details>
+                <details className="finance-details">
+                  <summary>Таблица по месяцам</summary>
+                  <div className="table-wrap" role="region" aria-label="Финансы по месяцам" tabIndex={0} style={{ marginTop: 12 }}>
+                    <table className="table">
+                      <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
+                      <tbody>{[...f.months].reverse().map((m) => (
+                        <tr key={m.month}><td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">Текущий месяц</div>}</td>
+                          <td className="r num">{formatMoneyShort(m.revenue_minor, f.currency)}</td>
+                          <td className="r">{m.pct !== null ? `${n(m.pct).toLocaleString('ru-RU')} %` : '—'}</td>
+                          <td className="r num">{formatMoneyShort(m.payroll_minor, f.currency)}</td>
+                          <td className="r num">{formatMoneyShort(m.royalty_minor, f.currency)}</td>
+                          <td className="r num">{formatMoneyShort(m.expenses_minor, f.currency)}</td>
+                          <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </details>
               </Card>
 
               {f.by_location && f.by_location.length > 1 && (
                 <Card title={`По точкам — ${monthLabel(f.month)}`} bodyless>
-                  <div className="table-wrap">
+                  <div className="table-wrap" role="region" aria-label="Финансы по точкам" tabIndex={0}>
                     <table className="table">
-                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
+                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Роялти</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                       <tbody>{f.by_location.map((l) => (
                         <tr key={l.location_id} className="clickable" onClick={() => setLoc(l.location_id)}>
                           <td><strong>{l.location_name}</strong></td>
@@ -256,12 +259,12 @@ function RoyaltySection({ r, currency }: { r: Royalty; currency: string }) {
         <div className="kpi"><span className="v">≈ {formatMoneyShort(Math.round(n(r.live.projected_accrual_minor) / 100) * 100, currency)}</span><span className="l">к концу месяца при текущем темпе</span></div>
         <div className={`kpi${n(r.debt_minor) > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(r.debt_minor, currency)}</span><span className="l">долг за закрытые месяцы</span></div>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" role="region" aria-label="Роялти по месяцам" tabIndex={0}>
         <table className="table">
           <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">Долг</th></tr></thead>
           <tbody>{r.months.map((m) => (
             <tr key={m.month}>
-              <td>{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
+              <td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
               <td className="r num">{formatMoneyShort(m.revenue_minor, currency)}</td>
               <td className="r">{pct(m.rate_bp)}</td>
               <td className="r num">{formatMoneyShort(m.accrued_minor, currency)}</td>

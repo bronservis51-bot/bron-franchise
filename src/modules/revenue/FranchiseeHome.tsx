@@ -1,17 +1,14 @@
 // Главная франчайзи: план месяца по точке или по всем точкам сразу, ввод выручки за сегодня, сравнение с прошлым месяцем, роялти сейчас, дни месяца.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { BookOpen, CalendarX, Check, ChevronRight, Download, Landmark, Plus, TrendingDown, TrendingUp } from 'lucide-react';
-import { command } from '../../platform/backend';
-import { dayLabel, formatDate, monthLabel, monthStart } from '../../platform/dates';
+import { CalendarX, Check, Download, Plus, TrendingDown, TrendingUp } from 'lucide-react';
+import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, DataState, EmptyState, Money } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
 import { revenueMonth, revenueOverview, WEEKDAY, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { downloadMonthReport } from './monthReport';
 import { RevenueDialog } from './RevenueDialog';
-import { OrderCard } from '../orders/OrderLink';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
@@ -36,24 +33,6 @@ function Insights({ m }: { m: MonthDetail }) {
         </div>
       )}
     </div>
-  );
-}
-
-interface RoyaltyLive { currency: string; debt_minor: number; live: { month: string; accrued_minor: number } }
-
-function RoyaltyCard() {
-  const q = useQuery({ queryKey: ['royalty', 'my'], queryFn: () => command<RoyaltyLive>('royalty_my'), refetchInterval: 120_000 });
-  if (!q.data) return null;
-  const r = q.data;
-  return (
-    <Link to="/finance" className="read-card royalty-live">
-      <span className="todo-icon"><Landmark size={18} aria-hidden /></span>
-      <span className="todo-main">
-        <span className="todo-title">Начислено роялти за {monthLabel(r.live.month, false)}: {formatMoneyShort(r.live.accrued_minor, r.currency)}</span>
-        <span className="todo-meta">{Number(r.debt_minor) > 0 ? `Долг за закрытые месяцы: ${formatMoneyShort(r.debt_minor, r.currency)}` : 'Долга за закрытые месяцы нет'}</span>
-      </span>
-      <ChevronRight size={16} className="todo-chevron" aria-hidden />
-    </Link>
   );
 }
 
@@ -110,7 +89,6 @@ function AllPoints({ points, month, onPick, onEnter }: {
           })}
         </ul>
       </section>
-      <RoyaltyCard />
       <section>
         <h2 className="section-title">Дни месяца по всем точкам</h2>
         {!ready ? <p className="faint">Загружаем…</p> : !list.length ? <EmptyState title="В этом месяце записей нет" /> : (
@@ -146,7 +124,6 @@ export function FranchiseeHome() {
   useEffect(() => { if (!all && current && current.location_id !== loc) setLoc(current.location_id); }, [all, current, loc]);
   const detail = useQuery({ queryKey: ['revenue', 'month', current?.location_id, month], enabled: Boolean(current), queryFn: () => revenueMonth(current!.location_id, month) });
   const [enter, setEnter] = useState<{ p: LocationMonth; d: MonthDetail; row?: DayRow } | null>(null);
-  const toRead = useQuery({ queryKey: ['kb', 'to-read'], queryFn: () => command<{ article_id: string; title: string; due_on: string }[]>('kb_to_read') });
   const pick = (id: string) => { setLoc(id); try { localStorage.setItem(LOC_KEY, id); } catch { /* удобство */ } };
   const m = detail.data;
   const todayRow = m?.days.find((d) => d.day === m.today);
@@ -160,7 +137,6 @@ export function FranchiseeHome() {
         <h1>Выручка</h1>
       </header>
 
-      <OrderCard />
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title="Точек пока нет" text="Менеджер по франшизе ещё не добавил ваши точки." />)}>
         {() => (
           <div className="home-body">
@@ -196,7 +172,6 @@ export function FranchiseeHome() {
                     </div>
                   )}
                   <details><summary>Сравнение с прошлым месяцем</summary><Insights m={d} /></details>
-                  <RoyaltyCard />
                   <section>
                     <div className="row between" style={{ marginBottom: 8 }}>
                       <h2 className="section-title" style={{ margin: 0 }}>Дни месяца</h2>
@@ -208,16 +183,6 @@ export function FranchiseeHome() {
                 </>
               )}
             </DataState>
-            )}
-            {Boolean(toRead.data?.length) && (
-              <Link to="/kb" className="read-card">
-                <span className="todo-icon"><BookOpen size={18} aria-hidden /></span>
-                <span className="todo-main">
-                  <span className="todo-title">Нужно прочитать: {toRead.data!.length}</span>
-                  <span className="todo-meta">{toRead.data!.map((a) => a.title).join(', ')}</span>
-                </span>
-                <ChevronRight size={16} className="todo-chevron" aria-hidden />
-              </Link>
             )}
           </div>
         )}

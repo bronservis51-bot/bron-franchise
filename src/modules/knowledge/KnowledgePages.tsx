@@ -167,7 +167,7 @@ export function ArticleEditPage() {
   );
 }
 
-export function QuestionsPage() {
+export function QuestionsPage({ home = false }: { home?: boolean }) {
   const { can } = useSession();
   const editor = can('kb.edit');
   const qc = useQueryClient();
@@ -184,8 +184,8 @@ export function QuestionsPage() {
   });
   return (
     <div className="home" style={{ maxWidth: 820 }}>
-      <PageHeader back={{ to: '/kb', label: 'База знаний' }} title={editor ? 'Вопросы франчайзи' : 'Мои вопросы'}
-        sub={editor ? 'Ответьте здесь. Если вопрос повторяется — сделайте из ответа статью.' : 'Ответы менеджера по франшизе и технического специалиста'}
+      <PageHeader back={home ? undefined : { to: '/kb', label: 'База знаний' }} title={editor ? 'Вопросы франчайзи' : 'Мои вопросы'}
+        sub={home ? undefined : editor ? 'Ответьте здесь. Если вопрос повторяется — сделайте из ответа статью.' : 'Ответы менеджера по франшизе и технического специалиста'}
         actions={!editor && <Button variant="primary" onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />
       <SupportAccounts /><ActionError error={answer.error} />
       <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Вопросов пока нет" text={editor ? 'Когда франчайзи спросят, вопросы появятся здесь.' : 'Не нашли ответ в базе знаний — спросите, менеджер по франшизе или технический специалист ответит.'} />)}>
