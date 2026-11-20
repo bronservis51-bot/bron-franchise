@@ -1,28 +1,28 @@
-// Отчёт за месяц для своей бухгалтерии: дни (наличные, карта, итог, кто работал) и итоги — файл Excel.
+import { formatDate } from '../../platform/dates';
 import { minorToDecimal } from '../../platform/money';
-import { formatDate, monthLabel } from '../../platform/dates';
 import type { MonthDetail } from './api';
 
-export async function downloadMonthReport(m: MonthDetail) {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const money = (v: number) => ({ value: Number(minorToDecimal(v, m.currency)), type: Number, format: '#,##0.00' });
-  const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
-  const days = new Map(m.days.map((day) => [day.day, day]));
-  const dates = [...new Set([...days.keys(), ...(m.days_off ?? [])])].sort();
-  const data = [
-    [{ value: `${m.location_name} — выручка за ${monthLabel(m.month)}`, fontWeight: 'bold' as const, fontSize: 14 }],
-    [],
-    ['Дата', 'Наличные', 'Карта', 'Без разбивки', 'Итого', 'Кто работал', 'Комментарий'].map(head),
-    ...dates.map((date) => {
-      const d = days.get(date);
-      if (!d) return [formatDate(date), null, null, null, null, null, 'Выходной'];
-      return [formatDate(date), money(d.cash_minor), money(d.card_minor), money(d.unallocated_minor ?? 0), money(d.total_minor),
-        d.entries.map((e) => e.employee_name ?? 'франчайзи').join(', '), d.comment ?? ''];
-    }),
-    [],
-    [{ value: 'Итого', fontWeight: 'bold' as const }, money(m.cash_minor), money(m.card_minor), money(Number(m.fact_minor)-Number(m.cash_minor)-Number(m.card_minor)), { ...money(m.fact_minor), fontWeight: 'bold' as const }],
-    ...(m.plan_minor ? [['План', null, null, null, money(m.plan_minor)], ['Выполнение', null, null, null, { value: (m.pct ?? 0) / 100, type: Number, format: '0.0%' }]] : []),
-  ];
-  await writeXlsxFile(data, { sheet: 'Выручка', columns: [{ width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 24 }, { width: 30 }] })
-    .toFile(`vyruchka-${m.location_name.replace(/\s+/g, '-')}-${m.month.slice(0, 7)}.xlsx`);
+type LocationDays = Pick<MonthDetail, 'location_name' | 'currency' | 'days' | 'days_off'>;
+
+export function revenueMonthSheet(points: LocationDays[]) {
+  const headings = ['Дата', 'Точка', 'Валюта', 'Наличные', 'Карта', 'Без разбивки', 'Итого', 'Кто работал', 'Комментарий'];
+  return {
+    sheet: 'Выручка по дням',
+    columns: [14, 26, 12, 14, 14, 16, 14, 24, 30].map((width) => ({ width })),
+    data: [
+      headings.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' })),
+      ...points.flatMap((point) => {
+        const days = new Map(point.days.map((day) => [day.day, day]));
+        const dates = [...new Set([...days.keys(), ...(point.days_off ?? [])])].sort();
+        const money = (minor: number) => ({ value: Number(minorToDecimal(minor, point.currency)), type: Number, format: '#,##0.00' });
+        return dates.map((date) => {
+          const label = [formatDate(date), point.location_name, point.currency];
+          const day = days.get(date);
+          if (!day) return [...label, null, null, null, null, null, 'Выходной'];
+          return [...label, money(day.cash_minor), money(day.card_minor), money(day.unallocated_minor ?? 0), money(day.total_minor),
+            day.entries.map((entry) => entry.employee_name ?? 'франчайзи').join(', '), day.comment ?? ''];
+        });
+      }),
+    ],
+  };
 }

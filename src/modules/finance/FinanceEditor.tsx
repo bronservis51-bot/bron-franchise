@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 import { monthLabel } from '../../platform/dates';
+import type { MinorInput } from '../../platform/money';
 import { Card, Chips, DataState } from '../../ui';
 import { DayList } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
@@ -12,9 +13,9 @@ import { ExpensesCard, type Expense } from './Expenses';
 
 type Tab = 'revenue' | 'expenses' | 'payroll';
 
-export function FinanceEditor({ month, currency, location, locations, expenses, own, prevCount, total }: {
+export function FinanceEditor({ month, currency, location, locations, expenses, own, prevCount, total, royalty }: {
   month: string; currency: string; location: string | null; locations: { id: string; name: string }[];
-  expenses: Expense[]; own: string[]; prevCount: number; total: number;
+  expenses: Expense[]; own: string[]; prevCount: number; total: MinorInput; royalty: MinorInput;
 }) {
   const [tab, setTab] = useState<Tab>('revenue');
   const [point, setPoint] = useState(location ?? locations[0]?.id ?? '');
@@ -44,7 +45,7 @@ export function FinanceEditor({ month, currency, location, locations, expenses, 
         </>
       )}
       {tab === 'expenses' && (
-        <ExpensesCard month={month} currency={currency} location={location} locations={locations} expenses={expenses} own={own} prevCount={prevCount} total={total} bare />
+        <ExpensesCard month={month} currency={currency} location={location} locations={locations} expenses={expenses} own={own} prevCount={prevCount} total={total} royalty={royalty} bare />
       )}
       {tab === 'payroll' && (
         <div className="stack" style={{ gap: 8 }}>
