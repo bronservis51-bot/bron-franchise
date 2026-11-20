@@ -10,7 +10,6 @@ import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataS
 import { useToast } from '../../ui/toast';
 import { MotivationPanel } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
-import { TeamAccounts } from './TeamAccounts';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffRow } from './api';
@@ -252,7 +251,6 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
         {overdueShifts > 0 && <Button size="sm" onClick={() => setSection('shifts')}>Незакрытые смены за прошлые дни: {overdueShifts}</Button>}
         <Field label="Найти сотрудника">{id => <Input id={id} type="search" value={search} placeholder="Имя, телефон или точка" onChange={e => setSearch(e.target.value)} />}</Field>
         <Chips options={[...staffStatuses]} value={status} onChange={setStatus} label="Статус доступа" />
-        <TeamAccounts partner={partnerId} />
         <DataState query={q}>{(list) => (
           visibleStaff.length ? <div className="stack">
             {visibleStaff.map((staff) => {

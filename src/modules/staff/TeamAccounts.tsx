@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Navigate } from 'react-router';
 import { command, from, rows } from '../../platform/backend';
-import { useSession } from '../../platform/session';
+import { useSession, type Me } from '../../platform/session';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, PageHeader, Select } from '../../ui';
@@ -14,6 +15,22 @@ import { PhoneLoginDialog } from './PhoneLoginDialog';
 type Team = { user_id: string; full_name: string; phone: string; active: boolean; location_ids: string[]; location_names: string[] };
 type TeamAction = 'new' | 'assign' | { type: 'password' | 'active'; user: Team } | {type:'scope';user:Team};
 type RevenuePoint = {location_id:string; location_name:string; currency:string; total_minor:number; days:{day:string;total_minor:number}[]};
+
+export function ownedTeamPartner(me: Me | null) {
+  return me?.assignments.find((assignment) => assignment.role === 'franchisee' && assignment.scope_type === 'partner'
+    && assignment.permissions.includes('team.manage'))?.scope_id;
+}
+
+export function TeamAccessPage() {
+  const { me } = useSession();
+  const partner = ownedTeamPartner(me);
+  if (!partner) return <Navigate to="/" replace />;
+  return <>
+    <PageHeader title="Управляющие" />
+    <TeamAccounts partner={partner} standalone />
+  </>;
+}
+
 export function TeamHome() {
   const { me, can } = useSession();
   const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee_manager')?.scope_id;
@@ -33,7 +50,7 @@ function TeamRevenue({partner}:{partner:string}) {
     </Card>):<p className="faint">Франчайзи ещё не назначил точки управления.</p>}</DataState>
   </section>;
 }
-export function TeamAccounts({ partner }: { partner: string }) {
+export function TeamAccounts({ partner, standalone = false }: { partner: string; standalone?: boolean }) {
   const { me } = useSession(); const qc = useQueryClient();
   const canManageTeam = me?.assignments.some((assignment) => assignment.permissions.includes('team.manage')
     && (assignment.scope_type === 'company' || (assignment.scope_type === 'partner' && assignment.scope_id === partner)));
@@ -51,8 +68,8 @@ export function TeamAccounts({ partner }: { partner: string }) {
     void qc.invalidateQueries({ queryKey: ['staff-access-history', partner] });
   };
   const actionLabel:Record<string,string>={'team.create':'Создан доступ управляющего','staff.create':'Создан доступ','staff.update':'Изменён профиль','staff.access':'Изменены роль или точки','user.password':'Изменён пароль','user.login':'Изменён телефон для входа','staff.remove':'Доступ закрыт','staff.restore':'Доступ возвращён','team.active':'Изменён доступ','staff.active':'Изменён доступ','team.remove':'Доступ закрыт','team.restore':'Доступ возвращён'};
-  return <details className="team-accounts"><summary>Управляющие и доступы</summary>
-    <p className="faint">Управляющий видит выручку и сотрудников назначенных точек, заказывает материалы своей компании. Точки можно менять; график работы не фиксирован.</p>
+  const content = <>
+    <p className="faint">Управляющий видит выручку и сотрудников назначенных точек и может заказывать материалы.</p>
     <div className="row"><Button size="sm" onClick={() => setAction('assign')}>Назначить управляющего</Button><Button size="sm" onClick={() => setAction('new')}>Новый управляющий</Button></div>
     <DataState query={q} empty={list => list.length ? null : <EmptyState title="Управляющих пока нет" />}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
       <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
@@ -68,7 +85,9 @@ export function TeamAccounts({ partner }: { partner: string }) {
     {action && (action==='assign'||typeof action==='object'&&action.type==='scope'
       ? <StaffAccessDialog partner={partner} user={typeof action==='object'?action.user:undefined} onClose={closeAction}/>
       : <TeamDialog partner={partner} action={action} onClose={closeAction} />)}
-  </details>;
+  </>;
+  return standalone ? <div className="stack">{content}</div>
+    : <details className="team-accounts"><summary>Управляющие</summary>{content}</details>;
 }
 function StaffAccessDialog({partner,user,onClose}:{partner:string;user?:Team;onClose:()=>void}) {
   const {me}=useSession();

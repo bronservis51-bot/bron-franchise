@@ -33,12 +33,33 @@ function type(input, value) {
 frame.width = String(Number(params.get('width')) || 390);
 frame.src = `/tests/ui/responsive-app.html?role=franchisee&text=${params.get('text') === '200' ? '200' : '100'}#/`;
 try {
-  const open = await until(() => button(frame.contentDocument, 'Внести выручку за сегодня'));
+  let open = await until(() => button(frame.contentDocument, 'Внести выручку за сегодня'));
   const app = frame.contentWindow;
   const fetchFixture = app.fetch;
   const saves = [];
-  app.fetch = (request, init) => {
+  const daysOff = new Set();
+  const dayOffWrites = [];
+  let dayOffUnavailable = false;
+  app.fetch = async (request, init) => {
     const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/revenue_day_off_set')) {
+      if (dayOffUnavailable) return app.Response.json({ message: 'external-unavailable', details: 'Связь прервалась' }, { status: 503 });
+      const payload = JSON.parse(init.body);
+      dayOffWrites.push(payload);
+      if (payload.p_day_off) daysOff.add(payload.p_day);
+      else daysOff.delete(payload.p_day);
+      return app.Response.json(null);
+    }
+    const isMonth = url.pathname.endsWith('/rpc/revenue_month');
+    if (isMonth || url.pathname.endsWith('/rpc/revenue_overview')) {
+      const response = await fetchFixture(request, init);
+      const body = await response.json();
+      for (const row of isMonth ? [body] : body.rows) {
+        row.days_off = [...daysOff];
+        row.missing_days = row.missing_days.filter(day => !daysOff.has(day));
+      }
+      return app.Response.json(body);
+    }
     if (url.pathname.endsWith('/rpc/revenue_total_set')) {
       const payload = JSON.parse(init.body);
       saves.push(payload);
@@ -48,6 +69,31 @@ try {
     }
     return fetchFixture(request, init);
   };
+
+  open.click();
+  const offDialog = await until(() => app.document.querySelector('dialog[open]'));
+  const offOption = [...offDialog.querySelectorAll('label')].find(label => label.textContent.includes('Точка не работала'));
+  assert(offOption, 'У пустого дня нет отметки «Выходной»');
+  offOption.querySelector('input').click();
+  await wait(0);
+  assert(!offDialog.querySelector('input[inputmode=decimal]:not([hidden])')?.getClientRects().length, 'для выходного запрашивается сумма');
+  dayOffUnavailable = true;
+  app.dispatchEvent(new app.Event('offline'));
+  button(offDialog, 'Сохранить').click();
+  await until(() => offDialog.textContent.includes('Связь прервалась'));
+  assert(!dayOffWrites.length && offDialog.open, 'потеря связи не должна подтверждать выходной');
+  dayOffUnavailable = false;
+  app.dispatchEvent(new app.Event('online'));
+  button(offDialog, 'Сохранить').click();
+  const todayOff = await until(() => button(app.document, 'Сегодня выходной'));
+  assert(dayOffWrites.length === 1 && dayOffWrites[0].p_day_off === true && saves.length === 0, 'выходной отправлен как выручка');
+  assert(app.document.querySelector('.day-list2').textContent.includes('Выходной'), 'в списке нет отметки о выходном');
+  assert(app.document.querySelector('.alert')?.textContent.includes('Не внесена выручка'), 'исчезло напоминание за остальные дни');
+  todayOff.click();
+  const undoDialog = await until(() => app.document.querySelector('dialog[open]'));
+  button(undoDialog, 'Отменить выходной').click();
+  open = await until(() => button(app.document, 'Внести выручку за сегодня'));
+  assert(dayOffWrites.length === 2 && dayOffWrites[1].p_day_off === false && saves.length === 0, 'не удалось отменить выходной');
 
   const failures = [];
   open.click();
@@ -93,7 +139,7 @@ try {
       assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
       if (byKeyboard) {
         input.dispatchEvent(new app.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        assert(app.document.activeElement === dialog.querySelector('input:not([inputmode=decimal])'), 'клавиатура не перевела фокус к комментарию');
+        assert(app.document.activeElement === dialog.querySelector('input[type="text"], input:not([type]):not([inputmode=decimal])'), 'клавиатура не перевела фокус к комментарию');
         assert(saves.length === count && dialog.isConnected, 'переход к следующему полю отправил выручку');
       }
       save.click();
@@ -121,7 +167,7 @@ try {
   }
   assert(!failures.length, failures.join(' • '));
   result.dataset.status = 'passed';
-  result.textContent = `Проверок пройдено: ${cases.length}`;
+  result.textContent = `Проверок пройдено: ${cases.length + 2}`;
 } catch (error) {
   result.dataset.status = 'failed';
   result.textContent = error.message;

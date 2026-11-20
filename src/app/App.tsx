@@ -7,7 +7,7 @@ import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
 import { ErrorState, Skeleton } from '../ui';
 import { Shell } from './Shell';
-import { TeamHome } from '../modules/staff/TeamAccounts';
+import { TeamAccessPage, TeamHome } from '../modules/staff/TeamAccounts';
 import { LoginPage, SetupPage } from './LoginPage';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
@@ -79,6 +79,7 @@ const router = createHashRouter([
       { path: 'royalty', element: <Navigate to="/finance" replace /> },
       { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
       { path: 'staff', element: <ByRole franchisee={<StaffPage />} team={<StaffPage />} /> },
+      { path: 'team-access', element: <ByRole franchisee={<TeamAccessPage />} /> },
       { path: 'rating', element: <ManagerOnly><RatingPage /></ManagerOnly> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },

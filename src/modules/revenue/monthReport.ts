@@ -7,13 +7,18 @@ export async function downloadMonthReport(m: MonthDetail) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const money = (v: number) => ({ value: Number(minorToDecimal(v, m.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
-  const days = [...m.days].sort((a, b) => a.day.localeCompare(b.day));
+  const days = new Map(m.days.map((day) => [day.day, day]));
+  const dates = [...new Set([...days.keys(), ...(m.days_off ?? [])])].sort();
   const data = [
     [{ value: `${m.location_name} — выручка за ${monthLabel(m.month)}`, fontWeight: 'bold' as const, fontSize: 14 }],
     [],
     ['Дата', 'Наличные', 'Карта', 'Без разбивки', 'Итого', 'Кто работал', 'Комментарий'].map(head),
-    ...days.map((d) => [formatDate(d.day), money(d.cash_minor), money(d.card_minor), money(d.unallocated_minor ?? 0), money(d.total_minor),
-      d.entries.map((e) => e.employee_name ?? 'франчайзи').join(', '), d.comment ?? '']),
+    ...dates.map((date) => {
+      const d = days.get(date);
+      if (!d) return [formatDate(date), null, null, null, null, null, 'Выходной'];
+      return [formatDate(date), money(d.cash_minor), money(d.card_minor), money(d.unallocated_minor ?? 0), money(d.total_minor),
+        d.entries.map((e) => e.employee_name ?? 'франчайзи').join(', '), d.comment ?? ''];
+    }),
     [],
     [{ value: 'Итого', fontWeight: 'bold' as const }, money(m.cash_minor), money(m.card_minor), money(Number(m.fact_minor)-Number(m.cash_minor)-Number(m.card_minor)), { ...money(m.fact_minor), fontWeight: 'bold' as const }],
     ...(m.plan_minor ? [['План', null, null, null, money(m.plan_minor)], ['Выполнение', null, null, null, { value: (m.pct ?? 0) / 100, type: Number, format: '0.0%' }]] : []),

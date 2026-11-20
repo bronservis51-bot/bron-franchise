@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Smartphone, User, WifiOff, X } from 'lucide-react';
+import { CloudOff, KeyRound, LogOut, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOps } from '../platform/outbox';
 import { navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
+import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
@@ -85,7 +86,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending, onLocalWork }: { pending: number; onLocalWork: () => void }) {
+function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean }) {
   const { me, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
@@ -115,6 +116,7 @@ function UserMenu({ pending, onLocalWork }: { pending: number; onLocalWork: () =
           </div>
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
+          {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
           <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
@@ -186,7 +188,7 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
           {(role === 'franchisee' || role === 'team') && <OrderTopButton />}
-          <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} />
+          <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
         <AppUpdateBanner hasQueuedWork={ops.length > 0} />
         {!online && (

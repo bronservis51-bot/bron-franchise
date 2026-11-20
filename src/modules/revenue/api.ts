@@ -9,9 +9,10 @@ export interface LocationMonth {
   location_id: string; location_name: string; city: string; currency: string; status: string;
   partner_id: string; partner_name: string;
   month: string; today: string;
+  opened_on?: string | null;
   plan_minor: number | null; fact_minor: number; cash_minor: number; card_minor: number; pct: number | null;
   days_in_month: number; days_left: number; need_per_day_minor: number | null;
-  missing_days: string[]; last_day: string | null; fx_rub: number | null;
+  missing_days: string[]; days_off?: string[]; last_day: string | null; fx_rub: number | null;
 }
 
 export interface MonthDetail extends LocationMonth {
@@ -25,6 +26,8 @@ export interface Overview { month: string; rows: LocationMonth[]; fact_rub_minor
 
 export const revenueOverview = (month: string) => command<Overview>('revenue_overview', { month });
 export const revenueMonth = (location: string, month: string) => command<MonthDetail>('revenue_month', { location, month });
+export const revenueDayOffSet = (location: string, day: string, dayOff: boolean) =>
+  command('revenue_day_off_set', { location, day, day_off: dayOff });
 /** Сохранить выручку дня (без сети — в очередь на устройстве). employee = null — запись самого франчайзи. */
 export const revenueSave = async (userId: string, location: string, day: string, cash: string, card: string, comment: string | null, employee: string | null, expected_revision: number) => {
   const args = { location, day, cash, card, comment, employee, expected_revision };
