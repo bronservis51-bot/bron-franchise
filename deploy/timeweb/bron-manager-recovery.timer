@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for pending Bron Franchise manager recovery email
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=30s
+AccuracySec=1s
+Unit=bron-manager-recovery.service
+
+[Install]
+WantedBy=timers.target

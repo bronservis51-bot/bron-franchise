@@ -387,6 +387,11 @@ a.stat-link:hover .card { border-color: var(--border-strong); }
 .qty input { width: 64px; border: 0; text-align: center; min-height: 40px; background: var(--surface); }
 .login-wrap { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: max(var(--space-4), env(safe-area-inset-top)) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-4), env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
 .login-card { width: min(420px, 100%); }
+.recovery-panel { height: var(--app-height, 100dvh); min-height: 0; overflow-y: auto; align-items: safe center; }
+.recovery-panel .card-body, .recovery-email { overflow-wrap: anywhere; }
+.recovery-panel h1 { margin-bottom: var(--space-4); }
+.recovery-panel form > .btn { margin-top: var(--space-2); }
+.recovery-back { display: inline-block; margin-top: var(--space-4); }
 
 /* Узкие карточки (правая колонка): подпись над значением, без переноса по буквам */
 .card { container-type: inline-size; min-width: 0; }

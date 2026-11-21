@@ -8,6 +8,13 @@ import { exportData, restoreData } from '../../scripts/backup-lib.mjs';
 describe('резервная копия и восстановление', () => {
   it('экспорт → новая установка с другими id пользователей → те же данные, долги и права', async () => {
     const src = await createDb();
+    const seedRecovery = async (db: typeof src) => {
+      await db.exec(`insert into app_private.manager_recovery_account(user_id,email,enabled,reset_enabled,verified_at)
+        select id,'manager-recovery@example.invalid',true,true,now() from auth.users where email='fm@demo.example.com';
+        insert into app_private.manager_recovery_job(user_id,kind,state_hash,expires_at)
+        select user_id,'reset',decode('00','hex'),now()+interval '15 minutes' from app_private.manager_recovery_account;`);
+    };
+    await seedRecovery(src);
     const product = '10000000-0000-0000-0000-000000000081';
     const store = '10000000-0000-0000-0000-000000000082';
     const operation = '10000000-0000-0000-0000-000000000083';
@@ -48,14 +55,20 @@ describe('резервная копия и восстановление', () => 
     expect(dump.private_tables.procurement_incoming).toHaveLength(1);
     expect(dump.private_tables.revenue_day_off).toHaveLength(1);
     expect(dump.private_tables.partner_launch_task).toHaveLength(1);
+    expect(dump.private_tables).not.toHaveProperty('manager_recovery_account');
+    expect(dump.private_tables).not.toHaveProperty('manager_recovery_job');
 
     // Новая установка: только миграции, пользователи созданы заново (новые id)
     const dst = await createDb({ seed: false });
     for (const u of demoUsers) {
       await dst.query(`insert into auth.users(email, raw_user_meta_data, raw_app_meta_data) values ($1, $2, '{}')`, [u.email, JSON.stringify({ full_name: u.name })]);
     }
+    await seedRecovery(dst);
     await expect(restoreData(dst, dump)).rejects.toThrow(/confirm-wipe/);
     await restoreData(dst, dump, { wipe: true });
+    expect((await dst.query('select id from app_private.manager_recovery_job')).rows).toEqual([]);
+    expect((await dst.query('select enabled,reset_enabled,verified_at from app_private.manager_recovery_account')).rows)
+      .toEqual([{ enabled: false, reset_enabled: false, verified_at: null }]);
 
     const restoredLesson=(await dst.query('select questions,for_trainees,pass_percent from app_private.learning_config')).rows[0];
     expect(restoredLesson.questions).toHaveLength(1);expect(restoredLesson.for_trainees).toBe(false);expect(restoredLesson.pass_percent).toBe(80);

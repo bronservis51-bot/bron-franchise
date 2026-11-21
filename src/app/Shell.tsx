@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { CloudOff, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { phoneLoginDigits } from '../platform/login';
@@ -15,6 +15,7 @@ import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { ManagerRecoverySettings } from './ManagerRecoverySettings';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
 import { sameJson, type QueuedOperation } from '../platform/offline';
@@ -130,6 +131,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
   const [phone, setPhone] = useState(false);
+  const [recovery, setRecovery] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const installState = useInstallState();
   const ref = useRef<HTMLDivElement>(null);
@@ -157,6 +159,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
           <div className="sep" />
           <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
           {isManager && <button role="menuitem" onClick={() => { setOpen(false); setPhone(true); }}><Phone size={16} aria-hidden />Сменить логин</button>}
+          {isManager && <button role="menuitem" onClick={() => { setOpen(false); setRecovery(true); }}><Mail size={16} aria-hidden />Почта для восстановления</button>}
           {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
           <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
@@ -165,6 +168,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
       )}
       {pw && <PasswordDialog onClose={() => setPw(false)} />}
       {isManager && phone && <ManagerLoginDialog onClose={() => setPhone(false)} />}
+      {isManager && recovery && <ManagerRecoverySettings onClose={() => setRecovery(false)} />}
       {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
     </div>
   );

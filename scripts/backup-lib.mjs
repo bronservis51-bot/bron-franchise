@@ -93,6 +93,15 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   }
   if (missing.length) throw new Error(`В целевой установке нет пользователей: ${missing.join(', ')}. Создайте их (npm run seed:users) и повторите.`);
 
+  // Recovery belongs to the target installation. Require new proof after
+  // a logical restore and discard any links sent before it.
+  const recovery = await db.query("select to_regclass('app_private.manager_recovery_job') is not null as present");
+  if (recovery.rows[0].present) {
+    await db.query('delete from app_private.manager_recovery_job');
+    await db.query(`update app_private.manager_recovery_account set enabled=false,reset_enabled=false,verified_at=null,
+      last_confirm_requested_at=null,last_reset_requested_at=null`);
+  }
+
   // Restore profile facts/timestamps too; Auth identity/password migration is separate.
   for (const u of dump.tables.app_user ?? []) {
     const target = userMap.get(u.id);
