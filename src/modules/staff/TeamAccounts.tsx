@@ -5,11 +5,13 @@ import { command, from, rows } from '../../platform/backend';
 import { useSession, type Me } from '../../platform/session';
 import { dayLabel, monthStart } from '../../platform/dates';
 import { Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, Input, Money, PageHeader, Select } from '../../ui';
+import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { MonthlyDetails, StaffHome } from './StaffHome';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, randomPassword, staffList, userSetPassword } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
+import { NewAccountCredentials } from './NewAccountCredentials';
 
 type Team = { user_id: string; full_name: string; phone: string; active: boolean; location_ids: string[]; location_names: string[] };
 type TeamAction = 'new' | 'assign' | { type: 'password' | 'active'; user: Team } | {type:'scope';user:Team};
@@ -80,6 +82,7 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
     <DataState query={q} empty={list => list.length ? null : <EmptyState title="Управляющих пока нет" />}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
       <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
       {u.user_id !== me?.user.id && <div className="row">
+        {u.phone && <CopyCredential kind="login" value={formatPhone(u.phone)} />}
         {u.active && <><Button size="sm" onClick={() => setAction({ type: 'scope', user: u })}>Точки и роль</Button>
           <Button size="sm" onClick={() => setLoginUser(u)}>Телефон / логин</Button>
           <Button size="sm" onClick={() => setAction({ type: 'password', user: u })}>Пароль</Button></>}
@@ -127,15 +130,17 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
     if (action === 'new') {
       const submittedPhone = phone;
       await command('staff_account_create_phone', { partner, full_name: name.trim(), phone: submittedPhone, password: submittedPassword, locations: selected, manager: true });
-      return { phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword };
+      setIssued({ phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword });
+      return;
     }
-    if (action.type === 'active') { await command('team_set_active', { partner, user: action.user.user_id, active: !action.user.active }); return null; }
+    if (action.type === 'active') { await command('team_set_active', { partner, user: action.user.user_id, active: !action.user.active }); return; }
     await userSetPassword(action.user.user_id, submittedPassword);
-    return { phone: formatPhone(action.user.phone), password: submittedPassword };
-  }, onSuccess: result => access ? onClose() : setIssued(result) });
+    setIssued({ phone: formatPhone(action.user.phone), password: submittedPassword });
+  }, onSuccess: () => { if (access) onClose(); } });
+  if (issued && action === 'new') return <NewAccountCredentials title="Управляющий добавлен" {...issued} onClose={onClose} />;
   if (issued) return <ConfirmDialog open title="Доступ готов" confirmLabel="Готово" onConfirm={onClose} onClose={onClose}>
     <p>Передайте управляющему данные для входа. Пароль повторно не показывается.</p>
-    <div className="login-card-data"><div>Логин: <strong>{issued.phone}</strong></div><div>Пароль: <strong className="mono">{issued.password}</strong></div></div>
+    <CredentialFields login={issued.phone} password={issued.password} />
   </ConfirmDialog>;
   return <ConfirmDialog open title={action === 'new' ? 'Новый управляющий' : access ? (action.user.active ? 'Закрыть доступ?' : 'Вернуть доступ?') : 'Новый пароль'}
     confirmLabel={access ? 'Подтвердить' : 'Сохранить'} onConfirm={() => m.mutate()} onClose={onClose} busy={m.isPending} error={m.error}
