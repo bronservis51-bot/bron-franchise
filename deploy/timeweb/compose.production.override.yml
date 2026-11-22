@@ -1,6 +1,9 @@
 # Apply LAST, after the actual Compose files and maintenance override.
 # Publish only web with --no-deps --pull never after the release checks pass.
 services:
+  auth:
+    # v2.198.0 serializes password grants with password changes.
+    image: supabase/gotrue:v2.198.0@sha256:ba8c0c82c574756c835c696df2a2c698020cc408a42034013d3712e34de7964d
   web:
     pull_policy: never
     ports: !override
