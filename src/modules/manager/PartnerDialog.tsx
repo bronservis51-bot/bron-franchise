@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { monthLabel } from '../../platform/dates';
 import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
+import { CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { planSet } from '../revenue/api';
 import { accessGrant, accountCreatePhone, countries, locationSave, partnerSave, type Location, type Partner } from './api';
 import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
 import { loginEmail, phoneLoginDigits } from '../../platform/login';
+import { NewAccountCredentials } from '../staff/NewAccountCredentials';
 
 function formChanged<T extends Record<string, string>>(original: T, draft: T) {
   return Object.keys(original).some(key => original[key] !== draft[key]);
@@ -123,29 +125,19 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
         const submittedPhone = phone;
         const submittedPassword = password;
         await accountCreatePhone(partnerId, name, submittedPhone, submittedPassword);
-        return { status: 'created' as const, phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword };
+        setMade({ phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword });
+        return { status: 'created' as const };
       }
       return { status: (await accessGrant(partnerId, login)).status };
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['access', partnerId] });
-      if (r.status === 'created') { setMade({ phone: r.phone, password: r.password }); return; }
+      if (r.status === 'created') return;
       toast(r.status === 'granted' ? 'Доступ выдан' : r.status === 'exists' ? 'У этого пользователя уже есть доступ' : 'Пользователь не найден. Отмените подготовленное приглашение в карточке и затем создайте учётную запись.');
       onClose();
     },
   });
-  if (made) {
-    return (
-      <ConfirmDialog open title="Учётная запись создана" confirmLabel="Готово" onClose={onClose} onConfirm={onClose}>
-        <p>Передайте франчайзи данные для входа. Пароль он сможет сменить сам в профиле.</p>
-        <div className="login-card-data">
-          <div><span className="faint">Сайт</span><strong>{location.origin}{location.pathname}</strong></div>
-          <div><span className="faint">Телефон / логин</span><strong>{made.phone}</strong></div>
-          <div><span className="faint">Пароль</span><strong className="mono">{made.password}</strong></div>
-        </div>
-      </ConfirmDialog>
-    );
-  }
+  if (made) return <NewAccountCredentials title="Учётная запись создана" {...made} onClose={onClose} />;
   return (
     <ConfirmDialog open title="Доступ для франчайзи" confirmLabel={mode === 'create' ? 'Создать учётную запись' : 'Выдать доступ'} busy={m.isPending} error={m.error}
       disabled={mode === 'create' ? !digits || !name.trim() || password.length < 6 : !grantValid} onClose={onClose} onConfirm={() => m.mutate()}>
@@ -164,10 +156,18 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
   );
 }
 
-export function SetPasswordDialog({ user, name, onClose }: { user: string; name: string; onClose: () => void }) {
-  const toast = useToast();
+export function SetPasswordDialog({ user, name, login, onClose }: { user: string; name: string; login: string; onClose: () => void }) {
   const [pw, setPw] = useState(randomPassword);
-  const m = useMutation({ mutationFn: () => userSetPassword(user, pw), onSuccess: () => { toast(`Новый пароль для ${name}: ${pw}`); onClose(); } });
+  const [issued, setIssued] = useState<string | null>(null);
+  const m = useMutation({ mutationFn: async () => {
+    const submitted = pw;
+    await userSetPassword(user, submitted);
+    setIssued(submitted);
+  } });
+  if (issued) return <ConfirmDialog open title="Пароль изменён" cancelLabel="Готово" onClose={onClose}>
+    <p>Пароль для {name} доступен до закрытия этого окна.</p>
+    <CredentialFields login={login} password={issued} />
+  </ConfirmDialog>;
   return (
     <ConfirmDialog open title={`Новый пароль — ${name}`} confirmLabel="Задать пароль" busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Пароль" hint="Минимум 6 символов. Сообщите его пользователю">{(id) => <Input id={id} value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>

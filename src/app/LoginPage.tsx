@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Eye, EyeOff } from 'lucide-react';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { useSession } from '../platform/session';
@@ -7,6 +8,7 @@ import { Button, Checkbox, Field, Input } from '../ui';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { loginEmail } from '../platform/login';
+import { managerRecoveryAvailable } from '../platform/managerRecovery';
 import { InstallButton } from './InstallApp';
 
 export function LoginPage() {
@@ -83,13 +85,21 @@ export function LoginPage() {
             <div style={{ marginTop: 16 }}>
               <Button type="submit" variant="primary" block loading={busy} disabled={!email || !password}>Войти</Button>
             </div>
-            <details className="forgot"><summary>Забыли пароль?</summary>
-              <p className="faint">Сотрудникам пароль меняет франчайзи в разделе «Сотрудники». Франчайзи может запросить новый пароль у менеджера по франшизе. После входа пароль можно сменить в профиле.</p>
-              <p className="faint">Менеджеру по франшизе восстановить доступ поможет администратор системы после проверки личности.</p>
-            </details>
+            <ForgotPassword login={email} />
           </form>
     );
   }
+}
+
+function ForgotPassword({ login }: { login: string }) {
+  const [open, setOpen] = useState(false);
+  const recovery = useQuery({ queryKey: ['manager-recovery-available'], queryFn: managerRecoveryAvailable,
+    enabled: open, retry: false });
+  return <details className="forgot" onToggle={e => setOpen(e.currentTarget.open)}><summary>Забыли пароль?</summary>
+    {recovery.data && <p><Link to="/recover" state={{ login }}>Восстановить доступ менеджера по франшизе</Link></p>}
+    <p className="faint">Сотрудникам пароль меняет франчайзи. Франчайзи может запросить новый пароль у менеджера по франшизе.</p>
+    <p className="faint">Менеджеру по франшизе также может помочь администратор системы после проверки личности.</p>
+  </details>;
 }
 
 function ErrorBox({ e }: { e: { text: string; detail: string } }) {

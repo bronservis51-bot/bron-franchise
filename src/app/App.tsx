@@ -42,6 +42,10 @@ const LearningPage = page(() => import('../modules/learning/Learning'), 'Learnin
 const LearningManagePage = page(() => import('../modules/learning/Learning'), 'LearningManagePage');
 const LearningLessonPage = page(() => import('../modules/learning/Learning'), 'LearningLessonPage');
 const LeadsPage = page(() => import('../modules/leads/LeadsPage'), 'LeadsPage');
+const recovery = () => import('./ManagerRecoveryPage');
+const RecoveryRequest = page(recovery, 'ManagerRecoveryRequestPage');
+const RecoveryLink = page(recovery, 'ManagerRecoveryLinkPage');
+const RecoveryDone = page(recovery, 'ManagerRecoveryDonePage');
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -65,6 +69,9 @@ function NotFound() {
 
 const router = createHashRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/recover', element: <RecoveryRequest /> },
+  { path: '/recover/:kind/:token', element: <RecoveryLink /> },
+  { path: '/recover/done', element: <RecoveryDone /> },
   {
     path: '/',
     element: <Guard />,

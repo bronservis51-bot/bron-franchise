@@ -1,7 +1,10 @@
 import { AppError, command } from './backend';
 import { createPasswordConfirmationClient, requireClient } from './supabase';
 
-export async function changeManagerPhoneLogin(user: { id: string; email: string }, phone: string, password: string) {
+type ManagerAccount = { id: string; email: string };
+
+export async function withManagerPasswordConfirmation<T>(user: ManagerAccount, password: string,
+  action: (previousSession: string, accessToken: string) => Promise<T>) {
   const { data: current, error: currentError } = await requireClient().auth.getClaims();
   if (currentError) throw currentError;
   const previous = current?.claims.session_id;
@@ -22,10 +25,14 @@ export async function changeManagerPhoneLogin(user: { id: string; email: string 
     if (data?.session?.user.id !== user.id) {
       throw new AppError('unauthenticated', 'Не удалось подтвердить вашу учётную запись.', '', '');
     }
-    return await command<boolean>('manager_set_my_phone_login', { phone, previous_session: previous },
-      { accessToken: data.session.access_token });
+    return await action(previous, data.session.access_token);
   } finally {
     await confirmation.auth.signOut({ scope: 'local' }).catch(() => undefined);
     await confirmation.auth.dispose().catch(() => undefined);
   }
+}
+
+export function changeManagerPhoneLogin(user: ManagerAccount, phone: string, password: string) {
+  return withManagerPasswordConfirmation(user, password, (previous_session, accessToken) =>
+    command<boolean>('manager_set_my_phone_login', { phone, previous_session }, { accessToken }));
 }

@@ -1,0 +1,25 @@
+[Unit]
+Description=Deliver Bron Franchise manager recovery email
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=true
+User=bron-recovery
+WorkingDirectory=/opt/bron/manager-recovery
+EnvironmentFile=/etc/bron-franchise/manager-recovery.env
+Environment=PATH=/opt/bron/node-v22.23.5-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=NODE_DEBUG NODE_DEBUG_NATIVE NODE_OPTIONS
+ExecStart=/usr/bin/env node scripts/manager-recovery-delivery.mjs --run
+TimeoutStartSec=80s
+TimeoutStopSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+LimitCORE=0
+UMask=0077

@@ -8,6 +8,7 @@ import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { sameJson } from '../../platform/offline';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, KV, MoneyInput, PageHeader, Select } from '../../ui';
+import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { CustomPayFields, customPayDraft, customPayPolicy, percentToBp } from './CustomPayFields';
 import { MotivationPanel } from './Motivation';
@@ -16,6 +17,7 @@ import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
 import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
+import { NewAccountCredentials } from './NewAccountCredentials';
 
 interface Loc { id: string; name: string; currency: string; status: string }
 const locationsOf = (partner: string) => rows<Loc>(from('location').select('id, name, currency, status').eq('partner_id', partner).order('name'));
@@ -133,7 +135,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
       if (staff) { toast('Карточка сотрудника сохранена'); onClose(); }
     },
   });
-  if (created) return <StaffCredentials title="Сотрудник добавлен" {...created} onClose={onClose} />;
+  if (created) return <NewAccountCredentials title="Сотрудник добавлен" {...created} onClose={onClose} />;
   const editable = !staff || staff.active;
   const showSave = editable && (section !== 'login' || (canSetAccess && (!staff || dirty)));
   return (
@@ -213,7 +215,10 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
         {section === 'login' && <div className="stack">
           {staff && <div style={{ overflowWrap: 'anywhere' }}>
             <div className="faint">Логин</div>
-            <strong>{formatPhone(staff.phone) || 'Не задан'}</strong>
+            <div className="row">
+              <strong>{formatPhone(staff.phone) || 'Не задан'}</strong>
+              {staff.phone && <CopyCredential kind="login" value={formatPhone(staff.phone)} />}
+            </div>
           </div>}
           {editable && canSetAccess && <div role="group" aria-label="Права сотрудника">
             <strong>Права сотрудника</strong>
@@ -243,40 +248,16 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   );
 }
 
-function StaffCredentials({ title, phone, password, onClose }: { title: string; phone: string; password: string; onClose: () => void }) {
-  const toast = useToast();
-  const [copyError, setCopyError] = useState(false);
-  const site = `${location.origin}${location.pathname}`;
-  const copy = async () => {
-    setCopyError(false);
-    try {
-      await navigator.clipboard.writeText(`Вход в кабинет «Бронь Сервис»: ${site}\nЛогин: ${phone}\nПароль: ${password}`);
-      toast('Данные для входа скопированы');
-    } catch {
-      setCopyError(true);
-    }
-  };
-  return (
-    <ConfirmDialog open title={title} cancelLabel="Готово" onClose={onClose}>
-      <p>Передайте сотруднику данные для входа. Пароль показан только сейчас.</p>
-      <div className="login-card-data">
-        <div><span className="faint">Сайт</span><strong>{site}</strong></div>
-        <div><span className="faint">Логин</span><strong>{phone}</strong></div>
-        <div><span className="faint">Пароль</span><strong className="mono">{password}</strong></div>
-      </div>
-      <Button size="sm" onClick={() => void copy()}>Скопировать данные для входа</Button>
-      {copyError && <p role="status">Скопируйте данные вручную.</p>}
-    </ConfirmDialog>
-  );
-}
-
 function PasswordReset({ partnerId, staff, onClose }: { partnerId: string; staff: StaffRow; onClose: () => void }) {
   const qc = useQueryClient();
   const [pw, setPw] = useState(randomPassword);
   const [issued, setIssued] = useState<string | null>(null);
   const m = useMutation({ mutationFn: async () => { const password = pw; await userSetPassword(staff.user_id, password); setIssued(password); },
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] }); } });
-  if (issued) return <StaffCredentials title="Пароль изменён" phone={formatPhone(staff.phone)} password={issued} onClose={onClose} />;
+  if (issued) return <ConfirmDialog open title="Пароль изменён" cancelLabel="Готово" onClose={onClose}>
+    <p>Новый пароль доступен до закрытия этого окна.</p>
+    <CredentialFields login={formatPhone(staff.phone)} password={issued} />
+  </ConfirmDialog>;
   return (
     <ConfirmDialog open title="Новый пароль" confirmLabel="Задать пароль" busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
       <p><strong>{staff.full_name}</strong><br />{formatPhone(staff.phone)}</p>

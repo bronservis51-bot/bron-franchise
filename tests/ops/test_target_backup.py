@@ -145,6 +145,8 @@ class TargetBackupSafetyTests(unittest.TestCase):
             self.assertEqual(len(database_commands), 1)
             self.assertIn('--create', database_commands[0])
             self.assertIn('--format=custom', database_commands[0])
+            self.assertIn('--exclude-table-data=app_private.manager_recovery_account', database_commands[0])
+            self.assertIn('--exclude-table-data=app_private.manager_recovery_job', database_commands[0])
 
     def test_missing_recovery_key_is_never_automatically_replaced(self):
         with mock.patch.object(backup.source, 'secure_path', side_effect=FileNotFoundError), \

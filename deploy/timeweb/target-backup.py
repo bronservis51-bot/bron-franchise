@@ -278,7 +278,9 @@ FROM vault.decrypted_secrets ORDER BY id) TO STDOUT WITH (FORMAT CSV, HEADER tru
 ROLLBACK;"""
             commands = [
                 ('database.dump', db_command(db, 'pg_dump', '--dbname=postgres', '--format=custom', '--create',
-                    '--compress=0', '--lock-wait-timeout=5s', '--snapshot=' + snapshot)),
+                    '--compress=0', '--lock-wait-timeout=5s', '--snapshot=' + snapshot,
+                    '--exclude-table-data=app_private.manager_recovery_account',
+                    '--exclude-table-data=app_private.manager_recovery_job')),
                 ('roles.sql', db_command(db, 'pg_dumpall', '--globals-only', '--database=postgres')),
                 ('vault-logical.csv', db_command(db, 'psql', '--dbname=postgres', '-X', '-q', '-A', '-t',
                     '-v', 'ON_ERROR_STOP=1', '--command', logical)),
