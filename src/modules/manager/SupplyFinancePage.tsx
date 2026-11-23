@@ -62,7 +62,7 @@ function FranchiseOverview() {
           <div className="kpis">
             <div className="kpi"><span className="l">Розничная выручка</span>
               {Object.entries(retailByCurrency).length ? Object.entries(retailByCurrency).map(([currency, value]) => <span className="v" key={currency}>{money(value, currency)}</span>) : <span className="v">—</span>}
-              <span className="l">Продажи партнёров своим клиентам</span>
+              <span className="l">Продажи франчайзи своим клиентам</span>
             </div>
             <div className="kpi"><span className="l">Роялти: начислено / оплачено</span>
               {royalty.data?.totals.length ? royalty.data.totals.map(row => <span className="v" key={row.currency}>{money(row.accrued_minor, row.currency)} / {money(row.paid_minor, row.currency)}</span>) : <span className="v">—</span>}
@@ -73,14 +73,14 @@ function FranchiseOverview() {
             <div className="kpi"><span className="v">{hasMappedSupply ? money(total.cost) : '—'}</span><span className="l">Себестоимость отгрузок, ₽</span></div>
             <div className="kpi"><span className="v">{hasMappedSupply ? money(total.profit) : '—'}</span><span className="l">Валовая прибыль поставок, ₽</span></div>
           </div>
-          <p className="faint">Это показатели выручки партнёров, роялти и поставок; они не складываются в чистую прибыль сети.</p>
+          <p className="faint">Эти данные показывают выручку франчайзи, роялти и поставки. Для расчёта чистой прибыли сети нужны и другие данные.</p>
         </Card>
         <DataState query={economy} skeleton={3}>{e => <>
           <CompanyExpenses month={month} expenses={e.company_expenses} totals={e.company_expense_totals} />
           <Card title="Расходы и зарплаты франчайзи">
-            <p className="faint">Суммы показаны по партнёрам и в валюте каждого партнёра. Зарплаты — по закрытым сменам.</p>
+            <p className="faint">Суммы показаны в валюте каждого франчайзи. Зарплаты — по закрытым сменам.</p>
             <div className="economics-table-wrap" role="region" aria-label="Расходы и зарплаты франчайзи" tabIndex={0}><table className="economics-table">
-              <thead><tr><th>Партнёр</th><th>Зарплаты</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
+              <thead><tr><th>Франчайзи</th><th>Зарплаты</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
               <tbody>{e.partners.map(p => <tr key={p.partner_id}>
                 <td><Link to={`/partners/${p.partner_id}`}>{p.partner_name}</Link></td>
                 <td>{money(p.payroll_minor,p.currency)}</td><td>{p.closed_shifts}</td><td>{money(p.expenses_minor,p.currency)}</td>
@@ -91,7 +91,7 @@ function FranchiseOverview() {
           </Card>
         </>}</DataState>
         <div className="economics-table-wrap" role="region" aria-label="Розница, роялти и поставки по франчайзи" tabIndex={0}><table className="economics-table">
-          <thead><tr><th>Партнёр</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
+          <thead><tr><th>Франчайзи</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
           <tbody>{s.rows.map(r => {
             const points = rev.data?.rows.filter(p => p.partner_id === r.partner_id);
             const rr = royalty.data?.rows.find(p => p.partner_id === r.partner_id);
@@ -107,12 +107,12 @@ function FranchiseOverview() {
             </tr>;
           })}</tbody>
         </table></div>
-        {s.unmapped.length > 0 && <Card title={`Без привязки к партнёру: ${s.unmapped.length}`}>
+        {s.unmapped.length > 0 && <Card title={`Без привязки к франчайзи: ${s.unmapped.length}`}>
           <p className="faint">Эти суммы не входят в итоги выше. Привязывайте карточку после проверки личности; одинаковое имя не подтверждает совпадение.</p>
           {s.unmapped.map(c => <div className="supply-mapping" key={c.counterparty_id}>
             <div><strong>{c.name}</strong><small>{money(c.sales_minor)} продаж · {money(c.cost_minor)} себестоимость</small><a className="faint" href={`https://online.moysklad.ru/app/#Company/edit?id=${c.counterparty_id}`} target="_blank" rel="noopener noreferrer">Открыть карточку МойСклад</a></div>
-            <Select aria-label={`Партнёр для ${c.name}`} value={mapping[c.counterparty_id] ?? ''} onChange={e => setMapping(x => ({ ...x, [c.counterparty_id]: e.target.value }))}>
-              <option value="">Выберите партнёра</option>{s.rows.map(p => <option key={p.partner_id} value={p.partner_id}>{p.partner_name}</option>)}
+            <Select aria-label={`Франчайзи для ${c.name}`} value={mapping[c.counterparty_id] ?? ''} onChange={e => setMapping(x => ({ ...x, [c.counterparty_id]: e.target.value }))}>
+              <option value="">Выберите франчайзи</option>{s.rows.map(p => <option key={p.partner_id} value={p.partner_id}>{p.partner_name}</option>)}
             </Select>
             <Button size="sm" disabled={!mapping[c.counterparty_id]} loading={bind.isPending} onClick={() => bind.mutate(c.counterparty_id)}>Привязать</Button>
           </div>)}

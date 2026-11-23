@@ -6,10 +6,11 @@ export function PartnerStatus({ partner, current }: { partner?: Partner; current
   if (!partner) return null;
   let status: [string, Tone];
   if (partner.status !== 'active') status = Object.hasOwn(PARTNER_STATUS, partner.status)
-    ? PARTNER_STATUS[partner.status] : ['Статус партнёра неизвестен', 'neutral'];
+    ? PARTNER_STATUS[partner.status] : ['Статус франчайзи неизвестен', 'neutral'];
   else {
     if (!current) return null;
     if (current.working) status = ['Работает', 'success'];
+    else if ('launch_archived' in partner && partner.launch_archived === true) status = ['Нет действующих точек', 'neutral'];
     else if (partner.preparation_stage) status = Object.hasOwn(PARTNER_PREPARATION, partner.preparation_stage)
       ? PARTNER_PREPARATION[partner.preparation_stage] : ['Этап подготовки неизвестен', 'neutral'];
     else status = ['Нет открытой точки', 'neutral'];
@@ -20,6 +21,6 @@ export function PartnerStatus({ partner, current }: { partner?: Partner; current
 
 export const OWNER_ACCESS_LABEL: Record<ManagerPartnerStatus['owner_access'], string> = {
   granted: 'Доступ франчайзи выдан',
-  pending: 'Ожидается первый вход франчайзи',
+  pending: 'Ожидается создание учётной записи',
   none: 'У франчайзи нет доступа',
 };

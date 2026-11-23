@@ -4,6 +4,7 @@ import { loginEmail } from '../../platform/login';
 export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string; updated_at?: string;
   preparation_stage?: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null;
+  contact_city?: string | null; contact_instagram?: string | null;
   /** Ссылка контрагента в МойСклад для заказа материалов. */
   order_url: string | null }
 export interface Location { id: string; code: string; name: string; partner_id: string; city: string; address: string | null; updated_at?: string;
@@ -23,6 +24,7 @@ export const managerPartnerStatusKey = ['manager-partner-status'] as const;
 export const managerPartnerStatus = () => command<ManagerPartnerStatus[]>('manager_partner_status');
 
 type PartnerForm = { name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null };
+export type PartnerFromLead = Omit<PartnerForm, 'status'> & { contact_city: string; contact_instagram: string };
 export const partnerCreate = (p: PartnerForm & { operation: string }) => command<string>('partner_create_checked', p);
 export const partnerSave = (p: PartnerForm & { id: string; expected_updated_at: string | null }) =>
   command<string>('partner_save_preparation_checked', p);
@@ -40,12 +42,14 @@ export const inviteCancel = (invite: number) => command('access_cancel_invite', 
 export interface RoyaltyRow {
   partner_id: string; partner_name: string; status: string; country: string; currency: string; rate_bp: number;
   revenue_minor: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean;
+  correction_minor?: number; past_debt_minor?: number;
   current_revenue_minor: number; current_accrual_minor: number; debt_months: { month: string; debt_minor: number }[];
   last_payment_on: string | null; fx_rub: number | null;
 }
 export interface RoyaltySummary { month: string | null; current_month: string; rows: RoyaltyRow[];
   totals: { currency: string; accrued_minor: number; paid_minor: number; debt_minor: number }[]; debt_rub_minor: number | null }
-export interface LedgerMonth { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean }
+export interface LedgerMonth { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number;
+  correction_minor?: number; past_debt_minor?: number; paid_minor: number; debt_minor: number; is_open: boolean }
 export interface RoyaltyPartner { partner_id: string; partner_name: string; currency: string; rate_bp: number; months: LedgerMonth[];
   payments: { id: string; month: string; amount_minor: number; paid_on: string; note: string | null }[];
   manual: { id: string; month: string; amount_minor: number; note: string | null }[];
@@ -53,8 +57,6 @@ export interface RoyaltyPartner { partner_id: string; partner_name: string; curr
 
 export const royaltySummary = (month: string | null) => command<RoyaltySummary>('royalty_summary', { month });
 export const royaltyPartner = (partner: string) => command<RoyaltyPartner>('royalty_partner', { partner });
-export const paymentAdd = (partner: string, month: string, amount: string, paid_on: string, note: string | null) =>
-  command('royalty_payment_add', { partner, month, amount, paid_on, note });
 export const paymentDelete = (id: string) => command('royalty_payment_delete', { id });
 export const manualAdd = (partner: string, month: string, amount: string, note: string | null) => command('royalty_manual_add', { partner, month, amount, note });
 export const manualDelete = (id: string) => command('royalty_manual_delete', { id });

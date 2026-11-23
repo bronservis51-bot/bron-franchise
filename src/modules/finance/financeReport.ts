@@ -15,6 +15,7 @@ export async function downloadFinanceFile(makeFile: () => Promise<File>, signal:
 
 interface ReportTotals {
   revenue_minor: MinorInput;
+  return_minor?: MinorInput;
   payroll_minor: MinorInput;
   royalty_minor: MinorInput;
   expenses_minor: MinorInput;
@@ -33,8 +34,14 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly { cat
   const payroll = toBigInt(totals.payroll_minor);
   const royalties = toBigInt(totals.royalty_minor);
   const recordedExpenses = toBigInt(totals.expenses_minor);
+  const sales = toBigInt(totals.revenue_minor);
+  const returns = toBigInt(totals.return_minor ?? 0);
   return [
-    { label: 'Выручка', minor: toBigInt(totals.revenue_minor), indent: 0, total: true },
+    { label: 'Выручка', minor: sales, indent: 0, total: true },
+    ...(returns > 0n ? [
+      { label: 'Возвраты покупателям', minor: -returns, indent: 1, total: false },
+      { label: 'Выручка после возвратов', minor: sales - returns, indent: 0, total: true },
+    ] : []),
     { label: 'Всего расходов', minor: -(payroll + financeExpensesMinor(totals)), indent: 0, total: true },
     { label: 'Начисленная зарплата', minor: -payroll, indent: 1, total: false },
     { label: 'Роялти по ставке', minor: -royalties, indent: 1, total: false },

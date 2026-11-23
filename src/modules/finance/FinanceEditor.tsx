@@ -8,13 +8,13 @@ import type { MinorInput } from '../../platform/money';
 import { Card, Chips, DataState } from '../../ui';
 import { DayList } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
-import { revenueMonth, type DayRow } from '../revenue/api';
+import { canEditRevenueDay, revenueMonth, type DayRow } from '../revenue/api';
 import { ExpensesCard, type Expense } from './Expenses';
 
 type Tab = 'revenue' | 'expenses' | 'payroll';
 
 export function FinanceEditor({ month, currency, location, locations, expenses, own, prevCount, total, royalty }: {
-  month: string; currency: string; location: string | null; locations: { id: string; name: string }[];
+  month: string; currency: string; location: string | null; locations: { id: string; name: string; status: string }[];
   expenses: Expense[]; own: string[]; prevCount: number; total: MinorInput; royalty: MinorInput;
 }) {
   const [tab, setTab] = useState<Tab>('revenue');
@@ -32,26 +32,26 @@ export function FinanceEditor({ month, currency, location, locations, expenses, 
               {locations.map((l) => <button key={l.id} type="button" className="chip" aria-pressed={point === l.id} onClick={() => setPoint(l.id)}>{l.name}</button>)}
             </div>
           )}
-          <p className="faint">Откройте день, чтобы исправить выручку или отметить выходной. Текущий месяц можно править целиком, прошлый — до 5-го числа. Позже обратитесь к менеджеру по франшизе.</p>
+          <p className="faint">Выберите месяц и день, чтобы внести пропущенную выручку или исправить итог.</p>
           <DataState query={q} skeleton={4}>
             {(m) => (
               <>
                 <DayList m={m} onPick={(day, row) => setEdit({ day, row })} />
                 {edit && <RevenueDialog location={m.location_id} locationName={m.location_name} currency={m.currency} day={edit.day} existing={edit.row}
-                  dayOff={m.days_off?.includes(edit.day)} canMarkOff={m.status === 'active' && (!m.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
+                  dayOff={m.days_off?.includes(edit.day)} canMarkOff={canEditRevenueDay(m, edit.day) && (Boolean(m.editable_days) || m.status === 'active')}
+                  readOnly={!canEditRevenueDay(m, edit.day)} onClose={() => setEdit(null)} />}
               </>
             )}
           </DataState>
         </>
       )}
       {tab === 'expenses' && (
-        <ExpensesCard month={month} currency={currency} location={location} locations={locations} expenses={expenses} own={own} prevCount={prevCount} total={total} royalty={royalty} bare />
+        <ExpensesCard month={month} currency={currency} location={location} locations={locations.filter(point => point.status === 'active')} expenses={expenses} own={own} prevCount={prevCount} total={total} royalty={royalty} bare />
       )}
       {tab === 'payroll' && (
         <div className="stack" style={{ gap: 8 }}>
           <p className="muted">Зарплата считается по закрытым сменам и сохранённым условиям оплаты.
-            Настройки в разделе «Сотрудники» действуют для следующих смен; уже начисленный заработок от изменения ставок не пересчитывается.
-            Ошибку в прошлой смене передайте менеджеру по франшизе через «Задать вопрос».</p>
+            Настройки в разделе «Сотрудники» действуют с выбранной даты. Прошлую смену можно открыть и исправить в этом же разделе.</p>
           <Link className="btn btn-secondary" to="/staff" style={{ alignSelf: 'flex-start' }}><Users size={16} aria-hidden />Открыть «Сотрудники»</Link>
         </div>
       )}

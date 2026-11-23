@@ -87,10 +87,10 @@ describe('выручка за день', () => {
     await t.expectError(MARSEL, `select public.revenue_save($1, $2::date, 100, 0, null)`, 'not-found', [l, await today(l)]);
   });
 
-  it('франчайзи не правит закрытые месяцы, менеджер — может', async () => {
+  it('франчайзи и менеджер могут исправить выручку за прошлые месяцы', async () => {
     const l = await loc('ALPHA-2');
     const old = (await t.admin<{ d: string }>(`select to_char((date_trunc('month', app_private.local_today($1)) - interval '2 months')::date + 3, 'YYYY-MM-DD') d`, [l]))[0].d;
-    await t.expectError(VIKTOR, `select public.revenue_save($1, $2::date, 100, 0, null)`, 'period-locked', [l, old]);
+    await t.as(VIKTOR, `select public.revenue_save($1, $2::date, 50, 0, null)`, [l, old]);
     const r = await t.as<{ total_minor: string }>(FM, `select * from public.revenue_save($1, $2::date, 100, 0, 'исправил менеджер')`, [l, old]);
     expect(Number(r[0].total_minor)).toBe(100);
   });

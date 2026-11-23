@@ -36,6 +36,16 @@ describe('portable local work preserves actor, idempotency, conflicts and drafts
     } };
     expect(parseLocalRecovery(JSON.stringify({ ...backup(), operations: [op] }), userId).operations).toEqual([op]);
   });
+  it('preserves a queued refund on the original shift operation and rejects invalid return amounts', () => {
+    const op = { ...operation(), kind: 'shift_record_with_return', payload: {
+      operation: operationId, location: other, day: '2026-11-11', shift: null, expected_revision: null,
+      cash: '0', card: '100', return: '350', comment: null, reason: null,
+    } };
+    const withOperation = () => JSON.stringify({ ...backup(), operations: [op] });
+    expect(parseLocalRecovery(withOperation(), userId).operations).toEqual([op]);
+    op.payload.return = '-350';
+    expect(() => parseLocalRecovery(withOperation(), userId)).toThrow('повреждён');
+  });
   it('round trips the original payload, UUID, financial version and blocked error without tokens', async () => {
     const text = await exportLocalRecovery(userId);
     const parsed = parseLocalRecovery(text, userId);

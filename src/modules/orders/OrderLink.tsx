@@ -6,7 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
 import { captureSession, command, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
-import { Button, ConfirmDialog, ErrorState, PageHeader } from '../../ui';
+import { Alert, Button, ConfirmDialog, ErrorState, PageHeader } from '../../ui';
+import { HelpTip } from '../../ui/HelpTip';
+import { useOwnPartnerLifecycle } from '../revenue/partnerLifecycle';
 
 interface StoreLink {
   url: string | null;
@@ -138,6 +140,8 @@ function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?:
 
 /** Кнопка в шапке — оба способа закупки с любого экрана франчайзи. */
 export function OrderTopButton() {
+  const { readOnly } = useOwnPartnerLifecycle();
+  if (readOnly) return null;
   return (
       <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов">
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
@@ -147,6 +151,8 @@ export function OrderTopButton() {
 
 /** Existing personal links remain visible and usable throughout the in-app store rollout. */
 export function PersonalStoreLink() {
+  const { readOnly } = useOwnPartnerLifecycle();
+  if (readOnly) return null;
   return <div className="procurement-native-store"><StoreLinkAction compact /></div>;
 }
 
@@ -154,6 +160,8 @@ export function OrderPage() { return <><PageHeader title="Заказать" /><O
 
 export function OrderFallback() {
   const { isManager } = useSession();
+  const { readOnly } = useOwnPartnerLifecycle();
+  if (!isManager && readOnly) return <Alert title="Заказы приостановлены">История и отчёты доступны для просмотра.</Alert>;
   return (
     <div>
       <div className="order-options">
@@ -166,9 +174,12 @@ export function OrderFallback() {
         </section>
         <section className="card order-option" aria-labelledby="order-preorder-title">
           <Package size={24} aria-hidden />
-          <h2 id="order-preorder-title">Предзаказ</h2>
+          <div className="row">
+            <h2 id="order-preorder-title">Предзаказ</h2>
+            <HelpTip label="Как работает предзаказ">Уточните у менеджера возможность поставки, срок и итоговую цену.</HelpTip>
+          </div>
           <p>Заявка на плёнки, которых нет в наличии, — через bronserviceshop.</p>
-          <p className="faint">Каталог сайта не синхронизирован со складом. Возможность поставки, срок и итоговую стоимость нужно подтвердить у менеджера.</p>
+          <p className="faint">Наличие на сайте и на складе может отличаться.</p>
           <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
             Открыть каталог<ExternalLink size={16} aria-hidden />
           </a>

@@ -90,6 +90,36 @@ def verify(fixture):
         assert ok(f"select revision||':'||total_minor from work_shift where id='{shift}'") == f'2:{total}'
         print('PASS', first, flush=True)
 
+    other = ok(f"""insert into location(code,name,partner_id,city,timezone,currency,opened_on)
+        values('RACE2','Вторая точка','{partner}','Тест','Europe/Moscow','RUB',current_date-7) returning id""")
+    employee = ok(f"""begin;{commands(owner)} select staff_account_create('{partner}','Две точки','twopoints','test-only-password',
+        array['{point}'::uuid,'{other}'::uuid],false);commit;""")
+    # Supervisor writers on different points do not share the point/day lock.
+    # Hold the first posting uncommitted while the second waits on its daily claim.
+    holder = subprocess.Popen(
+        [fixture.docker, '--host', native.SOCKET, 'exec', '-i', fixture.container, *psql],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=fixture.environment)
+    try:
+        holder.stdin.write(f"begin;{commands(owner)} select revenue_save('{point}','{day}',0,0,null,'{employee}');\n\\echo ready\n")
+        holder.stdin.flush()
+        while holder.stdout.readline().strip() != 'ready':
+            assert holder.poll() is None, 'first point writer exited'
+        with ThreadPoolExecutor() as pool:
+            pending = pool.submit(query, f"begin;set application_name='second-pay-point';{commands(owner)} select revenue_save('{other}','{day}',0,0,null,'{employee}');commit;")
+            deadline = time.monotonic() + 10
+            while ok("select count(*) from pg_stat_activity where application_name='second-pay-point' and wait_event_type='Lock'") != '1':
+                assert time.monotonic() < deadline, 'second payroll writer did not encounter the pending first claim'
+                time.sleep(.03)
+            holder.communicate('commit;\n',timeout=15)
+            second = pending.result()
+            assert holder.returncode == 0 and second.returncode == 0, second.stderr
+    finally:
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait()
+    assert ok(f"select count(*)||':'||count(*) filter(where counts_as_exit)||':'||sum(earned_minor) from work_shift where employee_id='{employee}'") == '2:1:100000'
+    print('PASS concurrent payroll at two points', flush=True)
+
 
 if __name__ == '__main__':
     with tempfile.TemporaryDirectory() as config:

@@ -55,7 +55,7 @@ export function RoyaltyPage() {
                 <thead>
                   <tr>
                     <th>Франчайзи</th><th className="r">Ставка</th><th className="r">Выручка</th><th className="r">Начислено</th>
-                    <th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">{balanceLabel}</th>
+                    <th className="r">Корректировки</th><th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">{balanceLabel}</th>
                     {all && <th className="r">Текущий месяц</th>}<th />
                   </tr>
                 </thead>
@@ -69,7 +69,8 @@ export function RoyaltyPage() {
                       <td className="r">{pct(r.rate_bp)}</td>
                       <td className="r num">{formatMoneyShort(r.revenue_minor, r.currency)}</td>
                       <td className="r num">{formatMoneyShort(r.accrued_minor, r.currency)}</td>
-                      <td className="r num">{r.manual_minor ? formatMoneyShort(r.manual_minor, r.currency) : '—'}</td>
+                      <td className="r num">{(r.correction_minor ?? r.manual_minor) ? formatMoneyShort(r.correction_minor ?? r.manual_minor, r.currency) : '—'}</td>
+                      <td className="r num">{r.past_debt_minor ? formatMoneyShort(r.past_debt_minor, r.currency) : '—'}</td>
                       <td className="r num">{formatMoneyShort(r.paid_minor, r.currency)}</td>
                       <td className={`r num${!open && r.debt_minor > 0 ? ' danger-text' : ''}`}><Money minor={r.debt_minor} currency={r.currency} short strong /></td>
                       {all && <td className="r num faint" title="Начисляется, в долг войдёт после окончания месяца">{formatMoneyShort(r.current_accrual_minor, r.currency)}</td>}

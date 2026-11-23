@@ -15,8 +15,9 @@ const isTemporary = (e: unknown) => temporaryErrors.has(toAppError(e).code);
 
 export function queuedOperationState(op: QueuedOperation): 'pending' | 'retryable' | 'blocked' {
   if (!op.lastError) return 'pending';
-  // A pre-release tab could report an unrecognized shift_submit this way.
-  if (op.kind === 'shift_submit' && op.lastErrorCode === 'unknown' && op.lastError === 'Не удалось выполнить действие') return 'retryable';
+  // A tab running an older release can see the same IndexedDB before it knows the command.
+  if ((op.kind === 'shift_submit' || op.kind === 'shift_record_with_return') &&
+    op.lastErrorCode === 'unknown' && op.lastError === 'Не удалось выполнить действие') return 'retryable';
   return op.lastErrorCode && temporaryErrors.has(op.lastErrorCode) ? 'retryable' : 'blocked';
 }
 

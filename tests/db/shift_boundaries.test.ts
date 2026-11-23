@@ -61,16 +61,16 @@ it('uses the point day at midnight, posts yesterday into January, accepts a late
   expect(await db.admin('select total_minor from daily_revenue where employee_id=$1', [user])).toEqual([{ total_minor: 40000 }]);
 });
 
-it('closes January for a franchisee at the start of the local sixth while retaining old receipts', async () => {
+it('keeps January editable for the owner after the local sixth while retaining old receipts', async () => {
   const receipt = await call(SUBMIT, submission('2027-01-31', 20000, 0));
   at('2027-02-05T09:59:59Z'); // still the 5th at the east point
   const correction = 'select staff_shift_correct($1,$2,0,$3,$4,$5) result';
   const params = [receipt.shift.id, 30000, 1, 'Касса сверена', crypto.randomUUID()];
   const saved = await db.as(OWNER, correction, params);
   at('2027-02-05T10:00:00Z');
-  await db.expectError(OWNER, correction, 'period-locked', [receipt.shift.id, 40000, 2, 'Ещё одна покупка', crypto.randomUUID()]);
+  await db.as(OWNER, correction, [receipt.shift.id, 40000, 2, 'Ещё одна покупка', crypto.randomUUID()]);
   expect(await db.as(OWNER, correction, params)).toEqual(saved);
-  expect(await db.admin('select total_minor from work_shift where id=$1', [receipt.shift.id])).toEqual([{ total_minor: 30000 }]);
+  expect(await db.admin('select total_minor from work_shift where id=$1', [receipt.shift.id])).toEqual([{ total_minor: 40000 }]);
 });
 
 it('prevents an old unversioned tab from overwriting a supervisor correction while preserving old first close and versioned employee edits', async () => {
@@ -117,4 +117,57 @@ it('rejects a first offline submission after point closure or a later opening da
   expect(completed.shift.id).toBe(old.id);
   expect(await call(checked, params)).toEqual(completed);
   await db.expectError(email, checked, 'version-conflict', [old.id, crypto.randomUUID()]);
+});
+
+it('lets the owner complete operating days of a closed point and protects its shutdown interval after reopening', async () => {
+  const write = 'select revenue_total_set($1,$2,10000,$3,gen_random_uuid(),null)';
+  const ownerMonth = async () => (await db.as<{ result: { missing_days: string[]; editable_days: string[] } }>(
+    OWNER, "select revenue_month($1,'2027-01-01') result", [point]))[0].result;
+  at('2027-01-15T08:00:00Z');
+  await db.admin("update location set status='closed' where id=$1", [point]);
+  at('2027-01-19T08:00:00Z');
+  const closed = await ownerMonth();
+  expect(closed.editable_days).toContain('2027-01-14');
+  expect(closed.missing_days).toContain('2027-01-14');
+  expect(closed.editable_days).not.toContain('2027-01-16');
+  const overview = (await db.as<{result: { rows: { location_id: string }[] } }>(OWNER,
+    "select revenue_overview('2027-01-01') result"))[0].result;
+  expect(overview.rows.map(row => row.location_id)).toContain(point);
+  await db.as(OWNER, write, [point,'2027-01-14','empty']);
+  await db.as(OWNER, 'select revenue_day_off_set($1,$2,true)', [point,'2027-01-13']);
+  await db.expectError(OWNER, write, 'validation', [point,'2027-01-16','empty']);
+  await db.admin("update location set status='active', opened_on='2027-01-19' where id=$1", [point]);
+  const reopened = await ownerMonth();
+  expect(reopened.editable_days).toContain('2027-01-14');
+  expect(reopened.missing_days).toContain('2027-01-12');
+  await db.as(OWNER, write, [point,'2027-01-12','empty']);
+  await call(SUBMIT, submission('2027-01-11', 2500, 0));
+  expect(reopened.editable_days).not.toContain('2026-12-31');
+  const [{ version }] = await db.as<{ version: string }>(OWNER, `
+    select row->>'day_version' as version from jsonb_array_elements(revenue_month($1,'2027-01-01')->'days') row
+    where row->>'day'='2027-01-14'`, [point]);
+  await db.as(OWNER, write, [point,'2027-01-14',version]);
+  await db.expectError(OWNER, write, 'validation', [point,'2026-12-31','empty']);
+  expect(reopened.editable_days).toContain('2027-01-19');
+  expect(reopened.missing_days).not.toContain('2027-01-16');
+  await db.expectError(OWNER, write, 'validation', [point,'2027-01-16','empty']);
+  await db.expectError(email, SUBMIT, 'validation', submission('2027-01-16', 3000, 0));
+  const [home] = await db.as<{data:{locations:{location_id:string;opened_on:string;days_off:string[]}[]}}>(email,'select staff_home() data');
+  const assigned = home.data.locations.find(item => item.location_id === point)!;
+  expect(assigned.opened_on).toBe('2027-01-01');
+  expect(assigned.days_off).toContain('2027-01-16');
+  expect(assigned.days_off).not.toContain('2027-01-12');
+});
+
+it('shows only recorded dates for a legacy closure without a known operating period', async () => {
+  const [legacy] = await db.admin<{ id: string }>(`
+    insert into location(code,name,partner_id,city,timezone,currency,status)
+    values(gen_random_uuid()::text,'Архив',$1,'QA','UTC','RUB','closed') returning id`, [partner]);
+  await db.admin(`insert into daily_revenue(location_id,partner_id,day,currency,cash_minor,card_minor)
+    values ($1,$2,'2027-01-03','RUB',1000,0)`, [legacy.id,partner]);
+  const detail = (await db.as<{ data:{ editable_days:string[]; days:{day_version:string}[] } }>(
+    OWNER, "select revenue_month($1,'2027-01-01') data", [legacy.id]))[0].data;
+  expect(detail.editable_days).toEqual(['2027-01-03']);
+  await db.as(OWNER, "select revenue_total_set($1,'2027-01-03',2000,$2,gen_random_uuid(),null)", [legacy.id, detail.days[0].day_version]);
+  await db.expectError(OWNER, "select revenue_total_set($1,'2027-01-02',0,'empty',gen_random_uuid(),null)", 'validation', [legacy.id]);
 });

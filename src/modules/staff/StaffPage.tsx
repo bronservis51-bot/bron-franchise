@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { Download, Plus } from 'lucide-react';
-import { command, from, rows } from '../../platform/backend';
+import { command, from, rows, toAppError } from '../../platform/backend';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { sameJson } from '../../platform/offline';
@@ -11,11 +11,12 @@ import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataS
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, maxPolicyMinor, percentToBp, tierPolicy, validPolicyMoney } from './CustomPayFields';
-import { MotivationPanel, PayExample, payTiming, useMotivation, type ShiftPolicy } from './Motivation';
+import { MotivationPanel, PayExample, payTiming, teamPolicyForDate, useMotivation, type ShiftPolicy } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
 import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
+import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards } from '../revenue/partnerLifecycle';
 import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type PayrollShift, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 import { NewAccountCredentials } from './NewAccountCredentials';
@@ -75,6 +76,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const initialLocations = staff?.location_ids ?? (activeLocs.length === 1 ? [activeLocs[0].id] : []);
   const [initialPosition] = useState(() => positionOf(staff));
   const [initialAccess] = useState(() => staff?.access ?? (initialPosition === 'manager' ? legacyManagerAccess : defaultAccess));
+  const [payRevision] = useState(staff?.pay_revision);
+  const [initialPayStart] = useState(() => staff?.pay_scheduled?.find(v => v.effective_from === staff.pay_effective_from)?.effective_from ?? '');
+  const [payStart, setPayStart] = useState(initialPayStart);
   const [initialPayMode] = useState(() => payModeOf(staff));
   const [initialCustomPay] = useState(() => staff?.custom_pay);
   const [initialPassword] = useState(randomPassword);
@@ -99,7 +103,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const digits = phoneLoginDigits(phone);
   const bp = percentToBp(rate);
   const customPolicy = payMode === 'custom' ? customPayPolicy(formula) : null;
-  const teamPolicy = canSetCustomPay && !common.error ? common.data?.policy : undefined;
+  const commonTerms = canSetCustomPay && !common.error ? common.data : undefined;
+  const teamPolicy = commonTerms && teamPolicyForDate(commonTerms, payStart);
+  const savedTeamPolicy = commonTerms && teamPolicyForDate(commonTerms, initialPayStart);
   const payPreview: ShiftPolicy | null = payMode === 'partner' ? teamPolicy ?? null
     : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
     : validFee && bp !== null && Number.isSafeInteger(Number(fee)) ? { mode: 'legacy', rate_bp: bp, fee_minor: Number(fee) } : null;
@@ -119,13 +125,15 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
     || positionChanged || accessChanged || learningEnabled !== (staff?.learning_enabled ?? true)
     || (kind === 'trainee' && (start !== (staff?.internship_from ?? '') || until !== (staff?.internship_until ?? '')
       || traineeFee !== String(staff?.internship_floor_minor ?? 50000) || !validTraineeFee))
-    || payMode !== initialPayMode
+    || payStart !== initialPayStart || payMode !== initialPayMode
     || formulaChanged
     || (payMode === 'fixed' && (bp !== (staff?.rate_bp ?? 0) || Number(fee) !== (staff?.shift_fee_minor ?? 0) || !validFee));
   const m = useMutation({
     mutationFn: async () => {
       const submittedPassword = password;
       const settings = {
+        ...(payRevision !== undefined ? { expected_pay_revision: payRevision } : {}),
+        ...(payStart ? { pay_effective_from: payStart } : {}),
         employee_kind: kind, internship_from: start || null, internship_until: until || null,
         internship_floor_minor: traineeFee, learning_enabled: learningEnabled,
         ...(canSetAccess && (!staff || positionChanged) ? { position } : {}),
@@ -141,6 +149,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
         settings,
       });
       if (!staff && digits) setCreated({ phone: formatPhone(digits), password: submittedPassword });
+    },
+    onError: error => {
+      if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
@@ -197,7 +208,10 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {staff && <div className="pay-current">
               <span>Сохранённые условия{staff.employee_kind === 'trainee' ? ' после стажировки' : ''}</span>
               <strong>{payTerms(staff, currency)}</strong>
-              {initialPayMode === 'partner' && teamPolicy && <span>Гарантия за смену {formatMoneyShort(teamPolicy.floor_minor, currency)}</span>}
+              {staff.pay_effective_from && <span>Дата начала этих условий — {formatDate(staff.pay_effective_from)}</span>}
+              {staff.pay_scheduled?.filter(v => v.effective_from !== staff.pay_effective_from).map(v =>
+                <span key={v.effective_from}>С {formatDate(v.effective_from)} — {v.label}</span>)}
+              {initialPayMode === 'partner' && savedTeamPolicy && <span>Гарантия за смену {formatMoneyShort(savedTeamPolicy.floor_minor, currency)}</span>}
               {initialPayMode === 'custom' && initialCustomPay && <span>Гарантия за смену {formatMoneyShort(initialCustomPay.floor_minor, currency)}</span>}
               {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined &&
                 <span>На стажировке — гарантия {formatMoneyShort(staff.internship_floor_minor, currency)}</span>}
@@ -209,6 +223,8 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
                 <MoneyInput id={id} describedBy={describedBy} invalid={!validTraineeFee} currency={currency} value={traineeFee} placeholder="0"
                   onChange={setTraineeFee} onValidityChange={setTraineeFeeParsed} />}</Field>
             </section>}
+            {staff && <Field label="Новые условия действуют с" hint="Если оставить поле пустым, изменения вступят в силу сегодня по времени точки.">{(id, describedBy) =>
+              <Input id={id} type="date" value={payStart} aria-describedby={describedBy} onChange={e => setPayStart(e.target.value)} />}</Field>}
             <fieldset className="pay-choices"><legend>{kind === 'trainee' ? 'Схема после стажировки' : 'Схема оплаты за смену'}</legend>
               {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
                 <label className="pay-choice" key={choice.id}>
@@ -308,7 +324,7 @@ async function downloadPayroll(list: StaffRow[], month: string, currency: string
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
   await writeXlsxFile([
     { sheet: 'Ведомость', columns: [{ width: 26 }, { width: 16 }, { width: 10 }, { width: 16 }, { width: 16 }],
-      data: [['Сотрудник', 'Телефон', 'Смен', 'Выручка смен', 'Заработок'].map(head),
+      data: [['Сотрудник', 'Телефон', 'Выходов', 'Выручка смен', 'Заработок'].map(head),
         ...list.map((s) => [s.full_name, formatPhone(s.phone), { value: s.month_shifts, type: Number }, money(s.month_revenue_minor), money(s.month_earned_minor)]),
         [{ value: 'Итого', fontWeight: 'bold' as const }, null, null, money(list.reduce((a, s) => a + Number(s.month_revenue_minor), 0)),
           { ...money(list.reduce((a, s) => a + Number(s.month_earned_minor), 0)), fontWeight: 'bold' as const }]] },
@@ -365,7 +381,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] });
     },
   });
-  const payroll = (q.data ?? []).filter((s) => s.month_shifts > 0);
+  const payroll = (q.data ?? []).filter((s) => s.month_shifts > 0 || s.shifts.length > 0);
   const exp = useMutation({ mutationFn: () => downloadPayroll(payroll, month, currency) });
   const term = search.trim().toLocaleLowerCase('ru-RU');
   const digits = /^[+\d()\s.-]+$/.test(term) ? (phoneLoginDigits(term) ?? term.replace(/\D/g, '')) : '';
@@ -435,14 +451,14 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
             {payroll.map((staff) => <Card key={staff.user_id}>
               <div className="row between staff-summary">
                 <div style={{ minWidth: 0 }}><strong>{staff.full_name}</strong>
-                  <div className="faint">Смены: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
+                  <div className="faint">Выходов: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
                 </div>
                 <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency)}</strong>
               </div>
               {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>Смены за месяц</summary>
                 <ul className="list">{staff.shifts.map((shift) => <li key={shift.id} className="row between access-row">
                   <span>{dayLabel(shift.day)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
-                    {payrollShiftTime(shift)} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
+                    {payrollShiftTime(shift)}{shift.counts_as_exit === false && ' · Дополнительная точка'} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
                   </span></span>
                   <div className="row wrap">
                     <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
@@ -463,7 +479,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
               {activeStaff.map((staff) => <li key={staff.user_id} className="row between access-row">
                 <div style={{ minWidth: 0 }}>
                   <strong>{staff.full_name}</strong>
-                  <div className="faint">{payTerms(staff, currency)}</div>
+                  <div className="faint">{payTerms(staff, currency)}{staff.pay_effective_from && ` · с ${formatDate(staff.pay_effective_from)}`}</div>
                   {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined && <div className="faint">
                     Минимум за смену на стажировке: {formatMoneyShort(staff.internship_floor_minor, currency)}
                   </div>}
@@ -491,12 +507,15 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
 
 export function StaffPage() {
   const { me } = useSession();
-  const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee')
-    ?? me?.assignments.find(a => a.scope_type === 'partner' && a.permissions.some(p => p === 'staff.manage' || p === 'staff.view' || p === 'staff.create'));
+  const ownedCards = franchiseePartnerCards(me);
+  const delegated = ownedCards.length === 0 ? me?.assignments.find(a =>
+    a.scope_type === 'partner' && a.permissions.some(p => p === 'staff.manage' || p === 'staff.view' || p === 'staff.create'))?.scope_id : undefined;
+  const partner = ownedCards.length === 1 ? ownedCards[0] : delegated;
   return (
     <>
       <PageHeader title="Сотрудники" />
-      {partner?.scope_id ? <StaffPanel key={partner.scope_id} partnerId={partner.scope_id} /> : <EmptyState title="Нет франчайзи" />}
+      {ownedCards.length > 1 ? <EmptyState title="Уточните доступ к карточке франчайзи" text={FRANCHISEE_CARD_AMBIGUITY} />
+        : partner ? <StaffPanel key={partner} partnerId={partner} /> : <EmptyState title="Нет франчайзи" />}
     </>
   );
 }

@@ -57,8 +57,8 @@ it('posts revenue and payroll together; exact replay returns the receipt and a s
   await db.expectError(email, 'select shift_open($1)', 'validation', [point]);
 });
 
-it('accepts yesterday in the point timezone, rejects future/older new days and rolls back an invalid close', async () => {
-  for (const day of [days.earlier, days.future]) await db.expectError(email, SUBMIT, 'validation', args(day));
+it('accepts yesterday in the point timezone, rejects future new days and rolls back an invalid close', async () => {
+  await db.expectError(email, SUBMIT, 'validation', args(days.future));
   await db.expectError(email, SUBMIT, 'validation', args(days.today, -1));
   await db.expectError(email, SUBMIT, 'validation', args(days.today, null));
   expect(await db.admin('select id from work_shift where employee_id=$1', [worker])).toEqual([]);
@@ -118,7 +118,7 @@ it('requires resolving an outstanding shift and retains the original historical 
   expect((await submit(args(days.today, 0, 0))).shift.earned_minor).toBe(70000);
 });
 
-it('preserves financial period and day-off rules for the employee and franchisee', async () => {
+it('protects days off and lets the employee finish an old open shift', async () => {
   await db.as(OWNER, 'select revenue_day_off_set($1,$2,true)', [point, days.today]);
   await db.expectError(email, SUBMIT, 'validation', args());
   expect(await db.admin('select id from work_shift where employee_id=$1', [worker])).toEqual([]);
@@ -126,8 +126,7 @@ it('preserves financial period and day-off rules for the employee and franchisee
   await submit(args());
   await db.expectError(OWNER, 'select revenue_day_off_set($1,$2,true)', 'validation', [point, days.today]);
   await db.admin('insert into work_shift(partner_id,location_id,employee_id,day) values ($1,$2,$3,$4)', [partner, point, worker, days.locked]);
-  await db.expectError(email, SUBMIT, 'period-locked', args(days.locked));
-  expect(await db.admin("select day::text from work_shift where employee_id=$1 and status='open'", [worker])).toEqual([{ day: days.locked }]);
+  expect((await submit(args(days.locked))).shift.day).toBe(days.locked);
 });
 
 it('requires an active worker and an assigned active point for a new shift', async () => {
@@ -166,14 +165,56 @@ it('shows the employee’s yesterday shift per point even when the requested his
   });
 });
 
-it('returns the pay policy for each date shown at the assigned point', async () => {
+it('uses the pay policy effective on the selected date for display and submission', async () => {
   await db.admin(`update staff_member set employee_kind='trainee', internship_from=$2, internship_until=$2,
-    internship_floor_minor=50000 where user_id=$1`, [worker, days.yesterday]);
+    internship_floor_minor=50000 where user_id=$1`, [worker, days.today]);
   const [home] = await db.as<{ data: { locations: {
     location_id: string; pay_today: unknown; pay_yesterday: unknown;
   }[] } }>(email, 'select public.staff_home() data');
   expect(home.data.locations.find(location => location.location_id === point)).toMatchObject({
-    pay_today: { floor_minor: 100000 }, pay_yesterday: { floor_minor: 50000 },
+    pay_today: { floor_minor: 50000 }, pay_yesterday: { floor_minor: 100000 },
   });
-  expect((await submit(args(days.yesterday, 0, 0))).shift.earned_minor).toBe(50000);
+  expect((await submit(args(days.yesterday, 0, 0))).shift.earned_minor).toBe(100000);
+});
+
+it('shows the same outstanding dates to every assigned employee and clears a historical gap on a zero report', async () => {
+  const secondLogin = 'missing.' + crypto.randomUUID().slice(0, 8);
+  await db.as(OWNER, "select staff_account_create($1,'Вторая смена',$2,'test-only-password',array[$3::uuid],false)", [partner, secondLogin, point]);
+  await db.admin('update location set opened_on=$2 where id=$1', [point, days.locked]);
+  await db.as(OWNER, 'select revenue_day_off_set($1,$2,true)', [point, days.yesterday]);
+  const [foreign] = await db.admin<{ id: string }>('select id from location where partner_id<>$1 limit 1', [partner]);
+  // Historical installations may still contain an obsolete foreign ID in the assignment array.
+  await db.admin('update staff_member set location_ids=array_append(location_ids,$2) where user_id=$1', [worker, foreign.id]);
+  const home = async (actor: string) => (await db.as<{ data: {
+    locations: {location_id: string; missing_count: number; missing_periods: { from: string; until: string }[]; recent_corrections: Receipt['shift'][]}[];
+  }}>(actor, 'select staff_home() data'))[0].data.locations;
+  const first = await home(email);
+  const second = secondLogin + '@access.bron.local';
+  expect(first).toHaveLength(1);
+  expect(first[0]).toMatchObject({ location_id: point, missing_periods: [{ from: days.locked, until: days.earlier }] });
+  expect((await home(second))[0].missing_count).toBe(first[0].missing_count);
+  const params = args(days.locked, 0, 0);
+  const saved = await submit(params);
+  expect(await submit(params)).toEqual(saved);
+  expect((await home(email))[0].recent_corrections.map(shift => shift.id)).toContain(saved.shift.id);
+  const other = (await home(second))[0];
+  expect(other.recent_corrections).toEqual([]);
+  expect(other.missing_periods[0].from > days.locked).toBe(true);
+  expect(other.missing_count).toBe(first[0].missing_count - 1);
+  await db.expectError(email, SUBMIT, 'version-conflict', args(days.locked));
+});
+
+it('lets the owner fill and revise an old point total using the version read from the selected month', async () => {
+  await db.admin('update location set opened_on=$2 where id=$1', [point, days.locked]);
+  const read = async () => (await db.as<{ data: { editable_from: string; days: { day_version: string }[] } }>(
+    OWNER, 'select revenue_month($1,$2) data', [point, days.locked]))[0].data;
+  expect((await read()).editable_from).toBe(days.locked);
+  const write = "select revenue_total_set($1,$2,$3,$4,$5,null)";
+  const params = [point, days.locked, 10000, 'empty', crypto.randomUUID()];
+  const first = await db.as(OWNER, write, params);
+  expect(await db.as(OWNER, write, params)).toEqual(first);
+  await db.expectError(OWNER, write, 'version-conflict', [point, days.locked, 20000, 'empty', crypto.randomUUID()]);
+  await db.as(OWNER, write, [point, days.locked, 20000, (await read()).days[0].day_version, crypto.randomUUID()]);
+  await db.expectError('beta.owner@demo.example.com', write, 'not-found', params);
+  await db.expectError(OWNER, write, 'validation', [point, days.future, 1, 'empty', crypto.randomUUID()]);
 });

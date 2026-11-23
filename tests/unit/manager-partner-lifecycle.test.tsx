@@ -50,7 +50,7 @@ it('uses a readable fallback for unknown commercial statuses and preparation sta
   const state = { partner_id: partner.id, working: false, owner_access: 'none' } as const;
   const unknownStatus = renderToStaticMarkup(<PartnerStatus partner={{ ...partner, status: 'future_state' }} current={state} />);
   const unknownStage = renderToStaticMarkup(<PartnerStatus partner={{ ...partner, preparation_stage: 'new_stage' }} current={state} />);
-  expect(unknownStatus).toContain('Статус партнёра неизвестен');
+  expect(unknownStatus).toContain('Статус франчайзи неизвестен');
   expect(unknownStage).toContain('Этап подготовки неизвестен');
   expect(unknownStatus).not.toContain('future_state');
   expect(unknownStage).not.toContain('new_stage');

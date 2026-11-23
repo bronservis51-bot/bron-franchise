@@ -1,4 +1,5 @@
 import { command } from '../../platform/backend';
+import type { PartnerFromLead } from '../manager/api';
 
 export type LeadStatus = 'new' | 'in_work' | 'call_back' | 'meeting' | 'won' | 'lost';
 export type LeadTier = 'hot' | 'warm' | 'cold';
@@ -10,10 +11,15 @@ export interface Lead {
   instagram?: string | null; pipeline_column?: string | null;
   comment: string | null; source: string | null; score: number; tier: LeadTier; status: LeadStatus; note: string | null;
   updated_at: string; updated_by_name: string | null; deleted_at?: string | null;
+  partner_id?: string | null; pending_recontact?: boolean; last_recontact_at?: string | null;
+  last_recontact?: { name: string; phone: string; city: string; contact_via: 'whatsapp' | 'telegram' | 'call' } | null;
 }
 
 export const leadList = () => command<Lead[]>('lead_list');
 export const leadTrashList = () => command<Lead[]>('lead_trash_list');
+export const leadPendingRecontacts = () => command<number>('lead_pending_recontacts');
+export const leadLinkPartner = (lead: Lead, partner: string | null, create: PartnerFromLead | null, operation: string) =>
+  command<string>('lead_link_partner', { id: lead.id, partner, create, expected_updated_at: lead.updated_at, operation });
 export const leadSetDeleted = (lead: Lead, deleted: boolean) => command<Lead>('lead_set_deleted', { id: lead.id, deleted, expected_updated_at: lead.updated_at });
 export const leadMove = (lead: Lead, column: string) => command<Lead>('lead_move', { id: lead.id, column, expected_updated_at: lead.updated_at });
 export interface LeadInput { id?: string; name: string; instagram: string | null; phone: string; city: string; column: string; note: string; }

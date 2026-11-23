@@ -18,7 +18,7 @@ const tasks = {
 
 type TaskId = keyof typeof tasks;
 type Stage = 'contract_signed' | 'location_search' | 'opening_preparation';
-type Launch = { stage: Stage; completed_task_ids: TaskId[] };
+type Launch = { stage: Stage; completed_task_ids: TaskId[]; cycle?: number };
 
 const searchTasks: TaskId[] = ['location_requirements', 'location_options', 'location_review', 'launch_learning'];
 const openingTasks: TaskId[] = ['island_brief', 'island_design', 'purchase_list', 'launch_learning'];
@@ -41,7 +41,7 @@ function TaskList({ ids, completed, disabled, onChange }: {
   </fieldset>;
 }
 
-export function LaunchChecklist({ partner, launch }: { partner: string; launch: Launch }) {
+export function LaunchChecklist({ partner, launch, onHistory }: { partner: string; launch: Launch; onHistory?: () => void }) {
   const client = useQueryClient();
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const ids = tasksForStage(launch.stage);
@@ -58,14 +58,15 @@ export function LaunchChecklist({ partner, launch }: { partner: string; launch: 
   const change = useMutation({
     networkMode: 'always',
     mutationFn: ({ task, completed }: { task: TaskId; completed: boolean }) =>
-      command<Launch | null>('partner_launch_task_set', { partner, task, completed }),
-    onSuccess: async data => {
-      await client.cancelQueries({ queryKey: launchQueryKey(partner) });
-      client.setQueryData(launchQueryKey(partner), data);
+      command<Launch | null>('partner_launch_task_set_checked', { partner, task, completed, cycle: launch.cycle ?? 0 }),
+    onSuccess: data => {
+      client.setQueryData<Launch | null>(launchQueryKey(partner), current =>
+        current?.stage === launch.stage && (current.cycle ?? 0) === (launch.cycle ?? 0) ? data : current);
+      void client.invalidateQueries({ queryKey: launchQueryKey(partner) });
     },
     onError: error => {
       const { code } = toAppError(error);
-      if (code === 'validation' || code === 'unauthenticated' || code === 'forbidden' || code === 'not-found') {
+      if (code === 'validation' || code === 'version-conflict' || code === 'unauthenticated' || code === 'forbidden' || code === 'not-found') {
         void client.invalidateQueries({ queryKey: launchQueryKey(partner) });
       }
     },
@@ -73,7 +74,8 @@ export function LaunchChecklist({ partner, launch }: { partner: string; launch: 
   const opening = launch.stage === 'opening_preparation';
 
   return <div className="home">
-    <PageHeader title={PARTNER_PREPARATION[launch.stage][0]} />
+    <PageHeader title={PARTNER_PREPARATION[launch.stage][0]}
+      actions={onHistory && <Button onClick={onHistory}>История выручки</Button>} />
     <div className="stack">
       <div aria-live="polite">
         {nextId ? <Card title={tasks[nextId].title}>

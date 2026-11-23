@@ -11,6 +11,11 @@ export function createShiftFixture(params:URLSearchParams,location:{id:string;na
    shift=null;return Response.json(null);
   }
   if(name==='shift_close_versioned'){shift={...shift,status:'closed',revision:shift.revision+1,closed_at:shift.closed_at??new Date().toISOString(),cash_minor:Number(args.p_cash),card_minor:Number(args.p_card),total_minor:Number(args.p_cash)+Number(args.p_card),earned_minor:100000};return Response.json({shift,month_earned_minor:100000,month_shifts:1,currency:'RUB'});}
+  if(name==='shift_record_with_return'){
+    shift={...shift,status:'closed',revision:shift.revision+2,closed_at:shift.closed_at??new Date().toISOString(),cash_minor:Number(args.p_cash),
+      card_minor:Number(args.p_card),total_minor:Number(args.p_cash)+Number(args.p_card),return_minor:Number(args.p_return),earned_minor:100000};
+    return Response.json({shift,month_earned_minor:100000,month_shifts:1,currency:'RUB'});
+  }
   if(name==='staff_open_shifts')return Response.json([{id:'qa-forgotten',revision:0,employee_id:'qa-other',location_id:location.id,partner_id:partner.id,location_name:location.name,user_name:'Вымышленный сотрудник',currency:'RUB',day:'2026-11-08',today:day,status:'open',opened_at:'2026-11-08T07:00:00Z',closed_at:null,cash_minor:0,card_minor:0,total_minor:0,can_resolve:true,can_close:true}]);
   if(name==='staff_shift_resolve')return Response.json({ok:true});
   return null;

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { CustomPayFields, customPayDraft, customPayPolicy, percentToBp, validPolicyMoney } from '../../src/modules/staff/CustomPayFields';
-import { PayExample } from '../../src/modules/staff/Motivation';
+import { PayExample, teamPolicyForDate } from '../../src/modules/staff/Motivation';
 
 const policy = { name: 'Личные условия', floor_minor: 50000, tiers: [
   { from_minor: 0, rate_bp: 1000, bonus_minor: 0 },
@@ -44,4 +44,13 @@ it('applies the server maximum to a trainee or tier guarantee', () => {
   expect(validPolicyMoney({ minor: '99999999999', valid: true })).toBe(true);
   expect(validPolicyMoney({ minor: '100000000000', valid: true })).toBe(false);
   expect(validPolicyMoney({ minor: '50001', valid: false })).toBe(false);
+});
+
+it('previews the team rates in force on the date selected for individual terms', () => {
+  const saved = { policy, baseline: { ...policy, floor_minor: 1000 }, history: [{ effective_from: '2026-11-01', policy }],
+    scheduled: [{ effective_from: '2026-12-01', policy: { ...policy, floor_minor: 8000 } }] };
+  expect(teamPolicyForDate(saved, '2026-10-31').floor_minor).toBe(1000);
+  expect(teamPolicyForDate(saved, '2026-11-30')).toBe(policy);
+  expect(teamPolicyForDate(saved, '2026-12-01').floor_minor).toBe(8000);
+  expect(teamPolicyForDate(saved, '')).toBe(policy);
 });

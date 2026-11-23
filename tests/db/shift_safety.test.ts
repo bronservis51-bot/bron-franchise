@@ -41,9 +41,9 @@ it('training belongs to staff only while owners retain team management',async()=
  await t.as(OWNER,'select learning_catalog($1)',[p]);
  await t.expectError(STAFF,'select learning_catalog($1)','forbidden',[p]);
 });
-it('an open shift cannot bypass a closed financial month; public role/session boundaries stay closed',async()=>{
+it('an old open shift can be finished; public role/session boundaries stay closed',async()=>{
  const id=crypto.randomUUID();await t.admin("insert into work_shift(id,partner_id,location_id,employee_id,day) values($1,$2,$3,$4,(date_trunc('month',current_date)-interval '2 months')::date)",[id,p,l,u]);
- await t.expectError(STAFF,'select shift_close($1,100000,0,null)','period-locked',[id]);
+ expect((await run('select shift_close($1,100000,0,null)',[id])).shift.status).toBe('closed');
  await expect(t.as(null,'select staff_open_shifts($1)',[p])).rejects.toThrow();
  await t.expectError(OTHER,'select staff_open_shifts($1)','forbidden',[p]);
  await t.as(OWNER,'select staff_set_active($1,false)',[u]);

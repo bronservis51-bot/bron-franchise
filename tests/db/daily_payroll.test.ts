@@ -80,7 +80,7 @@ it('missing report stays absent, explicit zero is recorded, and previous months 
  expect((await t.admin('select id from daily_revenue where employee_id=$1 and day=$2',[user,yesterday]))).toHaveLength(0);
  await t.expectError(STAFF,'select shift_close($1,null,0,null)','validation',[open.id]);
  const zero=await result(STAFF,'select shift_close($1,0,0,null)',[open.id]);
- expect(Number(zero.shift.total_minor)).toBe(0);expect(Number(zero.shift.earned_minor)).toBe(75000); // Yesterday predates trainee start: custom standard minimum.
+ expect(Number(zero.shift.total_minor)).toBe(0);expect(Number(zero.shift.earned_minor)).toBe(100000); // Yesterday precedes both the internship and the dated team policy change.
  const previousMonth=(await t.admin<{m:string}>("select (date_trunc('month',app_private.local_today($1))-interval '1 month')::date::text as m",[location]))[0].m;
  await t.as(OWNER,"select staff_terms_set($1,'Дневной расчёт',array[$2::uuid],1000,50000,false)",[user,location]);
  const historical=(await t.admin<{id:string}>(`insert into work_shift(partner_id,location_id,employee_id,day,status,closed_at,cash_minor,card_minor,pay_policy)

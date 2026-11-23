@@ -254,6 +254,8 @@ export function PartnerCardPanel({ partner, locations }: { partner: Partner; loc
               <KV items={[
                 ['Владелец', or(p?.owner_name ?? partner.contact_name)],
                 ['Телефон', or(partner.contact_phone && <a href={`tel:${partner.contact_phone}`}>{partner.contact_phone}</a>)],
+                ...(c.partner.contact_city ? [['Город', c.partner.contact_city] as [string, ReactNode]] : []),
+                ...(c.partner.contact_instagram ? [['Instagram', <a key="instagram" href={`https://www.instagram.com/${c.partner.contact_instagram}/`} target="_blank" rel="noopener noreferrer">@{c.partner.contact_instagram}</a>] as [string, ReactNode]] : []),
                 ...(p?.phone2 ? [['Второй телефон', <a key="p2" href={`tel:${p.phone2}`}>{p.phone2}</a>] as [string, ReactNode]] : []),
                 ['Email', or(partner.contact_email && <a href={`mailto:${partner.contact_email}`}>{partner.contact_email}</a>)],
                 ['Telegram', or(p?.telegram)], ['WhatsApp', or(p?.whatsapp)],

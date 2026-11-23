@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { phoneLoginDigits } from '../platform/login';
@@ -12,9 +12,11 @@ import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
+import { HelpTip } from '../ui/HelpTip';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunRole } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
@@ -149,15 +151,25 @@ function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean }) {
+function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: FirstRunRole }) {
   const { me, isManager, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
   const [phone, setPhone] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const guideUserId = me?.assignments.length ? me.user.id : undefined;
+  const [guideSeen, setGuideSeen] = useState(() => Boolean(me?.user.id && hasSeenFirstRunGuide(me.user.id, role)));
+  const [replayGuide, setReplayGuide] = useState(false);
   const installState = useInstallState();
   const ref = useRef<HTMLDivElement>(null);
+  const profileButton = useRef<HTMLButtonElement>(null);
+  const restoreProfileFocus = useRef(false);
+  useEffect(() => {
+    if (replayGuide || !restoreProfileFocus.current) return;
+    restoreProfileFocus.current = false;
+    profileButton.current?.focus({ preventScroll: true });
+  }, [replayGuide]);
   useEffect(() => {
     const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
     document.addEventListener('click', close);
@@ -168,9 +180,15 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
     if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
     void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
   };
+  const closeGuide = () => {
+    if (guideUserId) markFirstRunGuideSeen(guideUserId, role);
+    setGuideSeen(true);
+    restoreProfileFocus.current = replayGuide;
+    setReplayGuide(false);
+  };
   return (
     <div style={{ position: 'relative' }} ref={ref}>
-      <button className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <User size={20} aria-hidden />
       </button>
       {open && (
@@ -185,6 +203,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
           {isManager && <button role="menuitem" onClick={() => { setOpen(false); setRecovery(true); }}><Mail size={16} aria-hidden />Почта для восстановления</button>}
           {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
           <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
+          {guideUserId && <button role="menuitem" onClick={() => { setOpen(false); setReplayGuide(true); }}><GraduationCap size={16} aria-hidden />Первые шаги</button>}
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
@@ -193,6 +212,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
       {isManager && phone && <ManagerLoginDialog onClose={() => setPhone(false)} />}
       {isManager && recovery && <ManagerRecoverySettings onClose={() => setRecovery(false)} />}
       {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
+      {guideUserId && (!guideSeen || replayGuide) && <FirstRunGuide role={role} replay={replayGuide} onClose={closeGuide} />}
     </div>
   );
 }
@@ -258,7 +278,8 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
           {showOrder && <OrderTopButton />}
-          <UserMenu pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)} showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
+          <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)}
+            showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
         {queueOpen && me && <QueueDialog key={me.user.id} userId={me.user.id} outbox={outbox} online={online} onClose={() => setQueueOpen(false)} />}
         <main id="main" className="content" ref={mainRef} tabIndex={-1} style={{ outline: 'none' }}>
@@ -317,9 +338,12 @@ function QueueDialog({userId,outbox,online,onClose}:{userId:string;outbox:Return
     } catch(e) {fail(e);} finally {setBusy(false);}
   };
   return <ConfirmDialog open title="Локальные записи" cancelLabel="Закрыть" onClose={onClose} busy={busy} error={error ?? outbox.readError ?? outbox.sendError}>
-    <p className="faint">Копия содержит только ваши неотправленные записи и сохранённые черновики. Храните её в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
+    <p className="faint">Храните копию в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
     <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
-      <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
+      <div className="row">
+        <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
+        <HelpTip label="Что входит в копию">В копию входят ваши неотправленные записи и сохранённые черновики.</HelpTip>
+      </div>
       <Field label="Загрузить сохранённую копию">{id=><Input id={id} type="file" accept=".json,application/json" disabled={busy} onChange={event=>{
         const file=event.target.files?.[0]; event.target.value=''; setImportFile(null); setError(null);setNotice('');
         if(!file)return;
@@ -352,6 +376,8 @@ function QueueDialog({userId,outbox,online,onClose}:{userId:string;outbox:Return
         <strong>{op.kind.startsWith('revenue') ? `Выручка за ${String(op.payload.day)}` : 'Закрытие смены'}</strong>
         <div className="faint">{op.kind === 'revenue_total_set' ? `Всего: ${(Number(op.payload.total) / 100).toLocaleString('ru-RU')}`
           : `Наличные: ${(Number(op.payload.cash) / 100).toLocaleString('ru-RU')} · карта: ${(Number(op.payload.card) / 100).toLocaleString('ru-RU')}`}</div>
+        {op.kind === 'shift_record_with_return' && Number(op.payload.return) > 0 &&
+          <div className="faint">Возврат: {(Number(op.payload.return) / 100).toLocaleString('ru-RU')}</div>}
         <div className="faint">{state === 'pending' ? 'Ожидает отправки' : state === 'retryable'
           ? `Отправка пока недоступна. ${op.lastError}` : `Требует сверки. ${op.lastError}`}</div>
         {state === 'blocked' && <Button variant="ghost" size="sm" disabled={busy || !savedInCopy} onClick={() => {

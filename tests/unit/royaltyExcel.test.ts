@@ -65,4 +65,21 @@ describe('выгрузка роялти в Excel', () => {
     ]));
   });
 
+  it('показывает корректировку и прошлый долг отдельно при сохранённом итоговом долге', async () => {
+    const { downloadRoyaltyExcel } = await import('../../src/modules/manager/royaltyExcel');
+    await downloadRoyaltyExcel({
+      ...summary,
+      rows: [{ ...summary.rows[0], accrued_minor: 2000000, manual_minor: 4800000,
+        correction_minor: -200000, past_debt_minor: 5000000, paid_minor: 0, debt_minor: 6800000 }],
+      totals: [{ currency: 'RUB', accrued_minor: 6800000, paid_minor: 0, debt_minor: 6800000 }],
+      debt_rub_minor: 6800000,
+    });
+    const [sheet] = calls.at(-1)![0] as { data: unknown[][] }[];
+    expect(sheet.data[2].slice(5, 10)).toEqual(['Начислено', 'Корректировки', 'Прошлый долг', 'Оплачено', 'Долг']
+      .map(value => expect.objectContaining({ value })));
+    expect(sheet.data[3].slice(5, 10)).toEqual([20000, -2000, 50000, 0, 68000].map(value => expect.objectContaining({ value })));
+    const totals = sheet.data.find(row => typeof row[0] === 'object' && row[0] != null && (row[0] as { value: unknown }).value === 'Итого, RUB');
+    expect(totals?.slice(5, 10)).toEqual([20000, -2000, 50000, 0, 68000].map(value => expect.objectContaining({ value })));
+  });
+
 });

@@ -6,7 +6,7 @@ import { dayLabel } from '../../platform/dates';
 import { useSession } from '../../platform/session';
 import { Button, Checkbox, ConfirmDialog, Field, Input, Money, MoneyInput } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { revenueDayOffSet, revenueMonth, revenueTotalSet, type DayRow, type MonthDetail } from './api';
+import { canEditRevenueDay, revenueDayOffSet, revenueMonth, revenueTotalSet, type DayRow, type MonthDetail } from './api';
 
 const MAX_TOTAL_MINOR = 100_000_000_000; // revenue_total_set limit in the database
 type RevenueAction = 'save-total' | 'mark-off' | 'unmark-off';
@@ -37,9 +37,9 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
   const canSave = total !== '' && totalValid && !exceedsLimit && !belowStaffTotal;
   const action: RevenueAction = dayOff ? 'unmark-off' : markOff ? 'mark-off' : 'save-total';
   const newlyMarkedOff = !dayOff && freshMonth?.days_off?.includes(day);
-  const periodLocked = Boolean(freshMonth && (day > freshMonth.today ||
-    (freshMonth.editable_from && day < freshMonth.editable_from)));
-  const locked = periodLocked || (Boolean(freshMonth && freshMonth.status !== 'active') && action !== 'unmark-off');
+  const locked = Boolean(freshMonth && (freshMonth.editable_days
+    ? !canEditRevenueDay(freshMonth, day)
+    : !canEditRevenueDay(freshMonth, day) || (freshMonth.status !== 'active' && action !== 'unmark-off')));
   const refreshBlocksSave = refreshStatus === 'loading' || refreshStatus === 'error';
   const saveDisabled = refreshBlocksSave || locked || newlyMarkedOff || (action === 'save-total' && !canSave);
   const refreshDay = async () => {
@@ -105,6 +105,7 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
       В выручку включено <Money minor={row.total_minor} currency={currency} />.
     </p>}
     {(readOnly || locked) && <p>Редактирование за эту дату недоступно.</p>}
+    {row?.return_minor ? <p className="faint">Возвраты покупателям за день · <Money minor={row.return_minor} currency={currency} /></p> : null}
     {newlyMarkedOff && <div className="stack">
       <p role="status">Дату отметили как выходной. Чтобы внести выручку, сначала снимите отметку.</p>
       {!locked && !readOnly && <Button size="sm" disabled={refreshBlocksSave || save.isPending}

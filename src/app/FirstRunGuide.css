@@ -1,0 +1,25 @@
+.first-run-guide h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.first-run-guide p {
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.first-run-guide .first-run-progress {
+  margin: 0 0 var(--space-3);
+}
+
+.first-run-guide + .btn {
+  margin-top: var(--space-3);
+}
+
+@media (max-width: 430px) {
+  dialog.first-run-dialog { max-width: calc(100vw - var(--space-5)); }
+  .first-run-dialog .dialog-head { padding: var(--space-4) var(--space-4) 0; }
+  .first-run-dialog .dialog-body { padding: var(--space-3) var(--space-4); }
+  .first-run-dialog .dialog-foot { padding: var(--space-2) var(--space-4) var(--space-3); }
+  .first-run-dialog .dialog-foot .btn { line-height: 1.2; }
+}

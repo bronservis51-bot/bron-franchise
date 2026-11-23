@@ -66,7 +66,7 @@ it('allows the responsible franchisee to correct expired employee totals while p
   await db.expectError(OWNER, CORRECT, 'version-conflict', correction());
 });
 
-it('enforces worker, tenant and financial authority and refuses anonymous, incomplete or locked-period corrections', async () => {
+it('enforces worker, tenant and financial authority and refuses anonymous, incomplete corrections', async () => {
   for (const actor of [email, OTHER]) await db.expectError(actor, CORRECT, 'forbidden', correction());
   await expect(db.as(null, CORRECT, correction())).rejects.toThrow(/permission denied/);
   for (const [cash, card, reason] of [[null, 0, 'Сверили'], [-1, 0, 'Сверили'], [0, 0, ' '], ['9223372036854775807', 5, 'Сверили']]) {
@@ -80,7 +80,7 @@ it('enforces worker, tenant and financial authority and refuses anonymous, incom
     insert into work_shift(partner_id,location_id,employee_id,day,status,closed_at) values(
       $1,$2,$3,(date_trunc('month',current_date)-interval '2 months')::date,'closed',now()) returning id,revision
   `, [partner, location, user]);
-  await db.expectError(OWNER, CORRECT, 'period-locked', [old.id, 1, 1, old.revision, 'Сверили архив', crypto.randomUUID()]);
+  await db.as(OWNER, CORRECT, [old.id, 1, 1, old.revision, 'Сверили архив', crypto.randomUUID()]);
   const [opened] = await db.admin<{ id: string; revision: number }>(`
     insert into work_shift(partner_id,location_id,employee_id,day) values($1,$2,$3,$4::date-1) returning id,revision
   `, [partner, location, user, today]);

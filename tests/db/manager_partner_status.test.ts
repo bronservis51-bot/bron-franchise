@@ -28,13 +28,15 @@ it('2.1–2.2: reports a partner without operations or owner access and rejects 
 });
 
 it('2.1: distinguishes waiting, granted and revoked owner access independently of commercial status', async () => {
+  const projectOwner = 'project.owner@example.invalid';
+  await t.admin("select app_private.create_login($1,'synthetic-project-password','Владелец проекта')", [projectOwner]);
   await t.as(manager, 'select public.access_grant($1,$2)', [partner, 'future.qa@example.invalid']);
   expect(await project()).toMatchObject({ owner_access: 'pending' });
-  await t.as(manager, `select public.access_grant($1,$2)`, [partner, owner]);
+  await t.as(manager, `select public.access_grant($1,$2)`, [partner, projectOwner]);
   await t.as(manager, `select public.partner_save_preparation(
     $1,'Синтетический проект','RU',null,null,null,'terminated','opening_preparation')`, [partner]);
   expect(await project()).toMatchObject({ owner_access: 'granted', working: false });
-  const [{ id }] = await t.admin<{ id: string }>(`select id from public.role_assignment where scope_id = $1 and user_id = $2`, [partner, await t.userId(owner)]);
+  const [{ id }] = await t.admin<{ id: string }>(`select id from public.role_assignment where scope_id = $1 and user_id = $2`, [partner, await t.userId(projectOwner)]);
   await t.as(manager, 'select public.access_revoke($1)', [id]);
   expect(await project()).toMatchObject({ owner_access: 'pending' });
 });

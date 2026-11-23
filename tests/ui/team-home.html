@@ -8,12 +8,16 @@
 const frame = document.querySelector('#app');
 const result = document.querySelector('#result');
 const params = new URLSearchParams(location.search);
+const paused = params.get('scenario') === 'paused';
+const historical = params.get('scenario') === 'historical';
 const testOffline = params.get('scenario') === 'offline';
 frame.width = String(Number(params.get('width')) || 390);
 frame.src = `/tests/ui/responsive-app.html?role=team&text=${params.get('text') === '200' ? '200' : '100'}#/kb`;
 const previousMonth = '2026-10-01';
 const currentMonth = '2026-11-01';
 const points = ['Торговый центр с длинным названием', 'Вторая назначенная точка с ещё более длинным названием'].map((name, i) => ({
+  opened_on: '2026-08-01', missing_count: i === 1 ? 1 : 0,
+  missing_periods: i === 1 ? [{ from: '2026-09-15', until: '2026-09-15' }] : [],
   location_id: `qa-team-point-${i + 1}`, location_name: name, currency: 'RUB', today: '2026-11-20', my_today: null,
 }));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -36,6 +40,7 @@ try {
   app.fetch = (request, init) => {
     const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
     const name = url.pathname.split('/').at(-1);
+    if (paused && name === 'partner') return Promise.resolve(app.Response.json([{ status: 'suspended' }]));
     if (url.pathname.includes('/rpc/') && ['staff_home', 'team_revenue_month', 'shift_submit'].includes(name)) {
       const args = JSON.parse(init.body);
       if (name === 'staff_home') {
@@ -43,10 +48,10 @@ try {
         requested.pay.push(month);
         const earned = month === currentMonth ? 123000 : 456000;
         return Promise.resolve(app.Response.json({
-          month, currency: 'RUB', partner_name: 'Вымышленный франчайзи', rate_bp: 500, shift_fee_minor: 0,
+          month, currency: 'RUB', partner_name: 'Вымышленный франчайзи', rate_bp: 500, shift_fee_minor: 0, pay_policy: { mode: 'legacy', fee_minor: 123400, rate_bp: 250 },
           open_shift: null, locations: points.map(point => ({ ...point, my_today: closedShift?.location_id === point.location_id ? closedShift : null })), month_earned_minor: earned,
-          month_revenue_minor: 1230000, month_shifts: 1,
-          shifts: [{ id: 'qa-prior-shift', day: `${month.slice(0, 7)}-11`, location_name: points[0].location_name, earned_minor: earned, total_minor: 1230000 }],
+          month_revenue_minor: 1230000, month_shifts: 0,
+          shifts: [{ id: 'qa-prior-shift', counts_as_exit: false, day: `${month.slice(0, 7)}-11`, location_name: points[0].location_name, earned_minor: earned, total_minor: 1230000 }],
         }));
       }
       if (name === 'team_revenue_month') {
@@ -72,6 +77,7 @@ try {
   const compact = text => text.replace(/\s/g, '');
   await until(() => compact(doc.querySelector('main').textContent).includes('101000₽'), 'Не появилась выручка назначенной точки');
   await until(() => compact(doc.querySelector('main').textContent).includes('1230₽'), 'Нет личных начислений');
+  assert(compact(doc.querySelector('.monthly-details')?.textContent ?? '').includes('1234₽завыход'), 'Показаны будущие условия оплаты вместо действующих');
   const navigation = doc.querySelector('main .month-nav');
   assert(doc.querySelectorAll('main .month-nav').length === 1, 'В главной два переключателя месяца');
   assert(link === doc.querySelector('.bottom-nav a') && link.textContent.trim() === 'Главная', 'Главная расположена после другого раздела');
@@ -92,9 +98,19 @@ try {
   navigation.querySelector('button').click();
   await until(() => requested.pay.includes(previousMonth) && requested.revenue.includes(previousMonth), 'Выручка и начисления запрашивают разные месяцы');
   await until(() => compact(doc.querySelector('main').textContent).includes('202000₽') && compact(doc.querySelector('main').textContent).includes('4560₽'), 'Нет итогов выбранного месяца');
+  assert(payDetails.textContent.includes('Дополнительная точка') && payDetails.textContent.includes('выручка смен'), 'Дополнительная точка скрыта при нуле основных выходов');
   const close = button('Закрыть смену');
+  if (paused) {
+    assert(!close && !doc.querySelector('.point-missing button'), 'На паузе доступна сдача выручки');
+    assert(payDetails.querySelector('li'), 'На паузе исчезла история смен');
+  } else {
   assert(close && !button('Открыть смену'), 'Нужно одно действие для сдачи смены');
-  close.click();
+  if (historical) {
+    const reminder = doc.querySelector('details.point-missing');
+    assert(reminder, 'Не виден пропуск назначенной точки в другой месяц');
+    reminder.open = true;
+    reminder.querySelector('button').click();
+  } else close.click();
   const dialog = await until(() => doc.querySelector('dialog[open]'), 'Не открылся выбор точки');
   await doc.fonts.ready;
   assert(dialog.scrollWidth <= dialog.clientWidth + 1, 'Диалог выбора точки шире экрана');
@@ -102,8 +118,14 @@ try {
   assert(point, 'Нет доступного выбора точки');
   const confirm = [...dialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Закрыть смену');
   assert(confirm?.disabled, 'Смену можно сдать без выбора точки и кассы');
-  point.value = points[1].location_id;
-  point.dispatchEvent(new app.Event('change', { bubbles: true }));
+  if (historical) {
+    assert(point.value === points[1].location_id, 'Напоминание открыло чужую точку');
+    const date = dialog.querySelector('input[type=date]');
+    assert(date?.value === '2026-09-15' && date.min === '2026-08-01' && date.max === points[1].today, 'Форма не открыла пропущенную дату');
+  } else {
+    point.value = points[1].location_id;
+    point.dispatchEvent(new app.Event('change', { bubbles: true }));
+  }
   const [cash, card] = dialog.querySelectorAll('input[inputmode="decimal"]');
   Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(cash, '999999999999999999');
   cash.dispatchEvent(new app.Event('input', { bubbles: true }));
@@ -122,8 +144,7 @@ try {
     const pendingPoint = pendingDialog.querySelector('select');
     pendingPoint.value = points[1].location_id;
     pendingPoint.dispatchEvent(new app.Event('change', { bubbles: true }));
-    await until(() => pendingDialog.textContent.includes('чт, 19 нояб.'), 'Дата записи в очереди осталась доступна для повторной сдачи');
-    assert(!pendingDialog.textContent.includes('пт, 20 нояб.'), 'День в очереди всё ещё доступен');
+    await until(() => pendingDialog.querySelector('input[type=date]')?.value === '2026-11-19', 'Дата записи в очереди снова предложена для сдачи');
     [...pendingDialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Отмена').click();
     connectionLost = false;
     app.dispatchEvent(new app.Event('focus'));
@@ -133,8 +154,9 @@ try {
     await until(() => doc.querySelector('.earn-result'), 'На главной не появилось подтверждение');
     assert(requested.submissions.length === 1, 'Смена отправилась больше одного раза');
   }
-  assert(requested.submissions[0]?.p_location === points[1].location_id && requested.submissions[0].p_day === points[1].today, 'Смена сдана в другую точку или за другую дату');
+  assert(requested.submissions[0]?.p_location === points[1].location_id && requested.submissions[0].p_day === (historical ? '2026-09-15' : points[1].today), 'Смена сдана в другую точку или за другую дату');
   assert(requested.revenue.at(-1) === previousMonth, 'Закрытие сегодняшней смены сбрасывает выбранный месяц');
+  }
   assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Содержимое шире экрана');
   result.dataset.status = 'passed';
   result.textContent = 'Главная, общий месяц и сдача смены проверены';

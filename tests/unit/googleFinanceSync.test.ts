@@ -22,10 +22,20 @@ describe('automatic Google financial reports', () => {
       { ...record, key: 'three', kind: 'royalty_payment', amount: '1000', cash: null, card: null },
       { ...record, key: 'four', partner_id: other, partner: 'Другой партнёр', currency: 'KZT', amount: '16000' },
     ], asOf);
-    expect(reports[0].sheets[0].rows[3]).toEqual(['2026-11', 'Точка — партнёр', 'RUB', null, 150, null, null, 10.5, null, 10, 139.5]);
+    expect(reports[0].sheets[0].rows[3]).toEqual(['2026-11', 'Точка — партнёр', 'RUB', null, 150, null, null, 10.5, null, 10, 139.5, null, null]);
     expect(reports[0].sheets[0].rows[4][2]).toBe('KZT');
     expect(reports[1].sheets[1].rows).toHaveLength(4);
     expect(JSON.stringify(reports[1])).not.toContain('Другой партнёр');
+  });
+
+  it('exports retail returns as operations and subtracts them once from the balance', () => {
+    const report = buildGoogleReports([books[0]], [record,
+      { ...record, key: 'refund', kind: 'return', amount: '20000', cash: null, card: null },
+      { ...record, key: 'royalty', kind: 'royalty', amount: '1050', cash: null, card: null },
+      { ...record, key: 'debt', kind: 'royalty_past_debt', amount: '40000', cash: null, card: null },
+    ], asOf)[0];
+    expect(report.sheets[0].rows[3]).toEqual(['2026-11', 'Точка — партнёр', 'RUB', null, 150, null, null, 10.5, null, null, -60.5, 200, 400]);
+    expect(report.sheets[1].rows[2].slice(5, 8)).toEqual(['Возврат покупателю', null, 200]);
   });
 
   it('rejects using the same workbook for network and partner data', () => {

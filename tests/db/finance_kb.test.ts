@@ -21,8 +21,8 @@ describe('сотрудник не видит выручку точки', () => {
     expect(h.locations.length).toBeGreaterThan(0);
     for (const l of h.locations) {
       expect(Object.keys(l).sort()).toEqual([
-        'awaiting_opening_date', 'currency', 'days_off', 'location_id', 'location_name', 'my_today',
-        'my_yesterday', 'opened_on', 'pay_today', 'pay_yesterday', 'today',
+        'awaiting_opening_date', 'currency', 'days_off', 'location_id', 'location_name', 'missing_count', 'missing_periods',
+        'my_today', 'my_yesterday', 'opened_on', 'pay_today', 'pay_yesterday', 'recent_corrections', 'today',
       ]);
     }
     await t.expectError(DINA, `select public.finance_my(current_date, null)`, 'forbidden');
@@ -138,13 +138,13 @@ describe('расходы франчайзи', () => {
     expect((await one<{ current: Fin }>(VIKTOR, `select public.finance_my(current_date, $1) j`, [l2])).current.expenses_minor).toBe(0);
   });
 
-  it('повтор прошлого месяца без дублей; чужие расходы и будущий месяц — нельзя; сотрудник не ведёт расходы', async () => {
+  it('старые разовые записи не переносятся; чужие расходы и будущий месяц — нельзя; сотрудник не ведёт расходы', async () => {
     const prev = `(date_trunc('month', current_date) - interval '1 month')::date`;
     await one(VIKTOR, `select public.expense_save(null, ${prev}, null, 'Интернет', 150000) j`);
     await one(VIKTOR, `select public.expense_save(null, ${prev}, null, 'Реклама', 500000) j`);
-    expect(await one<number>(VIKTOR, `select public.expense_repeat(current_date) j`)).toBe(1); // интернет уже есть
-    expect(await one<number>(VIKTOR, `select public.expense_repeat(current_date) j`)).toBe(0);
-    const eid = (await t.admin<{ id: string }>(`select id from public.expense where category = 'Реклама' and month = ${cur}`))[0].id;
+    await t.expectError(VIKTOR, `select public.expense_repeat(current_date)`, 'validation');
+    expect(await one<unknown[]>(VIKTOR, `select public.expense_repeat_preview(current_date) j`)).toEqual([]);
+    const eid = await one<string>(VIKTOR, `select public.expense_save(null, ${cur}, null, 'Реклама', 500000) j`);
     await t.expectError(MARSEL, `select public.expense_delete($1)`, 'not-found', [eid]);
     await t.expectError(VIKTOR, `select public.expense_save(null, (${cur} + interval '1 month')::date, null, 'Аренда', 100)`, 'validation');
     await t.expectError(VIKTOR, `select public.expense_save(null, ${cur}, $1, 'Аренда', 100)`, 'not-found', [await id('location', 'code', 'BETA-1')]);

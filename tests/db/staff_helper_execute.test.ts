@@ -190,10 +190,23 @@ it('preserves the finance, learning and CRM call paths across a native split-own
    [open.id, closed.shift.revision, crypto.randomUUID()]);
   expect(correction).toMatchObject({ ok: true, revision: 2 });
   const operation = crypto.randomUUID();
-  const createLead = () => call<{id: string}>('fm@demo.example.com', 'select public.lead_save($1::jsonb,null,$2) as result',
-   [JSON.stringify({name: 'Проверка сохранения'}), operation]);
+  const crm = 'fm@demo.example.com';
+  const createLead = () => call<{id: string; updated_at: string}>(crm, 'select public.lead_save($1::jsonb,null,$2) as result',
+   [JSON.stringify({name: 'Проверка сохранения', phone: '+7 777 000-00-44'}), operation]);
+  const savedLead = await createLead();
+  expect(savedLead.id).toBe(operation);
   expect((await createLead()).id).toBe(operation);
-  expect((await createLead()).id).toBe(operation);
+  await call(crm, 'select public.lead_set_deleted($1,true,$2) as result', [savedLead.id, savedLead.updated_at]);
+  await migrated.transaction(async tx => {
+   await tx.exec('set local role anon');
+   expect((await tx.query('select public.lead_submit($1::jsonb) result', [JSON.stringify({ name:'Повтор', phone:'8 777 000-00-44',
+    city:'Алматы', contact_via:'call', budget:'partial',timing:'month',manage:'self',experience:'some',place:'options' })])).rows)
+    .toEqual([{ result:{ok:true} }]);
+  });
+  expect(await call(crm, 'select public.lead_pending_recontacts() as result')).toBe(1);
+  expect((await migrated.query(`select actor,has_table_privilege(actor,'app_private.lead_recontact','select') readable
+    from unnest(array['postgres','anon','authenticated']) as actor`)).rows)
+   .toEqual([{actor:'postgres',readable:true},{actor:'anon',readable:false},{actor:'authenticated',readable:false}]);
   for (const fn of ['app_private.fin_month(uuid,uuid[],date,boolean)', 'app_private.expense_rows(uuid,uuid[],date,boolean)']) {
    const allowed = await migrated.query<{actor: string; allowed: boolean}>(`
     select actor, has_function_privilege(actor, $1::regprocedure, 'EXECUTE') as allowed

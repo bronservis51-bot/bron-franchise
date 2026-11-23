@@ -5,7 +5,7 @@ import { dayLabel, monthLabel, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { EmptyState, Money } from '../../ui';
 import { BrandPattern } from '../../ui/brand';
-import { type DayRow, type MonthDetail } from './api';
+import { canEditRevenueDay, type DayRow, type MonthDetail } from './api';
 
 export function MonthNav({ month, onChange, max }: { month: string; onChange: (m: string) => void; max?: string }) {
   return (
@@ -44,7 +44,7 @@ export function PlanCard({ m }: { m: MonthDetail }) {
   );
 }
 
-export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, row?: DayRow) => void }) {
+export function DayList({ m, readOnly = false, onPick }: { m: MonthDetail; readOnly?: boolean; onPick: (day: string, row?: DayRow) => void }) {
   const [expanded, setExpanded] = useState(false);
   const byDay = new Map(m.days.map((d) => [d.day, d]));
   const missing = new Set(m.missing_days);
@@ -53,8 +53,9 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
   const last = m.today < monthEnd ? m.today : monthEnd;
   // Все дни месяца до сегодня: внесённые и пропущенные, новые сверху
   const days: string[] = [];
-  for (let d = last; d >= m.month; d = shiftDay(d, -1)) days.push(d);
-  const editable = (d: string) => !m.editable_from || d >= m.editable_from;
+  for (let d = last; d >= m.month; d = shiftDay(d, -1)) {
+    if (byDay.has(d) || daysOff.has(d) || (!readOnly && (missing.has(d) || (d === m.today && canEditRevenueDay(m, d))))) days.push(d);
+  }
   if (!days.length) return <EmptyState title="В этом месяце записей нет" />;
   return (
     <><ul className="day-list2">
@@ -62,8 +63,7 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
         const r = byDay.get(d);
         const miss = missing.has(d);
         const dayOff = daysOff.has(d);
-        if (!r && !miss && !dayOff && d !== m.today) return null;
-        const can = editable(d);
+        const can = readOnly || canEditRevenueDay(m, d);
         return (
           <li key={d}>
             <button type="button" className={`day-row2${miss ? ' missing' : ''}`} disabled={!can} onClick={() => onPick(d, r)}>
@@ -77,6 +77,7 @@ export function DayList({ m, onPick }: { m: MonthDetail; onPick: (day: string, r
                       ? r.entries.map((e) => `${e.employee_name ?? 'без разбивки'} ${formatMoneyShort(e.total_minor, m.currency)}`).join(' · ')
                       : 'Всего за день'}</span>
                   {r.reported_total_minor != null && Number(r.total_minor) > Number(r.reported_total_minor) && <span className="day-split" role="status">Сумма смен больше ранее указанного итога — проверьте день</span>}
+                  {r.return_minor ? <span className="day-split">Возвраты · {formatMoneyShort(r.return_minor, m.currency)}</span> : null}
                   {r.comment && <span className="day-split">{r.comment}</span>}
                 </span>
               ) : <span className="day-sum2 day-empty">{dayOff ? 'Выходной' : miss ? <><CalendarX size={14} aria-hidden /> не внесено</> : 'сегодня — ещё не внесено'}</span>}
