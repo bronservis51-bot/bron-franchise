@@ -54,6 +54,12 @@ describe('offline storage truthfulness', () => {
 });
 
 describe('outbox recovery preserves the original actor and operation', () => {
+  it('replays a shift submission blocked by a tab that did not yet know the command', async () => {
+    const shift = { operation: payload.operation, location: 'location', day: '2026-11-10', cash: '300', card: '800', comment: null };
+    put(operation({ kind: 'shift_submit', payload: shift, lastErrorCode: 'unknown', lastError: 'Не удалось выполнить действие' }));
+    await expect(flushOutbox('user')).resolves.toEqual({ sent: 1, failed: 0 });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith('shift_submit', shift, { accessToken: 'fixture-user-token' });
+  });
   it('retries after re-authentication as the same UUID with the exact original payload', async () => {
     put(); getSession.mockResolvedValueOnce({ data: { session: null }, error: null });
     await expect(flushOutbox('user')).resolves.toEqual({ sent: 0, failed: 1 });

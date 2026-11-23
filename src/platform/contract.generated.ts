@@ -118,6 +118,7 @@ export const CONTRACT = {
   shift_close_checked: { args: ['shift', 'cash', 'card', 'expected_closed_at', 'operation', 'comment'], returns: 'scalar' },
   shift_close_versioned: { args: ['shift', 'cash', 'card', 'expected_revision', 'operation', 'comment'], returns: 'scalar' },
   shift_open: { args: ['location'], returns: 'single' },
+  shift_submit: { args: ['location', 'day', 'cash', 'card', 'operation', 'comment'], returns: 'scalar' },
   staff_access_history: { args: ['partner'], returns: 'scalar' },
   staff_access_set: { args: ['partner', 'user', 'manager', 'locations'], returns: 'void' },
   staff_account_create: { args: ['partner', 'full_name', 'login', 'password', 'locations', 'manager'], returns: 'scalar' },

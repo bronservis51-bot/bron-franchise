@@ -23,6 +23,13 @@ beforeEach(() => {
 });
 
 describe('portable local work preserves actor, idempotency, conflicts and drafts', () => {
+  it('restores a shift submitted by point and business date with its original operation key', async () => {
+    const op = { userId, clientOpId: operationId, kind: 'shift_submit', createdAt: time, attempts: 0,
+      payload: { operation: operationId, location: other, day: '2026-11-11', cash: '830100', card: '570200', comment: null } };
+    const text = JSON.stringify({ ...backup(), operations: [op] });
+    expect(parseLocalRecovery(text, userId).operations).toEqual([op]);
+    await expect(importLocalRecovery(userId, text)).resolves.toBe(2);
+  });
   it('round trips the original payload, UUID, financial version and blocked error without tokens', async () => {
     const text = await exportLocalRecovery(userId);
     const parsed = parseLocalRecovery(text, userId);

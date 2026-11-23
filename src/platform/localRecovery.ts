@@ -12,7 +12,7 @@ export interface LocalRecovery {
   operations: QueuedOperation[];
   drafts: DraftRow[];
 }
-const kinds = new Set(['shift_close_versioned', 'revenue_total_set', 'revenue_save', 'shift_close', 'revenue_save_checked', 'shift_close_checked']);
+const kinds = new Set(['shift_submit', 'shift_close_versioned', 'revenue_total_set', 'revenue_save', 'shift_close', 'revenue_save_checked', 'shift_close_checked']);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const timestamp = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
@@ -53,6 +53,8 @@ export function parseLocalRecovery(text: string, userId: string): LocalRecovery 
     onlyKeys(payload, [...CONTRACT[kind].args]);
     if (Object.values(payload).some(value => value !== null && !['string', 'number', 'boolean'].includes(typeof value))) return invalid();
     if (kind !== 'revenue_save' && kind !== 'shift_close' && payload.operation !== item.clientOpId) return invalid();
+    if (kind === 'shift_submit' && (!uuid(payload.location) || typeof payload.day !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(payload.day) || !timestamp(payload.day))) return invalid();
     if (kind === 'revenue_total_set' && typeof payload.expected_version !== 'string') return invalid();
     if ((kind === 'revenue_save_checked' || kind === 'shift_close_versioned') && (!Number.isSafeInteger(payload.expected_revision) || Number(payload.expected_revision) < -1)) return invalid();
     if (kind === 'shift_close_checked' && payload.expected_closed_at !== null && !timestamp(payload.expected_closed_at)) return invalid();
