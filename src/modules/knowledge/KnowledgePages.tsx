@@ -58,8 +58,8 @@ export function ArticleEditPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
-  const art = useQuery({ queryKey: ['kb', 'article', id], queryFn: () => getArticle(id) });
-  const revs = useQuery({ queryKey: ['kb', 'revs', id], queryFn: () => revisionsOf(id) });
+  const art = useQuery({ queryKey: ['kb', 'article', id, true], queryFn: () => getArticle(id) });
+  const revs = useQuery({ queryKey: ['kb', 'revs', id, true], queryFn: () => revisionsOf(id) });
   const latest = revs.data?.[0];
   const published = revs.data?.find((r) => r.status === 'published');
   const [title, setTitle] = useState('');
@@ -174,7 +174,7 @@ export function QuestionsPage({ home = false }: { home?: boolean }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, { text?: string; article?: string }>>({});
-  const q = useQuery({ queryKey: ['kb', 'questions'], queryFn: kbQuestions });
+  const q = useQuery({ queryKey: ['kb', 'questions', editor], queryFn: kbQuestions });
   const materials = useQuery({ queryKey: ['kb', 'manage'], queryFn: kbManage, enabled: editor && Boolean(q.data?.some(x => !x.answer && !x.article_id)) });
   const published = (materials.data ?? []).filter(a => a.status === 'published').sort((a, b) => a.title.localeCompare(b.title, 'ru'));
   useEffect(() => { if (q.isSuccess) void qc.invalidateQueries({ queryKey: ['kb', 'inbox'] }); }, [q.isSuccess, qc]);

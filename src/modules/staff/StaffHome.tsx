@@ -261,7 +261,10 @@ function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; curren
 
 function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: PointRevenue }) {
   const qc = useQueryClient();
-  const { readOnly } = useOwnPartnerLifecycle();
+  const { can } = useSession();
+  const { readOnly: partnerPaused } = useOwnPartnerLifecycle();
+  const mayCloseShifts = can('shift.work');
+  const readOnly = partnerPaused || !mayCloseShifts;
   useTick(10_000);
   const q = useQuery({ queryKey: ['staff', 'home', userId], queryFn: () => staffHome(null), refetchInterval: 120_000 });
   const [cancelling,setCancelling]=useState<Shift|null>(null);
@@ -314,9 +317,12 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                   </div>
                 </div>
               )}
-              {readOnly ? <div role="status">
-                <p>Кабинет доступен для просмотра. Отправка смен приостановлена.</p>
+              {readOnly ? <div className="alert tone-info" role="status">
+                <div className="alert-body">{mayCloseShifts
+                  ? 'Кабинет доступен для просмотра. Отправка смен приостановлена.'
+                  : 'Вы можете смотреть свои начисления. Для закрытия смен обратитесь к франчайзи.'}
                 {d.open_shift && <p>Незакрытая смена · {d.open_shift.location_name} · {formatDate(d.open_shift.day)}</p>}
+                </div>
               </div> : d.open_shift ? (
                 <section className="shift-card" aria-label="Открытая смена">
                   <div className="shift-label"><span className="on-dot" />Незакрытая смена · {d.open_shift.location_name}</div>

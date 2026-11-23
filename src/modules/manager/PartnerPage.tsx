@@ -77,36 +77,43 @@ function AccessCard({ partnerId, ownerAccess }: { partnerId: string; ownerAccess
 }
 
 function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
+  const { can } = useSession();
+  const mayRead = can('revenue.read');
+  const mayPlan = can('plan.manage');
+  const mayEnter = can('revenue.enter');
   const [plan, setPlan] = useState(false);
   const [editLoc, setEditLoc] = useState(false);
   const [edit, setEdit] = useState<{ day: string; row?: DayRow } | null>(null);
-  const q = useQuery({ queryKey: ['revenue', 'month', l.id, month], queryFn: () => revenueMonth(l.id, month) });
+  const q = useQuery({ queryKey: ['revenue', 'month', l.id, month], enabled: mayRead, queryFn: () => revenueMonth(l.id, month) });
   return (
-    <DataState query={q}>
+    <div className="stack">
+      <div className="row">
+        <Button variant="ghost" onClick={() => setEditLoc(true)}><Edit3 size={16} aria-hidden />Данные точки</Button>
+        {l.status !== 'active' && <Badge tone="neutral">точка закрыта</Badge>}
+      </div>
+      {editLoc && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
+    {mayRead && <DataState query={q}>
       {(m) => (
         <div className="stack">
           <PlanCard m={m} />
-          <div className="row">
-            <Button onClick={() => setPlan(true)}><Target size={16} aria-hidden />{m.plan_minor ? 'Изменить план' : 'Поставить план'}</Button>
-            <Button variant="ghost" onClick={() => setEditLoc(true)}><Edit3 size={16} aria-hidden />Данные точки</Button>
-            {l.status !== 'active' && <Badge tone="neutral">точка закрыта</Badge>}
-          </div>
+          {mayPlan && <Button onClick={() => setPlan(true)}><Target size={16} aria-hidden />{m.plan_minor ? 'Изменить план' : 'Поставить план'}</Button>}
           <section>
             <h2 className="section-title">Выручка по дням</h2>
-            <p className="faint">Менеджер может внести или исправить любой день — например, если франчайзи ошибся в прошлом месяце.</p>
-            <DayList m={m} onPick={(day, row) => setEdit({ day, row })} />
+            {mayEnter && <p className="faint">Можно внести или исправить выручку за предыдущие рабочие дни.</p>}
+            <DayList m={m} readOnly={!mayEnter} onPick={(day, row) => setEdit({ day, row })} />
           </section>
-          {plan && <PlanDialog location={l} month={month} currency={l.currency} current={m.plan_minor} onClose={() => setPlan(false)} />}
-          {editLoc && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
+          {plan && mayPlan && <PlanDialog location={l} month={month} currency={l.currency} current={m.plan_minor} onClose={() => setPlan(false)} />}
           {edit && <RevenueDialog location={l.id} locationName={l.name} currency={l.currency} day={edit.day} existing={edit.row}
-            dayOff={m.days_off?.includes(edit.day)} canMarkOff={l.status === 'active' && (!m.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
+            readOnly={!mayEnter} dayOff={m.days_off?.includes(edit.day)} canMarkOff={l.status === 'active' && (!m.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
         </div>
       )}
-    </DataState>
+    </DataState>}
+    </div>
   );
 }
 
 export function PartnerPage() {
+  const { can } = useSession();
   const { id = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const [month, setMonth] = useState(params.get('month') ?? monthStart());
@@ -128,7 +135,7 @@ export function PartnerPage() {
             sub={<span className="row"><PartnerStatus partner={partner} current={current} />
               <span>{partner.currency}</span></span>}
             actions={<>
-              <Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти</Link>
+              {can('royalty.manage') && <Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти</Link>}
               <Button onClick={() => setEditing(true)}><Edit3 size={16} aria-hidden />Изменить</Button>
             </>} />
           <div className="grid grid-main">
@@ -142,7 +149,7 @@ export function PartnerPage() {
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => setAdding(true)}><Plus size={15} aria-hidden />Точка</Button>
               </div>
-              <MonthNav month={month} onChange={(m) => { setMonth(m); if (sel) setParams({ location: sel.id, month: m }, { replace: true }); }} max={monthStart()} />
+              {can('revenue.read') && <MonthNav month={month} onChange={(m) => { setMonth(m); if (sel) setParams({ location: sel.id, month: m }, { replace: true }); }} max={monthStart()} />}
               {sel ? <LocationMonthBlock key={sel.id} l={sel} month={month} /> : <EmptyState title="Точек пока нет" action={<Button onClick={() => setAdding(true)}>Добавить точку</Button>} />}
               <section>
                 <h2 className="section-title">Сотрудники франчайзи</h2>

@@ -41,6 +41,7 @@ function Recontact({ lead }: { lead: Lead }) {
 export function LeadsPage() {
   const qc = useQueryClient(); const toast = useToast();
   const [search, setSearch] = useState(''); const [onlyNew, setOnlyNew] = useState(false);
+  const [mobileStage, setMobileStage] = useState('all');
   const [editor, setEditor] = useState<{ lead?: Lead; column: string } | null>(null);
   const [trash, setTrash] = useState(false); const [restore, setRestore] = useState<Lead | null>(null);
   const [partnerLead, setPartnerLead] = useState<Lead | null>(null);
@@ -60,6 +61,7 @@ export function LeadsPage() {
     if (q.data && rq.data !== undefined) qc.setQueryData(['leads', 'inbox'], q.data.filter(l => l.status === 'new').length + rq.data);
   }, [q.data, rq.data, qc]);
   const groups = useMemo(() => groupLeads(q.data ?? [], search, onlyNew), [q.data, search, onlyNew]);
+  const matchCount = [...groups.values()].reduce((sum, rows) => sum + rows.length, 0);
   const moved = useMutation({
     mutationFn: ({ lead, column }: { lead: Lead; column: string }) => leadMove(lead, column),
     onSuccess: row => { qc.setQueryData<Lead[]>(['leads'], all => all?.map(l => l.id === row.id ? row : l)); toast('Заявка перемещена'); },
@@ -84,18 +86,25 @@ export function LeadsPage() {
         }}>Восстановить</Button>
       </div></div>)}
     </>}</DataState> : <><div className="pipeline-tools">
-      <label className="pipeline-search"><Search size={18} aria-hidden /><Input aria-label="Поиск заявок" placeholder="Instagram, имя, город, телефон" value={search} onChange={e => setSearch(e.target.value)} /></label>
+      <label className="pipeline-search"><Search size={18} aria-hidden /><Input type="search" aria-label="Поиск заявок" placeholder="Имя, телефон или Instagram" value={search} onChange={e => { setSearch(e.target.value); setMobileStage('all'); }} /></label>
       <Checkbox label="Только новые" checked={onlyNew} onChange={setOnlyNew} />
       <div className="pipeline-jump"><Select aria-label="Перейти к колонке" disabled={!q.data} defaultValue="" onChange={e => { jump(e.target.value); e.target.value = ''; }}>
         <option value="" disabled>К колонке…</option>{COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title} ({groups.get(c.id)!.length})</option>)}
       </Select></div>
+      <div className="pipeline-stage">
+        <Field label="Этап заявки">{id => <Select id={id} disabled={!q.data} value={mobileStage} onChange={e => setMobileStage(e.target.value)}>
+          <option value="all">Все этапы ({matchCount})</option>
+          {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title} ({groups.get(c.id)!.length})</option>)}
+        </Select>}</Field>
+      </div>
     </div>
     <ActionError error={moved.error} />
     <DataState query={q} skeleton={5}>{all => <>
       {!all.length && <p className="faint">Добавьте заявку по нику Instagram или имени. Анкеты с сайта появятся автоматически.</p>}
-      {all.length > 0 && ![...groups.values()].some(list => list.length) && <p role="status" className="faint">По выбранным условиям заявок нет.</p>}
-      <div className="pipeline-board" ref={board} role="region" aria-label="Канбан заявок. Прокручивается горизонтально" tabIndex={0}>
+      {all.length > 0 && matchCount === 0 && <p role="status" className="faint">По выбранным условиям заявок нет.</p>}
+      <div className="pipeline-board" ref={board} role="region" aria-label="Заявки по этапам" tabIndex={0}>
         {COLUMNS.map(column => <section key={column.id} id={`lead-column-${column.id}`} aria-labelledby={`lead-heading-${column.id}`}
+          data-mobile-visible={mobileStage === column.id || (mobileStage === 'all' && groups.get(column.id)!.length > 0)}
           className={`pipeline-column${column.id === '111' ? ' ready' : ''}${column.status ? ` stage-${column.id}` : ''}${over === column.id ? ' drag-over' : ''}`}
           onDragOver={e => { if (!moved.isPending && (dragId || e.dataTransfer.types.includes('text/plain'))) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(column.id); } }}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null); }}
@@ -111,7 +120,7 @@ export function LeadsPage() {
             const pending = moved.isPending && moved.variables.lead.id === l.id;
             return <article key={l.id} className={`lead-tile${pending ? ' pending' : ''}`} draggable={!moved.isPending} aria-busy={pending}
               onDragStart={e => { e.dataTransfer.setData('text/plain', l.id); e.dataTransfer.effectAllowed = 'move'; setDragId(l.id); moved.reset(); }} onDragEnd={() => { setDragId(null); setOver(null); }}>
-              <div className="lead-tile-top"><span>{l.city}</span><GripVertical size={15} aria-hidden /></div>
+              <div className="lead-tile-top"><span>{l.city}</span><GripVertical className="lead-grip" size={15} aria-hidden /></div>
               <button className="lead-open" onClick={() => setEditor({ lead: l, column: stageValue(l) })} disabled={pending}><strong>{l.name}</strong><ArrowRight size={16} aria-hidden /></button>
               <Factors value={shownFactors(l)} />
               <div className="lead-tile-foot">
@@ -140,7 +149,9 @@ export function LeadsPage() {
       void qc.invalidateQueries({queryKey:['leads']}); setEditor(null);
     }} onSaved={row => {
       qc.setQueryData<Lead[]>(['leads'], (all = []) => all.some(l => l.id === row.id) ? all.map(l => l.id === row.id ? row : l) : [row, ...all]);
-      setEditor(null); setSearch(''); setOnlyNew(false); requestAnimationFrame(() => jump(columnFor(row)));
+      setEditor(null); setSearch(''); setOnlyNew(false);
+      const stage = columnFor(row);
+      setMobileStage(stage); requestAnimationFrame(() => jump(stage));
     }} />}
   </div>;
 }

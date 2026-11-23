@@ -173,7 +173,7 @@ function FinanceStatement({ finance }: { finance: Finance }) {
 }
 
 export function FinancePage() {
-  const { me } = useSession();
+  const { me, can } = useSession();
   const qc = useQueryClient();
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(null);
@@ -195,7 +195,7 @@ export function FinancePage() {
   const [editing, setEditing] = useState(false);
   const [drive, setDrive] = useState<{ finance: Finance; userId: string } | null>(null);
   const availableFinance = !q.error && q.data;
-  const readOnly = Boolean(q.data?.partner_status && q.data.partner_status !== 'active');
+  const readOnly = !can('revenue.enter') || Boolean(q.data?.partner_status && q.data.partner_status !== 'active');
   const showEditor = editing && !readOnly;
 
   return (
