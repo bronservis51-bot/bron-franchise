@@ -11,7 +11,7 @@ import { createDb, readContract, root } from './db-lib.mjs';
 const PORT = Number(process.env.PORT ?? 54321);
 const stagingPassword = process.env.BRON_STAGING_ACCOUNT_PASSWORD;
 if (process.env.BRON_STAGING_REQUIRED === '1' && !stagingPassword) throw new Error('The staging account password is required');
-if (stagingPassword && stagingPassword.length < 16) throw new Error('The staging account password must have at least 16 characters');
+if (stagingPassword && stagingPassword.length < 12) throw new Error('The staging account password must have at least 12 characters');
 const LOCAL = join(root, 'local');
 const DATA = join(LOCAL, 'pgdata');
 const FILES = join(LOCAL, 'files');

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 const ACCESS = '/_preview/access';
 const CHECK = '/_preview/check';
 const COOKIE = '__Host-bron-preview';
+const FORM_COOKIE = '__Host-bron-preview-form';
 const AGE = 30 * 24 * 60 * 60;
 const ATTEMPT_WINDOW = 15 * 60 * 1000;
 const API_PATH = /^\/(?:auth\/v1\/(?:health|token|user|logout)|rest\/v1\/[a-zA-Z0-9_/]+|storage\/v1\/object\/[a-zA-Z0-9_./~%\-]+)$/;
@@ -15,10 +16,15 @@ function equal(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function loginPage(error = '') {
+function loginPage(token, error = '') {
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Бронь Сервис — тестовый кабинет</title>
   <style>*,*::before,*::after{box-sizing:border-box}body{margin:0;background:#10131a;color:#f3f5fa;font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100dvh;padding:16px}main{width:min(100%,400px);background:#171b24;border:1px solid #323b4f;border-radius:18px;padding:24px}h1{font-size:25px;line-height:1.2;margin:0 0 12px}p{color:#b4bed0;margin:0 0 20px}label{display:block;font-weight:600}input,button{width:100%;margin-top:8px;font:inherit;border-radius:9px;min-height:44px;padding:10px 12px}input{color:inherit;background:#10131a;border:1px solid #525f76}button{background:#3359ea;color:#fff;font-weight:650;border:0;margin-top:16px}input:focus-visible,button:focus-visible{outline:3px solid #a6b9fe;outline-offset:3px}[role=alert]{color:#ffb5b5;margin-top:12px}</style></head>
-  <body><main><h1>Тестовый кабинет</h1><p>Бронь Сервис · учебные профили и данные</p><form method="post" action="${ACCESS}"><label for="access">Код доступа к стенду</label><input id="access" name="access" type="password" autocomplete="current-password" required maxlength="96"><button type="submit">Открыть кабинет</button>${error ? '<p role="alert">' + error + '</p>' : ''}</form></main></body></html>`;
+  <body><main><h1>Тестовый кабинет</h1><p>Бронь Сервис · учебные профили и данные</p><form method="post" action="${ACCESS}"><input type="hidden" name="form_token" value="${token}"><label for="access">Код доступа к стенду</label><input id="access" name="access" type="password" autocomplete="current-password" required maxlength="96"><button type="submit">Открыть кабинет</button>${error ? '<p role="alert">' + error + '</p>' : ''}</form></main></body></html>`;
+}
+
+function cookieValue(req, name) {
+  return (req.headers.cookie ?? '').split(';').map(value => value.trim())
+    .find(value => value.startsWith(name + '='))?.slice(name.length + 1) ?? '';
 }
 
 export function createPreviewGate({ origin, code, secret, apiPort, now = Date.now }) {
@@ -31,27 +37,32 @@ export function createPreviewGate({ origin, code, secret, apiPort, now = Date.no
   let failures = 0;
   let attemptWindowStart = now();
 
-  function authorized(req) {
-    const token = (req.headers.cookie ?? '').split(';').map(value => value.trim())
-      .find(value => value.startsWith(COOKIE + '='))?.slice(COOKIE.length + 1);
-    const parts = token?.match(/^(\d{1,12})\.([a-zA-Z0-9_-]{22})\.([a-zA-Z0-9_-]{43})$/);
+  function issue(purpose, age) {
+    const ticket = Math.floor(now() / 1000 + age) + '.' + randomBytes(16).toString('base64url');
+    return ticket + '.' + sign(purpose + '.' + ticket);
+  }
+
+  function valid(token, purpose) {
+    const parts = token.match(/^(\d{1,12})\.([a-zA-Z0-9_-]{22})\.([a-zA-Z0-9_-]{43})$/);
     if (!parts) return false;
     const [, expiry, nonce, signature] = parts;
-    return Number(expiry) * 1000 > now() && equal(signature, sign(expiry + '.' + nonce));
+    return Number(expiry) * 1000 > now() && equal(signature, sign(purpose + '.' + expiry + '.' + nonce));
+  }
+
+  function renderAccess(res, status, error) {
+    const age = ATTEMPT_WINDOW / 1000;
+    const token = issue('form', age);
+    res.writeHead(status, { 'Set-Cookie': FORM_COOKIE + '=' + token + '; Path=/; Max-Age=' + age + '; Secure; HttpOnly; SameSite=Strict' });
+    res.end(loginPage(token, error));
   }
 
   async function access(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
-    if (req.method === 'GET') { res.end(loginPage()); return; }
-    if (req.method !== 'POST' || req.headers.origin !== origin) { res.writeHead(403).end(); return; }
-    if (now() - attemptWindowStart >= ATTEMPT_WINDOW) {
-      attemptWindowStart = now();
-      failures = 0;
-    }
-    if (failures >= 12) {
-      res.writeHead(429, { 'Retry-After': Math.max(1, Math.ceil((attemptWindowStart + ATTEMPT_WINDOW - now()) / 1000)) })
-        .end(loginPage('Слишком много попыток. Попробуйте через несколько минут.'));
+    if (req.method === 'GET') { renderAccess(res, 200); return; }
+    const sender = req.headers.origin;
+    if (req.method !== 'POST' || (sender && sender !== 'null' && sender !== origin) || req.headers['sec-fetch-site'] === 'cross-site') {
+      res.writeHead(403).end();
       return;
     }
     let body = '';
@@ -59,16 +70,30 @@ export function createPreviewGate({ origin, code, secret, apiPort, now = Date.no
       body += chunk.toString('utf8');
       if (body.length > 1024) { res.writeHead(413).end(); return; }
     }
-    if (!equal(new URLSearchParams(body).get('access') ?? '', code)) {
+    const form = new URLSearchParams(body);
+    const token = cookieValue(req, FORM_COOKIE);
+    if (!valid(token, 'form') || !equal(token, form.get('form_token') ?? '')) {
+      renderAccess(res, 403, 'Форма открыта заново. Введите код ещё раз.');
+      return;
+    }
+    if (now() - attemptWindowStart >= ATTEMPT_WINDOW) {
+      attemptWindowStart = now();
+      failures = 0;
+    }
+    if (failures >= 12) {
+      res.setHeader('Retry-After', Math.max(1, Math.ceil((attemptWindowStart + ATTEMPT_WINDOW - now()) / 1000)));
+      renderAccess(res, 429, 'Слишком много попыток. Попробуйте через несколько минут.');
+      return;
+    }
+    if (!equal(form.get('access') ?? '', code)) {
       failures++;
-      res.writeHead(401).end(loginPage('Код доступа не подошёл.'));
+      renderAccess(res, 401, 'Код доступа не подошёл.');
       return;
     }
     failures = 0;
-    const ticket = Math.floor(now() / 1000 + AGE) + '.' + randomBytes(16).toString('base64url');
     res.writeHead(303, {
       Location: '/',
-      'Set-Cookie': COOKIE + '=' + ticket + '.' + sign(ticket) + '; Path=/; Max-Age=' + AGE + '; Secure; HttpOnly; SameSite=Lax',
+      'Set-Cookie': COOKIE + '=' + issue('access', AGE) + '; Path=/; Max-Age=' + AGE + '; Secure; HttpOnly; SameSite=Lax',
     }).end();
   }
 
@@ -80,7 +105,7 @@ export function createPreviewGate({ origin, code, secret, apiPort, now = Date.no
       catch { if (!res.headersSent) res.writeHead(400).end(); }
       return;
     }
-    if (!authorized(req)) {
+    if (!valid(cookieValue(req, COOKIE), 'access')) {
       if (path === CHECK && (req.headers['x-forwarded-uri']?.split('?')[0] === '/' || req.headers.accept?.includes('text/html'))) {
         res.writeHead(303, { Location: ACCESS }).end();
       } else res.writeHead(401).end();

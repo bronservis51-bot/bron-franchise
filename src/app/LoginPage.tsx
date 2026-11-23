@@ -7,7 +7,7 @@ import { useSession } from '../platform/session';
 import { Button, Checkbox, Field, Input } from '../ui';
 import { loginErrorText, useServerCheck } from './loginDiagnostics';
 import { AppUpdateBanner } from './AppUpdateBanner';
-import { loginEmail } from '../platform/login';
+import { loginEmail, stagingLoginEmail } from '../platform/login';
 import { managerRecoveryAvailable } from '../platform/managerRecovery';
 import { InstallButton } from './InstallApp';
 import { config } from '../platform/config';
@@ -31,7 +31,7 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(loginEmail(email), password, remember);
+      await signIn(config.appEnv === 'staging' ? stagingLoginEmail(email) : loginEmail(email), password, remember);
       navigate('/', { replace: true });
     } catch (err) {
       fail(err);
