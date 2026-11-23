@@ -8,6 +8,7 @@ import { Button, Card, Checkbox, ConfirmDialog, DataState, Field, Input, Select,
 import { Markdown } from '../../ui/markdown';
 import { getRevision } from '../knowledge/api';
 import { MonthNav } from '../revenue/components';
+import { LearningCourse, type Lesson, type Overview } from './LearningCourse';
 
 type Quiz = {prompt:string; choices:string[]; correct:number};
 type Config = {version:number; revision_id?:string; enabled?:boolean; for_managers?:boolean; for_sales?:boolean; for_trainees?:boolean; for_franchisees?:boolean; stage?:string; position?:number; pass_percent?:number; quiz_size?:number; questions:Quiz[]};
@@ -46,8 +47,6 @@ function LessonSettings({article,revision,partner}:{article:string;revision:stri
  </div>}</DataState></div>;
 }
 
-type Lesson = {article_id:string;revision_id:string;title:string;stage:string;questions:number;due:string|null;percent:number|null;completed:boolean;active:boolean};
-type Overview = {day:string;audience:string;items:Lesson[]};
 type Catalog = Lesson & {position:number;ready:boolean;local_current:boolean;local_questions:number;for_sales:boolean;for_trainees:boolean;for_managers:boolean;for_franchisees:boolean};
 export function LearningPage(){
  const {isStaff,isTeamManager}=useSession();
@@ -82,24 +81,9 @@ function MyLessons(){
  useEffect(()=>{if(!preview)void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc,preview]);
  return <>
  <PageHeader title="Обучение" sub={q.data?.audience === 'trainees' ? 'Программа стажировки' : undefined} />
- <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены"/>}>{d=>{
-  const next = d.items.find(l => l.active) ?? d.items.find(l => !l.completed || (l.due !== null && l.due <= d.day));
-  const nextReview = next ? undefined : d.items.map(l => l.due).filter(due => due !== null).sort()[0];
-  return <div className="stack">
-   {next ? <Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><Link className="btn btn-primary" data-tour-target="first-lesson" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':next.completed?'Повторить':'Начать'}</Link></Card> :
-    <Card title="Все назначенные уроки пройдены" className="learning-next">{nextReview && <p>Ближайшее повторение: {formatDate(nextReview)}.</p>}</Card>}
-   <details className="learning-program">
-    <summary>Все уроки ({d.items.filter(l=>l.completed).length} из {d.items.length} пройдено)</summary>
-    <div className="stack">{d.items.map(l=><Card key={l.article_id}><div className="row between">
-     <div className="grow"><span className="faint">{l.stage}</span><h3>{l.title}</h3>
-      <div className="faint">{l.percent === null ? 'Ещё не пройден' : `Последний результат: ${l.percent}%`}</div>
-      {l.due && <div className="faint">Повторение: {formatDate(l.due)}</div>}
-     </div>
-     <Link className="btn" to={`/learning/lesson/${l.article_id}`}>{l.active?'Продолжить':l.completed?'Повторить':'Начать'}</Link>
-    </div></Card>)}</div>
-   </details>
-  </div>;
- }}</DataState>
+ <DataState query={q} empty={d => d.items.length ? null : <EmptyState title="Уроки пока не назначены" />}>
+   {course => <LearningCourse course={course} />}
+ </DataState>
  </>;
 }
 function Program({partner,editable}:{partner:string|null;editable:boolean}) {

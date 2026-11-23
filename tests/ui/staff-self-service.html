@@ -101,7 +101,7 @@ try {
     } else {
       assert(next.textContent.includes('12.11.2026'), 'Не показана ближайшая дата повторения');
       assert(!next.querySelector('a'), 'Пройденный урок ошибочно предложен как следующий');
-      assert(doc.querySelector('.learning-program summary'), 'Исчезла полная программа обучения');
+      assert(doc.querySelector('.learning-program a[href*="/learning/lesson/"]'), 'Исчезла полная программа обучения');
     }
   }
   assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Содержимое выходит за ширину окна');

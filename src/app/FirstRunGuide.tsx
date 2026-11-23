@@ -23,84 +23,82 @@ type Step = {
 };
 
 const knowledge: Step = {
-  id: 'knowledge', title: 'Найдите инструкцию', text: 'В «Знаниях» можно найти инструкции по работе на точке и ответы на частые вопросы.',
+  id: 'knowledge', title: 'Найдите инструкцию', text: 'Введите вопрос или тему в поиск.',
   icon: BookOpen, target: 'nav-kb', route: '/kb',
 };
 const profile: Step = {
-  id: 'profile', title: 'Откройте свой профиль', text: 'Здесь указаны ваша роль и область доступа. Из профиля можно снова открыть «Первые шаги».',
+  id: 'profile', title: 'Откройте профиль', text: 'Здесь можно сменить пароль.',
   icon: User, target: 'profile',
 };
 const shift: Step = {
-  id: 'shift', title: 'Закройте смену', text: 'Кнопка открывает форму смены. В ней указывают точку, дату, наличные и оплату картой.',
-  fallbackText: 'На главной появится кнопка «Закрыть смену», когда смену можно будет оформить.',
+  id: 'shift', title: 'Закройте смену', text: 'Укажите выручку наличными и картой.',
+  fallbackText: 'Кнопка появится на главной, когда смену можно закрыть.',
   icon: ClipboardCheck, target: 'shift-close', fallback: 'nav-home', route: '/',
 };
 const earnings: Step = {
-  id: 'earnings', title: 'Сверьте заработок', text: 'Выберите месяц, чтобы увидеть начисления за каждую половину месяца и даты выплат.',
+  id: 'earnings', title: 'Посмотрите начисления', text: 'Выберите месяц и проверьте заработок.',
   icon: Clock3, target: 'payroll-history', fallback: 'nav-home', route: '/',
 };
 const lessons: Step = {
-  id: 'lessons', title: 'Пройдите урок', text: 'Откройте текущий урок, изучите материал и ответьте на вопросы.',
-  fallbackText: 'В «Обучении» появятся уроки и программа стажировки, когда их вам назначат.',
+  id: 'lessons', title: 'Пройдите урок', text: 'Откройте назначенный урок.',
+  fallbackText: 'Здесь появятся назначенные уроки.',
   icon: GraduationCap, target: 'first-lesson', fallback: 'nav-learning', route: '/learning',
 };
 const directory: Step = {
-  id: 'directory', title: 'Найдите сотрудников', text: 'Здесь доступна работа с командой в пределах выданных вам прав.',
+  id: 'directory', title: 'Откройте сотрудников', text: 'Найдите сотрудника по имени.',
   icon: Users, target: 'nav-staff', route: '/staff',
 };
 const order: Step = {
-  id: 'order', title: 'Закажите материалы', text: 'Кнопка в шапке ведёт в раздел заказа и предзаказа материалов.',
-  icon: ShoppingCart, target: 'order',
+  id: 'order', title: 'Закажите материалы', text: 'Здесь можно открыть заказ или предзаказ.',
+  icon: ShoppingCart, target: 'order', route: '/order',
 };
 
 function guideSteps(role: FirstRunRole, can: (permission: string) => boolean, readOnly: boolean): Step[] {
   const access = workspaceAccess(role, can);
   const steps: Step[] = [];
   if (role === 'manager') {
-    if (access.network) {
-      steps.push(
-        { id: 'network', title: 'Найдите франчайзи', text: 'На главной найдите франчайзи. В его карточке можно открыть нужную точку и проверить доступ в кабинет.', icon: Store, target: 'nav-home', route: '/' },
-        { id: 'leads', title: 'Откройте заявки', text: 'Здесь появляются обращения с сайта. Меняйте этап заявки по мере переговоров.', icon: Inbox, target: 'nav-leads', route: '/leads' },
-      );
+    if (access.network) steps.push(
+      { id: 'network', title: 'Найдите франчайзи', text: 'Откройте его карточку из списка.', icon: Store, target: 'nav-home', route: '/' },
+      { id: 'leads', title: 'Откройте заявки', text: 'Здесь появляются обращения с сайта.', icon: Inbox, target: 'nav-leads', route: '/leads' },
+    );
+    if (access.finance) steps.push({
+      id: 'finance', title: access.network ? 'Откройте экономику' : 'Откройте роялти',
+      text: access.network ? 'Выберите месяц для просмотра сводки.' : 'Выберите период для сверки оплат.',
+      icon: Wallet, target: 'nav-finance', route: '/finance',
+    });
+  } else if (role === 'franchisee') {
+    if (can('revenue.read')) {
+      const mayEnterRevenue = !readOnly && can('revenue.enter');
+      steps.push({
+        id: 'revenue', title: mayEnterRevenue ? 'Найдите ввод выручки' : 'Посмотрите историю выручки',
+        text: mayEnterRevenue ? 'Откройте форму выручки за сегодня.' : 'Выберите точку и месяц.',
+        fallbackText: 'На главной можно выбрать точку и день.',
+        icon: Store, target: mayEnterRevenue ? 'revenue-entry' : 'nav-home', fallback: 'nav-home', route: '/',
+      });
     }
     if (access.finance) steps.push({
-      id: 'finance', title: access.network ? 'Сверьте экономику сети' : 'Сверьте роялти',
-      text: access.network ? 'Выберите месяц, чтобы сверить поставки и расходы сети.' : 'Выберите период, чтобы сверить начисления и оплаты.',
+      id: 'finance', title: 'Проверьте финансы', text: 'Выберите месяц для просмотра отчёта.',
       icon: Wallet, target: 'nav-finance', route: '/finance',
     });
-  }
-  if (role === 'franchisee' && can('revenue.read')) {
-    const mayEnterRevenue = !readOnly && can('revenue.enter');
-    steps.push({
-      id: 'revenue', title: mayEnterRevenue ? 'Найдите ввод выручки' : 'Откройте историю точки',
-      text: mayEnterRevenue ? 'Кнопка открывает форму выручки за сегодня. В календаре можно открыть другой день.'
-        : 'На главной выберите точку и месяц, чтобы сверить выручку. При подготовке к открытию здесь будет список задач.',
-      fallbackText: 'На главной выберите точку и месяц. Если точка готовится к открытию, здесь появится список задач.',
-      icon: Store, target: mayEnterRevenue ? 'revenue-entry' : 'nav-home', fallback: 'nav-home', route: '/',
-    });
-    if (access.finance) steps.push({
-      id: 'finance', title: 'Сверьте финансы', text: 'Выберите месяц, чтобы посмотреть начисления и расходы или скачать отчёт.',
-      icon: Wallet, target: 'nav-finance', route: '/finance',
-    });
-  }
-  if (access.learning) {
+    if (access.staffDirectory) steps.push(directory);
+    else if (access.order && !readOnly) steps.push(order);
+  } else if (access.learning) {
     if (can('shift.work') && !readOnly) steps.push(shift);
-    if (role === 'staff' || can('shift.work')) steps.push(earnings);
+    else if (role === 'staff' || can('shift.work')) steps.push(earnings);
     else steps.push({
-      id: 'team-revenue', title: 'Проверьте выручку точек', text: 'На главной выберите месяц, чтобы сверить выручку назначенных точек.',
+      id: 'team-revenue', title: 'Проверьте выручку точек', text: 'Выберите месяц на главной.',
       icon: Store, target: 'nav-home', route: '/',
     });
     steps.push(lessons);
+    if (access.staffDirectory) steps.push(directory);
+  } else if (role === 'support') {
+    if (can('kb.edit')) steps.push({
+      id: 'questions', title: 'Откройте вопросы', text: 'На главной видны вопросы для поддержки.',
+      icon: Inbox, target: 'nav-home', route: '/',
+    });
+    if (can('kb.read') || can('kb.edit')) steps.push(knowledge);
   }
-  if (role === 'support' && can('kb.edit')) steps.push({
-    id: 'questions', title: 'Откройте вопросы команды', text: 'Вопросы, переданные в техническую поддержку, появляются на главной.',
-    icon: Inbox, target: 'nav-home', route: '/',
-  });
-  if (access.staffDirectory) steps.push(directory);
-  if (access.order && !readOnly) steps.push(order);
-  if (can('kb.read') || can('kb.edit')) steps.push(knowledge);
-  steps.push(profile);
-  return steps;
+  return steps.length ? steps : [can('kb.read') ? knowledge : profile];
 }
 
 const guideKey = (userId: string, role: FirstRunRole) => 'bron.first-run-v2:' + userId + ':' + role;
@@ -189,6 +187,7 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
   const navigate = useNavigate();
   const preview = location.state as FirstRunPreview | null;
   const origin = useRef(preview?.firstRunOrigin ?? location);
+  const returning = useRef(false);
   const [stepId, setStepId] = useState<string>();
   const [placement, setPlacement] = useState<Placement>();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -260,21 +259,37 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
 
   const isPreview = preview?.firstRunPreview === true;
   useEffect(() => {
-    if (!isPreview && location.key !== origin.current.key) onClose(true);
+    if (isPreview) return;
+    if (returning.current) {
+      dialog.current?.close();
+      onClose(true);
+      requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
+    } else if (location.key !== origin.current.key) onClose(true);
   }, [isPreview, location.key, onClose]);
 
   function finish() {
-    if (!dialog.current?.open) return;
+    if (!dialog.current?.open || returning.current) return;
+    if (isPreview) {
+      const { pathname, search, hash, state } = origin.current;
+      returning.current = true;
+      void navigate({ pathname, search, hash }, { replace: true, state });
+      return;
+    }
     dialog.current.close();
-    onClose(isPreview && origin.current.pathname !== location.pathname);
+    onClose();
     if (!replay) requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
   }
 
   function go(next: Step) {
+    if (returning.current) return;
     setStepId(next.id);
-    if (!onEditor && next.route && next.route !== location.pathname) {
+    previewRoute(next.route);
+  }
+
+  function previewRoute(path?: string) {
+    if (!returning.current && !onEditor && path && path !== location.pathname) {
       const state: FirstRunPreview = { firstRunPreview: true, firstRunOrigin: origin.current };
-      void navigate(next.route, { replace: true, state });
+      void navigate(path, { replace: true, state });
     }
   }
 
@@ -296,12 +311,19 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
   }
 
   const target = placement?.target;
+  const targetStyle = target && { left: target.left, top: target.top, width: target.width, height: target.height };
+  const canOpenTarget = !onEditor && target && (target.name === active.target || target.name === active.fallback)
+    && (target.name.startsWith('nav-') || target.name === 'order') && active.route;
   return createPortal(
     <dialog className="first-run-dialog" ref={dialog} style={placement?.viewport}
       data-targeted={Boolean(target)} aria-labelledby={titleId} aria-describedby={progressId + ' ' + textId}
       onCancel={event => { event.preventDefault(); finish(); }} onKeyDown={keyboard}>
-      {target && <div className="guide-spotlight" data-target={target.name} aria-hidden
-        style={{ left: target.left, top: target.top, width: target.width, height: target.height }} />}
+      {target && (canOpenTarget ? <button type="button" className="guide-spotlight guide-spotlight-action"
+        data-target={target.name} style={targetStyle} aria-label={active.title} onClick={() => {
+          if (location.pathname !== active.route) previewRoute(active.route);
+          else if (last) finish();
+          else go(steps[index + 1]);
+        }} /> : <div className="guide-spotlight" data-target={target.name} style={targetStyle} aria-hidden />)}
       {placement?.arrow && <span className="guide-arrow" style={placement.arrow} aria-hidden />}
       <div ref={panel} className="guide-card" style={placement?.panel}>
         <div className="guide-meta"><span>{workspaceTitle[role]}</span><span id={progressId}>Шаг {index + 1} из {steps.length}</span></div>

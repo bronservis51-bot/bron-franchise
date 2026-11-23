@@ -1,9 +1,9 @@
-// Карточка франчайзи для менеджера: данные, договор и документы; точки, план и выручка по дням, правка любого дня, доступ.
+// Карточка франчайзи для менеджера сети.
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Edit3, KeyRound, Landmark, Phone, Plus, Target, UserPlus, X } from 'lucide-react';
-import { monthStart } from '../../platform/dates';
+import { formatDate, monthStart } from '../../platform/dates';
 import { ActionError, Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 import { CopyCredential } from '../../ui/CredentialFields';
 import { PartnerCardPanel } from './PartnerCard';
@@ -21,6 +21,27 @@ import { formatPhone } from '../staff/api';
 import { phoneLoginInitial } from '../../platform/login';
 import { useSession } from '../../platform/session';
 import { OWNER_ACCESS_LABEL, PartnerStatus } from './PartnerStatus';
+import './partner-page.css';
+
+const sections = [
+  { id: 'locations', label: 'Точки' },
+  { id: 'contacts', label: 'Контакты' },
+  { id: 'terms', label: 'Условия и роялти' },
+  { id: 'team', label: 'Команда' },
+  { id: 'access', label: 'Доступы' },
+  { id: 'documents', label: 'Документы' },
+] as const;
+
+const staffPermissions = ['staff.manage', 'staff.view', 'staff.create', 'staff.pay_edit', 'team.manage'];
+
+function changeParams(params: URLSearchParams, fields: Record<string, string | null>) {
+  const next = new URLSearchParams(params);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === null) next.delete(key);
+    else next.set(key, value);
+  }
+  return next;
+}
 
 function AccessCard({ partnerId, ownerAccess }: { partnerId: string; ownerAccess?: ManagerPartnerStatus['owner_access'] }) {
   const { me } = useSession();
@@ -81,17 +102,26 @@ function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
   const mayRead = can('revenue.read');
   const mayPlan = can('plan.manage');
   const mayEnter = can('revenue.enter');
+  const mayManage = can('org.manage');
   const [plan, setPlan] = useState(false);
   const [editLoc, setEditLoc] = useState(false);
   const [edit, setEdit] = useState<{ day: string; row?: DayRow } | null>(null);
   const q = useQuery({ queryKey: ['revenue', 'month', l.id, month], enabled: mayRead, queryFn: () => revenueMonth(l.id, month) });
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: l.timezone });
+  const openedOn = l.opened_on && /^\d{4}-\d{2}-\d{2}$/.test(l.opened_on) ? l.opened_on : null;
+  const scheduled = l.status === 'active' && openedOn && openedOn > today;
   return (
     <div className="stack">
-      <div className="row">
-        <Button variant="ghost" onClick={() => setEditLoc(true)}><Edit3 size={16} aria-hidden />Данные точки</Button>
-        {l.status !== 'active' && <Badge tone="neutral">точка закрыта</Badge>}
+      <div className="row between partner-point-heading">
+        <div>
+          <h2 className="section-title">{l.name}</h2>
+          <div className="faint">{[l.city, l.address].filter(Boolean).join(', ')}</div>
+          {openedOn && <div className="faint">{scheduled ? 'Открытие запланировано на' : 'Дата открытия'} {formatDate(openedOn)}</div>}
+          {l.status !== 'active' && <Badge tone="neutral">Точка закрыта</Badge>}
+        </div>
+        {mayManage && <Button size="sm" onClick={() => setEditLoc(true)}><Edit3 size={16} aria-hidden />Данные точки</Button>}
       </div>
-      {editLoc && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
+      {editLoc && mayManage && <LocationDialog partnerId={l.partner_id} location={l} onClose={() => setEditLoc(false)} />}
     {mayRead && <DataState query={q}>
       {(m) => (
         <div className="stack">
@@ -113,58 +143,98 @@ function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
 }
 
 export function PartnerPage() {
-  const { can } = useSession();
-  const { id = '' } = useParams();
+  const { id } = useParams();
+  return <PartnerWorkspace key={id} id={id ?? ''} />;
+}
+
+function PartnerWorkspace({ id }: { id: string }) {
+  const { can, me } = useSession();
   const [params, setParams] = useSearchParams();
-  const [month, setMonth] = useState(params.get('month') ?? monthStart());
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<'details' | 'contacts' | null>(null);
   const [adding, setAdding] = useState(false);
+  const [pointHistory, setPointHistory] = useState(false);
+  const mayManage = can('org.manage');
+  const mayRevenue = can('revenue.read');
+  const mayRoyalty = can('royalty.manage');
+  const maySeeRoyalty = mayRoyalty || can('royalty.read');
+  const mayTeam = Boolean(me?.assignments.some(a => (a.scope_type === 'company' || a.scope_id === id)
+    && a.permissions.some(permission => staffPermissions.includes(permission))));
+  const available = sections
+    .filter(section => section.id === 'team' ? mayTeam : section.id === 'locations' || mayManage)
+    .map(section => section.id === 'terms' && !maySeeRoyalty ? { ...section, label: 'Условия' } : section);
+  const requested = params.get('section');
+  const section = available.find(item => item.id === requested) ?? available[0];
+  const maxMonth = monthStart();
+  const requestedMonth = params.get('month');
+  const month = requestedMonth && /^\d{4}-(0[1-9]|1[0-2])-01$/.test(requestedMonth) && requestedMonth <= maxMonth ? requestedMonth : maxMonth;
   const p = useQuery({ queryKey: ['partners'], queryFn: partners });
   const locs = useQuery({ queryKey: ['locations', id], queryFn: () => locationsOf(id) });
-  const status = useQuery({ queryKey: managerPartnerStatusKey, queryFn: managerPartnerStatus });
+  const status = useQuery({ queryKey: managerPartnerStatusKey, queryFn: managerPartnerStatus, enabled: mayManage });
   const partner = p.data?.find((x) => x.id === id);
   const current = status.data?.find(x => x.partner_id === id);
   const sel = locs.data?.find((l) => l.id === params.get('location')) ?? locs.data?.[0];
-  useEffect(() => { if (sel && params.get('location') !== sel.id) setParams({ location: sel.id, month }, { replace: true }); }, [sel, params, setParams, month]);
+  useEffect(() => {
+    if (mayTeam && params.has('employee') && requested !== 'team') {
+      setParams(changeParams(params, { section: 'team' }), { replace: true });
+    }
+  }, [mayTeam, params, requested, setParams]);
+
+  const update = (fields: Record<string, string>, replace = false) =>
+    setParams(changeParams(params, fields), { replace });
+  const addPoint = <Button size="sm" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Добавить точку</Button>;
 
   return (
     <DataState query={p} empty={() => (partner ? null : <EmptyState title="Франчайзи не найден" />)}>
       {() => partner && (
-        <>
+        <div className="partner-page">
           <PageHeader back={{ to: '/', label: 'Франчайзи' }} title={partner.name}
             sub={<span className="row"><PartnerStatus partner={partner} current={current} />
               <span>{partner.currency}</span></span>}
-            actions={<>
-              {can('royalty.manage') && <Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти</Link>}
-              <Button onClick={() => setEditing(true)}><Edit3 size={16} aria-hidden />Изменить</Button>
-            </>} />
-          <div className="grid grid-main">
-            <div className="stack">
+            actions={mayManage && <Button onClick={() => setEditing('details')}><Edit3 size={16} aria-hidden />Изменить данные</Button>} />
+          <nav className="partner-section-nav" aria-label="Разделы карточки">
+            {available.map(item => <Link key={item.id} to={{ search: `?${changeParams(params, { section: item.id, employee: null })}` }}
+              aria-current={section.id === item.id ? 'page' : undefined}>{item.label}</Link>)}
+          </nav>
+          <section className="stack partner-section" aria-label={section.label}>
+            {section.id === 'locations' && <>
               {partner.preparation_stage && <PartnerLaunchPreview partner={partner.id} />}
-              <div className="row between">
-                <div className="chips" role="group" aria-label="Точка" style={{ marginBottom: 0 }}>
-                  {(locs.data ?? []).map((l) => (
-                    <button key={l.id} type="button" className="chip" aria-pressed={l.id === sel?.id} onClick={() => setParams({ location: l.id, month })}>{l.name}</button>
-                  ))}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setAdding(true)}><Plus size={15} aria-hidden />Точка</Button>
-              </div>
-              {can('revenue.read') && <MonthNav month={month} onChange={(m) => { setMonth(m); if (sel) setParams({ location: sel.id, month: m }, { replace: true }); }} max={monthStart()} />}
-              {sel ? <LocationMonthBlock key={sel.id} l={sel} month={month} /> : <EmptyState title="Точек пока нет" action={<Button onClick={() => setAdding(true)}>Добавить точку</Button>} />}
-              <section>
+              <DataState query={locs} skeleton={3} empty={rows => !rows.length && <EmptyState title="Точек пока нет" action={mayManage && addPoint} />}>
+                {rows => <>
+                  <div className="row between partner-point-actions">
+                    <div className="chips partner-point-switch" role="group" aria-label="Торговая точка">
+                      {rows.map(l => <button key={l.id} type="button" className="chip" aria-pressed={l.id === sel?.id}
+                        onClick={() => update({ location: l.id, month })}>{l.name}</button>)}
+                    </div>
+                    {mayManage && addPoint}
+                  </div>
+                  {mayRevenue && sel && <MonthNav month={month} onChange={value => update({ location: sel.id, month: value }, true)} max={maxMonth} />}
+                  {sel && <LocationMonthBlock key={sel.id} l={sel} month={month} />}
+                  {mayManage && <details className="partner-disclosure" open={pointHistory} onToggle={event => setPointHistory(event.currentTarget.open)}>
+                    <summary>История точек</summary>
+                    {pointHistory && <PartnerCardPanel partner={partner} section="locations" locations={rows} showRevenue={mayRevenue} />}
+                  </details>}
+                </>}
+              </DataState>
+            </>}
+            {section.id === 'contacts' && <PartnerCardPanel key="contacts" partner={partner} section="contacts" onEditContact={() => setEditing('contacts')} />}
+            {section.id === 'terms' && <>
+              {mayRoyalty && <div><Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти по месяцам</Link></div>}
+              <PartnerCardPanel key="terms" partner={partner} section="terms" locations={locs.data} showRevenue={mayRevenue}
+                showRoyalty={maySeeRoyalty} showStaff={mayTeam} />
+            </>}
+            {section.id === 'team' && mayTeam && <>
                 <h2 className="section-title">Сотрудники франчайзи</h2>
                 <StaffPanel partnerId={partner.id} />
-              </section>
-            </div>
-            <div className="stack">
-              <PartnerCardPanel partner={partner} locations={locs.data ?? []} />
+            </>}
+            {section.id === 'access' && mayManage && <>
               <AccessCard partnerId={partner.id} ownerAccess={current?.owner_access} />
               <TeamAccounts partner={partner.id} />
-            </div>
-          </div>
-          {editing && <PartnerDialog partner={partner} working={current?.working} onClose={() => setEditing(false)} />}
-          {adding && <LocationDialog partnerId={partner.id} onClose={() => setAdding(false)} />}
-        </>
+            </>}
+            {section.id === 'documents' && <PartnerCardPanel key="documents" partner={partner} section="documents" />}
+          </section>
+          {editing && mayManage && <PartnerDialog partner={partner} working={current?.working} focusContact={editing === 'contacts'} onClose={() => setEditing(null)} />}
+          {adding && mayManage && <LocationDialog partnerId={partner.id} onSaved={location => update({ location })} onClose={() => setAdding(false)} />}
+        </div>
       )}
     </DataState>
   );

@@ -1,0 +1,28 @@
+[Unit]
+Description=Bron Service mobile preview sign-in gate
+After=docker.service bron-mobile-preview-api.service
+Requires=docker.service
+
+[Service]
+User=bron-preview
+Group=bron-preview
+Environment=BRON_PREVIEW_GATE_HOST=172.19.0.1
+Environment=BRON_PREVIEW_GATE_PORT=54981
+Environment=BRON_PREVIEW_API_PORT=54982
+EnvironmentFile=/etc/bron-mobile-preview/gate.env
+WorkingDirectory=/opt/bron-mobile-preview/current
+ExecStart=/opt/bron-mobile-preview/runtime/node ops/gate.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+InaccessiblePaths=/opt/bron
+IPAddressDeny=any
+IPAddressAllow=localhost 172.19.0.0/16
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

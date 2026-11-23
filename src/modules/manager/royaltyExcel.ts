@@ -52,8 +52,12 @@ export async function downloadRoyaltyExcel(s: RoyaltySummary) {
   ];
   const byMonth = [
     ['Франчайзи', 'Валюта', 'Месяц', 'Долг'].map(head),
-    ...s.rows.flatMap((r) => r.debt_months.filter(d => !s.month || d.month === s.month)
-      .map(d => [r.partner_name, r.currency, monthLabel(d.month), money(d.debt_minor, r.currency)])),
+    ...s.rows.flatMap((r) => [
+      ...r.debt_months.filter(d => !s.month || d.month === s.month)
+        .map(d => [r.partner_name, r.currency, monthLabel(d.month), money(d.debt_minor, r.currency)]),
+      ...(!s.month && Number(r.undated_debt_minor) > 0
+        ? [[r.partner_name, r.currency, 'Без периода', money(r.undated_debt_minor, r.currency)]] : []),
+    ]),
   ];
   const width = [28, 9, 8, 9, 14, 14, 14, ...(separate ? [14] : []), 14, 14, 16, 12, 14].map((w) => ({ width: w }));
   await writeXlsxFile([

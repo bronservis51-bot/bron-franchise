@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Нижнее меню телефона</title>
+<p><output id="result" role="status">Проверка…</output></p>
+<iframe id="app" title="Кабинет с вымышленным профилем" width="390" height="620"></iframe>
+<script type="module">
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const read = selector => frame.contentDocument.querySelector(selector);
+const heading = () => read('main h1')?.textContent;
+const addEmployee = () => [...read('main').querySelectorAll('button')]
+  .find(button => button.textContent.trim() === 'Добавить сотрудника' && !button.disabled);
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function until(readState, failure) {
+  const deadline = performance.now() + 12000;
+  while (performance.now() < deadline) {
+    const state = readState();
+    if (state) return state;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error(failure);
+}
+
+try {
+  frame.src = '/tests/ui/responsive-app.html?role=team&staff-view=deny&staff-create=allow&learning=list&text=200#/learning';
+  await until(() => heading() === 'Обучение' && read('.bottom-nav'), 'Обучение не открылось');
+  const app = frame.contentWindow;
+  const viewport = app.visualViewport;
+  const height = viewport.height;
+  const bottomPad = () => app.getComputedStyle(read('.bottom-nav')).paddingBottom;
+  const initialPad = bottomPad();
+  const nextFrame = () => new Promise(resolve => app.requestAnimationFrame(() => app.requestAnimationFrame(resolve)));
+
+  function checkBottom() {
+    const bottom = read('.bottom-nav').getBoundingClientRect().bottom;
+    assert(Math.abs(bottom - (viewport.height + viewport.offsetTop)) < 2, 'Меню сместилось относительно нижней границы видимой области');
+    assert(bottomPad() === initialPad, 'Нижний отступ изменился');
+    const root = frame.contentDocument.documentElement;
+    assert(root.scrollWidth <= root.clientWidth + 1, 'Документ прокручивается по горизонтали');
+  }
+
+  async function simulateViewport(visibleHeight, offset) {
+    Object.defineProperties(viewport, {
+      height: { get: () => visibleHeight, configurable: true },
+      offsetTop: { get: () => offset, configurable: true },
+    });
+    viewport.dispatchEvent(new app.Event('resize'));
+    await nextFrame();
+  }
+
+  await until(() => read('main').scrollHeight > read('main').clientHeight, 'У длинного экрана нет внутренней прокрутки');
+  checkBottom();
+  read(`.bottom-nav a[href="#/staff"]`).click();
+  await until(() => heading() === 'Сотрудники' && addEmployee(), 'Короткий экран сотрудников не открылся');
+  assert(read('main').scrollHeight <= read('main').clientHeight + 1, 'Короткий экран сотрудников неожиданно прокручивается');
+  checkBottom();
+
+  // Reproduce the observed 65px offset while the viewport bottom stays in place.
+  await simulateViewport(height - 65, 65);
+  checkBottom();
+  read(`.bottom-nav a[href="#/learning"]`).click();
+  await until(() => heading() === 'Обучение', 'Повторный переход в обучение не сработал');
+  checkBottom();
+  read(`.bottom-nav a[href="#/staff"]`).click();
+  await until(() => heading() === 'Сотрудники', 'Повторный переход к сотрудникам не сработал');
+  await simulateViewport(height - 65, 0);
+  checkBottom();
+  await simulateViewport(height, 0);
+
+  (await until(addEmployee, 'Добавление сотрудника недоступно')).click();
+  const input = await until(() => [...frame.contentDocument.querySelectorAll('dialog[open] input')]
+    .find(field => field.getClientRects().length), 'Форма добавления сотрудника не открылась');
+  input.focus();
+  await simulateViewport(height - 220, 100);
+  assert(app.getComputedStyle(read('.bottom-nav')).display === 'none', 'Открытая клавиатура перекрыла меню');
+  const dialog = read('dialog[open]');
+  dialog.dispatchEvent(new app.Event('cancel', { cancelable: true }));
+  await until(() => !read('dialog[open]'), 'Форма добавления сотрудника не закрылась');
+  await simulateViewport(height, 0);
+  checkBottom();
+  result.textContent = 'PASS. Меню остаётся у нижней границы при смене маршрутов и видимой области, скрывается при вводе и появляется после закрытия клавиатуры.';
+} catch (error) {
+  result.textContent = `FAIL. ${error.message}`;
+  throw error;
+}
+</script>
+</html>

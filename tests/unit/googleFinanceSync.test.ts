@@ -38,6 +38,30 @@ describe('automatic Google financial reports', () => {
     expect(report.sheets[1].rows[2].slice(5, 8)).toEqual(['Возврат покупателю', null, 200]);
   });
 
+  it('groups debt and payments without a period separately, preserving amounts and known bank dates', () => {
+    const unperiodized = { ...record, month: null, cash: null, card: null };
+    const payment = { ...unperiodized, key: 'settlement', kind: 'royalty_payment',
+      category: 'Оплата подтверждена без даты', amount: '13000' };
+    const report = buildGoogleReports([books[0]], [
+      record, { ...payment, key: 'periodized', month: record.month, amount: '2500' },
+      { ...unperiodized, key: 'older-debt', kind: 'royalty_past_debt', amount: '9500' },
+      payment, { ...payment, key: 'bank-payment', category: null, day: '2026-11-14', amount: '400' },
+      { ...payment, key: 'other', partner: 'Другой', partner_id: other, amount: '300' },
+      { ...payment, key: 'currency', currency: 'KZT', amount: '500' },
+    ], asOf)[0];
+    expect(report.sheets[0].rows.slice(3)).toEqual([
+      ['2026-11', record.partner, 'RUB', null, 150, null, null, null, null, 25, 150, null, null],
+      ['Без периода', record.partner, 'RUB', null, null, null, null, null, null, 134, null, null, 95],
+      ['Без периода', 'Другой', 'RUB', null, null, null, null, null, null, 3, null, null, null],
+      ['Без периода', record.partner, 'KZT', null, null, null, null, null, null, 5, null, null, null],
+    ]);
+    const entries = report.sheets[1].rows;
+    expect(entries[2].slice(0, 2)).toEqual(['2026-11', null]);
+    expect(entries[4]).toEqual(['Без периода', null, record.partner, null, 'RUB', 'Оплата роялти',
+      payment.category, 130, null, null, 'settlement']);
+    expect(entries[5].slice(0, 2)).toEqual(['Без периода', '2026-11-14']);
+  });
+
   it('rejects using the same workbook for network and partner data', () => {
     expect(() => buildGoogleReports([books[0], { ...books[1], spreadsheetId: internalId }], [], asOf)).toThrow();
     expect(() => buildGoogleReports([books[0], { ...books[1], spreadsheetId: [internalId] }], [], asOf)).toThrow();

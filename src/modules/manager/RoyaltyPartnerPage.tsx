@@ -38,7 +38,7 @@ function RateDialog({ partner, current, onClose }: { partner: string; current: n
 
 export function RoyaltyPartnerPage() {
   const { id = '' } = useParams();
-  const [pay, setPay] = useState<{ month?: string; amount?: number } | null>(null);
+  const [pay, setPay] = useState<{ month?: string | null; amount?: number } | null>(null);
   const [fix, setFix] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [rate, setRate] = useState(false);
@@ -47,7 +47,7 @@ export function RoyaltyPartnerPage() {
   return (
     <DataState query={q}>
       {(r) => {
-        const debt = r.months.filter((m) => !m.is_open).reduce((a, m) => a + Number(m.debt_minor), 0);
+        const debt = r.months.filter((m) => !m.is_open).reduce((a, m) => a + Number(m.debt_minor), Number(r.undated?.debt_minor ?? 0));
         const open = r.months.find((m) => m.is_open);
         return (
           <>
@@ -60,9 +60,14 @@ export function RoyaltyPartnerPage() {
                 <Button variant="ghost" onClick={() => setRate(true)}><Percent size={16} aria-hidden />Ставка</Button>
               </>} />
             <div className="kpis">
-              <div className={`kpi${debt > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(debt, r.currency)}</span><span className="l">долг за закрытые месяцы</span></div>
+              <div className={`kpi${debt > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(debt, r.currency)}</span><span className="l">долг по роялти</span></div>
               {open && <div className="kpi"><span className="v">{formatMoneyShort(open.accrued_minor, r.currency)}</span><span className="l">начисляется за {monthLabel(open.month, false)}</span></div>}
             </div>
+            {r.undated && <Card title="Прошлый долг без периода" actions={Number(r.undated.debt_minor) > 0
+              ? <Button size="sm" onClick={() => setPay({ month: null, amount: r.undated?.debt_minor })}>Оплата</Button> : undefined}>
+              <span>Остаток <Money minor={r.undated.debt_minor} currency={r.currency} strong /></span>
+              {Number(r.undated.paid_minor) > 0 && <p className="faint">Оплачено {formatMoneyShort(r.undated.paid_minor, r.currency)}</p>}
+            </Card>}
             <div className="grid grid-main">
               <Card title="По месяцам" bodyless>
                 <div className="table-wrap" role="region" aria-label="Роялти франчайзи по месяцам" tabIndex={0}>
@@ -92,7 +97,8 @@ export function RoyaltyPartnerPage() {
                 <RoyaltyOps partner={r.partner_id} limit={30} />
               </div>
             </div>
-            {pay && <PaymentDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} month={pay.month} suggested={pay.amount} onClose={() => setPay(null)} />}
+            {pay && <PaymentDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency}
+              hasUndated={Number(r.undated?.debt_minor ?? 0) > 0} month={pay.month} suggested={pay.amount} onClose={() => setPay(null)} />}
             {fix && <CorrectionDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} month={fix} onClose={() => setFix(null)} />}
             {manual && <ManualDebtDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} onClose={() => setManual(false)} />}
             {rate && <RateDialog partner={r.partner_id} current={r.rate_bp} onClose={() => setRate(false)} />}

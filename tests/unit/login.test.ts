@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loginEmail } from '../../src/platform/login';
+import { loginEmail, stagingLoginEmail } from '../../src/platform/login';
 
 describe('personal login identifiers', () => {
   it('accepts short logins, trims whitespace and ignores case', () => {
@@ -7,6 +7,14 @@ describe('personal login identifiers', () => {
   });
   it('keeps email sign-in available', () => {
     expect(loginEmail('  Person@Example.COM ')).toBe('person@example.com');
+  });
+  it('maps readable test aliases separately from ordinary production logins', () => {
+    expect(stagingLoginEmail('  SET  ')).toBe('fm@demo.example.com');
+    expect(stagingLoginEmail('fran')).toBe('alpha.owner@demo.example.com');
+    expect(stagingLoginEmail('uprav')).toBe('79000000012@staff.bron.local');
+    expect(stagingLoginEmail('sales')).toBe('79000000011@staff.bron.local');
+    expect(stagingLoginEmail('staz')).toBe('79000000013@staff.bron.local');
+    expect(loginEmail('uprav')).toBe('uprav@access.bron.local');
   });
   it('keeps existing employee phone identities unchanged', () => {
     for (const phone of ['+7 (900) 123-45-67', '8 900 123 45 67', '9001234567']) {

@@ -73,6 +73,13 @@ if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
  if (qaParams.get('procurement-order') === 'allow' || (team && qaParams.get('procurement-order') !== 'deny')) permissions.push('procurement.order');
  me.assignments=[{id:'qa-worker',role:team?'franchisee_manager':'franchisee_staff',role_name:team?'Управляющий':'Менеджер продаж',scope_type:'partner',scope_id:partner.id,scope_name:partner.name,permissions}];
 }
+if (qaParams.get('qa-profile') === 'dual') {
+  me.user.full_name = 'Вымышленный сотрудник профиля';
+  me.assignments = [
+    { ...me.assignments[0], scope_name: 'Вымышленный франчайзи профиля' },
+    { ...me.assignments[0], id: 'qa-sales', role: 'franchisee_staff', role_name: 'Менеджер продаж', scope_name: 'Вымышленный франчайзи профиля' },
+  ];
+}
 if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
 if (qaParams.get('role') === 'pending') me.assignments = [];
 if (qaParams.has('access-refresh')) {
@@ -133,7 +140,7 @@ window.fetch = async (input, init) => {
       team_revenue_month:qaParams.get('access')==='empty'?[]:[{location_id:location.id,location_name:location.name,currency:'RUB',total_minor:12500000,days:[{day:'2026-11-15',total_minor:5000000},{day:'2026-11-14',total_minor:7500000}]},{location_id:teamLocation.id,location_name:teamLocation.name,currency:'RUB',total_minor:0,days:[]}],
       staff_access_history:[{id:1,at:'2026-11-15T19:00:00Z',action:'staff.access',actor_name:'Вымышленный франчайзи с длинным именем',user_name:'Вымышленный сотрудник с очень длинным именем и фамилией'},{id:2,at:'2026-11-14T18:00:00Z',action:'user.password',actor_name:'Вымышленный франчайзи',user_name:'Вымышленный сотрудник'}],
       order_link: { url: qaParams.get('order') === 'missing' ? null : 'https://b2b.moysklad.ru/qa-synthetic-not-an-order-link' },
-      me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
+      me, ping: { ok: true }, lead_list: [], lead_inbox: { new: 0 }, kb_inbox: { unanswered: qaParams.has('access-refresh') ? 2 : 0, new_answers: 0 }, kb_to_read: [], kb_search_misses: [], kb_questions: [],
       partner_card: { partner, profile, locations: [location], documents: [{ id: 'qa-document', title: 'ОченьДлинноеНазваниеДокументаБезПробелов'.repeat(3), kind: 'contract', path: 'qa', mime: 'application/pdf', size_bytes: 1000 }], stats: { opened_on: null, revenue_12m_minor: 25000000, rate_bp: 700, users: 1, staff: 0 } },
       partner_access: { users: [{ assignment_id: 'qa-access', user_id: 'qa-owner-account', full_name: 'Вымышленный пользователь с длинным именем', email: '79001234567@staff.bron.local', phone:'79001234567',can_manage:true }], invites: [] },
       staff_list: [{user_id:'qa-worker-edit',employee_kind:'trainee',internship_from:'2026-11-09',internship_until:'2026-12-08',internship_floor_minor:50000,learning_enabled:true,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
@@ -149,7 +156,6 @@ window.fetch = async (input, init) => {
         partners: [{ partner_id: partner.id, partner_name: partner.name, currency: 'RUB', payroll_minor: 4250750,
           payroll_halves: [2000000, 2250750], closed_shifts: 16, expenses_minor: 900000,
           expense_categories: [{ category: 'Аренда', amount_minor: 900000 }] }] },
-      rating: { rows: [{rank:1,partner_id:partner.id,partner_name:partner.name,cities:location.city,is_me:false,forecast_pct:123.4,pct_to_date:90,fill_pct:100,growth_pct:20,badges:['leader','no_gaps'],points:1,currency:'RUB',fact_minor:1234567890,plan_minor:1500000000,forecast_minor:1900000000,fact_rub_minor:1234567890,forecast_rub_minor:1900000000}], month },
     };
     if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
     if (name === 'manager_supply_snapshot' && qaParams.get('supply') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой МойСклад' }, { status: 503 });
@@ -200,8 +206,12 @@ if(qaParams.get('scene')){
  if(qaParams.get('scene')==='queue'){
   let stage=0;
   const timer=setInterval(()=>{
-   const button=stage===0?document.querySelector<HTMLButtonElement>('[aria-label="Профиль"]'):[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()==='Локальные записи');
-   if(button){button.click();if(stage++===1)clearInterval(timer);}
+   const button=stage===0?document.querySelector<HTMLButtonElement>('[aria-label="Профиль"]'):document.querySelector<HTMLButtonElement>('[data-local-work]');
+   if (button) { button.click(); stage++; }
+   if (stage === 2) {
+     const recovery = document.querySelector<HTMLDetailsElement>('dialog[open] .queue-recovery');
+     if (recovery) { recovery.open = true; clearInterval(timer); }
+   }
   },50);setTimeout(()=>clearInterval(timer),10_000);
  }else if(qaParams.get('scene')!.startsWith('lead-')){
   const scene=qaParams.get('scene');let stage=0;

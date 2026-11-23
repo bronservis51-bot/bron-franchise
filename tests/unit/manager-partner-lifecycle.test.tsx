@@ -17,7 +17,7 @@ const future: Location = {
 const undated: Location = { ...future, id: 'undated', opened_on: null, name: 'Точка без даты' };
 const closed: Location = { ...future, id: 'closed', opened_on: '2020-10-15', name: 'Бывшая точка', status: 'closed' };
 
-function renderCard(locations: Location[], openedOn: string | null) {
+function renderCard(locations: Location[], openedOn: string | null, section: 'contacts' | 'terms' | 'locations' | 'documents' = 'locations') {
   const client = new QueryClient();
   client.setQueryData(['partner-card', partner.id], {
     partner, profile: null, documents: [],
@@ -25,7 +25,7 @@ function renderCard(locations: Location[], openedOn: string | null) {
     stats: { opened_on: openedOn, revenue_12m_minor: 0, rate_bp: 0, users: 1, staff: 0 },
   });
   return renderToStaticMarkup(<QueryClientProvider client={client}>
-    <PartnerCardPanel partner={partner} locations={locations} />
+    <PartnerCardPanel partner={partner} locations={locations} section={section} showRevenue />
   </QueryClientProvider>);
 }
 
@@ -40,10 +40,23 @@ it('shows a scheduled opening date without claiming the point or partner has alr
 
 it('retains the historic opening of a closed point and labels future points independently', () => {
   const html = renderCard([future, closed], closed.opened_on);
-  expect(html).toContain('Первое открытие');
+  expect(renderCard([future, closed], closed.opened_on, 'terms')).toContain('Первое открытие');
   expect(html).toContain('15.10.2020');
   expect(html).toContain('Закрыта');
   expect(html).toContain('Открытие запланировано на 23.11.2099');
+});
+
+it('keeps contacts, terms and documents in their own sections', () => {
+  const contacts = renderCard([], null, 'contacts');
+  const terms = renderCard([], null, 'terms');
+  const documents = renderCard([], null, 'documents');
+  expect(contacts).toContain('Владелец и связь');
+  expect(contacts).not.toContain('Реквизиты');
+  expect(terms).toContain('Договор и реквизиты');
+  expect(terms).toContain('Персональный магазин МойСклад');
+  expect(terms).not.toContain('Владелец и связь');
+  expect(documents).toContain('Загрузить');
+  expect(documents).not.toContain('Договор и реквизиты');
 });
 
 it('uses a readable fallback for unknown commercial statuses and preparation stages', () => {

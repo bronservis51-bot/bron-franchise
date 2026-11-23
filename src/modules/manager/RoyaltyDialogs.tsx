@@ -30,16 +30,16 @@ function useUndoable() {
   };
 }
 
-type PaymentMatch = { id: string; month: string; note: string | null };
+type PaymentMatch = { id: string; month: string | null; note: string | null };
 type PaymentResult = { id: string } | { matches: PaymentMatch[] };
-type PaymentDraft = { key: string; month: string; amount: string; paidOn: string; note: string | null; reviewed: string[] };
+type PaymentDraft = { key: string; month: string | null; amount: string; paidOn: string; note: string | null; reviewed: string[] };
 
-export function PaymentDialog({ partner, currency, month, suggested, onClose }: {
-  partner: { id: string; name: string }; currency: string; month?: string; suggested?: number; onClose: () => void;
+export function PaymentDialog({ partner, currency, month, suggested, hasUndated = false, onClose }: {
+  partner: { id: string; name: string }; currency: string; month?: string | null; suggested?: number; hasUndated?: boolean; onClose: () => void;
 }) {
   const done = useUndoable();
   const userId = useSession().me?.user.id;
-  const initialMonth = month ?? shiftMonth(monthStart(), -1);
+  const initialMonth = month === null && hasUndated ? '' : month ?? shiftMonth(monthStart(), -1);
   const [m, setM] = useState(initialMonth);
   const [enteredAmount, setEnteredAmount] = useState<string>();
   const [amountValid, setAmountValid] = useState(true);
@@ -69,7 +69,7 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
       busy={save.isPending} error={save.error} disabled={!canSave} onClose={onClose}
       onConfirm={() => {
         if (canSave && !save.isPending) save.mutate({
-          key: reviewKey, month: m, amount, paidOn, note: note.trim() || null, reviewed: matches?.map(match => match.id).sort() ?? [],
+          key: reviewKey, month: m || null, amount, paidOn, note: note.trim() || null, reviewed: matches?.map(match => match.id).sort() ?? [],
         });
       }}>
       <p className="muted">Деньги поступили — отметьте сумму. Ошиблись — нажмите «Отменить» в уведомлении или в журнале операций.</p>
@@ -77,6 +77,7 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
         <div className="grid grid-2" style={{ gap: 12 }}>
           <Field label="За месяц">{(id) => (
             <Select id={id} value={m} onChange={(e) => setM(e.target.value)}>
+              {hasUndated && <option value="">Без периода</option>}
               {monthOptions().map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
             </Select>
           )}</Field>
@@ -92,7 +93,7 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
         <div className="alert-body">
           <strong>Есть похожая оплата</strong>
           <p>На {formatDate(paidOn)} уже записано {formatMoneyShort(amount, currency)} от этого франчайзи. Сверьте банковскую выписку перед добавлением отдельного платежа.</p>
-          <ul>{matches.map(match => <li key={match.id}>За {monthLabel(match.month)}{match.note ? ` · ${match.note}` : ''}</li>)}</ul>
+          <ul>{matches.map(match => <li key={match.id}>{match.month ? monthLabel(match.month) : 'Без периода'}{match.note ? ` · ${match.note}` : ''}</li>)}</ul>
         </div>
       </div>}
     </ConfirmDialog>
@@ -172,16 +173,17 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
   const [amountValid, setAmountValid] = useState(true);
   const [note, setNote] = useState('');
   const save = useMutation({
-    mutationFn: () => manualAdd(partner.id, m, amount, note.trim() || null) as Promise<string>,
+    mutationFn: () => manualAdd(partner.id, m || null, amount, note.trim() || null) as Promise<string>,
     onSuccess: (id) => { done(`Прошлый долг ${formatMoneyShort(amount, currency)} добавлен`, () => manualDelete(id)); onClose(); },
   });
   return (
     <ConfirmDialog open title={`Прошлый долг — ${partner.name}`} confirmLabel="Добавить долг" cancelLabel="Закрыть" busy={save.isPending} error={save.error}
-      disabled={!amountValid || !amount || amount === '0'} onClose={onClose} onConfirm={() => save.mutate()}>
+      disabled={!amountValid || !amount || amount === '0' || (!m && !note.trim())} onClose={onClose} onConfirm={() => save.mutate()}>
       <p className="muted">Неоплаченные роялти за период до начала учёта в приложении. Сумма прибавится к долгу франчайзи.</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="За месяц">{(id) => (
           <Select id={id} value={m} onChange={(e) => setM(e.target.value)}>
+            <option value="">Период неизвестен</option>
             {monthOptions(60).map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
           </Select>
         )}</Field>
@@ -190,23 +192,25 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
             onValidityChange={setAmountValid} currency={currency} />}
         </Field>
       </div>
-      <Field label="Комментарий">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: долг за май по акту сверки" />}</Field>
+      <Field label="Комментарий" required={!m}>{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: долг за май по акту сверки" />}</Field>
     </ConfirmDialog>
   );
 }
 
-interface Op { id: string; op: 'payment' | 'past_debt' | 'correction'; partner_id: string; partner_name: string; currency: string; month: string;
-  amount_minor: number; note: string | null; paid_on?: string; created_at: string; by: string | null }
+interface Op { id: string; op: 'payment' | 'past_debt' | 'correction'; partner_id: string; partner_name: string; currency: string; month: string | null;
+  amount_minor: number; note: string | null; paid_on?: string | null; created_at: string; by: string | null }
 const OP_LABEL: Record<Op['op'], [string, 'success' | 'info' | 'warning']> = {
   payment: ['оплата', 'success'], past_debt: ['прошлый долг', 'warning'], correction: ['исправление', 'info'],
 };
+
+const operationLabel = (op: Op) => op.op === 'payment' && op.paid_on === null ? 'оплата подтверждена без даты' : OP_LABEL[op.op][0];
 
 /** Журнал операций по роялти с отменой. */
 export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: number }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [confirm, setConfirm] = useState<Op | null>(null);
-  const q = useQuery({ queryKey: ['royalty', 'ops', partner ?? null, limit], queryFn: () => command<Op[]>('royalty_ops', { partner: partner ?? null, limit }) });
+  const q = useQuery({ queryKey: ['royalty', 'ops', partner ?? null, limit], queryFn: () => command<Op[]>('royalty_ops_v2', { partner: partner ?? null, limit }) });
   const undo = useMutation({
     mutationFn: (o: Op) => (o.op === 'payment' ? paymentDelete(o.id) : manualDelete(o.id)),
     onSuccess: () => { toast('Операция отменена'); setConfirm(null); void qc.invalidateQueries({ queryKey: ['royalty'] }); },
@@ -219,10 +223,10 @@ export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: 
             {list.map((o) => (
               <div key={o.id} className="row between access-row">
                 <span style={{ minWidth: 0 }}>
-                  <span className="row" style={{ gap: 6 }}><Badge tone={OP_LABEL[o.op][1]} icon={false}>{OP_LABEL[o.op][0]}</Badge>
+                  <span className="row" style={{ gap: 6 }}><Badge tone={OP_LABEL[o.op][1]} icon={false}>{operationLabel(o)}</Badge>
                     <strong className="num">{o.amount_minor > 0 && o.op === 'correction' ? '+' : ''}{formatMoneyShort(o.amount_minor, o.currency)}</strong>
                     {!partner && <span>{o.partner_name}</span>}</span>
-                  <span className="faint" style={{ display: 'block' }}>за {monthLabel(o.month)}{o.note ? ` · ${o.note}` : ''} · {formatDateTime(o.created_at)}{o.by ? ` · ${o.by}` : ''}</span>
+                  <span className="faint" style={{ display: 'block' }}>{o.month ? monthLabel(o.month) : 'Без периода'}{o.note ? ` · ${o.note}` : ''} · {formatDateTime(o.created_at)}{o.by ? ` · ${o.by}` : ''}</span>
                 </span>
                 <Button size="sm" variant="ghost" onClick={() => setConfirm(o)}><Undo2 size={14} aria-hidden />Отменить</Button>
               </div>
@@ -233,7 +237,7 @@ export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: 
       {confirm && (
         <ConfirmDialog open danger title="Отменить операцию?" confirmLabel="Отменить операцию" cancelLabel="Не отменять" busy={undo.isPending} error={undo.error}
           onClose={() => setConfirm(null)} onConfirm={() => undo.mutate(confirm)}
-          summary={[['Что', OP_LABEL[confirm.op][0]], ['Франчайзи', confirm.partner_name], ['Сумма', formatMoneyShort(confirm.amount_minor, confirm.currency)], ['Месяц', monthLabel(confirm.month)]]}>
+          summary={[['Что', operationLabel(confirm)], ['Франчайзи', confirm.partner_name], ['Сумма', formatMoneyShort(confirm.amount_minor, confirm.currency)], ['Месяц', confirm.month ? monthLabel(confirm.month) : 'Без периода']]}>
           <p className="muted">Долг франчайзи пересчитается сразу. Отмена записывается в журнал действий.</p>
         </ConfirmDialog>
       )}

@@ -29,3 +29,15 @@ export function loginEmail(value: string): string {
   if (!/^[a-z][a-z0-9._-]{1,39}$/.test(login)) throw new Error('Неверный логин');
   return `${login}@${LOGIN_DOMAIN}`;
 }
+
+const stagingLogins: ReadonlyMap<string, string> = new Map([
+  ['set', 'fm@demo.example.com'],
+  ['fran', 'alpha.owner@demo.example.com'],
+  ['uprav', '79000000012@staff.bron.local'],
+  ['sales', '79000000011@staff.bron.local'],
+  ['staz', '79000000013@staff.bron.local'],
+]);
+
+export function stagingLoginEmail(value: string): string {
+  return stagingLogins.get(value.trim().toLowerCase()) ?? loginEmail(value);
+}

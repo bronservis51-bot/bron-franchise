@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
+import { config } from '../platform/config';
 import { phoneLoginDigits } from '../platform/login';
 import { changeManagerPhoneLogin } from '../platform/managerLogin';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOperationState, queuedOps } from '../platform/outbox';
@@ -12,7 +13,6 @@ import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
-import { HelpTip } from '../ui/HelpTip';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
@@ -151,7 +151,9 @@ function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: WorkspaceRole }) {
+function UserMenu({ pending, queueIssue, onLocalWork, showTeamAccess, role }: {
+  pending: number; queueIssue: boolean; onLocalWork: () => void; showTeamAccess: boolean; role: WorkspaceRole;
+}) {
   const { me, isManager, signOut } = useSession();
   const navigate = useNavigate();
   const preview = useLocation().state as FirstRunPreview | null;
@@ -175,7 +177,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: num
   const toast = useToast();
   const out = () => {
     close();
-    if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
+    if (pending) { toast('Есть неотправленные записи. Проверьте их в профиле перед выходом.'); return; }
     void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
   };
   const closeGuide = (navigating = false) => {
@@ -198,25 +200,25 @@ function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: num
             <div className="profile-avatar"><User size={22} aria-hidden /></div>
             <div className="profile-name">
               <strong>{me?.user.full_name}</strong>
+              <span>{workspaceTitle[role]}</span>
               <span>{me?.user.email?.endsWith('@staff.bron.local') ? `+${me.user.email.split('@')[0]}` : me?.user.email}</span>
             </div>
           </div>
-          {!!me?.assignments.length && <ul className="profile-scopes" aria-label="Роли и область доступа">
-            {me.assignments.map(assignment => <li key={assignment.id}>
-              <strong>{assignment.role_name || workspaceTitle[role]}</strong>
-              <span>{assignment.scope_name}</span>
-            </li>)}
-          </ul>}
           <div className="profile-actions">
+            {(pending > 0 || queueIssue) && <button type="button" data-local-work
+              aria-label={pending > 0 ? `Неотправленные записи: ${pending}` : undefined} onClick={() => { close(); onLocalWork(); }}>
+              <CloudOff size={18} aria-hidden />Неотправленные записи{pending > 0 && <span className="profile-queue-count">{pending}</span>}<ChevronRight size={16} aria-hidden />
+            </button>}
             <button type="button" onClick={() => setView('password')}><KeyRound size={18} aria-hidden />Сменить пароль<ChevronRight size={16} aria-hidden /></button>
             {isManager && <button type="button" onClick={() => setView('login')}><Phone size={18} aria-hidden />Сменить логин<ChevronRight size={16} aria-hidden /></button>}
             {isManager && <button type="button" onClick={() => setView('recovery')}><Mail size={18} aria-hidden />Почта для восстановления<ChevronRight size={16} aria-hidden /></button>}
             {showTeamAccess && <Link to="/team-access" onClick={() => { restoreProfileFocus.current = false; close(); }}><Users size={18} aria-hidden />Управляющие<ChevronRight size={16} aria-hidden /></Link>}
-            <button type="button" onClick={() => { close(); onLocalWork(); }}><CloudOff size={18} aria-hidden />Локальные записи<ChevronRight size={16} aria-hidden /></button>
             {role !== 'pending' && <button type="button" onClick={() => setView('guide')}><GraduationCap size={18} aria-hidden />Первые шаги<ChevronRight size={16} aria-hidden /></button>}
             {!installState.installed && <button type="button" onClick={() => setView('install')}><Smartphone size={18} aria-hidden />Как установить приложение<ChevronRight size={16} aria-hidden /></button>}
             <button type="button" onClick={out}><LogOut size={18} aria-hidden />Выйти</button>
           </div>
+          {!pending && !queueIssue && <button type="button" data-local-work className="link-btn profile-recovery"
+            onClick={() => { close(); onLocalWork(); }}>Копия и восстановление записей</button>}
         </ConfirmDialog>
       )}
       {view === 'password' && <PasswordDialog onClose={close} />}
@@ -254,6 +256,7 @@ export function Shell() {
   const access = workspaceAccess(role, can);
   const mainRef = useRef<HTMLElement>(null);
   const outbox = useOutbox(me?.user.id, online);
+  const queueIssue = outbox.readError != null || outbox.sendError != null;
   const [queueOpen, setQueueOpen] = useState(false);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
@@ -297,10 +300,10 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-account">
             <span className="topbar-title">{me?.user.full_name}</span>
-            <span className="topbar-role">{workspaceTitle[role]}</span>
+            <span className="topbar-role">{workspaceTitle[role]}{config.appEnv === 'staging' && ' · Тест'}</span>
           </div>
           {access.order && <OrderTopButton />}
-          <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)}
+          <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} queueIssue={queueIssue} onLocalWork={() => setQueueOpen(true)}
             showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
         {queueOpen && me && <QueueDialog key={me.user.id} userId={me.user.id} outbox={outbox} online={online} onClose={() => setQueueOpen(false)} />}
@@ -315,7 +318,7 @@ export function Shell() {
               <div className="alert-body">Нет сети. Выручку и закрытие смены можно сохранить — они отправятся сами, когда связь вернётся.</div>
             </div>
           )}
-          {(outbox.ops.length > 0 || outbox.readError != null || outbox.sendError != null) && (
+          {(outbox.ops.length > 0 || queueIssue) && (
             <div className="alert tone-info" style={{ marginBottom: 12 }}>
               <CloudOff size={18} aria-hidden />
               <div className="alert-body">
@@ -326,7 +329,7 @@ export function Shell() {
                   </>}
                   {outbox.sendError != null && <div>Отправка не завершилась.</div>}
                 </div>
-                <Button size="sm" style={{ marginTop: 8 }} onClick={() => setQueueOpen(true)}>Посмотреть записи</Button>
+                <Button size="sm" style={{ marginTop: 8 }} onClick={() => setQueueOpen(true)}>Открыть неотправленные записи</Button>
               </div>
             </div>
           )}
@@ -362,13 +365,13 @@ function QueueDialog({userId,outbox,online,onClose}:{userId:string;outbox:Return
       setNotice('Копия подготовлена. Проверьте, что файл сохранился на устройстве.');
     } catch(e) {fail(e);} finally {setBusy(false);}
   };
-  return <ConfirmDialog open title="Локальные записи" cancelLabel="Закрыть" onClose={onClose} busy={busy} error={error ?? outbox.readError ?? outbox.sendError}>
-    <p className="faint">Храните копию в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
-    <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
-      <div className="row">
-        <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
-        <HelpTip label="Что входит в копию">В копию входят ваши неотправленные записи и сохранённые черновики.</HelpTip>
-      </div>
+  const hasQueue = outbox.ops.length > 0 || outbox.readError != null || outbox.sendError != null;
+  return <ConfirmDialog open title={hasQueue ? 'Неотправленные записи' : 'Копия и восстановление записей'} cancelLabel="Закрыть" onClose={onClose} busy={busy} error={error ?? outbox.readError ?? outbox.sendError}>
+    {outbox.ops.length > 0 && <p>Выручка и закрытые смены ждут отправки с этого устройства. При восстановлении связи кабинет повторит отправку.</p>}
+    <details className="queue-recovery" open={!hasQueue}>
+      <summary>Копия записей и черновиков</summary>
+      <p className="faint">Чтобы восстановить записи из файла, войдите с тем же логином.</p>
+      <Button disabled={busy} onClick={()=>void download()}>Скачать копию</Button>
       <Field label="Загрузить сохранённую копию">{id=><Input id={id} type="file" accept=".json,application/json" disabled={busy} onChange={event=>{
         const file=event.target.files?.[0]; event.target.value=''; setImportFile(null); setError(null);setNotice('');
         if(!file)return;
@@ -376,7 +379,7 @@ function QueueDialog({userId,outbox,online,onClose}:{userId:string;outbox:Return
         setBusy(true);
         void file.text().then(text=>setImportFile({text,data:parseLocalRecovery(text,userId)})).catch(fail).finally(()=>setBusy(false));
       }}/>}</Field>
-    </div>
+    </details>
     {importFile&&<div className="alert tone-info" style={{marginTop:12,flexWrap:'wrap'}}>
       <div className="alert-body" style={{flex:'1 1 240px',overflowWrap:'anywhere'}}>В копии: записей — {importFile.data.operations.length}, черновиков — {importFile.data.drafts.length}. После добавления очередь отправится при наличии связи. Существующие записи не перезаписываются.</div>
       <Button disabled={busy} onClick={()=>{

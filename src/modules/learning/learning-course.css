@@ -1,0 +1,56 @@
+.learning-course {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 46rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.course-progress { display: grid; gap: var(--space-2); }
+.course-progress > div { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0 var(--space-3); }
+.course-progress span { color: var(--text-2); font-size: var(--fs-s); }
+.course-progress strong { font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
+.course-progress progress {
+  display: block; width: 100%; height: 6px; appearance: none;
+  border: 0; border-radius: 4px; background: var(--border); overflow: hidden;
+}
+.course-progress progress::-webkit-progress-bar { background: var(--border); }
+.course-progress progress::-webkit-progress-value { background: var(--primary); border-radius: 4px; }
+.course-progress progress::-moz-progress-bar { background: var(--primary); border-radius: 4px; }
+
+.learning-course .learning-next {
+  display: grid; justify-items: start; min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border); border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius); background: var(--surface);
+}
+.learning-course :is(h2, h3, p, ul) { margin: 0; }
+.course-action-label { display: flex; align-items: center; gap: var(--space-2); color: var(--link); font-size: var(--fs-s); font-weight: 650; }
+.course-action-label svg, .learning-next h2 svg, .course-open svg { flex: none; }
+.learning-next h2 { margin-top: var(--space-2); font-size: var(--fs-xl); line-height: 1.28; }
+.learning-next h2:first-child { margin-top: 0; }
+.learning-next h2 svg { vertical-align: -.15em; margin-inline-end: .4em; color: var(--success); }
+.learning-next .course-next-meta { margin-top: var(--space-1); color: var(--text-2); font-size: var(--fs-s); }
+.learning-next .course-open { margin-top: var(--space-4); max-width: 100%; white-space: normal; }
+
+.learning-course .learning-program { display: grid; gap: var(--space-4); }
+.learning-program > h2 { font-size: var(--fs-l); }
+.course-stage { min-width: 0; }
+.course-stage h3 { margin-bottom: var(--space-1); color: var(--text-2); font-size: var(--fs-s); font-weight: 600; }
+.course-stage ul { list-style: none; padding: 0; }
+.course-stage li { border-bottom: 1px solid var(--border); }
+.course-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: var(--space-3); min-height: var(--touch); padding-block: var(--space-2);
+  color: var(--text); text-decoration: none; border-radius: var(--radius-s);
+}
+.course-row:hover { background: var(--surface-2); text-decoration: none; }
+.course-row svg { color: var(--text-3); }
+.course-row .course-done-icon { color: var(--success); }
+.course-row-copy { display: grid; gap: 2px; }
+.course-row-copy strong { font-size: var(--fs); line-height: 1.35; }
+.course-row-copy > span { color: var(--text-2); font-size: var(--fs-s); }
+@media (max-width: 520px) {
+  .learning-course { gap: var(--space-4); }
+  .learning-next .course-open { justify-self: stretch; }
+}

@@ -36,7 +36,6 @@ const PartnerPage = page(() => import('../modules/manager/PartnerPage'), 'Partne
 const RoyaltyPartnerPage = page(() => import('../modules/manager/RoyaltyPartnerPage'), 'RoyaltyPartnerPage');
 const StaffHome = page(() => import('../modules/staff/StaffHome'), 'StaffHome');
 const StaffPage = page(() => import('../modules/staff/StaffPage'), 'StaffPage');
-const RatingPage = page(() => import('../modules/rating/RatingPage'), 'RatingPage');
 const FinancePage = page(() => import('../modules/finance/FinancePage'), 'FinancePage');
 const QuestionsPage = page(kb, 'QuestionsPage');
 const LearningPage = page(() => import('../modules/learning/Learning'), 'LearningPage');
@@ -73,6 +72,7 @@ const router = createHashRouter([
   { path: '/recover', element: <RecoveryRequest /> },
   { path: '/recover/:kind/:token', element: <RecoveryLink /> },
   { path: '/recover/done', element: <RecoveryDone /> },
+  { path: '/rating', element: <Navigate to="/" replace /> },
   {
     path: '/',
     element: <Guard />,
@@ -89,7 +89,6 @@ const router = createHashRouter([
       { path: 'finance', element: <WorkspaceRoute feature="finance"><FinanceEntry /></WorkspaceRoute> },
       { path: 'staff', element: <WorkspaceRoute feature="staffDirectory"><StaffPage /></WorkspaceRoute> },
       { path: 'team-access', element: <TeamAccessEntry /> },
-      { path: 'rating', element: <WorkspaceRoute feature="rating"><RatingPage /></WorkspaceRoute> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },
       { path: 'kb/manage', element: <WorkspaceRoute feature="knowledgeEdit"><KbManagePage /></WorkspaceRoute> },
