@@ -28,6 +28,9 @@ export const partnerCard = (partner: string) => command<CardData>('partner_card'
 
 const DOC_KIND: Record<string, string> = { contract: 'Договор', addendum: 'Допсоглашение', act: 'Акт', passport: 'Паспорт / документы владельца', other: 'Другое' };
 const LEGAL_FORMS = ['ИП', 'ООО', 'Самозанятый', 'Другое'];
+const contactFields = ['owner_name', 'phone2', 'telegram', 'whatsapp', 'contact_notes', 'notes'] as const;
+const contractFields = ['legal_form', 'legal_name', 'inn', 'ogrn', 'legal_address', 'bank_details',
+  'contract_number', 'contract_date', 'contract_until', 'started_on', 'territory', 'franchise_fee_minor'] as const;
 
 /** «1 год 4 мес.» от даты до сегодня. */
 function since(iso: string | null) {
@@ -43,15 +46,17 @@ function since(iso: string | null) {
 const daysTo = (iso: string) => Math.round((new Date(`${iso}T12:00:00Z`).getTime() - Date.now()) / 86_400_000);
 const or = (v: ReactNode) => (v === null || v === undefined || v === '' ? <span className="faint">—</span> : v);
 
-function ProfileDialog({ partnerId, currency, profile, onClose }: { partnerId: string; currency: string; profile: Profile | null; onClose: () => void }) {
+function ProfileDialog({ partnerId, currency, profile, section, onClose }: {
+  partnerId: string; currency: string; profile: Profile | null; section: 'contacts' | 'terms'; onClose: () => void;
+}) {
   const qc = useQueryClient();
   const toast = useToast();
-  const init = (k: keyof Profile) => (profile?.[k] ?? '') as string;
-  const keys = ['owner_name', 'phone2', 'telegram', 'whatsapp', 'contact_notes', 'legal_form', 'legal_name', 'inn', 'ogrn', 'legal_address',
-    'bank_details', 'contract_number', 'contract_date', 'contract_until', 'started_on', 'territory', 'notes'] as const;
-  const [f, setF] = useState<Record<string, string>>(() => ({
-    ...Object.fromEntries(keys.map((k) => [k, init(k)])), franchise_fee_minor: profile?.franchise_fee_minor ? String(profile.franchise_fee_minor) : '',
-  }));
+  const contacts = section === 'contacts';
+  const [original] = useState(() => Object.fromEntries(
+    (contacts ? contactFields : contractFields).map(key => [key, String(profile?.[key] ?? '')]),
+  ));
+  const [f, setF] = useState(original);
+  const dirty = Object.keys(original).some(key => original[key] !== f[key]);
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const m = useMutation({
     mutationFn: () => command('partner_profile_save', { partner: partnerId, data: f }),
@@ -61,43 +66,42 @@ function ProfileDialog({ partnerId, currency, profile, onClose }: { partnerId: s
     <Field label={label}>{(id) => <Input id={id} value={f[k]} onChange={set(k)} {...props} />}</Field>
   );
   return (
-    <ConfirmDialog open title="Карточка франчайзи" confirmLabel="Сохранить карточку" cancelLabel="Закрыть" busy={m.isPending} error={m.error}
-      onClose={onClose} onConfirm={() => m.mutate()}>
-      <h3 className="section-title">Владелец и связь</h3>
-      {text('owner_name', 'Владелец (ФИО)')}
-      <div className="grid grid-2" style={{ gap: 12 }}>
-        {text('phone2', 'Второй телефон', { type: 'tel' })}
-        {text('telegram', 'Telegram', { placeholder: '@имя или телефон' })}
-        {text('whatsapp', 'WhatsApp', { type: 'tel' })}
-      </div>
-      {text('contact_notes', 'Как удобнее связаться', { placeholder: 'Например: звонить после 18:00' })}
+    <ConfirmDialog open title={contacts ? 'Дополнительные контакты' : 'Договор и реквизиты'} confirmLabel="Сохранить" cancelLabel="Закрыть"
+      busy={m.isPending} error={m.error} dirty={dirty} disabled={!dirty} onClose={onClose} onConfirm={() => m.mutate()}>
+      {contacts ? <>
+        {text('owner_name', 'Владелец (ФИО)')}
+        <div className="grid grid-2" style={{ gap: 12 }}>
+          {text('phone2', 'Второй телефон', { type: 'tel' })}
+          {text('telegram', 'Telegram', { placeholder: '@имя или телефон' })}
+          {text('whatsapp', 'WhatsApp', { type: 'tel' })}
+        </div>
+        {text('contact_notes', 'Как удобнее связаться', { placeholder: 'Например: звонить после 18:00' })}
+        <Field label="Заметки менеджера" hint="Видит только менеджер по франшизе">{(id) => <Textarea id={id} rows={4} value={f.notes} onChange={set('notes')} />}</Field>
+      </> : <>
+        <h3 className="section-title">Юрлицо и реквизиты</h3>
+        <div className="grid grid-2" style={{ gap: 12 }}>
+          <Field label="Форма">{(id) => (
+            <Select id={id} value={f.legal_form} onChange={set('legal_form')}>
+              <option value="">—</option>{LEGAL_FORMS.map((x) => <option key={x} value={x}>{x}</option>)}
+            </Select>
+          )}</Field>
+          {text('legal_name', 'Название', { placeholder: 'ИП Иванов В. В.' })}
+          {text('inn', 'ИНН / БИН', { inputMode: 'numeric' })}
+          {text('ogrn', 'ОГРН / ОГРНИП', { inputMode: 'numeric' })}
+        </div>
+        {text('legal_address', 'Юридический адрес')}
+        <Field label="Банковские реквизиты">{(id) => <Textarea id={id} rows={3} value={f.bank_details} onChange={set('bank_details')} />}</Field>
 
-      <h3 className="section-title">Юрлицо и реквизиты</h3>
-      <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label="Форма">{(id) => (
-          <Select id={id} value={f.legal_form} onChange={set('legal_form')}>
-            <option value="">—</option>{LEGAL_FORMS.map((x) => <option key={x} value={x}>{x}</option>)}
-          </Select>
-        )}</Field>
-        {text('legal_name', 'Название', { placeholder: 'ИП Иванов В. В.' })}
-        {text('inn', 'ИНН / БИН', { inputMode: 'numeric' })}
-        {text('ogrn', 'ОГРН / ОГРНИП', { inputMode: 'numeric' })}
-      </div>
-      {text('legal_address', 'Юридический адрес')}
-      <Field label="Банковские реквизиты">{(id) => <Textarea id={id} rows={3} value={f.bank_details} onChange={set('bank_details')} />}</Field>
-
-      <h3 className="section-title">Договор</h3>
-      <div className="grid grid-2" style={{ gap: 12 }}>
-        {text('contract_number', 'Номер договора')}
-        {text('contract_date', 'Дата договора', { type: 'date' })}
-        {text('contract_until', 'Действует до', { type: 'date' })}
-        {text('started_on', 'Начало работы по франшизе', { type: 'date' })}
-        <Field label={`Паушальный взнос, ${currency}`}>{(id) => <MoneyInput id={id} value={f.franchise_fee_minor} onChange={(v) => setF((x) => ({ ...x, franchise_fee_minor: v === '0' ? '' : v }))} currency={currency} />}</Field>
-        {text('territory', 'Территория', { placeholder: 'Город / ТЦ, эксклюзив' })}
-      </div>
-
-      <h3 className="section-title">Заметки менеджера</h3>
-      <Field label="Заметки" hint="Видит только менеджер по франшизе">{(id) => <Textarea id={id} rows={4} value={f.notes} onChange={set('notes')} />}</Field>
+        <h3 className="section-title">Договор</h3>
+        <div className="grid grid-2" style={{ gap: 12 }}>
+          {text('contract_number', 'Номер договора')}
+          {text('contract_date', 'Дата договора', { type: 'date' })}
+          {text('contract_until', 'Действует до', { type: 'date' })}
+          {text('started_on', 'Начало работы по франшизе', { type: 'date' })}
+          <Field label={`Паушальный взнос, ${currency}`}>{(id) => <MoneyInput id={id} value={f.franchise_fee_minor} onChange={(v) => setF((x) => ({ ...x, franchise_fee_minor: v === '0' ? '' : v }))} currency={currency} />}</Field>
+          {text('territory', 'Территория', { placeholder: 'Город / ТЦ, эксклюзив' })}
+        </div>
+      </>}
     </ConfirmDialog>
   );
 }
@@ -218,14 +222,36 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
   );
 }
 
-/** Правая колонка карточки франчайзи: данные, договор, точки, документы. */
-export function PartnerCardPanel({ partner, locations }: { partner: Partner; locations: Location[] }) {
+export function PartnerCardPanel({ partner, section, locations = [], showRevenue, showRoyalty, showStaff, onEditContact }: {
+  partner: Partner; section: 'contacts' | 'terms' | 'locations' | 'documents'; locations?: Location[];
+  showRevenue?: boolean; showRoyalty?: boolean; showStaff?: boolean; onEditContact?: () => void;
+}) {
   const [edit, setEdit] = useState(false);
   const q = useQuery({ queryKey: ['partner-card', partner.id], queryFn: () => partnerCard(partner.id) });
   return (
     <DataState query={q} skeleton={6}>
       {(c) => {
+        if (section === 'documents') return <DocumentsCard partnerId={partner.id} docs={c.documents} />;
         const p = c.profile;
+        if (section === 'contacts') return <Card title="Владелец и связь" actions={<>
+          {onEditContact && <Button size="sm" onClick={onEditContact}>Основной контакт</Button>}
+          <Button size="sm" onClick={() => setEdit(true)}><Edit3 size={15} aria-hidden />Дополнить</Button>
+        </>}>
+          <KV items={[
+            ['Владелец', or(p?.owner_name ?? partner.contact_name)],
+            ...(p?.owner_name && partner.contact_name && p.owner_name !== partner.contact_name
+              ? [['Контактное лицо', partner.contact_name] as [string, ReactNode]] : []),
+            ['Телефон', or(partner.contact_phone && <a href={`tel:${partner.contact_phone}`}>{partner.contact_phone}</a>)],
+            ...(c.partner.contact_city ? [['Город', c.partner.contact_city] as [string, ReactNode]] : []),
+            ...(c.partner.contact_instagram ? [['Instagram', <a key="instagram" href={`https://www.instagram.com/${c.partner.contact_instagram}/`} target="_blank" rel="noopener noreferrer">@{c.partner.contact_instagram}</a>] as [string, ReactNode]] : []),
+            ...(p?.phone2 ? [['Второй телефон', <a key="p2" href={`tel:${p.phone2}`}>{p.phone2}</a>] as [string, ReactNode]] : []),
+            ['Email', or(partner.contact_email && <a href={`mailto:${partner.contact_email}`}>{partner.contact_email}</a>)],
+            ['Telegram', or(p?.telegram)], ['WhatsApp', or(p?.whatsapp)],
+            ...(p?.contact_notes ? [['Связь', p.contact_notes] as [string, ReactNode]] : []),
+          ]} />
+          {p?.notes && <><h3 className="section-title">Заметки менеджера</h3><p className="partner-card-note">{p.notes}</p></>}
+          {edit && <ProfileDialog partnerId={partner.id} currency={partner.currency} profile={p} section="contacts" onClose={() => setEdit(false)} />}
+        </Card>;
         const until = p?.contract_until ? daysTo(p.contract_until) : null;
         const cur = partner.currency;
         const now = new Date();
@@ -235,6 +261,21 @@ export function PartnerCardPanel({ partner, locations }: { partner: Partner; loc
           const today = todayByLocation.get(l.id);
           return day && today && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= today ? [day] : [];
         }).sort()[0];
+        if (section === 'locations') return <Card>
+          {c.locations.map(l => {
+            const today = todayByLocation.get(l.id);
+            const date = l.opened_on && /^\d{4}-\d{2}-\d{2}$/.test(l.opened_on) ? l.opened_on : null;
+            const scheduled = l.status === 'active' && date && today && date > today;
+            return <div key={l.id} className="access-row">
+              <strong>{l.name}</strong>{l.status === 'closed' && <span className="faint"> · Закрыта</span>}
+              <span className="faint" style={{ display: 'block' }}>{[l.city, l.address].filter(Boolean).join(', ')}</span>
+              <span className="faint" style={{ display: 'block' }}>
+                {date ? `${scheduled ? 'Открытие запланировано на' : 'Дата открытия'} ${formatDate(date)}` : 'Дата открытия не указана'}
+                {showRevenue && (l.last_day ? ` · последняя выручка ${formatDate(l.last_day)}` : ' · выручки ещё нет')}
+              </span>
+            </div>;
+          })}
+        </Card>;
         return (
           <div className="stack">
             {until !== null && until <= 60 && (
@@ -243,23 +284,12 @@ export function PartnerCardPanel({ partner, locations }: { partner: Partner; loc
                 <div className="alert-body">{until < 0 ? `Договор истёк ${formatDate(p!.contract_until)}` : `Договор заканчивается ${formatDate(p!.contract_until)} — через ${until} дн.`}</div>
               </div>
             )}
-            <Card title="Карточка франчайзи" actions={<Button size="sm" onClick={() => setEdit(true)}><Edit3 size={15} aria-hidden />{p ? 'Изменить' : 'Заполнить'}</Button>}>
+            <Card title="Договор и реквизиты" actions={<Button size="sm" onClick={() => setEdit(true)}><Edit3 size={15} aria-hidden />{p ? 'Изменить' : 'Заполнить'}</Button>}>
               <KV items={[
                 ...(firstOpening ? [['Первое открытие', `${formatDate(firstOpening)} · ${since(firstOpening)} назад`] as [string, ReactNode]] : []),
-                ['Выручка за 12 мес.', formatMoneyShort(c.stats.revenue_12m_minor, cur)],
-                ['Роялти', `${(c.stats.rate_bp / 100).toLocaleString('ru-RU')} %`],
-                ['Сотрудников', String(c.stats.staff)],
-              ]} />
-              <h3 className="section-title" style={{ marginTop: 14 }}>Владелец и связь</h3>
-              <KV items={[
-                ['Владелец', or(p?.owner_name ?? partner.contact_name)],
-                ['Телефон', or(partner.contact_phone && <a href={`tel:${partner.contact_phone}`}>{partner.contact_phone}</a>)],
-                ...(c.partner.contact_city ? [['Город', c.partner.contact_city] as [string, ReactNode]] : []),
-                ...(c.partner.contact_instagram ? [['Instagram', <a key="instagram" href={`https://www.instagram.com/${c.partner.contact_instagram}/`} target="_blank" rel="noopener noreferrer">@{c.partner.contact_instagram}</a>] as [string, ReactNode]] : []),
-                ...(p?.phone2 ? [['Второй телефон', <a key="p2" href={`tel:${p.phone2}`}>{p.phone2}</a>] as [string, ReactNode]] : []),
-                ['Email', or(partner.contact_email && <a href={`mailto:${partner.contact_email}`}>{partner.contact_email}</a>)],
-                ['Telegram', or(p?.telegram)], ['WhatsApp', or(p?.whatsapp)],
-                ...(p?.contact_notes ? [['Связь', p.contact_notes] as [string, ReactNode]] : []),
+                ...(showRevenue ? [['Выручка за 12 мес.', formatMoneyShort(c.stats.revenue_12m_minor, cur)] as [string, ReactNode]] : []),
+                ...(showRoyalty ? [['Роялти', `${(c.stats.rate_bp / 100).toLocaleString('ru-RU')} %`] as [string, ReactNode]] : []),
+                ...(showStaff ? [['Сотрудников', String(c.stats.staff)] as [string, ReactNode]] : []),
               ]} />
               <h3 className="section-title" style={{ marginTop: 14 }}>Юрлицо</h3>
               <KV items={[
@@ -275,27 +305,10 @@ export function PartnerCardPanel({ partner, locations }: { partner: Partner; loc
                 ['Паушальный взнос', or(p?.franchise_fee_minor ? formatMoneyShort(p.franchise_fee_minor, cur) : null)],
                 ['Территория', or(p?.territory)],
               ]} />
-              {p?.notes && <><h3 className="section-title" style={{ marginTop: 14 }}>Заметки</h3><p style={{ whiteSpace: 'pre-line', margin: 0 }}>{p.notes}</p></>}
               {p && <p className="faint" style={{ marginTop: 10 }}>Обновлено {formatDate(p.updated_at)}{c.updated_by_name ? ` · ${c.updated_by_name}` : ''}</p>}
             </Card>
-            <Card title="Точки">
-              {c.locations.map(l => {
-                const today = todayByLocation.get(l.id);
-                const date = l.opened_on && /^\d{4}-\d{2}-\d{2}$/.test(l.opened_on) ? l.opened_on : null;
-                const scheduled = l.status === 'active' && date && today && date > today;
-                return <div key={l.id} className="access-row">
-                  <strong>{l.name}</strong>{l.status === 'closed' && <span className="faint"> · Закрыта</span>}
-                  <span className="faint" style={{ display: 'block' }}>{[l.city, l.address].filter(Boolean).join(', ')}</span>
-                  <span className="faint" style={{ display: 'block' }}>
-                    {date ? `${scheduled ? 'Открытие запланировано на' : 'Дата открытия'} ${formatDate(date)}` : 'Дата открытия не указана'}
-                    {l.last_day ? ` · последняя выручка ${formatDate(l.last_day)}` : ' · выручки ещё нет'}
-                  </span>
-                </div>;
-              })}
-            </Card>
             <OrderLinkCard partnerId={partner.id} url={c.partner.order_url} />
-            <DocumentsCard partnerId={partner.id} docs={c.documents} />
-            {edit && <ProfileDialog partnerId={partner.id} currency={cur} profile={p} onClose={() => setEdit(false)} />}
+            {edit && <ProfileDialog partnerId={partner.id} currency={cur} profile={p} section="terms" onClose={() => setEdit(false)} />}
           </div>
         );
       }}

@@ -43,6 +43,7 @@ export interface RoyaltyRow {
   partner_id: string; partner_name: string; status: string; country: string; currency: string; rate_bp: number;
   revenue_minor: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean;
   correction_minor?: number; past_debt_minor?: number;
+  undated_debt_minor?: number;
   current_revenue_minor: number; current_accrual_minor: number; debt_months: { month: string; debt_minor: number }[];
   last_payment_on: string | null; fx_rub: number | null;
 }
@@ -50,15 +51,18 @@ export interface RoyaltySummary { month: string | null; current_month: string; r
   totals: { currency: string; accrued_minor: number; paid_minor: number; debt_minor: number }[]; debt_rub_minor: number | null }
 export interface LedgerMonth { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number;
   correction_minor?: number; past_debt_minor?: number; paid_minor: number; debt_minor: number; is_open: boolean }
+export type UndatedRoyalty = Pick<LedgerMonth, 'manual_minor' | 'paid_minor' | 'debt_minor'>;
+export type RoyaltyPayment = { month: string | null; amount_minor: number; paid_on: string | null; note: string | null };
 export interface RoyaltyPartner { partner_id: string; partner_name: string; currency: string; rate_bp: number; months: LedgerMonth[];
-  payments: { id: string; month: string; amount_minor: number; paid_on: string; note: string | null }[];
+  undated?: UndatedRoyalty | null;
+  payments: (RoyaltyPayment & { id: string })[];
   manual: { id: string; month: string; amount_minor: number; note: string | null }[];
   rates: { effective_from: string; rate_bp: number }[] }
 
 export const royaltySummary = (month: string | null) => command<RoyaltySummary>('royalty_summary', { month });
 export const royaltyPartner = (partner: string) => command<RoyaltyPartner>('royalty_partner', { partner });
 export const paymentDelete = (id: string) => command('royalty_payment_delete', { id });
-export const manualAdd = (partner: string, month: string, amount: string, note: string | null) => command('royalty_manual_add', { partner, month, amount, note });
+export const manualAdd = (partner: string, month: string | null, amount: string, note: string | null) => command('royalty_manual_add', { partner, month, amount, note });
 export const manualDelete = (id: string) => command('royalty_manual_delete', { id });
 export const rateSet = (partner: string, rate_bp: number, from: string) => command('royalty_rate_set', { partner, rate_bp, from });
 

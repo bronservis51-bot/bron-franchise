@@ -48,28 +48,32 @@ try {
   const light = spotlight.getBoundingClientRect();
   assert(light.left <= targetRect.left && light.right >= targetRect.right, 'Подсветка не совпала с кнопкой в мобильной навигации');
   const hit = frame.contentDocument.elementFromPoint(targetRect.left + targetRect.width / 2, targetRect.top + targetRect.height / 2);
-  assert(guide.contains(hit), 'Подсвеченная кнопка принимает нажатие под туром');
-  button('Далее').click();
+  assert(guide.contains(hit) && hit.matches('button.guide-spotlight-action'), 'Подсвеченная навигация не получила безопасную кнопку');
+  assert(frame.contentWindow.location.hash === '#/', 'Старая ссылка на рейтинг не вернула на главную');
+  assert(!read('.bottom-nav a[href="#/rating"]'), 'Рейтинг остался в меню');
+  hit.click();
   await until(() => heading() === 'Заявки' && read('dialog[open] .guide-spotlight[data-target="nav-leads"]'), 'Подсказка не открыла заявки');
   button('Назад').click();
   await until(() => heading() === 'Франчайзи' && read('dialog[open] .guide-spotlight[data-target="nav-home"]'), 'Возврат по шагам не работает');
   button('Пропустить').click();
 
-  await until(() => heading() === 'Рейтинг франчайзи', 'Рейтинг недоступен при выданном праве');
+  await until(() => heading() === 'Франчайзи' && !read('dialog.first-run-dialog[open]'), 'Пропуск не вернул на главную');
+  read('.bottom-nav a[href="#/finance"]').click();
+  await until(() => frame.contentWindow.location.hash === '#/finance' && heading(), 'Не открылась экономика');
   read('[data-tour-target="profile"]').click();
   (await until(() => button('Первые шаги'), 'Из профиля нельзя открыть тур повторно')).click();
   (await until(() => button('Далее'), 'Повторный тур не открылся')).click();
   await until(() => heading() === 'Заявки', 'Повторный тур не открыл заявки');
   const preview = frame.contentWindow;
   read('dialog.first-run-dialog[open]').dispatchEvent(new preview.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-  await until(() => heading() === 'Рейтинг франчайзи' && !read('dialog.first-run-dialog[open]'), 'Escape не вернул исходный раздел');
+  await until(() => frame.contentWindow.location.hash === '#/finance' && !read('dialog.first-run-dialog[open]'), 'Escape не вернул исходный раздел');
 
-  updatePermissions(networkPermissions);
-  await until(() => heading() === 'Франчайзи' && read('.access-notice'), 'После отзыва права раздел не закрылся');
-  assert(!read('.bottom-nav a[href="#/rating"]'), 'Рейтинг остался в меню после отзыва');
+  updatePermissions(['kb.read']);
+  await until(() => heading() === 'Главная' && read('.access-notice'), 'После отзыва права раздел не закрылся');
+  assert(!read('.bottom-nav a[href="#/leads"]'), 'Заявки остались в меню после отзыва');
 
-  updatePermissions([...networkPermissions, 'rating.read']);
-  await until(() => read('.bottom-nav a[href="#/rating"]'), 'Меню не обновилось после выдачи права');
+  updatePermissions([...networkPermissions, 'kb.edit']);
+  await until(() => read('.bottom-nav a[href="#/leads"]') && read('.bottom-nav [data-tour-target="nav-kb"] .dot'), 'Меню не обновилось после выдачи права');
   read('.bottom-nav a[href="#/leads"]').click();
   const addLead = await until(() => read('.leads-workspace .page-header .btn-primary'), 'Не открылись заявки');
   addLead.click();
@@ -83,8 +87,8 @@ try {
   field.dispatchEvent(new app.Event('input', { bubbles: true }));
   await until(() => read('.lead-editor[data-unsaved=true]'), 'Черновик не зафиксирован');
   updatePermissions(networkPermissions);
-  await until(() => !read('.bottom-nav a[href="#/rating"]'), 'Отзыв права не отразился в меню');
-  assert(read('dialog[open] .lead-editor input')?.value === 'Черновик заявки', 'Смена права на рейтинг очистила черновик заявки');
+  await until(() => !read('.bottom-nav [data-tour-target="nav-kb"] .dot'), 'Отзыв права не отразился в меню');
+  assert(read('dialog[open] .lead-editor input')?.value === 'Черновик заявки', 'Смена права на базу знаний очистила черновик заявки');
   button('Отмена').click();
   (await until(() => button('Отбросить изменения'), 'Не открылась проверка черновика')).click();
   updatePermissions(['kb.read']);
@@ -101,6 +105,16 @@ try {
   updatePermissions(networkPermissions);
   await until(() => read('main')?.textContent.includes('Статья не найдена'), 'Снятие прав не закрыло неопубликованный материал');
   assert(!read('main')?.textContent.includes('Вымышленный черновик'), 'Старое название черновика осталось на экране');
+
+  const profileLoaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
+  frame.src = '/tests/ui/responsive-app.html?role=team&qa-profile=dual#/';
+  await profileLoaded;
+  (await until(() => read('[data-tour-target="profile"]'), 'Нет кнопки профиля')).click();
+  const profile = await until(() => read('dialog.profile-dialog[open]'), 'Профиль не открылся');
+  assert(profile.querySelector('.profile-name strong')?.textContent === 'Вымышленный сотрудник профиля', 'Профиль показал чужое имя');
+  assert(!/Вымышленный франчайзи профиля|Менеджер продаж/.test(profile.textContent), 'Профиль показал сырой список назначений');
+  assert(profile.querySelector('.profile-name span')?.textContent === 'Управляющий', 'Профиль не показал текущую роль');
+  assert(profile.querySelector('[data-local-work]')?.textContent.includes('Копия и восстановление'), 'Не видно восстановления записей');
 
   result.textContent = 'PASS. Тур подсвечивает реальные кнопки и открывает разделы. Меню обновляется. Черновик в другом разделе сохранён. Закрытый материал скрыт. Профиль без назначений видит состояние ожидания.';
 } catch (error) {

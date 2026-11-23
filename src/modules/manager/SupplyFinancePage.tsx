@@ -1,229 +1,269 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { command, toAppError } from '../../platform/backend';
-import { monthStart } from '../../platform/dates';
+import { formatDate, monthStart } from '../../platform/dates';
+import { formatMoneyShort, groupByCurrency, sumMinor, toBigInt, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { formatMoneyShort } from '../../platform/money';
-import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
+import { ActionError, Button, Card, DataState, PageHeader, Select, Skeleton } from '../../ui';
 import { payrollAccrualLabels } from '../finance/financeReport';
+import { revenueOverview, type Overview } from '../revenue/api';
 import { MonthNav } from '../revenue/components';
-import './supply-finance.css';
-import { revenueOverview } from '../revenue/api';
-import { royaltySummary } from './api';
+import { royaltySummary, type RoyaltySummary } from './api';
+import { economyComparison, networkSpreadsheetLink, type PartnerEconomy, type SupplyRow } from './economyComparison';
 import { RoyaltyPage } from './RoyaltyPage';
-import { useToast } from '../../ui/toast';
+import './supply-finance.css';
 
-interface SupplyRow { partner_id: string; partner_name: string; mapped_count: number; counterparties: string[]; sales_minor: number; cost_minor: number; profit_minor: number }
 interface Unmapped { counterparty_id: string; name: string; sales_minor: number; cost_minor: number; profit_minor: number }
-interface SupplySnapshot { month: string; fetched_at: string | null; period_to: string | null; currency: string; rows: SupplyRow[]; unmapped: Unmapped[] }
-interface NetworkExpense { id: string; category: string; amount_minor: number; note: string | null; created_at: string }
-interface CompanyExpenseDraft { id: string; category: string; amount: string; note: string }
-interface PartnerEconomy { partner_id: string; partner_name: string; currency: string; payroll_minor: number; payroll_halves?: [number, number];
-  closed_shifts: number; expenses_minor: number;
-  expense_categories: { category: string; amount_minor: number }[] }
-interface ManagerEconomy { month: string; company_expenses: NetworkExpense[]; company_expense_totals: { category: string; amount_minor: number }[]; partners: PartnerEconomy[] }
-const money = (n: number | string | undefined, c = 'RUB') => n === undefined ? '—' : formatMoneyShort(n, c);
+interface SupplySnapshot { fetched_at: string | null; period_to: string | null; currency: string; rows: SupplyRow[]; unmapped: Unmapped[] }
+interface ManagerEconomy { partners: PartnerEconomy[] }
 
-function EconomyCell({ label, children }: { label: string; children: ReactNode }) {
-  return <td><span className="economics-mobile-label" aria-hidden>{label}</span><div>{children}</div></td>;
+const sections = [
+  ['overview', 'Обзор'],
+  ['comparison', 'Сравнение'],
+  ['supply', 'Поставки'],
+  ['royalty', 'Роялти и оплаты'],
+] as const;
+type Section = typeof sections[number][0];
+
+const money = (amount: MinorInput, currency: string) => amount == null ? '—' : formatMoneyShort(amount, currency);
+const snapshotDate = new Intl.DateTimeFormat('ru-RU', {
+  dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow',
+});
+
+function readableData<T>({ data, error }: { data: T | undefined; error: unknown }) {
+  return error && ['forbidden', 'unauthenticated'].includes(toAppError(error).code) ? undefined : data;
 }
 
 export function SupplyFinancePage() {
-  const [section, setSection] = useState<'overview' | 'royalty'>('overview');
+  const [section, setSection] = useState<Section>('overview');
+  const [month, setMonth] = useState(monthStart());
   const { can } = useSession();
   const showRoyalty = can('royalty.manage');
   if (!can('org.manage')) return showRoyalty ? <RoyaltyPage /> : null;
+
+  const selected = section === 'royalty' && !showRoyalty ? 'overview' : section;
   return <div className="economy-overview">
-    {showRoyalty && <div className="chips" role="group" aria-label="Раздел экономики">
-      <button type="button" className="chip" aria-pressed={section === 'overview'} onClick={() => setSection('overview')}>Обзор</button>
-      <button type="button" className="chip" aria-pressed={section === 'royalty'} onClick={() => setSection('royalty')}>Роялти и оплаты</button>
-    </div>}
-    {showRoyalty && section === 'royalty' ? <RoyaltyPage /> : <FranchiseOverview />}
+    <div className="chips" role="group" aria-label="Раздел экономики">
+      {sections.filter(([id]) => id !== 'royalty' || showRoyalty).map(([id, label]) => (
+        <button key={id} type="button" className="chip" aria-pressed={selected === id} onClick={() => setSection(id)}>{label}</button>
+      ))}
+    </div>
+    {selected === 'royalty' ? <RoyaltyPage /> :
+      <NetworkEconomy section={selected} month={month} setMonth={setMonth} showRoyalty={showRoyalty} />}
   </div>;
 }
 
-function FranchiseOverview() {
+function NetworkEconomy({ section, month, setMonth, showRoyalty }: {
+  section: Exclude<Section, 'royalty'>; month: string; setMonth: (month: string) => void; showRoyalty: boolean;
+}) {
   const { can } = useSession();
   const showRevenue = can('revenue.read');
-  const showRoyalty = can('royalty.manage');
-  const [month, setMonth] = useState(monthStart());
-  const payrollLabels = payrollAccrualLabels(month);
+  const showSummary = section !== 'supply';
+  const showComparison = section === 'comparison';
   const q = useQuery({ queryKey: ['supply', month], queryFn: () => command<SupplySnapshot>('manager_supply_snapshot', { month }) });
-  const economy = useQuery({ queryKey: ['manager-economy', month], queryFn: () => command<ManagerEconomy>('manager_economy', { month }),
-    refetchInterval: 120_000 });
-  const rev = useQuery({ queryKey: ['revenue', 'overview', month], enabled: showRevenue, queryFn: () => revenueOverview(month) });
-  const royalty = useQuery({ queryKey: ['royalty', 'summary', month], enabled: showRoyalty, queryFn: () => royaltySummary(month) });
-  const revenueData = showRevenue ? rev.data : undefined;
-  const royaltyData = showRoyalty ? royalty.data : undefined;
-  const qc = useQueryClient();
-  const [mapping, setMapping] = useState<Record<string, string>>({});
-  const bind = useMutation({ mutationFn: (counterparty: string) => command('manager_supply_map', { counterparty, partner: mapping[counterparty] }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['supply'] }); } });
+  const economy = useQuery({ queryKey: ['manager-economy', month], enabled: showComparison,
+    queryFn: () => command<ManagerEconomy>('manager_economy', { month }), refetchInterval: 120_000 });
+  const rev = useQuery({ queryKey: ['revenue', 'overview', month], enabled: showSummary && showRevenue, queryFn: () => revenueOverview(month) });
+  const royalties = useQuery({ queryKey: ['royalty', 'summary', month], enabled: showSummary && showRoyalty, queryFn: () => royaltySummary(month) });
+  const report = useQuery({
+    queryKey: ['manager-google-report-link'], enabled: can('org.manage'),
+    queryFn: () => command<string | null>('manager_google_report_link'),
+  });
+  const sheetLink = networkSpreadsheetLink(readableData(report));
+  const supply = readableData(q);
+  const revenue = showRevenue ? readableData(rev) : undefined;
+  const royalty = showRoyalty ? readableData(royalties) : undefined;
+  const refresh = () => {
+    void q.refetch();
+    if (showComparison) void economy.refetch();
+    if (showSummary && showRevenue) void rev.refetch();
+    if (showSummary && showRoyalty) void royalties.refetch();
+    if (report.isError) void report.refetch();
+  };
+  const refreshing = q.isFetching || (showComparison && economy.isFetching)
+    || (showSummary && ((showRevenue && rev.isFetching) || (showRoyalty && royalties.isFetching)));
+  const error = (showComparison ? economy.error : null)
+    ?? (showSummary && showRevenue ? rev.error : null)
+    ?? (showSummary && showRoyalty ? royalties.error : null)
+    ?? (showSummary ? q.error : null);
+
   return <>
-    <PageHeader title="Экономика"
-      actions={<Button onClick={() => { void q.refetch(); void economy.refetch(); if (showRevenue) void rev.refetch(); if (showRoyalty) void royalty.refetch(); }} loading={q.isFetching || economy.isFetching || rev.isFetching || royalty.isFetching}><RefreshCw size={16} aria-hidden />Обновить сводку</Button>} />
+    <PageHeader title="Экономика" actions={<>
+      {sheetLink && <a className="btn btn-primary" href={sheetLink} target="_blank" rel="noopener noreferrer">
+        <ExternalLink size={16} aria-hidden />Открыть таблицы франшизы
+      </a>}
+      <Button variant="secondary" onClick={refresh} loading={refreshing}>
+        <RefreshCw size={16} aria-hidden />Обновить сводку
+      </Button>
+    </>} />
     <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-    <ActionError error={economy.error ?? (showRevenue ? rev.error : null) ?? (showRoyalty ? royalty.error : null) ?? bind.error} />
-    <DataState query={q} skeleton={5}>{s => {
-      const total = s.rows.filter(r => r.mapped_count > 0).reduce((a, r) => ({ sales: a.sales + Number(r.sales_minor), cost: a.cost + Number(r.cost_minor), profit: a.profit + Number(r.profit_minor) }), { sales: 0, cost: 0, profit: 0 });
-      const retailByCurrency = (revenueData?.rows ?? []).reduce<Record<string, number>>((totals, row) => {
-        totals[row.currency] = (totals[row.currency] ?? 0) + Number(row.fact_minor);
-        return totals;
-      }, {});
-      const missingDays = revenueData?.rows.reduce((count, row) => count + row.missing_days.length, 0);
-      const hasMappedSupply = Boolean(s.fetched_at && s.rows.some(r => r.mapped_count > 0));
-      return <div className="stack">
-        {s.fetched_at && <p className="faint">Снимок поставок от {new Date(s.fetched_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} МСК. Период по {s.period_to?.slice(0, 10).split('-').reverse().join('.')}. Кнопка обновляет сводку из последнего загруженного снимка.</p>}
-        <Card title="Сводка сети за месяц">
-          <div className="kpis economy-kpis">
-            <div className="kpi">
-              {Object.entries(retailByCurrency).length ? Object.entries(retailByCurrency).map(([currency, value]) => <span className="v" key={currency}>{money(value, currency)}</span>) : <span className="v">—</span>}
-              <span className="l">Розничная выручка франчайзи</span>
-            </div>
-            <div className={`kpi${missingDays ? ' warn' : ''}`}><span className="v">{missingDays === undefined ? '—' : missingDays}</span><span className="l">Не заполнено прошедших дней</span></div>
-            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.sales) : '—'}</span><span className="l">Поставки: наши продажи, ₽</span></div>
-            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.cost) : '—'}</span><span className="l">Себестоимость отгрузок, ₽</span></div>
-            <div className="kpi"><span className="v">{hasMappedSupply ? money(total.profit) : '—'}</span><span className="l">Валовая прибыль поставок, ₽</span></div>
-          </div>
-          {showRoyalty && <section className="economy-royalty-totals">
-            <h3 id="economy-royalty-heading">Роялти по валютам</h3>
-            {royaltyData?.totals.length ? <div className="table-wrap" role="region" aria-labelledby="economy-royalty-heading" tabIndex={0}>
-              <table className="table">
-                <thead><tr><th scope="col" className="r">Начислено</th><th scope="col" className="r">Оплачено</th></tr></thead>
-                <tbody>{royaltyData.totals.map(row => <tr key={row.currency}>
-                  <td className="r num">{money(row.accrued_minor, row.currency)}</td>
-                  <td className="r num">{money(row.paid_minor, row.currency)}</td>
-                </tr>)}</tbody>
-              </table>
-            </div> : !royalty.isError && <p className="faint">{royalty.isFetching ? 'Загружаем начисления…' : 'Нет данных за этот месяц'}</p>}
-          </section>}
-          <p className="faint">Для расчёта чистой прибыли сети нужны дополнительные данные.</p>
-        </Card>
-        <DataState query={economy} skeleton={3}>{e => <>
-          <CompanyExpenses month={month} expenses={e.company_expenses} totals={e.company_expense_totals} />
-          <Card title="Расходы и зарплаты франчайзи">
-            <p className="faint">Суммы показаны в валюте каждого франчайзи. Зарплаты начислены по закрытым сменам, даты выплат указаны по графику.</p>
-            <div className="economics-table-wrap" role="region" aria-label="Расходы и зарплаты франчайзи" tabIndex={0}><table className="economics-table" role="table">
-              <thead><tr><th>Франчайзи</th><th>Зарплата за месяц</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
-              <tbody>{e.partners.map(p => <tr key={p.partner_id}>
-                <td><Link to={`/partners/${p.partner_id}`}>{p.partner_name}</Link></td>
-                <EconomyCell label="Зарплата за месяц">{money(p.payroll_minor,p.currency)}
-                  {p.payroll_halves?.map((amount, index) => <small key={payrollLabels[index]}>
-                    {payrollLabels[index]} · {money(amount, p.currency)}
-                  </small>)}
-                </EconomyCell>
-                <EconomyCell label="Закрытые смены">{p.closed_shifts}</EconomyCell>
-                <EconomyCell label="Расходы">{money(p.expenses_minor,p.currency)}</EconomyCell>
-                <EconomyCell label="Структура расходов">{p.expense_categories.length ? <details><summary>Статьи: {p.expense_categories.length}</summary><small>{p.expense_categories.map(x => `${x.category}: ${money(x.amount_minor,p.currency)}`).join(' · ')}</small></details> : '—'}</EconomyCell>
-              </tr>)}</tbody>
-            </table></div>
-            <p className="faint">Здесь нет данных по отдельным сотрудникам. Не внесённые расходы не считаются нулевыми подтверждёнными затратами.</p>
-          </Card>
-        </>}</DataState>
-        <div className="economics-table-wrap" role="region" aria-label="Розница, роялти и поставки по франчайзи" tabIndex={0}><table className="economics-table" role="table">
-          <thead><tr><th>Франчайзи</th><th>Розничная выручка</th><th>Роялти начислено / оплачено</th><th>Остаток за месяц</th><th>Наши продажи, ₽</th><th>Себестоимость, ₽</th><th>Валовая прибыль, ₽</th></tr></thead>
-          <tbody>{s.rows.map(r => {
-            const points = revenueData?.rows.filter(p => p.partner_id === r.partner_id);
-            const rr = royaltyData?.rows.find(p => p.partner_id === r.partner_id);
-            const revenue = points?.reduce((n, p) => n + Number(p.fact_minor), 0);
-            const gaps = points?.reduce((n, p) => n + p.missing_days.length, 0);
-            const ready = s.fetched_at && r.mapped_count > 0;
-            return <tr key={r.partner_id}>
-              <td><Link to={`/partners/${r.partner_id}`}>{r.partner_name}</Link>{r.counterparties.length > 0 && <details><summary>Источник поставок</summary><small>{r.counterparties.join('; ')}</small></details>}</td>
-              <EconomyCell label="Розничная выручка">{points?.length ? money(revenue, points[0].currency) : '—'}<small>{points?.length ? gaps ? `Не заполнено ${gaps} дней по точкам` : 'Все прошедшие дни заполнены' : 'Нет отчётов по точкам'}</small></EconomyCell>
-              <EconomyCell label="Роялти начислено / оплачено">{rr ? `${money(Number(rr.accrued_minor) + Number(rr.manual_minor), rr.currency)} / ${money(rr.paid_minor, rr.currency)}` : '—'}</EconomyCell>
-              <EconomyCell label="Остаток за месяц">{rr ? money(Number(rr.accrued_minor) + Number(rr.manual_minor) - Number(rr.paid_minor), rr.currency) : '—'}{rr?.is_open && <small>Месяц ещё открыт</small>}</EconomyCell>
-              <EconomyCell label="Наши продажи, ₽">{ready ? money(r.sales_minor) : '—'}</EconomyCell>
-              <EconomyCell label="Себестоимость, ₽">{ready ? money(r.cost_minor) : '—'}</EconomyCell>
-              <EconomyCell label="Валовая прибыль, ₽">{ready ? money(r.profit_minor) : '—'}</EconomyCell>
-            </tr>;
-          })}</tbody>
-        </table></div>
-        {s.unmapped.length > 0 && <Card title={`Без привязки к франчайзи: ${s.unmapped.length}`}>
-          <p className="faint">Эти суммы не входят в итоги выше. Привязывайте карточку после проверки личности; одинаковое имя не подтверждает совпадение.</p>
-          {s.unmapped.map(c => <div className="supply-mapping" key={c.counterparty_id}>
-            <div><strong>{c.name}</strong><small>{money(c.sales_minor)} продаж · {money(c.cost_minor)} себестоимость</small><a className="faint" href={`https://online.moysklad.ru/app/#Company/edit?id=${c.counterparty_id}`} target="_blank" rel="noopener noreferrer">Открыть карточку МойСклад</a></div>
-            <Select aria-label={`Франчайзи для ${c.name}`} value={mapping[c.counterparty_id] ?? ''} onChange={e => setMapping(x => ({ ...x, [c.counterparty_id]: e.target.value }))}>
-              <option value="">Выберите франчайзи</option>{s.rows.map(p => <option key={p.partner_id} value={p.partner_id}>{p.partner_name}</option>)}
-            </Select>
-            <Button size="sm" disabled={!mapping[c.counterparty_id]} loading={bind.isPending} onClick={() => bind.mutate(c.counterparty_id)}>Привязать</Button>
-          </div>)}
-        </Card>}
-      </div>;
-    }}</DataState>
+    <ActionError error={error} />
+    {section === 'overview' && <NetworkOverview showRevenue={showRevenue} showRoyalty={showRoyalty}
+      revenue={revenue} royalty={royalty} supply={supply} loading={{
+        revenue: rev.isLoading, royalties: royalties.isLoading, supply: q.isLoading,
+      }} />}
+    {showComparison && <FranchiseComparison month={month} showRevenue={showRevenue} showRoyalty={showRoyalty}
+      revenue={revenue} royalty={royalty} supply={supply} economy={readableData(economy)}
+      loading={q.isLoading || economy.isLoading || (showRevenue && rev.isLoading) || (showRoyalty && royalties.isLoading)} />}
+    {section === 'supply' && <DataState query={q}>{snapshot => <SupplyDetails key={month} snapshot={snapshot} />}</DataState>}
   </>;
 }
 
-function CompanyExpenses({ month, expenses, totals }: { month: string; expenses: NetworkExpense[]; totals: ManagerEconomy['company_expense_totals'] }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const [draft, setDraft] = useState<NetworkExpense | null | undefined>(undefined);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['manager-economy', month], exact: true });
-  const refreshMissing = (error: unknown) => { if (toAppError(error).code === 'not-found') refresh(); };
-  const save = useMutation({
-    mutationFn: (value: CompanyExpenseDraft) => command<string>('manager_company_expense_save', {
-      id: value.id || null, month, category: value.category.trim(), amount: value.amount, note: value.note.trim() || null,
-    }),
-    onSuccess: (_id, value) => { toast(value.id ? 'Расход изменён' : 'Расход управляющей компании добавлен'); setDraft(undefined); refresh(); },
-    onError: refreshMissing,
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => command('manager_company_expense_delete', { id }),
-    onSuccess: () => { toast('Расход удалён'); setDeleteId(null); refresh(); },
-    onError: refreshMissing,
-  });
-  const openExpense = (item: NetworkExpense | null) => { save.reset(); setDraft(item); };
-  return <>
-    <Card title="Управляющая компания">
-      <p className="faint">Закупочная себестоимость поставок и отдельно учтённые расходы управляющей компании, ₽. Операционные расходы сюда не попадают автоматически.</p>
-      <div className="kpis">
-        {totals.length ? totals.map(row => <div className="kpi" key={row.category}><span className="l">{row.category}</span><span className="v">{money(row.amount_minor)}</span></div>) : <p className="faint">Расходы управляющей компании за этот месяц ещё не внесены.</p>}
-      </div>
-      {expenses.length > 0 && <ul className="expense-list">
-        {expenses.map(item => <li key={item.id}><div className="expense-row">
-          <span className="expense-main"><strong>{item.category}</strong>{item.note && <span className="faint">{item.note}</span>}</span>
-          <strong className="num">{money(item.amount_minor)}</strong>
-          <Button size="sm" variant="ghost" onClick={() => openExpense(item)}>Изменить</Button>
-          <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => { remove.reset(); setDeleteId(item.id); }}>Удалить</Button>
-        </div></li>)}
-      </ul>}
-      <Button size="sm" onClick={() => openExpense(null)}>Добавить расход</Button>
-    </Card>
-    {draft !== undefined && <CompanyExpenseDialog
-      value={draft}
-      busy={save.isPending}
-      error={save.error}
-      onClose={() => setDraft(undefined)}
-      onSave={(value) => save.mutate(value)}
-    />}
-    <ConfirmDialog open={Boolean(deleteId)} title="Удалить расход управляющей компании?" confirmLabel="Удалить" cancelLabel="Отмена" danger
-      busy={remove.isPending} error={remove.error} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) remove.mutate(deleteId); }} />
-  </>;
-}
-
-function CompanyExpenseDialog({ value, busy, error, onClose, onSave }: {
-  value: NetworkExpense | null; busy: boolean; error: unknown; onClose: () => void; onSave: (value: CompanyExpenseDraft) => void;
+function NetworkOverview({ showRevenue, showRoyalty, revenue, supply, royalty, loading }: {
+  showRevenue: boolean; showRoyalty: boolean; revenue?: Overview; supply?: SupplySnapshot; royalty?: RoyaltySummary;
+  loading: { revenue: boolean; royalties: boolean; supply: boolean };
 }) {
-  const [category, setCategory] = useState(value?.category ?? '');
-  const initialAmount = value?.amount_minor ? String(value.amount_minor) : '';
-  const [amount, setAmount] = useState(initialAmount);
-  const [amountValid, setAmountValid] = useState(true);
-  const [note, setNote] = useState(value?.note ?? '');
-  const canSave = Boolean(category.trim() && amountValid && amount && amount !== '0');
-  const dirty = !amountValid || category !== (value?.category ?? '') || amount !== initialAmount || note !== (value?.note ?? '');
-  return <ConfirmDialog open title={value?.id ? 'Изменить расход компании' : 'Расход управляющей компании'} confirmLabel="Сохранить" cancelLabel="Закрыть"
-    busy={busy} error={error} disabled={!canSave} dirty={dirty} onClose={onClose}
-    onConfirm={() => { if (canSave && !busy) onSave({ id: value?.id ?? '', category, amount, note }); }}>
-    <fieldset className="stack" disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <Field label="Статья расхода" required>{id => <Input id={id} value={category} onChange={event => setCategory(event.target.value)} maxLength={60} placeholder="Например: аренда офиса" autoFocus />}</Field>
-      <Field label="Сумма за месяц, RUB" required error={!amountValid ? 'Укажите сумму, например 12,50.' : undefined}>
-        {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} value={amount} onChange={setAmount}
-          onValidityChange={setAmountValid} currency="RUB" requireExplicitValue />}
-      </Field>
-      <Field label="Комментарий">{id => <Input id={id} value={note} onChange={event => setNote(event.target.value)} maxLength={500} placeholder="Необязательно" />}</Field>
-    </fieldset>
-  </ConfirmDialog>;
+  const retail = groupByCurrency(revenue?.rows ?? [], row => row.currency, row => row.fact_minor);
+  const missingDays = revenue?.rows.reduce((count, row) => count + row.missing_days.length, 0);
+  const mapped = supply?.fetched_at ? supply.rows.filter(row => row.mapped_count > 0) : [];
+  const supplyMetrics = [
+    ['Продажи управляющей компании', sumMinor(mapped.map(row => row.sales_minor))],
+    ['Себестоимость отгрузок', sumMinor(mapped.map(row => row.cost_minor))],
+    ['Валовая прибыль поставок', sumMinor(mapped.map(row => row.profit_minor))],
+  ] as const;
+  return <div className="stack">
+    {showRevenue && <Card title="Розница франчайзи">
+      {loading.revenue ? <Skeleton /> : <div className="kpis economy-kpis">
+        <div className="kpi">
+          <span className="l">Выручка</span>
+          {retail.size
+            ? [...retail].map(([currency, amount]) => <span className="v" key={currency}>{money(amount, currency)}</span>)
+            : <span className="v">—</span>}
+        </div>
+        <div className={'kpi' + (missingDays ? ' warn' : '')}>
+          <span className="l">Пропущено дней по точкам</span>
+          <span className="v">{missingDays ?? '—'}</span>
+        </div>
+      </div>}
+    </Card>}
+    {showRoyalty && <Card title="Роялти по валютам">
+      {loading.royalties ? <Skeleton /> : royalty?.totals.length ? <div className="table-wrap economy-royalty-totals" role="region" aria-label="Роялти по валютам" tabIndex={0}>
+        <table className="table">
+          <thead><tr><th scope="col">Валюта</th><th scope="col" className="r">Начислено</th><th scope="col" className="r">Оплачено</th></tr></thead>
+          <tbody>{royalty.totals.map(row => <tr key={row.currency}>
+            <th scope="row">{row.currency}</th>
+            <td className="r num">{money(row.accrued_minor, row.currency)}</td>
+            <td className="r num">{money(row.paid_minor, row.currency)}</td>
+          </tr>)}</tbody>
+        </table>
+      </div> : <p>{royalty ? 'Нет данных за этот месяц.' : 'Данные роялти недоступны.'}</p>}
+    </Card>}
+    <Card title="Поставки франчайзи">
+      {loading.supply ? <Skeleton /> : mapped.length && supply ? <div className="kpis economy-kpis">{supplyMetrics.map(([label, amount]) => (
+        <div className="kpi" key={label}><span className="l">{label}</span><span className="v">{money(amount, supply.currency)}</span></div>
+      ))}</div> : <p>{!supply ? 'Данные поставок недоступны.' : supply.fetched_at
+        ? 'Продажи по привязанным франчайзи отсутствуют.' : 'Нет загруженного снимка за этот месяц.'}</p>}
+      {supply?.fetched_at && <p className="faint">Снимок МойСклад от {snapshotDate.format(new Date(supply.fetched_at))} МСК.</p>}
+    </Card>
+  </div>;
+}
+
+function EconomyTable({ label, columns, children }: { label: string; columns: string[]; children: ReactNode }) {
+  return <>
+    <p className="economy-scroll-hint faint">Прокрутите таблицу вправо, чтобы увидеть другие показатели.</p>
+    <div className="economy-table-wrap" role="region" aria-label={label} tabIndex={0}>
+      <table className="economy-table">
+        <thead><tr>{columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  </>;
+}
+
+function FranchiseComparison({ month, showRevenue, showRoyalty, revenue, royalty, supply, economy, loading }: {
+  month: string; showRevenue: boolean; showRoyalty: boolean; revenue?: Overview; royalty?: RoyaltySummary;
+  supply?: SupplySnapshot; economy?: ManagerEconomy; loading: boolean;
+}) {
+  const label = 'Сравнение франчайзи';
+  const rows = economyComparison({ points: revenue?.rows, salaries: economy?.partners, royalties: royalty?.rows, supplies: supply?.rows });
+  const payrollLabels = payrollAccrualLabels(month);
+  return <Card title={label} className="economy-comparison">
+    {rows.length ? <EconomyTable label={label} columns={['Франчайзи',
+      ...(showRevenue ? ['Розничная выручка'] : []), ...(showRoyalty ? ['Роялти'] : []), 'Зарплата', 'Расходы', 'Поставки']}>
+      {rows.map(row => {
+        const r = row.royalty;
+        const p = row.salaries;
+        const mapped = supply?.fetched_at && row.supply && row.supply.mapped_count > 0;
+        return <tr key={row.id}>
+          <th scope="row"><Link to={'/partners/' + row.id}>{row.name}</Link></th>
+          {showRevenue && <td>
+            {row.retail.size ? [...row.retail].map(([currency, amount]) =>
+              <strong className="economy-value" key={currency}>{money(amount, currency)}</strong>) : '—'}
+            {row.missingDays !== null && <small>{row.missingDays ? 'Пропущено дней по точкам: ' + row.missingDays : 'Все прошедшие дни заполнены'}</small>}
+          </td>}
+          {showRoyalty && <td>{r ? <>
+            <small>Начислено: {money(toBigInt(r.accrued_minor) + toBigInt(r.manual_minor), r.currency)}</small>
+            <small>Оплачено: {money(r.paid_minor, r.currency)}</small>
+            <small>{r.is_open ? 'Предварительный остаток' : 'Остаток'}: <strong>{money(r.debt_minor, r.currency)}</strong></small>
+          </> : '—'}</td>}
+          <td>{p ? <>
+            <strong className="economy-value">{money(p.payroll_minor, p.currency)}</strong>
+            <small>Закрыто смен: {p.closed_shifts}</small>
+            {p.payroll_halves && <details><summary>График выплат</summary>
+              {p.payroll_halves.map((amount, index) => <small key={payrollLabels[index]}>{payrollLabels[index]} · {money(amount, p.currency)}</small>)}
+            </details>}
+          </> : '—'}</td>
+          <td>{p?.expense_categories.length ? <>
+            <strong className="economy-value">{money(p.expenses_minor, p.currency)}</strong>
+            <details><summary>Статьи расходов</summary>
+              {p.expense_categories.map(item => <small key={item.category}>{item.category}: {money(item.amount_minor, p.currency)}</small>)}
+            </details>
+          </> : <><span>—</span>{p && <small>Не внесены</small>}</>}</td>
+          <td>{mapped && supply && row.supply ? <>
+            <small>Продажи: <strong>{money(row.supply.sales_minor, supply.currency)}</strong></small>
+            <small>Валовая прибыль: {money(row.supply.profit_minor, supply.currency)}</small>
+          </> : '—'}</td>
+        </tr>;
+      })}
+    </EconomyTable> : loading ? <Skeleton /> : <p>Нет данных для сравнения за этот месяц.</p>}
+  </Card>;
+}
+
+function SupplyDetails({ snapshot: s }: { snapshot: SupplySnapshot }) {
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const qc = useQueryClient();
+  const bind = useMutation({
+    mutationFn: ({ counterparty, partner }: { counterparty: string; partner: string }) => command('manager_supply_map', { counterparty, partner }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['supply'] }),
+  });
+
+  return <div className="stack">
+    <Card title="Поставки по франчайзи">
+      {!s.fetched_at ? <p>Нет загруженного снимка за этот месяц.</p> : <>
+        <p className="faint">Снимок МойСклад от {snapshotDate.format(new Date(s.fetched_at))} МСК.
+          {s.period_to && ' Данные по ' + formatDate(s.period_to.slice(0, 10)) + '.'}</p>
+        {s.rows.length ? <EconomyTable label="Поставки по франчайзи" columns={['Франчайзи', 'Наши продажи', 'Себестоимость', 'Валовая прибыль']}>
+          {s.rows.map(row => <tr key={row.partner_id}>
+            <th scope="row"><Link to={'/partners/' + row.partner_id}>{row.partner_name}</Link>
+              {row.counterparties.length > 0 && <details><summary>Источники</summary><small>{row.counterparties.join(', ')}</small></details>}
+            </th>
+            <td>{money(row.mapped_count ? row.sales_minor : null, s.currency)}</td>
+            <td>{money(row.mapped_count ? row.cost_minor : null, s.currency)}</td>
+            <td>{money(row.mapped_count ? row.profit_minor : null, s.currency)}</td>
+          </tr>)}
+        </EconomyTable> : <p>Нет активных франчайзи в снимке.</p>}
+      </>}
+    </Card>
+    {s.unmapped.length > 0 && <Card title={'Без привязки к франчайзи: ' + s.unmapped.length}>
+      <p className="faint">Проверьте карточку МойСклад перед привязкой. Эти продажи войдут в сводку после привязки.</p>
+      <ActionError error={bind.error} />
+      {s.unmapped.map(c => <div className="supply-mapping" key={c.counterparty_id}>
+        <div>
+          <strong>{c.name}</strong>
+          <small>{money(c.sales_minor, s.currency)} продаж · {money(c.cost_minor, s.currency)} себестоимость</small>
+          <a className="faint" href={'https://online.moysklad.ru/app/#Company/edit?id=' + encodeURIComponent(c.counterparty_id)} target="_blank" rel="noopener noreferrer">Открыть карточку МойСклад</a>
+        </div>
+        <Select aria-label={'Франчайзи для ' + c.name} value={mapping[c.counterparty_id] ?? ''} disabled={bind.isPending}
+          onChange={event => setMapping(value => ({ ...value, [c.counterparty_id]: event.target.value }))}>
+          <option value="">Выберите франчайзи</option>
+          {s.rows.map(row => <option key={row.partner_id} value={row.partner_id}>{row.partner_name}</option>)}
+        </Select>
+        <Button size="sm" disabled={!mapping[c.counterparty_id] || bind.isPending}
+          loading={bind.isPending && bind.variables?.counterparty === c.counterparty_id}
+          onClick={() => bind.mutate({ counterparty: c.counterparty_id, partner: mapping[c.counterparty_id] })}>Привязать</Button>
+      </div>)}
+    </Card>}
+  </div>;
 }

@@ -17,12 +17,13 @@ function formChanged<T extends Record<string, string>>(original: T, draft: T) {
   return Object.keys(original).some(key => original[key] !== draft[key]);
 }
 
-export function PartnerDialog({ partner, working, fromLead, onClose, onSaved }: {
-  partner?: Partner; working?: boolean; onClose: () => void; onSaved?: (id: string) => void;
+export function PartnerDialog({ partner, working, focusContact = false, fromLead, onClose, onSaved }: {
+  partner?: Partner; working?: boolean; focusContact?: boolean; onClose: () => void; onSaved?: (id: string) => void;
   fromLead?: { initial: Partial<PartnerFromLead>; create: (fields: PartnerFromLead, operation: string) => Promise<string> };
 }) {
   const qc = useQueryClient();
-  const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity });
+  const contactOnly = Boolean(partner && focusContact);
+  const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity, enabled: !contactOnly });
   const [original] = useState(() => ({ name: partner?.name ?? fromLead?.initial.name ?? '', country: partner?.country ?? fromLead?.initial.country ?? 'RU',
     contact_name: partner?.contact_name ?? fromLead?.initial.contact_name ?? '', contact_phone: partner?.contact_phone ?? fromLead?.initial.contact_phone ?? '',
     contact_email: partner?.contact_email ?? fromLead?.initial.contact_email ?? '', status: partner?.status ?? 'active',
@@ -45,27 +46,29 @@ export function PartnerDialog({ partner, working, fromLead, onClose, onSaved }: 
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
-    <ConfirmDialog open title={partner ? 'Данные франчайзи' : 'Новый франчайзи'} confirmLabel={fromLead ? 'Создать франчайзи' : 'Сохранить'} busy={m.isPending} error={m.error}
+    <ConfirmDialog open title={contactOnly ? 'Основной контакт' : partner ? 'Данные франчайзи' : 'Новый франчайзи'} confirmLabel={fromLead ? 'Создать франчайзи' : 'Сохранить'} busy={m.isPending} error={m.error}
       disabled={!f.name.trim()} dirty={formChanged(original, f)} onClose={onClose} onConfirm={() => m.mutate()}>
-      <Field label="Название" required hint="Например: Виктор (Волгоград)">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
-      <div className="grid grid-2" style={{ gap: 12 }}>
-        <Field label="Страна" hint={partner ? 'Страну и валюту после создания не меняют' : 'Определяет валюту'}>{(id) => (
-          <Select id={id} value={f.country} disabled={Boolean(partner)} onChange={set('country')}>
-            {(c.data ?? []).map((x) => <option key={x.code} value={x.code}>{x.name} ({x.default_currency})</option>)}
+      {!contactOnly && <>
+        <Field label="Название" required hint="Например: Виктор (Волгоград)">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
+        <div className="grid grid-2" style={{ gap: 12 }}>
+          <Field label="Страна" hint={partner ? 'Страну и валюту после создания не меняют' : 'Определяет валюту'}>{(id) => (
+            <Select id={id} value={f.country} disabled={Boolean(partner)} onChange={set('country')}>
+              {(c.data ?? []).map((x) => <option key={x.code} value={x.code}>{x.name} ({x.default_currency})</option>)}
+            </Select>
+          )}</Field>
+          {partner && <Field label="Статус франчайзи">{(id) => (
+            <Select id={id} value={f.status} onChange={set('status')}>
+              <option value="active">Активен</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
+            </Select>
+          )}</Field>}
+        </div>
+        <Field label="Этап подготовки" hint={working ? 'Сохранённый этап до открытия торговой точки' : 'Этап можно менять в любом порядке'}>{(id) => (
+          <Select id={id} value={f.preparation_stage} onChange={set('preparation_stage')}>
+            <option value="">Не указан</option>
+            {Object.entries(PARTNER_PREPARATION).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
           </Select>
         )}</Field>
-        {partner && <Field label="Статус франчайзи">{(id) => (
-          <Select id={id} value={f.status} onChange={set('status')}>
-            <option value="active">Активен</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
-          </Select>
-        )}</Field>}
-      </div>
-      <Field label="Этап подготовки" hint={working ? 'Сохранённый этап до открытия торговой точки' : 'Этап можно менять в любом порядке'}>{(id) => (
-        <Select id={id} value={f.preparation_stage} onChange={set('preparation_stage')}>
-          <option value="">Не указан</option>
-          {Object.entries(PARTNER_PREPARATION).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
-        </Select>
-      )}</Field>
+      </>}
       <Field label="Контактное лицо">{(id) => <Input id={id} value={f.contact_name} onChange={set('contact_name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Телефон">{(id) => <Input id={id} type="tel" value={f.contact_phone} onChange={set('contact_phone')} />}</Field>
@@ -79,7 +82,9 @@ export function PartnerDialog({ partner, working, fromLead, onClose, onSaved }: 
   );
 }
 
-export function LocationDialog({ partnerId, location, onClose }: { partnerId: string; location?: Location; onClose: () => void }) {
+export function LocationDialog({ partnerId, location, onClose, onSaved }: {
+  partnerId: string; location?: Location; onClose: () => void; onSaved?: (id: string) => void;
+}) {
   const qc = useQueryClient();
   const [original] = useState(() => ({ name: location?.name ?? '', city: location?.city ?? '', address: location?.address ?? '',
     status: location?.status ?? 'active', opened_on: location?.opened_on ?? '' }));
@@ -88,7 +93,7 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
   const m = useMutation({
     mutationFn: () => locationSave({ id: version.id, partner: partnerId, ...f, opened_on: f.opened_on || null, expected_updated_at: version.updatedAt }),
     onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['locations', partnerId] }); },
-    onSuccess: () => { void qc.invalidateQueries(); onClose(); },
+    onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (

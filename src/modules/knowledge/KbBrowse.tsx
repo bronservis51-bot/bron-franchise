@@ -1,23 +1,21 @@
-// База знаний, устроенная под рост: поиск → разделы (два уровня) → статья. Плюс «Нужно прочитать», «Продолжить», «Новое», «Популярное».
-// Менеджеру — экран управления: все статьи с просмотрами и оценками, редактор разделов.
+// Поиск, каталог тем и отдельные рабочие подборки. Редакторские действия собраны в управлении.
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive, ArchiveRestore, BookOpen, Check, ChevronRight, ClipboardList, Clock, Edit3, FilePlus, FolderTree, GraduationCap, HelpCircle, Megaphone,
-  MessageCircleQuestion, PlayCircle, Rocket, Scissors, Search, SearchX, Settings2, ShieldCheck, Smartphone, Star, ThumbsDown, ThumbsUp, Trash2, Users, Wallet, Wrench,
+  MessageCircleQuestion, PlayCircle, Rocket, Scissors, Search, SearchX, Settings2, ShieldCheck, Smartphone, Star, ThumbsDown, ThumbsUp, Trash2, Users, Wallet, Wrench, X,
 } from 'lucide-react';
 import { command } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { formatDate, formatDateTime } from '../../platform/dates';
 import { ActionError, Alert, Badge, Button, Card, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, LinkButton, PageHeader, Select } from '../../ui';
-import { HelpTip } from '../../ui/HelpTip';
 import { ARTICLE_STATUS, st } from '../../ui/status';
 import { headings, Markdown } from '../../ui/markdown';
 import { useToast } from '../../ui/toast';
 import {
   getArticle, getRevision, kbArticleOpen, kbCommands, kbHome, kbManage, kbMisses, kbRate, kbSectionPage, myAcks, revisionsOf, search, sectionTree, sections, toRead,
-  TYPE_LABEL, type Card as ArticleCard, type SectionNode,
+  TYPE_LABEL, type Card as ArticleCard, type KbHome, type SectionNode, type ToRead,
 } from './api';
 import { AckStatusCard, AskDialog } from './KnowledgePages';
 import { KbJourneys } from './KbJourneys';
@@ -77,7 +75,7 @@ function ArticleItem({ a, editor, sectionTitle }: { a: ArticleCard; editor?: boo
 }
 
 /** The URL is the source of truth: a returned article preserves the query and filters. */
-function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
+function KbSearch() {
   const { can } = useSession();
   const editor = can('kb.edit');
   const [params, setParams] = useSearchParams();
@@ -89,7 +87,6 @@ function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
   const [asking, setAsking] = useState<string | null>(null);
   const active = q.trim().length >= 2;
   useEffect(() => { const h = setTimeout(() => setDebounced(q.trim()), 300); return () => clearTimeout(h); }, [q]);
-  useEffect(() => onResults(active), [active, onResults]);
   const results = useQuery({ queryKey: ['kb', 'search', debounced, includeDrafts], enabled: active && debounced.length >= 2, queryFn: () => search(debounced, includeDrafts) });
   function update(key: string, value: string) {
     const next = new URLSearchParams(params);
@@ -101,19 +98,16 @@ function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
   return (
     <>
       <section className="kb-search-panel" aria-label="Поиск по базе знаний">
-        <label className="kb-search-heading" htmlFor="kb-q">Поиск по базе знаний</label>
+        <label className="sr-only" htmlFor="kb-q">Поиск по базе знаний</label>
         <div className="kb-search-box" role="search">
-          <Search size={22} aria-hidden />
-          <input id="kb-q" type="search" className="kb-search-input" placeholder="Например, смена"
+          <Search size={20} aria-hidden />
+          <input id="kb-q" type="search" className="kb-search-input" placeholder="Найти статью"
             value={q} onChange={(e) => update('q', e.target.value)} autoComplete="off" maxLength={200}
-            aria-describedby="kb-search-hint" aria-controls={active ? 'kb-search-results' : undefined} />
-          {q && <button type="button" className="kb-search-clear" onClick={() => { update('q', ''); document.getElementById('kb-q')?.focus(); }}>Очистить</button>}
+            aria-describedby={q.trim().length === 1 ? 'kb-search-hint' : undefined} aria-controls={active ? 'kb-search-results' : undefined} />
+          {q && <button type="button" className="kb-search-clear" aria-label="Очистить поиск" title="Очистить поиск"
+            onClick={() => { update('q', ''); document.getElementById('kb-q')?.focus(); }}><X size={18} aria-hidden /></button>}
         </div>
-        <div id="kb-search-hint" className="kb-search-hint">Поиск по названиям, текстам и ключевым словам</div>
-        {!active && <div className="kb-search-examples" aria-label="Примеры запросов">
-          {['Анкета кандидата', 'Гарантия', 'Заказ материалов', 'Пузыри после оклейки'].map(example => <button key={example} type="button" onClick={() => update('q', example)}>{example}<ChevronRight size={12} aria-hidden /></button>)}
-        </div>}
-        {q.trim().length === 1 && <div className="kb-search-hint" role="status">Введите ещё хотя бы один символ</div>}
+        {q.trim().length === 1 && <div id="kb-search-hint" className="kb-search-hint" role="status">Введите ещё один символ</div>}
       </section>
       {active && (
         <Card bodyless className="kb-results">
@@ -158,17 +152,17 @@ function KbSearch({ onResults }: { onResults: (active: boolean) => void }) {
   );
 }
 
-function SectionTiles({ nodes }: { nodes: (SectionNode & { children: SectionNode[] })[] }) {
+function SectionTiles({ nodes, compact }: { nodes: (SectionNode & { children: SectionNode[] })[]; compact?: boolean }) {
   return (
-    <div className="kb-tiles">
+    <div className={compact ? 'kb-tiles kb-tiles-compact' : 'kb-tiles'}>
       {nodes.map((s) => (
         <Link key={s.id} to={`/kb/s/${s.id}`} className="kb-tile">
           <SectionIcon icon={s.icon} size={22} />
           <span className="kb-tile-main">
             <span className="kb-tile-title">{s.title}</span>
-            {s.children.length > 0
+            {!compact && (s.children.length > 0
               ? <span className="kb-tile-subs">{s.children.map((c) => c.title).join(', ')}</span>
-              : s.description && <span className="kb-tile-desc">{s.description}</span>}
+              : s.description && <span className="kb-tile-desc">{s.description}</span>)}
           </span>
           <span className="kb-tile-count" aria-label={`Опубликовано материалов: ${s.count}`}>{s.count || 'Пусто'}</span>
         </Link>
@@ -177,90 +171,96 @@ function SectionTiles({ nodes }: { nodes: (SectionNode & { children: SectionNode
   );
 }
 
+const HOME_VIEWS = [
+  { id: 'topics', title: 'Темы', to: '/kb' },
+  { id: 'tasks', title: 'Задачи', to: '/kb?view=tasks' },
+  { id: 'reading', title: 'Подборки', to: '/kb?view=reading' },
+] as const;
+
+function KbCollections({ home, reading }: { home: KbHome; reading: ToRead[] }) {
+  const titleOf = (id: string) => home.sections.find((s) => s.id === id)?.title;
+  return <div className="stack">
+    {reading.length > 0 && (
+      <Card title="Нужно прочитать" bodyless className="to-read">
+        <ul className="kb-list">
+          {reading.map((a) => (
+            <li key={a.article_id}>
+              <Link className="kb-item" to={`/kb/articles/${a.article_id}`}>
+                <span className="kb-item-main"><span className="kb-item-title">{a.title}</span>{a.summary && <span className="kb-item-sum">{a.summary}</span>}</span>
+                <Badge tone={a.due_on < new Date().toISOString().slice(0, 10) ? 'danger' : 'warning'}>до {formatDate(a.due_on)}</Badge>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    )}
+    {home.continue.length > 0 && (
+      <Card title="Продолжить чтение" bodyless>
+        <ul className="kb-list">{home.continue.map((a) => <ArticleItem key={a.id} a={a} sectionTitle={titleOf(a.section_id)} />)}</ul>
+      </Card>
+    )}
+    <div className="grid grid-2">
+      <Card title="Новое" bodyless>
+        {home.recent.length ? <ul className="kb-list">{home.recent.map((a) => <ArticleItem key={a.id} a={a} sectionTitle={titleOf(a.section_id)} />)}</ul> : <div className="card-body faint">Пока пусто</div>}
+      </Card>
+      <Card title="Популярное за месяц" bodyless>
+        {home.popular.length ? <ul className="kb-list">{home.popular.map((a) => <ArticleItem key={a.id} a={a} sectionTitle={titleOf(a.section_id)} />)}</ul> : <div className="card-body faint">Появится, когда статьи начнут читать</div>}
+      </Card>
+    </div>
+  </div>;
+}
+
 export function KbHomePage() {
   const { can } = useSession();
   const editor = can('kb.edit');
-  const navigate = useNavigate();
-  const [searching, setSearching] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [params] = useSearchParams();
+  const searching = (params.get('q') ?? '').trim().length >= 2;
+  const requestedView = params.get('view');
+  const view = requestedView === 'reading' ? 'reading' : requestedView === 'tasks' || params.has('path') ? 'tasks' : 'topics';
   const [asking, setAsking] = useState<string | null>(null);
-  const home = useQuery({ queryKey: ['kb', 'home', editor], queryFn: kbHome });
+  const home = useQuery({ queryKey: ['kb', 'home', editor], queryFn: kbHome, enabled: !searching });
   const reading = useQuery({ queryKey: ['kb', 'to-read'], enabled: !editor, queryFn: toRead });
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
-  const misses = useQuery({ queryKey: ['kb', 'misses'], enabled: editor, queryFn: kbMisses });
   const tree = useMemo(() => sectionTree(home.data?.sections ?? []), [home.data]);
-  const titleOf = (id: string) => home.data?.sections.find((s) => s.id === id)?.title;
+  const required = editor ? 0 : reading.data?.length ?? 0;
+  const questions = editor ? 'Вопросы' : 'Мои вопросы';
+  const notifications = (editor ? inbox.data?.unanswered : inbox.data?.new_answers) ?? 0;
 
   return (
-    <div className="kb">
-      <PageHeader title="База знаний"
-        actions={editor ? (
-          <>
-            <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Вопросы{inbox.data?.unanswered ? ` (${inbox.data.unanswered})` : ''}</LinkButton>
-            <LinkButton to="/kb/manage"><Settings2 size={16} aria-hidden />Управление</LinkButton>
-            <Button variant="primary" onClick={() => setCreating(true)}><FilePlus size={16} aria-hidden />Новая статья</Button>
-          </>
-        ) : (
-          <>
-            <div className="kb-questions-action">
-              <LinkButton to="/kb/questions">Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
-              <HelpTip label="Где посмотреть ответ">Ответы команды сети появляются в «Моих вопросах». Вопрос по инструкции можно задать из самой статьи.</HelpTip>
-            </div>
-            <Button onClick={() => setAsking('')}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
-          </>
-        )} />
-      <KbSearch onResults={setSearching} />
+    <div className="kb kb-home">
+      <PageHeader title="База знаний" />
+      <KbSearch />
       {!searching && (
-        <DataState query={home} skeleton={6}>
-          {(h) => (
-            <div className="stack">
-              <KbJourneys nodes={h.sections} onAsk={setAsking} />
-              {Boolean(reading.data?.length) && (
-                <Card title="Нужно прочитать" bodyless className="to-read">
-                  <ul className="kb-list">
-                    {reading.data!.map((a) => (
-                      <li key={a.article_id}>
-                        <Link className="kb-item" to={`/kb/articles/${a.article_id}`}>
-                          <span className="kb-item-main"><span className="kb-item-title">{a.title}</span>{a.summary && <span className="kb-item-sum">{a.summary}</span>}</span>
-                          <Badge tone={a.due_on < new Date().toISOString().slice(0, 10) ? 'danger' : 'warning'}>до {formatDate(a.due_on)}</Badge>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-              {editor && Boolean(h.drafts) && <Alert tone="info" title={`Черновиков: ${h.drafts}`} action={<LinkButton size="sm" to="/kb/manage?status=draft">Открыть</LinkButton>}>Франчайзи их не видят, пока вы не опубликуете.</Alert>}
-              {h.continue.length > 0 && (
-                <section>
-                  <h2 className="section-title">Продолжить чтение</h2>
-                  <div className="kb-continue">{h.continue.map((a) => (
-                    <Link key={a.id} to={`/kb/articles/${a.id}`} className="kb-chip-card"><span className="kb-item-title">{a.title}</span><span className="faint">{titleOf(a.section_id)}</span></Link>
-                  ))}</div>
-                </section>
-              )}
-              <section>
-                <div className="kb-section-label"><h2>Все темы</h2><span>{h.total} опубликованных материалов</span></div>
-                {tree.length ? <SectionTiles nodes={tree} /> : <EmptyState title="Разделов пока нет" />}
-              </section>
-              <div className="grid grid-2">
-                <Card title="Новое" bodyless>
-                  {h.recent.length ? <ul className="kb-list">{h.recent.map((a) => <ArticleItem key={a.id} a={a} sectionTitle={titleOf(a.section_id)} />)}</ul> : <div className="card-body faint">Пока пусто</div>}
-                </Card>
-                <Card title="Популярное за месяц" bodyless>
-                  {h.popular.length ? <ul className="kb-list">{h.popular.map((a) => <ArticleItem key={a.id} a={a} sectionTitle={titleOf(a.section_id)} />)}</ul> : <div className="card-body faint">Появится, когда статьи начнут читать</div>}
-                </Card>
-              </div>
-              {editor && Boolean(misses.data?.length) && (
-                <Card title="Искали и не нашли" icon={<SearchX size={18} />}>
-                  <p className="faint">Запросы без результатов за 60 дней.</p>
-                  <div className="chips" style={{ marginBottom: 0 }}>{misses.data!.map((m) => <span key={m.query} className="chip" style={{ cursor: 'default' }}>{m.query}{m.times > 1 ? ` ×${m.times}` : ''}</span>)}</div>
-                </Card>
-              )}
-            </div>
-          )}
-        </DataState>
+        <>
+          <div className="kb-home-links">
+            <nav className="kb-home-views" aria-label="Материалы базы знаний">
+              {HOME_VIEWS.map((item) => <Link key={item.id} to={item.to} className="kb-home-link"
+                aria-current={view === item.id ? 'page' : undefined}>{item.title}</Link>)}
+            </nav>
+            <nav className="kb-home-actions" aria-label="Действия базы знаний">
+              {view !== 'reading' && required > 0 && <Link className="kb-home-link kb-reading-link" to="/kb?view=reading">
+                <ClipboardList size={16} aria-hidden />Нужно прочитать <span className="kb-home-count">{required}</span>
+              </Link>}
+              <Link className="kb-home-link" to="/kb/questions"
+                aria-label={notifications ? `${questions}. ${editor ? 'Без ответа' : 'Новых ответов'} ${notifications}` : undefined}>
+                <MessageCircleQuestion size={16} aria-hidden />{questions}
+                {notifications > 0 && <span className="kb-home-count" aria-hidden>{notifications}</span>}
+              </Link>
+              {editor && <Link className="kb-home-link" to="/kb/manage"><Settings2 size={16} aria-hidden />Управление</Link>}
+            </nav>
+          </div>
+          <DataState query={home} skeleton={3}>
+            {(h) => {
+              if (view === 'tasks') return <KbJourneys nodes={h.sections} onAsk={setAsking} />;
+              if (view === 'reading') return <KbCollections home={h} reading={editor ? [] : reading.data ?? []} />;
+              return <section aria-labelledby="kb-topics-title">
+                <div className="kb-section-label"><h2 id="kb-topics-title">Все темы</h2></div>
+                {tree.length ? <SectionTiles nodes={tree} compact /> : <EmptyState title="Разделов пока нет" />}
+              </section>;
+            }}
+          </DataState>
+        </>
       )}
-      {creating && <NewArticleDialog onClose={() => setCreating(false)} onCreated={(id) => navigate(`/kb/articles/${id}/edit`)} />}
       {asking !== null && <AskDialog initial={asking} onClose={() => setAsking(null)} />}
     </div>
   );
@@ -535,22 +535,38 @@ function SectionEditDialog({ section, onClose, onDeleted }: { section?: { id: st
 /** Менеджеру: все статьи одной таблицей и структура разделов. */
 export function KbManagePage() {
   const { can } = useSession();
+  const editor = can('kb.edit');
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [filter, setFilter] = useState(params.get('status') ?? 'all');
+  const filter = params.get('status') ?? 'all';
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<'articles' | 'sections'>('articles');
   const [edit, setEdit] = useState<SectionNode | 'new' | null>(null);
-  const rows = useQuery({ queryKey: ['kb', 'manage'], queryFn: kbManage });
-  const secs = useQuery({ queryKey: ['kb', 'home', true], queryFn: kbHome });
+  const [creating, setCreating] = useState(false);
+  const [showMisses, setShowMisses] = useState(false);
+  const rows = useQuery({ queryKey: ['kb', 'manage'], queryFn: kbManage, enabled: editor });
+  const secs = useQuery({ queryKey: ['kb', 'home', true], queryFn: kbHome, enabled: editor });
+  const misses = useQuery({ queryKey: ['kb', 'misses'], queryFn: kbMisses, enabled: editor && showMisses });
   const tree = useMemo(() => sectionTree(secs.data?.sections ?? []), [secs.data]);
-  if (!can('kb.edit')) return <EmptyState title="Раздел для менеджера по франшизе" />;
+  if (!editor) return <EmptyState title="Раздел для менеджера по франшизе" />;
+  const drafts = secs.data?.drafts;
   const list = (rows.data ?? []).filter((a) =>
     (filter === 'all' || (filter === 'draft' ? a.status === 'draft' || a.has_draft : filter === 'required' ? a.required_ack : filter === 'low' ? a.not_helpful > a.helpful : a.status === filter))
     && (!q.trim() || a.title.toLowerCase().includes(q.trim().toLowerCase())));
   return (
     <div className="kb">
       <Crumbs items={[{ to: '/kb', label: 'База знаний' }, { label: 'Управление' }]} />
-      <PageHeader title="Управление базой знаний" actions={<LinkButton to="/learning/manage">Обучение сотрудников</LinkButton>} />
+      <PageHeader title="Управление базой знаний" actions={<>
+        <LinkButton to="/learning/manage">Обучение сотрудников</LinkButton>
+        <Button variant="primary" onClick={() => setCreating(true)}><FilePlus size={16} aria-hidden />Новая статья</Button>
+      </>} />
+      <details className="kb-search-misses" onToggle={e => setShowMisses(e.currentTarget.open)}>
+        <summary>Поиск без результатов</summary>
+        {showMisses && <div className="kb-search-misses-body"><DataState query={misses} skeleton={2}>{(items) => items.length ? <>
+          <p className="faint">Запросы за последние 60 дней</p>
+          <ul className="kb-missed-queries">{items.map((item) => <li key={item.query}>{item.query}{item.times > 1 && <span> ×{item.times}</span>}</li>)}</ul>
+        </> : <p className="faint">Запросов без результатов за последние 60 дней нет.</p>}</DataState></div>}
+      </details>
       <div className="tabs" role="tablist" aria-label="Управление">
         <button type="button" role="tab" aria-selected={tab === 'articles'} onClick={() => setTab('articles')}>Статьи</button>
         <button type="button" role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Разделы</button>
@@ -560,8 +576,8 @@ export function KbManagePage() {
           <div className="row" style={{ marginBottom: 12 }}>
             <Input aria-label="Найти статью" placeholder="Найти по названию" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320 }} />
           </div>
-          <Chips label="Фильтр" value={filter} onChange={(v) => { setFilter(v); setParams(v === 'all' ? {} : { status: v }, { replace: true }); }}
-            options={[{ id: 'all', label: 'Все' }, { id: 'published', label: 'Опубликованы' }, { id: 'draft', label: 'Черновики и правки' }, { id: 'archived', label: 'Архив' },
+          <Chips label="Фильтр" value={filter} onChange={(v) => setParams(v === 'all' ? {} : { status: v }, { replace: true })}
+            options={[{ id: 'all', label: 'Все' }, { id: 'published', label: 'Опубликованы' }, { id: 'draft', label: drafts ? `Черновики и правки (${drafts})` : 'Черновики и правки' }, { id: 'archived', label: 'Архив' },
               { id: 'required', label: 'Обязательные' }, { id: 'low', label: 'Плохие оценки' }]} />
           <DataState query={rows} empty={() => (list.length ? null : <EmptyState title="Ничего не найдено" />)}>
             {() => (
@@ -612,6 +628,7 @@ export function KbManagePage() {
           {edit && <SectionEditDialog section={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
         </>
       )}
+      {creating && <NewArticleDialog onClose={() => setCreating(false)} onCreated={(id) => navigate(`/kb/articles/${id}/edit`)} />}
     </div>
   );
 }

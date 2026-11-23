@@ -1,6 +1,4 @@
-// Меню по роли. Франчайзи: главная, сотрудники, финансы (вкл. роялти), база знаний. Рейтинг — только менеджеру сети.
-// Менеджер: франчайзи, заявки с сайта, экономика (вкл. роялти), рейтинг, база знаний.
-import { BookOpen, GraduationCap, Home, Inbox, Trophy, Users, Wallet } from 'lucide-react';
+import { BookOpen, GraduationCap, Home, Inbox, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { useSession } from '../platform/session';
 
@@ -49,7 +47,6 @@ export function workspaceAccess(role: WorkspaceRole, can: PermissionCheck) {
     network,
     finance: network || royalty || (role === 'franchisee' && can('revenue.read')),
     royalty,
-    rating: role === 'manager' && can('rating.read'),
     staffDirectory: partner && canOpenStaffDirectory(can),
     order: partner && canOrderMaterials(can),
     learning,
@@ -59,13 +56,12 @@ export function workspaceAccess(role: WorkspaceRole, can: PermissionCheck) {
 }
 
 export function navFor(role: WorkspaceRole, can: PermissionCheck = () => false): NavItem[] {
-  const { network, finance, staffDirectory, rating } = workspaceAccess(role, can);
+  const { network, finance, staffDirectory } = workspaceAccess(role, can);
   if (role === 'pending') return [];
   if (role === 'manager') return [
     home,
     ...(network ? [{ to: '/leads', label: 'Заявки', icon: Inbox, badge: 'leads' as const }] : []),
     ...(finance ? [{ to: '/finance', label: network ? 'Экономика' : 'Роялти', icon: Wallet }] : []),
-    ...(rating ? [{ to: '/rating', label: 'Рейтинг', icon: Trophy }] : []),
     { to: '/kb', label: 'Знания', icon: BookOpen, badge: 'kb' },
   ];
   if (role === 'support') return [{ ...home, badge: 'kb' }, { to: '/kb', label: 'Знания', icon: BookOpen }];

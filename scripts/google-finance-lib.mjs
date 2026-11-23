@@ -46,19 +46,24 @@ function amountCell(amount, units) {
   return Number(amount) / 10 ** units;
 }
 
+function reportMonth(month) {
+  return month === null ? 'Без периода' : month.slice(0, 7);
+}
+
 function monthRows(records) {
   const groups = new Map();
   for (const row of records) {
-    const key = [row.month, row.partner_id, row.currency].join('|');
-    if (!groups.has(key)) groups.set(key, { row, totals: new Map() });
+    const period = reportMonth(row.month);
+    const key = [period, row.partner_id, row.currency].join('|');
+    if (!groups.has(key)) groups.set(key, { period, row, totals: new Map() });
     const { totals } = groups.get(key);
     if (row.amount != null) totals.set(row.kind, (totals.get(row.kind) ?? 0n) + BigInt(row.amount));
   }
-  return [...groups.values()].map(({ row, totals }) => {
+  return [...groups.values()].map(({ period, row, totals }) => {
     const amount = (key) => amountCell(totals.get(key), row.minor_unit);
     const sum = (key) => totals.get(key) ?? 0n;
     const net = totals.has('revenue') ? sum('revenue') - sum('return') - sum('payroll') - sum('expense') - sum('royalty') : null;
-    return [row.month.slice(0, 7), row.partner, row.currency, amount('plan'), amount('revenue'), amount('payroll'),
+    return [period, row.partner, row.currency, amount('plan'), amount('revenue'), amount('payroll'),
       amount('expense'), amount('royalty'), amount('royalty_adjustment'), amount('royalty_payment'), amountCell(net, row.minor_unit),
       amount('return'), amount('royalty_past_debt')];
   });
@@ -95,7 +100,7 @@ export function buildGoogleReports(books, records, observedAt) {
         rows: [
           ['Месяц начисления', 'Дата операции', 'Партнёр', 'Точка', 'Валюта', 'Тип', 'Статья', 'Сумма', 'Наличные', 'Карта', 'ID записи'],
           ...recordsForBook.map(row => [
-            row.month.slice(0, 7), row.day, row.partner, row.point, row.currency, TYPES[row.kind], row.category,
+            reportMonth(row.month), row.day, row.partner, row.point, row.currency, TYPES[row.kind], row.category,
             amountCell(row.amount == null ? null : BigInt(row.amount), row.minor_unit),
             amountCell(row.cash == null ? null : BigInt(row.cash), row.minor_unit),
             amountCell(row.card == null ? null : BigInt(row.card), row.minor_unit), row.key,

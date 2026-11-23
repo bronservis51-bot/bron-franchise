@@ -1,18 +1,15 @@
+.economy-overview {
+  min-width: 0;
+}
+
 .economy-overview .economy-kpis {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr));
+  margin-bottom: var(--space-2);
 }
 
 .economy-overview .economy-kpis .v {
   font-size: var(--fs-l);
-  overflow-wrap: normal;
-}
-
-.economy-royalty-totals {
-  margin-block: var(--space-4);
-}
-
-.economy-royalty-totals h3 {
-  margin-bottom: var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 .economy-royalty-totals .table {
@@ -20,9 +17,88 @@
   min-width: min(100%, 24rem);
 }
 
+.economy-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+}
+
+.economy-table {
+  --economy-name-width: clamp(7.25rem, 32vw, 12rem);
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-s);
+  font-variant-numeric: tabular-nums;
+}
+
+.economy-table :is(th, td) {
+  min-width: 8.75rem;
+  max-width: 15rem;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: top;
+}
+
+.economy-table thead th {
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.economy-table tr > :first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  min-width: var(--economy-name-width);
+  width: var(--economy-name-width);
+  max-width: var(--economy-name-width);
+  background: var(--surface);
+  text-align: left;
+  box-shadow: 1px 0 var(--border);
+}
+
+.economy-table thead tr > :first-child {
+  background: var(--surface-2);
+}
+
+.economy-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.economy-table small, .economy-table .economy-value {
+  display: block;
+}
+
+.economy-table small, .economy-table details {
+  margin-top: 3px;
+  color: var(--text-2);
+}
+
+.economy-table small:first-child {
+  margin-top: 0;
+}
+
+.economy-scroll-hint {
+  margin-bottom: var(--space-2);
+}
+
+@media (min-width: 1250px) {
+  .economy-scroll-hint {
+    display: none;
+  }
+}
+
 @media (max-width: 560px) {
-  .economy-overview .economy-kpis .kpi:last-child {
-    grid-column: 1 / -1;
+  .economy-overview .page-header .actions {
+    width: 100%;
+  }
+
+  .economy-overview .economy-table :is(th, td) {
+    padding-inline: var(--space-2);
   }
 }
 

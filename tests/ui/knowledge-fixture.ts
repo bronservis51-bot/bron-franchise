@@ -66,6 +66,7 @@ knowledgeSections.forEach(section => {
   section.count = knowledgeArticles.filter(a => ids.includes(a.section_id)).length;
 });
 const findArticle = (id: unknown) => knowledgeArticles.find(a => a.id === id) ?? knowledgeArticles[0];
+const acknowledged = new Set<string>();
 const body = `## Когда пригодится\n\nЭто вымышленная статья для проверки интерфейса базы знаний. Она показывает, как выглядят инструкции с несколькими сценариями.\n\n## Что подготовить\n\n- Описание ситуации и вопрос.\n- Результат предыдущих действий.\n- Фотографии или документы, если они помогают понять проблему.\n\n## Порядок действий\n\n1. Найдите нужный раздел.\n2. Прочитайте инструкцию и сравните свою ситуацию с примером.\n3. Если ответа нет, задайте вопрос менеджеру.\n\n### Если ситуация отличается\n\nСохраните важные сведения и опишите, на каком шаге возникло затруднение.\n\n## Проверка результата\n\nПроверьте, что исходный вопрос решён. Просмотр этой статьи не означает аттестацию.\n\n## Связанные материалы\n\nВернитесь в раздел, чтобы открыть следующий материал.`;
 const revisionOf = (a: Card) => ({ id: `${a.id}-revision`, article_id: a.id, rev_no: 1, title: a.title, summary: a.summary, body,
   status: 'published', author_id: null, published_at: stamp, change_note: null, revision: 1, updated_at: stamp });
@@ -73,7 +74,9 @@ const revisionOf = (a: Card) => ({ id: `${a.id}-revision`, article_id: a.id, rev
 export function knowledgeFixture(url: URL, args: Record<string, unknown>, params: URLSearchParams): Response | undefined {
   if (params.get('knowledge') !== '1') return;
   const name = url.pathname.split('/').pop();
-  const editor = params.get('role') !== 'franchisee';
+  const role = params.get('role');
+  const editor = !role || role === 'manager';
+  const required = !editor && params.get('required') === '1' ? knowledgeArticles[0] : null;
   if (url.pathname.includes('/rpc/')) {
     if (name === 'kb_home') return Response.json({ sections: knowledgeSections, recent: knowledgeArticles.slice(1, 5), popular: knowledgeArticles.slice(6, 9), continue: knowledgeArticles.slice(3, 5), drafts: editor ? 4 : null, total: knowledgeArticles.length });
     if (name === 'kb_section_page') {
@@ -98,19 +101,28 @@ export function knowledgeFixture(url: URL, args: Record<string, unknown>, params
     if (name === 'kb_manage') return Response.json(knowledgeArticles.map(a => ({ ...a, section_title: knowledgeSections.find(s => s.id === a.section_id)?.title, parent_title: null, helpful: 4, not_helpful: 0, ack_done: null, ack_total: null })));
     if (name === 'kb_search_misses') return Response.json([{ query: 'как обучить новичка', times: 3, last_at: stamp }]);
     if (name === 'kb_inbox') return Response.json({ unanswered: editor ? 2 : 0, new_answers: editor ? 0 : 1 });
-    if (name === 'kb_to_read' || name === 'kb_questions') return Response.json([]);
+    if (name === 'kb_to_read') return Response.json(required && !acknowledged.has(required.id) ? [{
+      article_id: required.id, title: required.title, summary: required.summary, due_on: '2099-01-01', published_at: stamp,
+    }] : []);
+    if (name === 'article_acknowledge' && required && args.p_article === required.id) {
+      acknowledged.add(required.id);
+      return Response.json(null);
+    }
+    if (name === 'kb_questions') return Response.json([]);
     if (name === 'kb_ask' || name === 'kb_ask_categorized') return Response.json('qa-question-created');
   } else {
     if (name === 'kb_section') return Response.json(knowledgeSections);
     if (name === 'article') {
       const id = url.searchParams.get('id')?.replace(/^eq\./, '');
       const a = findArticle(id);
-      return Response.json([{ ...a, slug: a.id, published_revision_id: `${a.id}-revision`, published: { title: a.title, summary: a.summary, rev_no: 1, published_at: stamp }, revision: 1, tags: [] }]);
+      return Response.json([{ ...a, required_ack: a.id === required?.id || a.required_ack, ack_rev_no: a.id === required?.id ? 1 : null,
+        slug: a.id, published_revision_id: `${a.id}-revision`, published: { title: a.title, summary: a.summary, rev_no: 1, published_at: stamp }, revision: 1, tags: [] }]);
     }
     if (name === 'article_revision') {
       const id = url.searchParams.get('article_id')?.replace(/^eq\./, '') ?? url.searchParams.get('id')?.replace(/^eq\./, '').replace(/-revision$/, '');
       return Response.json([revisionOf(findArticle(id))]);
     }
-    if (name === 'acknowledgement') return Response.json([]);
+    if (name === 'acknowledgement') return Response.json(required && acknowledged.has(required.id) && url.searchParams.get('article_id') === `eq.${required.id}`
+      ? [{ rev_no: 1, at: stamp }] : []);
   }
 }

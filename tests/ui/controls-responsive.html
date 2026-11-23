@@ -16,7 +16,7 @@
 <body>
   <h1>Проверка основных разделов приложения</h1>
   <header>
-    <label for="route">Раздел<select id="route"><option value="/">Главная</option><option value="/order">Заказ</option><option value="/staff">Сотрудники</option><option value="/rating">Рейтинг</option><option value="/kb">Знания</option></select></label>
+    <label for="route">Раздел<select id="route"><option value="/">Главная</option><option value="/order">Заказ</option><option value="/staff">Сотрудники</option><option value="/finance">Экономика</option><option value="/kb">Знания</option></select></label>
     <label for="width">Ширина экрана<select id="width"><option>320</option><option selected>390</option><option>768</option><option>1440</option></select></label>
     <label for="text">Размер текста<select id="text"><option value="100">100%</option><option value="200">200%</option></select></label>
     <button type="button" id="reload">Загрузить выбранный экран</button>
@@ -35,7 +35,7 @@
       '/':{ready:'.home-body',minControls:0},
       '/order':{ready:'.order-options',minControls:0},
       '/staff':{ready:'.staff-summary',minControls:0},
-      '/rating':{ready:'.rating-row',minControls:0},
+      '/finance':{ready:'.economy-overview',minControls:0},
       '/kb':{ready:'.kb-tiles',minControls:1},
     };
     let running=false,sequence=0,navigation=0;
@@ -43,7 +43,7 @@
     const selected=()=>({route:byId('route').value,width:Number(byId('width').value),text:byId('text').value});
     function source(test){
       // A unique query value forces an actual navigation even for the same route.
-      const params=new URLSearchParams({role:test.route==='/rating'?'manager':'franchisee',knowledge:'1',text:test.text,layoutCase:String(++navigation)});
+      const params=new URLSearchParams({role:test.route==='/finance'?'manager':'franchisee',knowledge:'1',text:test.text,layoutCase:String(++navigation)});
       return '/tests/ui/responsive-app.html?'+params+'#'+test.route;
     }
     function geometry(doc){

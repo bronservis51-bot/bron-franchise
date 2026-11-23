@@ -158,16 +158,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bottom-nav { display: none; }
 
 @media (max-width: 960px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
+  html { touch-action: pan-x pan-y; }
+  body { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #root { position: fixed; top: 0; left: 0; right: 0; height: var(--app-height, 100dvh); min-height: 0; }
+  .app {
+    /* Anchor to the visual viewport's bottom without moving the shell's top. */
+    height: calc(100% + max(0px, var(--visual-top, 0px)));
+    min-height: 0;
+    grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+  }
+  .keyboard-open .app { height: 100%; }
   .sidebar { display: none; }
-  .topbar { padding: env(safe-area-inset-top) max(var(--space-4), env(safe-area-inset-right)) 0 max(var(--space-4), env(safe-area-inset-left)); min-height: calc(max(56px, var(--account-height)) + env(safe-area-inset-top)); }
-  .content { padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
+  .main { min-height: 0; }
+  .topbar { position: relative; flex: 0 0 auto; padding: env(safe-area-inset-top) max(var(--space-4), env(safe-area-inset-right)) 0 max(var(--space-4), env(safe-area-inset-left)); min-height: calc(max(56px, var(--account-height)) + env(safe-area-inset-top)); }
+  .content { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-5) max(var(--space-4), env(safe-area-inset-left)); }
   .bottom-nav {
-    display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: grid; position: relative; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--border); padding: 3px env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     grid-auto-flow: column; grid-auto-columns: minmax(min-content, 1fr);
     min-width: 0; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain;
   }
+  .keyboard-open .bottom-nav { display: none; }
   .bottom-nav a, .bottom-nav button {
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; min-height: 60px; padding: 9px 4px 6px;
     color: var(--text-2); font-size: var(--fs-xs); line-height: 1.2; background: none; border: 0; text-decoration: none; position: relative; isolation: isolate;
@@ -395,16 +406,19 @@ dialog.dialog::backdrop { background: rgb(10 15 22 / 60%); }
 .profile-dialog { --dialog-width: 450px; }
 .profile-identity { display: flex; align-items: center; gap: var(--space-3); }
 .profile-avatar { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--primary-weak); color: var(--link); }
-.profile-name, .profile-scopes li { display: grid; gap: 2px; min-width: 0; }
-.profile-name span, .profile-scopes span { color: var(--text-2); font-size: var(--fs-s); }
-.profile-scopes { display: grid; gap: var(--space-2); list-style: none; padding: var(--space-3); margin: var(--space-3) 0 0; background: var(--surface-2); border-radius: var(--radius-s); }
-.profile-scopes strong { font-size: var(--fs-s); }
+.profile-name { display: grid; gap: 2px; min-width: 0; }
+.profile-name span { color: var(--text-2); font-size: var(--fs-s); }
 .profile-actions { display: grid; gap: var(--space-1); margin-top: var(--space-4); }
 .profile-actions :is(button, a) { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--touch); padding: var(--space-2); border: 0; background: transparent; border-radius: var(--radius-s); color: var(--text); text-align: left; text-decoration: none; cursor: pointer; }
 .profile-actions :is(button, a):hover { background: var(--surface-2); }
 .profile-actions svg { flex: none; color: var(--text-2); }
 .profile-actions svg:nth-of-type(2) { margin-inline-start: auto; }
 .profile-actions > :last-child { color: var(--danger); }
+.profile-queue-count { margin-inline-start: auto; padding-inline: 7px; border-radius: 999px; background: var(--primary-weak); color: var(--link); font-size: var(--fs-s); }
+.profile-actions .profile-queue-count + svg { margin-inline-start: 0; }
+.profile-recovery { min-height: var(--touch); margin-top: var(--space-2); }
+.queue-recovery { margin-block: var(--space-3); }
+.queue-recovery summary { min-height: var(--touch); padding-block: var(--space-2); cursor: pointer; font-weight: 600; }
 .ctx-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; max-width: 100%; }
 .ctx-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 480px) { .ctx-btn { font-size: 14px; padding: 4px 10px; gap: 4px; } .topbar { gap: var(--space-2); } }
@@ -1014,15 +1028,6 @@ button.expense-row, .expense-royalty { display: grid; grid-template-columns: min
 .team-accounts summary { cursor: pointer; font-weight: 650; }
 .team-accounts > p { margin: 12px 0; }
 @media (max-width: 960px) {
-  html { touch-action: pan-x pan-y; }
-  body { position: fixed; inset: 0; width: 100%; height: 100%; }
-  #root { position: fixed; top: 0; left: 0; right: 0; height: var(--app-height, 100dvh); min-height: 0; }
-  .app { height: 100%; min-height: 0; grid-template-rows: minmax(0,1fr) auto; }
-  .main { min-height: 0; }
-  .topbar { position: relative; flex: 0 0 auto; }
-  .content { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding-bottom: 24px; }
-  .bottom-nav { position: relative; bottom: auto; left: auto; right: auto; flex-shrink: 0; background: var(--surface); }
-  .keyboard-open .bottom-nav { display: none; }
   .login-split { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .login-brand { min-height: 0; padding: 24px; }
   .keyboard-open .login-brand { display: none; }

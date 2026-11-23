@@ -7,6 +7,7 @@ import { formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal, toBigInt, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
+import type { RoyaltyPayment, UndatedRoyalty } from '../manager/api';
 import { revenueMonth } from '../revenue/api';
 import { MonthNav } from '../revenue/components';
 import { revenueMonthSheet } from '../revenue/monthReport';
@@ -22,7 +23,7 @@ interface Fin { month: string; revenue_minor: number; cash_minor: number; card_m
   expenses_minor: number; return_minor?: number; net_minor: number; is_open: boolean }
 interface Ledger { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean;
   correction_minor?: number; past_debt_minor?: number }
-interface Royalty { debt_minor: number; months: Ledger[]; payments: { month: string; amount_minor: number; paid_on: string; note: string | null }[] }
+interface Royalty { debt_minor: number; months: Ledger[]; payments: RoyaltyPayment[]; undated?: UndatedRoyalty | null; undated_payments?: RoyaltyPayment[] }
 interface Finance {
   partner_name: string; currency: string; month: string; location_id: string | null;
   partner_status?: string;
@@ -318,11 +319,12 @@ export function FinancePage() {
 }
 
 function RoyaltyHistory({ r, currency }: { r: Royalty; currency: string }) {
+  const payments = [...r.payments, ...(r.undated_payments ?? [])];
   return (
     <details className="finance-details">
       <summary>Начисления и оплаты роялти</summary>
       <div className="row between access-row">
-        <span>Долг за закрытые месяцы</span>
+        <span>Долг по роялти</span>
         <Money minor={r.debt_minor} currency={currency} short strong />
       </div>
       <div className="table-wrap" role="region" aria-label="Роялти по месяцам" tabIndex={0}>
@@ -342,12 +344,15 @@ function RoyaltyHistory({ r, currency }: { r: Royalty; currency: string }) {
           ))}</tbody>
         </table>
       </div>
-      {r.payments.length > 0 && (
+      {r.undated && <div className="row between access-row">
+        <span>Прошлый долг без периода</span><Money minor={r.undated.debt_minor} currency={currency} strong />
+      </div>}
+      {payments.length > 0 && (
         <>
           <h3 className="section-title" style={{ marginTop: 16 }}>Оплаты</h3>
-          {r.payments.map((p, i) => (
+          {payments.map((p, i) => (
             <div key={i} className="row between access-row">
-              <span>за {monthLabel(p.month)}<span className="faint" style={{ display: 'block' }}>{formatDate(p.paid_on)}{p.note ? ` · ${p.note}` : ''}</span></span>
+              <span>{p.month ? monthLabel(p.month) : 'Без периода'}<span className="faint" style={{ display: 'block' }}>{p.paid_on ? formatDate(p.paid_on) : 'Дата оплаты не указана'}{p.note ? ` · ${p.note}` : ''}</span></span>
               <Money minor={p.amount_minor} currency={currency} strong />
             </div>
           ))}

@@ -36,6 +36,19 @@ dialog.first-run-dialog::backdrop {
   pointer-events: none;
 }
 
+.guide-spotlight-action {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.guide-spotlight-action:focus-visible {
+  outline-width: 3px;
+  outline-color: #c3d2ff;
+}
+
 .guide-arrow {
   position: absolute;
   height: 2px;

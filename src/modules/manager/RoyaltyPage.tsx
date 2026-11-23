@@ -25,12 +25,12 @@ export function RoyaltyPage() {
 
   return (
     <>
-      <PageHeader title="Роялти" sub={all ? 'Начисления, корректировки и оплаты за закрытые месяцы.' : `Роялти за ${monthLabel(month)}.`}
+      <PageHeader title="Роялти" sub={all ? 'Долги за закрытые месяцы и без указанного периода.' : `Роялти за ${monthLabel(month)}.`}
         actions={<Button variant="primary" disabled={!q.data} loading={exp.isPending} onClick={() => exp.mutate()}><Download size={16} aria-hidden />Скачать Excel</Button>} />
       <div className="row" style={{ marginBottom: 16 }}>
         <label htmlFor="roy-period" className="faint">Период</label>
         <Select id="roy-period" value={month} onChange={(e) => setMonth(e.target.value)} style={{ maxWidth: 260 }}>
-          <option value="">Закрытые месяцы</option>
+          <option value="">Весь долг</option>
           {monthOptions(24).map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
         </Select>
       </div>
@@ -65,6 +65,7 @@ export function RoyaltyPage() {
                       <td>
                         <Link to={`/royalty/${r.partner_id}`}><strong>{r.partner_name}</strong></Link>
                         <div className="faint">{r.currency}{r.last_payment_on ? ` · оплата ${formatDate(r.last_payment_on)}` : ''}{all && r.debt_months.length ? ` · долг за ${r.debt_months.length} мес.` : ''}</div>
+                        {all && Number(r.undated_debt_minor) > 0 && <div className="faint">Без периода · {formatMoneyShort(r.undated_debt_minor, r.currency)}</div>}
                       </td>
                       <td className="r">{pct(r.rate_bp)}</td>
                       <td className="r num">{formatMoneyShort(r.revenue_minor, r.currency)}</td>
@@ -91,7 +92,9 @@ export function RoyaltyPage() {
         )}
       </DataState>
       {pay && <PaymentDialog partner={{ id: pay.partner_id, name: pay.partner_name }} currency={pay.currency}
-        month={month || pay.debt_months[0]?.month} suggested={month ? pay.debt_minor : pay.debt_months[0]?.debt_minor} onClose={() => setPay(null)} />}
+        hasUndated={Number(pay.undated_debt_minor) > 0}
+        month={month || pay.debt_months[0]?.month || (Number(pay.undated_debt_minor) > 0 ? null : undefined)}
+        suggested={month ? pay.debt_minor : pay.debt_months[0]?.debt_minor ?? pay.undated_debt_minor} onClose={() => setPay(null)} />}
       {fix && <CorrectionDialog partner={{ id: fix.partner_id, name: fix.partner_name }} currency={fix.currency} month={month || undefined} onClose={() => setFix(null)} />}
       {manual && <ManualDebtDialog partner={{ id: manual.partner_id, name: manual.partner_name }} currency={manual.currency} onClose={() => setManual(null)} />}
     </>

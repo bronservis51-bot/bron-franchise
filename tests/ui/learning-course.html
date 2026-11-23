@@ -1,0 +1,70 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Программа обучения</title>
+<output id="result">Проверка…</output><iframe id="app" height="850" title="Кабинет сотрудника"></iframe>
+<script type="module">
+const frame = document.querySelector('#app'), result = document.querySelector('#result');
+const params = new URLSearchParams(location.search), scenario = params.get('scenario') ?? 'active';
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = '/tests/ui/responsive-app.html?role=staff&theme=dark&text=' + (params.get('text') === '200' ? 200 : 100) + '#/';
+function check(ok, message) { if (!ok) throw new Error(message); }
+async function until(read, message) {
+  const until = performance.now() + 12000;
+  while (performance.now() < until) {
+    const value = read(); if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error(message);
+}
+try {
+  const nav = await until(() => frame.contentDocument.querySelector('a[href="#/learning"]'), 'Кабинет не открылся');
+  const app = frame.contentWindow, doc = app.document, original = app.fetch;
+  const items = ['Правила подготовки точки', 'Как принять сложный заказ и помочь покупателю подобрать защиту для телефона', 'Выдача заказа', 'Разговор с клиентом']
+    .map((title, index) => ({ article_id: 'lesson-' + index, title, stage: index < 2 ? 'Первый день' : 'Продажи',
+      questions: 4, revision_id: 'rev-' + index, active: false, completed: false, percent: null, due: null }));
+  Object.assign(items[0], { completed: true, percent: 100, due: '2026-11-09' });
+  Object.assign(items[1], { active: true });
+  if (scenario === 'due' || scenario === 'failed') items[1].active = false;
+  if (scenario === 'failed') Object.assign(items[0], { completed: false, percent: 0 });
+  if (scenario === 'finished') items.forEach((item, i) => Object.assign(item, { completed: true, active: false, percent: 100, due: i === 1 ? '2026-11-12' : '2026-11-20' }));
+  if (scenario === 'single') items.splice(1);
+  if (scenario === 'empty') items.splice(0);
+  let visits = 0, starts = 0;
+  app.fetch = async (input, init) => {
+    const url = new URL(input instanceof app.Request ? input.url : input, app.location.href);
+    if (url.pathname.endsWith('/rpc/learning_overview')) return app.Response.json({ day: '2026-11-09', audience: 'trainees', items });
+    if (url.pathname.endsWith('/rpc/learning_visit')) visits++;
+    if (url.pathname.endsWith('/rpc/learning_start')) starts++;
+    return original(input, init);
+  };
+  if (scenario === 'preview') {
+    app.history.pushState({ ...app.history.state, usr: { firstRunPreview: true } }, '', '#/learning');
+    app.dispatchEvent(new app.PopStateEvent('popstate', { state: app.history.state }));
+  } else nav.click();
+  const main = doc.querySelector('main');
+  if (!items.length) {
+    await until(() => main.textContent.includes('Уроки пока не назначены'), 'Нет пустого состояния');
+    check(!main.querySelector('progress, [role="progressbar"], [data-tour-target="first-lesson"]'), 'Показан фиктивный прогресс');
+  } else {
+    const next = await until(() => main.querySelector('.learning-next'), 'Нет следующего действия');
+    check(main.querySelector('progress, [role="progressbar"]'), 'Нет доступного индикатора прогресса');
+    const links = [...main.querySelectorAll('a[href*="/learning/lesson/"]')];
+    check(links.length === items.length && new Set(links.map(link => link.href)).size === items.length, 'Карточки уроков повторяются');
+    check(links.every(link => link.getClientRects().length), 'Для просмотра нужно раскрыть программу');
+    if (scenario === 'finished') {
+      check(next.textContent.includes('12.11.2026') && !next.querySelector('a'), 'Не показана ближайшая дата повторения');
+    } else {
+      const active = items.find(item => item.active) ?? items[0];
+      const action = next.querySelector('[data-tour-target="first-lesson"]');
+      check(action?.href.endsWith('/' + active.article_id), 'Выбран неверный урок');
+      check(action.getBoundingClientRect().top >= next.querySelector('h2').getBoundingClientRect().bottom, 'Кнопка мешает чтению названия');
+      if (scenario === 'failed') check(action.textContent.includes('Повторить'), 'Нет немедленного повтора после незачёта');
+    }
+    await doc.fonts.ready;
+    check(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Страница шире экрана');
+    if (items.length > 1) check(main.querySelector('.learning-program h3'), 'Этапы программы не сгруппированы');
+    if (scenario === 'single') check(!main.querySelector('.learning-program'), 'Показан пустой раздел программы');
+  }
+  check(starts === 0, 'Открытие списка создало попытку');
+  check(scenario === 'preview' ? visits === 0 : visits > 0, 'Неверная отметка посещения');
+  result.dataset.status = 'passed'; result.textContent = 'PASS';
+} catch(error) { result.dataset.status = 'failed'; result.textContent = error.message; }
+</script></html>

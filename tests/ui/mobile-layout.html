@@ -41,7 +41,7 @@
       '/royalty':{ready:'.royalty-table tbody tr',minControls:1},
       '/kb':{ready:'.kb-tiles .kb-tile',minControls:1},
       '/kb/manage':{ready:'.kb table tbody tr',minControls:1},
-      '/finance':{ready:'.economics-table tbody tr',minControls:0},
+      '/finance':{ready:'.economy-kpis .kpi',minControls:0},
     };
     let running=false,sequence=0,navigation=0;
     const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -57,7 +57,7 @@
       const fonts=controls.map(el=>({control:el.id||el.getAttribute('aria-label')||el.tagName,font:parseFloat(view.getComputedStyle(el).fontSize)}));
       const touch=root.clientWidth<=960||view.matchMedia('(pointer:coarse)').matches;
       const floor=touch?Math.max(16,parseFloat(view.getComputedStyle(root).getPropertyValue('--fs'))||16):null;
-      const localScrollRegions=[...doc.querySelectorAll('.table-wrap,.economics-table-wrap,.pipeline-board,.tabs,.point-chips,.prose table')].filter(el=>el.getClientRects().length).map(el=>({region:el.getAttribute('aria-label')||el.className,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,overflowX:view.getComputedStyle(el).overflowX}));
+      const localScrollRegions=[...doc.querySelectorAll('.table-wrap,.economy-table-wrap,.pipeline-board,.tabs,.point-chips,.prose table')].filter(el=>el.getClientRects().length).map(el=>({region:el.getAttribute('aria-label')||el.className,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,overflowX:view.getComputedStyle(el).overflowX}));
       return {layoutWidth:view.innerWidth,viewport:root.clientWidth,scrollWidth:root.scrollWidth,bodyScrollWidth:doc.body.scrollWidth,overflow:root.scrollWidth>root.clientWidth+1,controls:fonts.length,minControlFont:fonts.length?Math.min(...fonts.map(x=>x.font)):null,requiredControlFont:floor,smallControls:floor===null?[]:fonts.filter(x=>!Number.isFinite(x.font)||x.font<floor-.1),visualScale:view.visualViewport?.scale??null,rootOverscroll:view.getComputedStyle(root).overscrollBehavior,localScrollRegions};
     }
     async function waitReady(doc,test){
