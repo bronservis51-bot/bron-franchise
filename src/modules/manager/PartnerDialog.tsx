@@ -7,7 +7,7 @@ import { CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { toAppError } from '../../platform/backend';
 import { planSet } from '../revenue/api';
-import { accessGrant, accountCreatePhone, countries, locationSave, managerPartnerStatusKey, partnerSave, type Location, type Partner } from './api';
+import { accessGrant, accountCreatePhone, countries, locationSave, managerPartnerStatusKey, partnerCreate, partnerSave, type Location, type Partner } from './api';
 import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
 import { loginEmail, phoneLoginDigits } from '../../platform/login';
@@ -25,8 +25,14 @@ export function PartnerDialog({ partner, working, onClose, onSaved }: { partner?
     preparation_stage: partner?.preparation_stage ?? '' }));
   const [f, setF] = useState(original);
   const [version] = useState(() => ({ id: partner?.id ?? null, updatedAt: partner?.updated_at ?? null }));
+  const [operation] = useState(() => crypto.randomUUID());
   const m = useMutation({
-    mutationFn: () => partnerSave({ id: version.id, ...f, preparation_stage: f.preparation_stage || null, expected_updated_at: version.updatedAt }),
+    mutationFn: () => {
+      const fields = { ...f, preparation_stage: f.preparation_stage || null };
+      return version.id
+        ? partnerSave({ ...fields, id: version.id, expected_updated_at: version.updatedAt })
+        : partnerCreate({ ...fields, operation });
+    },
     onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['partners'] }); },
     onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
   });

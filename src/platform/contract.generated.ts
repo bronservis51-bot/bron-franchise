@@ -81,6 +81,7 @@ export const CONTRACT = {
   order_link: { args: [], returns: 'scalar' },
   partner_access: { args: ['partner'], returns: 'scalar' },
   partner_card: { args: ['partner'], returns: 'scalar' },
+  partner_create_checked: { args: ['name', 'country', 'contact_name', 'contact_phone', 'contact_email', 'status', 'preparation_stage', 'operation'], returns: 'scalar' },
   partner_document_add: { args: ['partner', 'kind', 'title', 'path', 'size', 'mime', 'signed_on'], returns: 'scalar' },
   partner_document_delete: { args: ['id'], returns: 'scalar' },
   partner_launch_get: { args: ['partner'], returns: 'scalar' },

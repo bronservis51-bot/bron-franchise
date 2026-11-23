@@ -22,7 +22,9 @@ export interface ManagerPartnerStatus {
 export const managerPartnerStatusKey = ['manager-partner-status'] as const;
 export const managerPartnerStatus = () => command<ManagerPartnerStatus[]>('manager_partner_status');
 
-export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null; expected_updated_at: string | null }) =>
+type PartnerForm = { name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null };
+export const partnerCreate = (p: PartnerForm & { operation: string }) => command<string>('partner_create_checked', p);
+export const partnerSave = (p: PartnerForm & { id: string; expected_updated_at: string | null }) =>
   command<string>('partner_save_preparation_checked', p);
 export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null; expected_updated_at: string | null }) =>
   command<string>('location_save_checked', l);

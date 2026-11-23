@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createTestDb, type TestDb } from './harness';
 
@@ -7,9 +8,23 @@ let t: TestDb;
 beforeAll(async () => { t = await createTestDb(); }, 180_000);
 afterAll(async () => t?.db.close());
 const partnerSave = 'select public.partner_save_preparation_checked($1,$2,$3,$4,$5,$6,$7,$8,$9) id';
+const partnerCreate = 'select public.partner_create_checked($1,$2,$3,$4,$5,$6,$7,$8) id';
 const locationSave = 'select public.location_save_checked($1,$2,$3,$4,$5,$6,$7,$8) id';
 const make = async (name: string) => (await t.as<{id:string}>(manager,partnerSave,[null,name,'RU',null,null,null,'active','opening_preparation',null]))[0].id;
 const stamp = async (table: 'partner' | 'location', id: string) => (await t.admin<{version:string}>(`select updated_at::text version from public.${table} where id=$1`,[id]))[0].version;
+
+it('replays one partner creation without merging independent records with the same contact', async () => {
+  const phone = '+70000000095';
+  const form = ['Первый партнёр', 'RU', 'Контакт', phone, null, 'active', 'location_search', randomUUID()];
+  const [{ id }] = await t.as<{ id: string }>(manager, partnerCreate, form);
+  expect(await t.as(manager, partnerCreate, form)).toEqual([{ id }]);
+  expect(await t.admin('select id from partner where contact_phone=$1', [phone])).toEqual([{ id }]);
+  await t.expectError(manager, partnerCreate, 'idempotency-conflict', ['Другие данные', ...form.slice(1)]);
+  await t.expectError(owner, partnerCreate, 'forbidden', form);
+  await expect(t.as(null, partnerCreate, form)).rejects.toThrow(/permission denied/);
+  const [{ id: other }] = await t.as<{ id: string }>(manager, partnerCreate, [...form.slice(0, -1), randomUUID()]);
+  expect(other).not.toBe(id);
+});
 
 it('rejects a stale partner form before it can undo the stage or commercial status saved in another tab', async () => {
   const p = await make('Исходное имя');

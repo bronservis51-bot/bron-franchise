@@ -10,7 +10,7 @@ import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, KV, MoneyInput, PageHeader, Select } from '../../ui';
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
-import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, percentToBp, tierPolicy } from './CustomPayFields';
+import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, maxPolicyMinor, percentToBp, tierPolicy, validPolicyMoney } from './CustomPayFields';
 import { MotivationPanel, PayExample, payTiming, useMotivation, type ShiftPolicy } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
 import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
@@ -86,7 +86,8 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const [start, setStart] = useState(staff?.internship_from ?? '');
   const [until, setUntil] = useState(staff?.internship_until ?? '');
   const [traineeFee, setTraineeFee] = useState(String(staff?.internship_floor_minor ?? 50000));
-  const [validTraineeFee, setValidTraineeFee] = useState(true);
+  const [traineeFeeParsed, setTraineeFeeParsed] = useState(true);
+  const validTraineeFee = validPolicyMoney({ minor: traineeFee, valid: traineeFeeParsed });
   const [learningEnabled, setLearningEnabled] = useState(staff?.learning_enabled ?? true);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(initialPassword);
@@ -178,7 +179,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           )}</DataState>
           <Field label="Статус сотрудника">{id => <Select id={id} value={position} disabled={!canSetAccess && position === 'manager'} onChange={e => {
             setPosition(e.target.value as StaffPosition);
-            setValidTraineeFee(true);
+            setTraineeFeeParsed(true);
           }}>
             <option value="sales_manager">Менеджер продаж</option><option value="trainee">Стажёр</option>
             {(canSetAccess || position === 'manager') && <option value="manager">Управляющий</option>}
@@ -204,9 +205,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {kind === 'trainee' && <section className="pay-trainee">
               <h4>На время стажировки</h4>
               <p className="pay-help">Действуют ступени общей схемы и отдельная гарантия{until ? ` по ${formatDate(until)} включительно` : ''}.</p>
-              <Field label={`Гарантия стажёра за смену, ${unit}`} error={validTraineeFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
-                <MoneyInput id={id} describedBy={describedBy} currency={currency} value={traineeFee} placeholder="0"
-                  onChange={setTraineeFee} onValidityChange={setValidTraineeFee} />}</Field>
+              <Field label={`Гарантия стажёра за смену, ${unit}`} error={!traineeFeeParsed ? 'Введите корректную сумму' : !validTraineeFee ? `Максимальная гарантия — ${formatMoneyShort(maxPolicyMinor, currency)}` : undefined}>{(id, describedBy) =>
+                <MoneyInput id={id} describedBy={describedBy} invalid={!validTraineeFee} currency={currency} value={traineeFee} placeholder="0"
+                  onChange={setTraineeFee} onValidityChange={setTraineeFeeParsed} />}</Field>
             </section>}
             <fieldset className="pay-choices"><legend>{kind === 'trainee' ? 'Схема после стажировки' : 'Схема оплаты за смену'}</legend>
               {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
@@ -224,8 +225,8 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {canSetCustomPay && <div hidden={payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
             {(payMode === 'partner' || kind === 'trainee') && canSetCustomPay && !teamPolicy &&
               <DataState query={common} skeleton={1}>{() => null}</DataState>}
-            {(payPreview || (kind === 'trainee' && teamPolicy && validTraineeFee)) && <PayExample currency={currency} policy={payPreview}
-              traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee && Number.isSafeInteger(Number(traineeFee))
+            {(payMode !== 'partner' || teamPolicy) && <PayExample currency={currency} policy={payPreview}
+              traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee
                 ? { ...teamPolicy, floor_minor: Number(traineeFee) } : null : undefined} />}
             <p className="pay-help">{payTiming}</p>
             {!validProfile && !locations.error && <p className="hint">Проверьте поля в разделе «Основное».</p>}

@@ -2,6 +2,17 @@ import { toBigInt, type MinorInput } from '../../platform/money';
 
 export const FINANCE_REPORT_NOTE = 'Отчёт составлен по внесённым данным. Если выручка или расходы внесены не полностью, итог изменится после их добавления.';
 
+export async function downloadFinanceFile(makeFile: () => Promise<File>, signal: AbortSignal) {
+  const file = await makeFile();
+  if (signal.aborted) return;
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = file.name;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 interface ReportTotals {
   revenue_minor: MinorInput;
   payroll_minor: MinorInput;

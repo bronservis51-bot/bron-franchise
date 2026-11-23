@@ -1,8 +1,8 @@
 // Финансы франчайзи: выручка, зарплата, расходы и остаток по всем точкам или по одной.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Download, Pencil } from 'lucide-react';
-import { AppError, command } from '../../platform/backend';
+import { AppError, captureSession, command } from '../../platform/backend';
 import { formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal, toBigInt, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
@@ -13,7 +13,7 @@ import { revenueMonthSheet } from '../revenue/monthReport';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceEditor } from './FinanceEditor';
-import { FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows } from './financeReport';
+import { downloadFinanceFile, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows } from './financeReport';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
   payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; net_minor: number; is_open: boolean }
@@ -120,13 +120,17 @@ async function financeWorkbook(f: Finance, reportOnly: boolean) {
   return writeXlsxFile(sheets);
 }
 
-async function downloadFinance(f: Finance) {
-  await (await financeWorkbook(f, false)).toFile(`finansy-${f.month.slice(0, 7)}.xlsx`);
-}
-
-async function makeFinanceReportFile(f: Finance) {
-  const blob = await (await financeWorkbook(f, true)).toBlob();
-  return new File([blob], `OPiU-${f.month.slice(0, 7)}.xlsx`, { type: blob.type });
+async function makeFinanceReportFile(f: Finance, userId: string, reportOnly: boolean) {
+  await captureSession(userId);
+  const blob = await (await financeWorkbook(f, reportOnly)).toBlob();
+  const session = await captureSession(userId);
+  const scope = await command<Finance>('finance_my', { month: f.month, location: f.location_id }, { accessToken: session.access_token });
+  if (scope.partner_name !== f.partner_name || scope.location_id !== f.location_id ||
+    f.locations.some(location => !scope.locations.some(current => current.id === location.id))) {
+    throw new AppError('forbidden', 'Данные выбранного партнёра изменились. Откройте отчёт заново.', '', '');
+  }
+  await captureSession(userId);
+  return new File([blob], `${reportOnly ? 'OPiU' : 'finansy'}-${f.month.slice(0, 7)}.xlsx`, { type: blob.type });
 }
 
 function FinanceStatement({ finance }: { finance: Finance }) {
@@ -158,15 +162,20 @@ export function FinancePage() {
   const qc = useQueryClient();
   const [month, setMonth] = useState(monthStart());
   const [loc, setLoc] = useState<string | null>(null);
+  const userId = me?.user.id;
+  const exportRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => { exportRequest.current?.abort(); exportRequest.current = null; }, [userId]);
   const q = useQuery({ queryKey: ['finance', month, loc], queryFn: () => command<Finance>('finance_my', { month, location: loc }), refetchInterval: 120_000 });
   const exp = useMutation({
-    mutationFn: downloadFinance,
+    mutationFn: ({ report, userId, request }: { report: Finance; userId: string; request: AbortController }) =>
+      downloadFinanceFile(() => makeFinanceReportFile(report, userId, false), request.signal),
     networkMode: 'always',
-    onError: (error, report) => {
-      if (error instanceof AppError && error.code === 'version-conflict') {
+    onError: (error, { report, request }) => {
+      if (!request.signal.aborted && error instanceof AppError && error.code === 'version-conflict') {
         return qc.invalidateQueries({ queryKey: ['finance', report.month, report.location_id], exact: true });
       }
     },
+    onSettled: (_data, _error, { request }) => { if (exportRequest.current === request) exportRequest.current = null; },
   });
   const [editing, setEditing] = useState(false);
   const [drive, setDrive] = useState<{ finance: Finance; userId: string } | null>(null);
@@ -179,13 +188,18 @@ export function FinancePage() {
           <Button variant={editing ? 'primary' : 'secondary'} aria-pressed={editing} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
             {editing ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
           </Button>
-          <Button disabled={!availableFinance} loading={exp.isPending} onClick={() => { if (availableFinance) exp.mutate(availableFinance); }}><Download size={16} aria-hidden />Excel</Button>
+          <Button disabled={!availableFinance || !userId} loading={exp.isPending} onClick={() => {
+            if (!availableFinance || !userId || exportRequest.current) return;
+            const request = new AbortController();
+            exportRequest.current = request;
+            exp.mutate({ report: availableFinance, userId, request });
+          }}><Download size={16} aria-hidden />Excel</Button>
           <Button disabled={!availableFinance || !me} onClick={() => { if (availableFinance && me) setDrive({ finance: availableFinance, userId: me.user.id }); }}>Google Drive</Button>
         </>} />
       <ActionError error={exp.error} />
       {availableFinance && drive && drive.userId === me?.user.id && drive.finance.month === month && drive.finance.location_id === loc && (
         <FinanceDriveDialog period={monthLabel(drive.finance.month)} scope={financeScope(drive.finance)}
-          makeFile={() => makeFinanceReportFile(drive.finance)} onClose={() => setDrive(null)} />
+          makeFile={() => makeFinanceReportFile(drive.finance, drive.userId, true)} onClose={() => setDrive(null)} />
       )}
       {q.data && q.data.locations.length > 0 && (
         <div className="chips point-chips" role="group" aria-label="Точки">

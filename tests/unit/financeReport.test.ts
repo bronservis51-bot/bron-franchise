@@ -1,6 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { financeReportRows } from '../../src/modules/finance/financeReport';
+import { describe, expect, it, vi } from 'vitest';
+import { downloadFinanceFile, financeReportRows } from '../../src/modules/finance/financeReport';
 import { revenueMonthSheet } from '../../src/modules/revenue/monthReport';
+
+it('не начинает скачивание, если отчёт завершился после закрытия', async () => {
+  const request = new AbortController();
+  const createElement = vi.fn();
+  vi.stubGlobal('document', { createElement });
+  try {
+    let finish!: (file: File) => void;
+    const pending = downloadFinanceFile(() => new Promise(resolve => { finish = resolve; }), request.signal);
+    request.abort();
+    finish(new File(['test'], 'finansy.xlsx'));
+    await pending;
+    expect(createElement).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 describe('monthly operating statement', () => {
   it('groups recorded expense categories without counting them twice in total expenses', () => {

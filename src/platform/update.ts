@@ -3,7 +3,11 @@ import { hasPendingLocalWork } from './offline';
 
 let available: (() => Promise<void>) | null = null;
 const listeners = new Set<(update: (() => Promise<void>) | null) => void>();
-export function setAvailableUpdate(update: () => Promise<void>) { available = update; listeners.forEach(fn => fn(available)); }
+export function setAvailableUpdate(update: (() => Promise<void>) | null) {
+  if (available === update) return;
+  available = update;
+  listeners.forEach(fn => fn(available));
+}
 export function onAvailableUpdate(fn: (update: (() => Promise<void>) | null) => void) { listeners.add(fn); fn(available); return () => { listeners.delete(fn); }; }
 
 export function mayReload(flags: { visible: boolean; commands: number; dialog: boolean; editing: boolean; pending: boolean }) {
@@ -18,13 +22,25 @@ async function safeToReload() {
 }
 
 export const updateBlockedMessage = 'Завершите ввод и отправку записей перед обновлением.';
+const updateCheckFailedMessage = 'Не удалось проверить новую версию. Проверьте подключение и повторите.';
 
 /** Same release for Safari, installed PWA and desktop. No auth, queue or draft is removed. */
 export function startAppUpdates() {
   if (!('serviceWorker' in navigator)) return;
-  let registration: ServiceWorkerRegistration | undefined; let checking = false; let lastCheck = 0; let target = ''; let reloading = false;
+  let registration: ServiceWorkerRegistration | undefined; let checking = false; let lastCheck = 0; let reloading = false;
   let applying: Promise<void> | null = null;
   const base = import.meta.env.BASE_URL;
+  const checkRelease = async (): Promise<string | null> => {
+    let build: unknown;
+    try {
+      const response = await fetch(`${base}app-version.json`, { cache: 'no-store' });
+      if (response.ok) build = (await response.json())?.build;
+    } catch { /* Show the same retry message for unavailable and unreadable manifests. */ }
+    if (typeof build !== 'string' || !build) throw new Error(updateCheckFailedMessage);
+    const target = build === import.meta.env.VITE_BUILD_TIME ? null : build;
+    setAvailableUpdate(target ? apply : null);
+    return target;
+  };
   const waitForInstall = async () => {
     const worker = registration?.installing ?? registration?.waiting;
     if (!worker || worker.state === 'activated') return;
@@ -41,10 +57,13 @@ export function startAppUpdates() {
   };
   const applyUpdate = async () => {
     if (reloading) return;
+    const target = await checkRelease();
+    if (!target) return;
     if (!(await safeToReload())) throw new Error(updateBlockedMessage);
     try { await registration?.update(); }
-    catch { throw new Error('Не удалось проверить новую версию. Проверьте подключение и повторите.'); }
+    catch { throw new Error(updateCheckFailedMessage); }
     await waitForInstall();
+    if (await checkRelease() !== target) return;
     if (!(await safeToReload())) throw new Error(updateBlockedMessage);
     reloading = true;
     try { sessionStorage.setItem('bron.update-attempt', JSON.stringify({ target, at: Date.now() })); } catch { /* no storage needed */ }
@@ -57,11 +76,8 @@ export function startAppUpdates() {
     try {
       registration ??= await navigator.serviceWorker.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' });
       // Also prompts a legacy waiting worker to activate. Activation never clears durable records or forces a reload.
-      const response = await fetch(`${base}app-version.json`, { cache: 'no-store' });
-      if (!response.ok) return;
-      const release: { build?: string } = await response.json();
-      if (!release.build || release.build === import.meta.env.VITE_BUILD_TIME) return;
-      target = release.build; setAvailableUpdate(apply);
+      const target = await checkRelease();
+      if (!target) return;
       let recent = false;
       try { const previous = JSON.parse(sessionStorage.getItem('bron.update-attempt') ?? '{}'); recent = previous.target === target && Date.now() - previous.at < 60_000; } catch { /* first attempt */ }
       if (!recent && await safeToReload()) await apply();

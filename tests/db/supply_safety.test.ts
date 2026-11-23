@@ -44,6 +44,24 @@ describe('private supply snapshot', () => {
 });
 
 describe('durable write receipts', () => {
+  it('повтор расхода с тем же ключом не дублирует запись у франчайзи или УК', async () => {
+    const actors = [
+      { email: OWNER, command: 'expense_save', scope: { p_location: null }, table: 'public.expense' },
+      { email: FM, command: 'manager_company_expense_save', scope: {}, table: 'app_private.network_expense' },
+    ];
+    for (const actor of actors) {
+      const op = crypto.randomUUID();
+      const args = { p_id: null, p_month: '2026-10-01', p_category: 'Аренда', p_amount: 314, p_note: op, ...actor.scope };
+      const write = 'select public.financial_operation($1,$2::jsonb,$3) id';
+      const params = [actor.command, JSON.stringify(args), op];
+      const first = await t.as(actor.email, write, params);
+      expect(await t.as(actor.email, write, params)).toEqual(first);
+      expect((await t.admin<{ n: number }>(`select count(*)::int n from ${actor.table} where note=$1`, [op]))[0].n).toBe(1);
+      await t.expectError(actor.email, write, 'idempotency-conflict',
+        [actor.command, JSON.stringify({ ...args, p_amount: 315 }), op]);
+    }
+  });
+
   it('a repeated royalty payment produces a single ledger entry, and rejects changed amounts', async () => {
     const p = (await t.admin<{id: string}>("select id from public.partner where code='ALPHA'"))[0].id;
     const args = {p_partner:p,p_month:'2026-10-01',p_amount:333,p_paid_on:'2026-10-31',p_note:'receipt test'};

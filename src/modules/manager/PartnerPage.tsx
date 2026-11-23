@@ -62,7 +62,7 @@ function AccessCard({ partnerId, ownerAccess }: { partnerId: string; ownerAccess
             })}
             {a.invites.map((i) => (
               <div key={i.id} className="row between access-row">
-                <span>{i.email}<span className="faint" style={{ display: 'block' }}>ждёт первого входа</span></span>
+                <span>{i.email}<span className="faint" style={{ display: 'block' }}>Ожидает создания учётной записи</span></span>
                 <button type="button" className="icon-btn" aria-label="Отменить приглашение" onClick={() => cancel.mutate(i.id)}><X size={16} /></button>
               </div>
             ))}

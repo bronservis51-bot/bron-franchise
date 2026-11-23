@@ -125,7 +125,10 @@ function LeadEditor({ lead: l, initialColumn, onClose, onSaved, onDeleted }: { l
   const [deleting, setDeleting] = useState(false);
   const removed = useMutation({mutationFn: () => leadSetDeleted(l!, true), onSuccess: row => { toast('Заявка удалена. Её можно восстановить из корзины'); onDeleted(row.id); }});
   const dirty = contact !== initial || phone !== (l?.phone ?? '') || city !== (l?.city ?? '') || note !== (l?.note ?? '') || column !== initialColumn;
-  const save = useMutation({ mutationFn: () => { const parsed = parseLeadContact(contact); return leadSave({ id: l?.id, ...parsed, name: contact === initial && l ? l.name : parsed.name, phone, city, note, column }, l?.updated_at ?? null, operation); },
+  const save = useMutation({ mutationFn: () => {
+    const fields = l && contact === initial ? { name: l.name, instagram: l.instagram ?? null } : parseLeadContact(contact);
+    return leadSave({ id: l?.id, ...fields, phone, city, note, column }, l?.updated_at ?? null, operation);
+  },
     onSuccess: row => {
       if (row.deleted_at) {
         toast('Заявка уже находится в корзине', 'info');

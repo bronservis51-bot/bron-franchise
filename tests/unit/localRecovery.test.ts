@@ -30,6 +30,12 @@ describe('portable local work preserves actor, idempotency, conflicts and drafts
     expect(parseLocalRecovery(text, userId).operations).toEqual([op]);
     await expect(importLocalRecovery(userId, text)).resolves.toBe(2);
   });
+  it('accepts a calendar leap day and explicitly recorded zero', () => {
+    const op = { ...operation(), kind: 'shift_submit', payload: {
+      operation: operationId, location: other, day: '2028-02-29', cash: 0, card: '0', comment: null,
+    } };
+    expect(parseLocalRecovery(JSON.stringify({ ...backup(), operations: [op] }), userId).operations).toEqual([op]);
+  });
   it('round trips the original payload, UUID, financial version and blocked error without tokens', async () => {
     const text = await exportLocalRecovery(userId);
     const parsed = parseLocalRecovery(text, userId);
@@ -76,6 +82,29 @@ describe('portable local work preserves actor, idempotency, conflicts and drafts
     expect(() => parseLocalRecovery(' '.repeat(MAX_RECOVERY_BYTES + 1), userId)).toThrow('5 МБ');
     const nested = JSON.stringify(backup()).replace('"total":"12300"', `"total":${'['.repeat(34)}0${']'.repeat(34)}`);
     expect(() => parseLocalRecovery(nested, userId)).toThrow('повреждён');
+  });
+  it.each([
+    { kind: 'shift_submit', changes: { day: '2026-02-31' } },
+    { kind: 'shift_submit', changes: { cash: null } },
+    { kind: 'shift_submit', changes: { card: '12.50' } },
+    { kind: 'shift_submit', changes: { cash: '100000000000', card: '1' } },
+    { kind: 'shift_close_versioned', changes: { shift: 'invalid-id' } },
+    { kind: 'shift_close_versioned', changes: { expected_revision: -1 } },
+    { kind: 'revenue_total_set', changes: { total: -100 } },
+    { kind: 'revenue_total_set', changes: { total: false } },
+    { kind: 'revenue_total_set', changes: { location: 'wrong-location-id' } },
+  ])('rejects an invalid $kind payload with $changes before touching storage', async ({ kind, changes }) => {
+    const common = { operation: operationId, comment: null };
+    const cash = { cash: '100', card: '200' };
+    const pointDate = { location: other, day: '2026-11-11' };
+    const payloads: Record<string, Record<string, unknown>> = {
+      shift_submit: { ...pointDate, ...cash },
+      shift_close_versioned: { shift: other, expected_revision: 1, ...cash },
+      revenue_total_set: { ...pointDate, total: '100', expected_version: 'empty' },
+    };
+    const op = { ...operation(), kind, payload: { ...common, ...payloads[kind], ...changes } };
+    await expect(importLocalRecovery(userId, JSON.stringify({ ...backup(), operations: [op] }))).rejects.toThrow('повреждён');
+    expect(mergeLocalWork).not.toHaveBeenCalled();
   });
   it('does not offer an exported backup that cannot be imported by the same version', async () => {
     const draft = { ...backup().drafts[0], value: 'x'.repeat(MAX_RECOVERY_BYTES) };

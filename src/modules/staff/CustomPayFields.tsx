@@ -4,7 +4,7 @@ import { Button, Field, Input, MoneyInput } from '../../ui';
 import type { CustomShiftPay } from './api';
 import type { PayPolicy } from './Motivation';
 
-const maxMinor = 99_999_999_999;
+export const maxPolicyMinor = 99_999_999_999;
 const maxTiers = 20;
 const nameLimit = 100;
 
@@ -24,22 +24,22 @@ export function customPayDraft(policy?: (PayPolicy & { name?: string }) | null):
   };
 }
 
-function validMoney(value: Money) { return value.valid && Number(value.minor) <= maxMinor; }
+export function validPolicyMoney(value: Money) { return value.valid && Number(value.minor) <= maxPolicyMinor; }
 
 export function percentToBp(value: string): number | null {
   const input = value.trim();
-  if (input && !/^\d+(?:[,.]\d{0,2})?$/.test(input)) return null;
+  if (input && !/^\d+(?:[,.]\d{1,2})?$/.test(input)) return null;
   const percent = Number(input.replace(',', '.'));
   return percent >= 0 && percent <= 100 ? Math.round(percent * 100) : null;
 }
 
 export function tierPolicy(draft: CustomPayDraft): PayPolicy | null {
-  if (!validMoney(draft.floor) || !draft.tiers.length || draft.tiers.length > maxTiers) return null;
+  if (!validPolicyMoney(draft.floor) || !draft.tiers.length || draft.tiers.length > maxTiers) return null;
   const tiers: CustomShiftPay['tiers'] = [];
   for (const [index, tier] of draft.tiers.entries()) {
     const rate = percentToBp(tier.rate);
     const from = Number(tier.from.minor);
-    if (rate === null || !validMoney(tier.from) || !validMoney(tier.bonus)
+    if (rate === null || !validPolicyMoney(tier.from) || !validPolicyMoney(tier.bonus)
       || (index ? from <= tiers[index - 1].from_minor : from !== 0)) return null;
     tiers.push({ from_minor: from, rate_bp: rate, bonus_minor: Number(tier.bonus.minor) });
   }
@@ -60,7 +60,7 @@ export function currencySymbol(currency: string) {
 function PolicyMoney({ label, value, currency, onChange, error }: {
   label: string; value: Money; currency: string; onChange: (value: Money) => void; error?: string;
 }) {
-  const message = error ?? (validMoney(value) ? undefined : 'Проверьте сумму');
+  const message = error ?? (validPolicyMoney(value) ? undefined : 'Проверьте сумму');
   return <Field label={label} error={message}>
     {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} invalid={Boolean(message)}
       value={value.minor} currency={currency} placeholder="0"

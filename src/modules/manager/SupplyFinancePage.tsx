@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
-import { command } from '../../platform/backend';
+import { command, toAppError } from '../../platform/backend';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
@@ -16,6 +16,7 @@ interface SupplyRow { partner_id: string; partner_name: string; mapped_count: nu
 interface Unmapped { counterparty_id: string; name: string; sales_minor: number; cost_minor: number; profit_minor: number }
 interface SupplySnapshot { month: string; fetched_at: string | null; period_to: string | null; currency: string; rows: SupplyRow[]; unmapped: Unmapped[] }
 interface NetworkExpense { id: string; category: string; amount_minor: number; note: string | null; created_at: string }
+interface CompanyExpenseDraft { id: string; category: string; amount: string; note: string }
 interface PartnerEconomy { partner_id: string; partner_name: string; currency: string; payroll_minor: number; closed_shifts: number; expenses_minor: number;
   expense_categories: { category: string; amount_minor: number }[] }
 interface ManagerEconomy { month: string; company_expenses: NetworkExpense[]; company_expense_totals: { category: string; amount_minor: number }[]; partners: PartnerEconomy[] }
@@ -126,16 +127,21 @@ function CompanyExpenses({ month, expenses, totals }: { month: string; expenses:
   const toast = useToast();
   const [draft, setDraft] = useState<NetworkExpense | null | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['manager-economy', month], exact: true });
+  const refreshMissing = (error: unknown) => { if (toAppError(error).code === 'not-found') refresh(); };
   const save = useMutation({
-    mutationFn: (value: NetworkExpense) => command<string>('manager_company_expense_save', {
-      id: value.id || null, month, category: value.category.trim(), amount: String(value.amount_minor), note: value.note?.trim() || null,
+    mutationFn: (value: CompanyExpenseDraft) => command<string>('manager_company_expense_save', {
+      id: value.id || null, month, category: value.category.trim(), amount: value.amount, note: value.note.trim() || null,
     }),
-    onSuccess: (_id, value) => { toast(value.id ? 'Расход изменён' : 'Расход управляющей компании добавлен'); setDraft(undefined); void qc.invalidateQueries({ queryKey: ['manager-economy'] }); },
+    onSuccess: (_id, value) => { toast(value.id ? 'Расход изменён' : 'Расход управляющей компании добавлен'); setDraft(undefined); refresh(); },
+    onError: refreshMissing,
   });
   const remove = useMutation({
     mutationFn: (id: string) => command('manager_company_expense_delete', { id }),
-    onSuccess: () => { toast('Расход удалён'); setDeleteId(null); void qc.invalidateQueries({ queryKey: ['manager-economy'] }); },
+    onSuccess: () => { toast('Расход удалён'); setDeleteId(null); refresh(); },
+    onError: refreshMissing,
   });
+  const openExpense = (item: NetworkExpense | null) => { save.reset(); setDraft(item); };
   return <>
     <Card title="Управляющая компания">
       <p className="faint">Закупочная себестоимость поставок и отдельно учтённые расходы управляющей компании, ₽. Операционные расходы сюда не попадают автоматически.</p>
@@ -146,12 +152,11 @@ function CompanyExpenses({ month, expenses, totals }: { month: string; expenses:
         {expenses.map(item => <li key={item.id}><div className="expense-row">
           <span className="expense-main"><strong>{item.category}</strong>{item.note && <span className="faint">{item.note}</span>}</span>
           <strong className="num">{money(item.amount_minor)}</strong>
-          <Button size="sm" variant="ghost" onClick={() => setDraft(item)}>Изменить</Button>
-          <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => setDeleteId(item.id)}>Удалить</Button>
+          <Button size="sm" variant="ghost" onClick={() => openExpense(item)}>Изменить</Button>
+          <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => { remove.reset(); setDeleteId(item.id); }}>Удалить</Button>
         </div></li>)}
       </ul>}
-      <Button size="sm" onClick={() => setDraft({ id: '', category: '', amount_minor: 0, note: '', created_at: '' })}>Добавить расход</Button>
-      <ActionError error={save.error ?? remove.error} />
+      <Button size="sm" onClick={() => openExpense(null)}>Добавить расход</Button>
     </Card>
     {draft !== undefined && <CompanyExpenseDialog
       value={draft}
@@ -166,16 +171,25 @@ function CompanyExpenses({ month, expenses, totals }: { month: string; expenses:
 }
 
 function CompanyExpenseDialog({ value, busy, error, onClose, onSave }: {
-  value: NetworkExpense | null; busy: boolean; error: unknown; onClose: () => void; onSave: (value: NetworkExpense) => void;
+  value: NetworkExpense | null; busy: boolean; error: unknown; onClose: () => void; onSave: (value: CompanyExpenseDraft) => void;
 }) {
   const [category, setCategory] = useState(value?.category ?? '');
-  const [amount, setAmount] = useState(value?.amount_minor ? String(value.amount_minor) : '');
+  const initialAmount = value?.amount_minor ? String(value.amount_minor) : '';
+  const [amount, setAmount] = useState(initialAmount);
+  const [amountValid, setAmountValid] = useState(true);
   const [note, setNote] = useState(value?.note ?? '');
+  const canSave = Boolean(category.trim() && amountValid && amount && amount !== '0');
+  const dirty = !amountValid || category !== (value?.category ?? '') || amount !== initialAmount || note !== (value?.note ?? '');
   return <ConfirmDialog open title={value?.id ? 'Изменить расход компании' : 'Расход управляющей компании'} confirmLabel="Сохранить" cancelLabel="Закрыть"
-    busy={busy} error={error} disabled={!category.trim() || !amount || amount === '0'} onClose={onClose}
-    onConfirm={() => onSave({ id: value?.id ?? '', category, amount_minor: Number(amount), note, created_at: value?.created_at ?? '' })}>
-    <Field label="Статья расхода" required>{id => <Input id={id} value={category} onChange={event => setCategory(event.target.value)} maxLength={60} placeholder="Например: аренда офиса" autoFocus />}</Field>
-    <Field label="Сумма за месяц, RUB" required>{id => <MoneyInput id={id} value={amount} onChange={setAmount} currency="RUB" />}</Field>
-    <Field label="Комментарий">{id => <Input id={id} value={note} onChange={event => setNote(event.target.value)} maxLength={500} placeholder="Необязательно" />}</Field>
+    busy={busy} error={error} disabled={!canSave} dirty={dirty} onClose={onClose}
+    onConfirm={() => { if (canSave && !busy) onSave({ id: value?.id ?? '', category, amount, note }); }}>
+    <fieldset className="stack" disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <Field label="Статья расхода" required>{id => <Input id={id} value={category} onChange={event => setCategory(event.target.value)} maxLength={60} placeholder="Например: аренда офиса" autoFocus />}</Field>
+      <Field label="Сумма за месяц, RUB" required error={!amountValid ? 'Укажите сумму, например 12,50.' : undefined}>
+        {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} value={amount} onChange={setAmount}
+          onValidityChange={setAmountValid} currency="RUB" requireExplicitValue />}
+      </Field>
+      <Field label="Комментарий">{id => <Input id={id} value={note} onChange={event => setNote(event.target.value)} maxLength={500} placeholder="Необязательно" />}</Field>
+    </fieldset>
   </ConfirmDialog>;
 }
