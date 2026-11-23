@@ -73,3 +73,15 @@
   .kb-section-search .input { flex-basis: calc(100% - 32px); }
   .kb-section-search .btn { margin-left: auto; }
 }
+.kb-questions-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-1);
+}
+
+.kb-questions-action .btn {
+  text-align: center;
+}

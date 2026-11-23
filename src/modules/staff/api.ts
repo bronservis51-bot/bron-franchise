@@ -17,7 +17,7 @@ export interface StaffHomeData {
   shifts: Shift[];
 }
 export type StaffPosition = 'trainee' | 'sales_manager' | 'manager';
-export interface StaffAccess { view_staff: boolean; create_staff: boolean; procurement: boolean }
+export interface StaffAccess { view_staff: boolean; create_staff: boolean; procurement: boolean; manage_pay?: boolean }
 export type CustomShiftPay = PayPolicy & { name: string };
 
 export interface PayrollShift {
@@ -30,7 +30,7 @@ export interface PayrollShift {
 export interface StaffRow {
   pay_revision?: number; pay_effective_from?: string | null;
   pay_scheduled?: { effective_from: string; label: string }[]; pay_policy?: ShiftPolicy | null;
-  can_manage?: boolean; is_manager?: boolean;
+  can_manage?: boolean; can_edit_pay?: boolean; is_manager?: boolean;
   position?: StaffPosition;
   access?: StaffAccess & { legacy_staff_management?: boolean };
   custom_pay?: CustomShiftPay | null;
@@ -69,6 +69,10 @@ export async function staffShiftCorrect(userId: string, shift: PayrollShift, cas
 export const shiftCancel = (shift: string) => command('shift_cancel', { shift });
 
 export const staffList = (partner: string, month: string) => command<StaffRow[]>('staff_list', { partner, month });
+export const staffPaySave = (a: { partner: string; user: string; rate_bp: number; shift_fee: number | string;
+  use_partner: boolean; custom_pay: CustomShiftPay | null; pay_effective_from: string | null;
+  expected_pay_revision: number; internship_floor_minor: number | string | null }) =>
+  command('staff_pay_save', a);
 export const staffCreate = (a: { partner: string; full_name: string; phone: string; password: string; locations: string[]; rate_bp: number; shift_fee: string }) =>
   command<string>('staff_create', a);
 export const staffUpdate = (a: { user: string; full_name: string; locations: string[]; rate_bp: number; shift_fee: string }) => command('staff_update', a);

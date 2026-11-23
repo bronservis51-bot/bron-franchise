@@ -7,7 +7,9 @@ describe('account credentials', () => {
     const html = renderToStaticMarkup(<CredentialFields login="+7 900 000-00-00" password="demo-starting-password" />);
     expect(html).toContain('Скопировать логин');
     expect(html).toContain('Скопировать пароль');
-    expect(html.match(/<button\b/g)).toHaveLength(2);
+    expect(html).toContain('Показать пароль');
+    expect(html).not.toContain('demo-starting-password');
+    expect(html.match(/<button\b/g)).toHaveLength(3);
   });
 
   it('shows only the login action when an existing account is viewed', () => {

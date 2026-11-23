@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useBlocker, useParams, useSearchParams, Navigate } from 'react-router';
+import { Link, useBlocker, useLocation, useParams, useSearchParams, Navigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { command, from, rows, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
@@ -77,15 +77,16 @@ export function LearningManagePage() {
 }
 function MyLessons(){
  const qc=useQueryClient();
+ const preview = Boolean(useLocation().state?.firstRunPreview);
  const q=useQuery({queryKey:['learning','overview'],queryFn:()=>command<Overview>('learning_overview')});
- useEffect(()=>{void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc]);
+ useEffect(()=>{if(!preview)void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc,preview]);
  return <>
  <PageHeader title="Обучение" sub={q.data?.audience === 'trainees' ? 'Программа стажировки' : undefined} />
  <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены"/>}>{d=>{
   const next = d.items.find(l => l.active) ?? d.items.find(l => !l.completed || (l.due !== null && l.due <= d.day));
   const nextReview = next ? undefined : d.items.map(l => l.due).filter(due => due !== null).sort()[0];
   return <div className="stack">
-   {next ? <Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><Link className="btn btn-primary" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':next.completed?'Повторить':'Начать'}</Link></Card> :
+   {next ? <Card title={next.active?'Продолжить урок':next.due&&next.due<=d.day?'Пора повторить':'Следующий урок'} className="learning-next"><span className="faint">{next.stage}</span><h2>{next.title}</h2><Link className="btn btn-primary" data-tour-target="first-lesson" to={`/learning/lesson/${next.article_id}`}>{next.active?'Продолжить':next.completed?'Повторить':'Начать'}</Link></Card> :
     <Card title="Все назначенные уроки пройдены" className="learning-next">{nextReview && <p>Ближайшее повторение: {formatDate(nextReview)}.</p>}</Card>}
    <details className="learning-program">
     <summary>Все уроки ({d.items.filter(l=>l.completed).length} из {d.items.length} пройдено)</summary>

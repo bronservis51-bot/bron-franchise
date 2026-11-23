@@ -1,0 +1,65 @@
+.finance-page .fin-chart {
+  position: relative;
+  container-type: inline-size;
+}
+
+.finance-page .fin-plot {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: var(--space-1) var(--space-1) calc(var(--fs-xs) * 1.5 + var(--space-2));
+}
+
+.finance-page .fin-bars {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  min-width: calc(var(--fs-xs) * 2.6 * 6 + var(--space-2) * 5);
+  gap: var(--space-2);
+}
+
+.finance-page .fin-col:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.finance-page .fin-month {
+  top: calc(100% + var(--space-1));
+  bottom: auto;
+  white-space: nowrap;
+}
+
+.finance-page .fin-tip {
+  inset: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  margin-inline: auto;
+  transform: none;
+  overflow-wrap: normal;
+}
+
+.finance-page .fin-tip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+}
+
+.finance-page .fin-tip-row b {
+  padding-inline-start: 0;
+  white-space: nowrap;
+}
+
+.finance-page .fin-chart figcaption {
+  margin-top: var(--space-1);
+}
+
+@container (max-width: 28rem) {
+  .finance-page .fin-tip {
+    position: static;
+    margin: var(--space-2) 0;
+    box-shadow: none;
+  }
+}
+
+.finance-points-table :is(th, td):first-child {
+  min-width: max(10rem, 14ch);
+}

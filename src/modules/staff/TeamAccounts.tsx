@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Navigate } from 'react-router';
+import { Navigate, useLocation, useNavigate } from 'react-router';
 import { command, from, rows } from '../../platform/backend';
 import { useSession, type Me } from '../../platform/session';
 import { dayLabel, monthStart } from '../../platform/dates';
@@ -75,6 +75,8 @@ function TeamRevenue({ partner, month, showMissing }: { partner: string; month: 
 }
 export function TeamAccounts({ partner, standalone = false }: { partner: string; standalone?: boolean }) {
   const { me } = useSession(); const qc = useQueryClient();
+  const navigate = useNavigate();
+  const route = useLocation();
   const canManageTeam = me?.assignments.some((assignment) => assignment.permissions.includes('team.manage')
     && (assignment.scope_type === 'company' || (assignment.scope_type === 'partner' && assignment.scope_id === partner)));
   const [action, setAction] = useState<TeamAction | null>(null);
@@ -84,6 +86,12 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
   const history=useQuery({queryKey:['staff-access-history',partner],enabled:Boolean(canManageTeam)&&historyOpen,
     queryFn:()=>command<{id:number;at:string;action:string;actor_name:string|null;user_name:string|null}[]>('staff_access_history',{partner})});
   if (!canManageTeam) return null;
+  const openEmployee = (id: string) => {
+    const params = new URLSearchParams(standalone ? '' : route.search);
+    params.set('employee', id);
+    setAction(null);
+    void navigate({ pathname: standalone ? '/staff' : route.pathname, search: `?${params}` });
+  };
   const closeAction = () => {
     setAction(null);
     void qc.invalidateQueries({ queryKey: ['team', partner] });
@@ -92,7 +100,7 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
   };
   const actionLabel:Record<string,string>={'team.create':'Создан доступ управляющего','staff.create':'Создан доступ','staff.update':'Изменён профиль','staff.access':'Изменены роль или точки','user.password':'Изменён пароль','user.login':'Изменён телефон для входа','staff.remove':'Доступ закрыт','staff.restore':'Доступ возвращён','team.active':'Изменён доступ','staff.active':'Изменён доступ','team.remove':'Доступ закрыт','team.restore':'Доступ возвращён'};
   const content = <>
-    <p className="faint">Управляющий видит выручку назначенных точек. Права на работу с сотрудниками и заказы настраиваются в карточке сотрудника на вкладке «Вход».</p>
+    <p className="faint">Управляющий видит выручку назначенных точек. Права на работу с сотрудниками, их оплату и заказы настраиваются в карточке сотрудника.</p>
     <div className="row"><Button size="sm" onClick={() => setAction('assign')}>Назначить управляющего</Button><Button size="sm" onClick={() => setAction('new')}>Новый управляющий</Button></div>
     <DataState query={q} empty={list => list.length ? null : <EmptyState title="Управляющих пока нет" />}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
       <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
@@ -106,30 +114,39 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
     </li>)}</ul>}</DataState>
     <details onToggle={e=>setHistoryOpen(e.currentTarget.open)}><summary>История доступа</summary><DataState query={history}>{list=><ul className="list">{list.map(a=><li key={a.id}><strong>{actionLabel[a.action]??'Изменён доступ'}</strong> · {a.user_name??'Сотрудник'}<span className="faint" style={{display:'block'}}>{new Date(a.at).toLocaleString('ru-RU')} · {a.actor_name??'Система'}</span></li>)}{!list.length&&<li>Изменений доступа пока нет.</li>}</ul>}</DataState></details>
     {loginUser && <PhoneLoginDialog user={loginUser.user_id} name={loginUser.full_name} currentPhone={loginUser.phone} onClose={() => setLoginUser(null)} />}
-    {action && (action==='assign'||typeof action==='object'&&action.type==='scope'
-      ? <StaffAccessDialog partner={partner} user={typeof action==='object'?action.user:undefined} onClose={closeAction}/>
+    {action === 'assign' && <AssignManagerDialog partner={partner} onOpen={openEmployee} onClose={closeAction} />}
+    {action && action !== 'assign' && (typeof action === 'object' && action.type === 'scope'
+      ? <StaffAccessDialog partner={partner} user={action.user} onClose={closeAction} />
       : <TeamDialog partner={partner} action={action} onClose={closeAction} />)}
   </>;
   return standalone ? <div className="stack">{content}</div>
     : <details className="team-accounts"><summary>Управляющие</summary>{content}</details>;
 }
-function StaffAccessDialog({partner,user,onClose}:{partner:string;user?:Team;onClose:()=>void}) {
-  const {me}=useSession();
-  const [selectedUser,setSelectedUser]=useState(user?.user_id??'');
-  const [selected,setSelected]=useState<string[]>(user?.location_ids??[]);
-  const [manager,setManager]=useState(true);
-  const employees=useQuery({queryKey:['staff-list',partner,monthStart()],queryFn:()=>staffList(partner,monthStart())});
-  const locations=useQuery({queryKey:['team-locations',partner],queryFn:()=>rows<{id:string;name:string}>(from('location').select('id,name').eq('partner_id',partner).eq('status','active'))});
-  const eligible = employees.data?.filter(s => s.active && !s.is_manager && s.user_id !== me?.user.id && s.can_manage !== false);
-  const m=useMutation({mutationFn:()=>command('staff_access_set',{partner,user:selectedUser,manager,locations:selected}),onSuccess:onClose});
-  const selectEmployee=(id:string)=>{setSelectedUser(id);const employee=employees.data?.find(s=>s.user_id===id);setSelected(employee?.location_ids??[]);};
-  return <ConfirmDialog open title={user?'Роль и точки управляющего':'Назначить управляющего'} confirmLabel="Сохранить" onConfirm={()=>m.mutate()} onClose={onClose} busy={m.isPending} error={m.error} disabled={!selectedUser||!selected.length}>
-    {user ? <p>{user.full_name}</p> : <DataState query={employees}>{() => eligible?.length
-      ? <Field label="Сотрудник" required>{id => <Select id={id} value={selectedUser} onChange={e => selectEmployee(e.target.value)}>
+function AssignManagerDialog({ partner, onOpen, onClose }: { partner: string; onOpen: (id: string) => void; onClose: () => void }) {
+  const { me } = useSession();
+  const [selected, setSelected] = useState('');
+  const [month] = useState(monthStart);
+  const employees = useQuery({ queryKey: ['staff-list', partner, month, true], queryFn: () => staffList(partner, month) });
+  const eligible = employees.data?.filter(s => s.active && !s.is_manager && s.user_id !== me?.user.id && s.can_manage === true) ?? [];
+  return <ConfirmDialog open title="Назначить управляющего" confirmLabel="Открыть карточку"
+    onConfirm={() => onOpen(selected)} onClose={onClose} disabled={!eligible.some(s => s.user_id === selected)}>
+    <DataState query={employees}>{() => eligible.length
+      ? <Field label="Сотрудник" required>{id => <Select id={id} value={selected} onChange={e => setSelected(e.target.value)}>
         <option value="">Выберите сотрудника</option>{eligible.map(s => <option key={s.user_id} value={s.user_id}>{s.full_name}</option>)}
       </Select>}</Field>
-      : <p className="faint">Нет сотрудников, которым можно назначить эту роль.</p>}</DataState>}
-    {user && <Checkbox label="Роль управляющего" checked={manager} onChange={setManager}/>}
+      : <p className="faint">Нет сотрудников, которым можно назначить эту роль.</p>}</DataState>
+    <p className="faint">В карточке выберите должность «Управляющий», точки и нужные права. Сохранятся логин, смены и начисления сотрудника.</p>
+  </ConfirmDialog>;
+}
+
+function StaffAccessDialog({partner,user,onClose}:{partner:string;user:Team;onClose:()=>void}) {
+  const [selected,setSelected]=useState<string[]>(user.location_ids);
+  const [manager,setManager]=useState(true);
+  const locations=useQuery({queryKey:['team-locations',partner],queryFn:()=>rows<{id:string;name:string}>(from('location').select('id,name').eq('partner_id',partner).eq('status','active'))});
+  const m=useMutation({mutationFn:()=>command('staff_access_set',{partner,user:user.user_id,manager,locations:selected}),onSuccess:onClose});
+  return <ConfirmDialog open title="Роль и точки управляющего" confirmLabel="Сохранить" onConfirm={()=>m.mutate()} onClose={onClose} busy={m.isPending} error={m.error} disabled={!selected.length}>
+    <p>{user.full_name}</p>
+    <Checkbox label="Роль управляющего" checked={manager} onChange={setManager}/>
     <Field label="Точки работы и управления" required>{()=>locations.data?.map(l=><Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v=>setSelected(v?[...selected,l.id]:selected.filter(x=>x!==l.id))}/>)}</Field>
     <p className="faint">Действующие сеансы сотрудника завершатся. После повторного входа будут действовать новые права. Смены и начисления сохранятся. Без роли управляющего остаётся обычный доступ сотрудника.</p>
   </ConfirmDialog>;
@@ -161,7 +178,8 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
     confirmLabel={access ? 'Подтвердить' : 'Сохранить'} onConfirm={() => m.mutate()} onClose={onClose} busy={m.isPending} error={m.error}
     disabled={!access && (password.length < 6 || action === 'new' && (!name.trim() || !phoneLoginDigits(phone) || !selected.length))}>
     {access ? <p>История сохранится. Для следующего входа понадобится заново ввести логин и пароль.</p> : <>
-      {action === 'new' && <><Field label="Имя" required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>
+      {action === 'new' && <><p className="faint">Для новой учётной записи доступны управление сотрудниками и их оплатой на выбранных точках, а также заказы.</p>
+        <Field label="Имя" required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>
         <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{id => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 900 123-45-67" />}</Field></>}
       {action === 'new' && <Field label="Точки работы и управления" required>{() => locations.data?.map(l => <Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v => setSelected(v ? [...selected, l.id] : selected.filter(x => x !== l.id))} />)}</Field>}
       {action === 'new' && <p className="faint">Управляющий сможет добавлять сотрудников на выбранные точки и заказывать материалы. Право «Видеть сотрудников» также позволит редактировать их карточки и просматривать начисления.</p>}

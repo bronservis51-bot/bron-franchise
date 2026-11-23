@@ -1,0 +1,7 @@
+.order-options > .order-option + .order-option {
+  margin-top: 0;
+}
+
+.order-option-title {
+  min-height: var(--touch);
+}

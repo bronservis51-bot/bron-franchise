@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, ExternalLink, Lock, Package, ShoppingCart } from 'lucide-react';
+import { ChevronRight, ExternalLink, Lock, ShoppingCart } from 'lucide-react';
 import { captureSession, command, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { Alert, Button, ConfirmDialog, ErrorState, PageHeader } from '../../ui';
 import { HelpTip } from '../../ui/HelpTip';
 import { useOwnPartnerLifecycle } from '../revenue/partnerLifecycle';
+import './order-link.css';
 
 interface StoreLink {
   url: string | null;
@@ -143,7 +144,7 @@ export function OrderTopButton() {
   const { readOnly } = useOwnPartnerLifecycle();
   if (readOnly) return null;
   return (
-      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов">
+      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов" data-tour-target="order">
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
       </NavLink>
   );
@@ -166,15 +167,12 @@ export function OrderFallback() {
     <div>
       <div className="order-options">
         <section className="card order-option" aria-labelledby="order-stock-title">
-          <ShoppingCart size={24} aria-hidden />
-          <h2 id="order-stock-title">Заказ</h2>
-          <p>Покупка из наличия на складе — через ваш персональный магазин МойСклад.</p>
-          <p className="faint">Выберите товары и количество. Заказ сразу поступит в МойСклад и оформится на вашу компанию.</p>
+          <div className="row order-option-title"><h2 id="order-stock-title">Заказ</h2></div>
+          <p>Материалы в наличии можно заказать в персональном магазине МойСклад.</p>
           {isManager ? <p className="faint">Персональные ссылки доступны в карточках франчайзи.</p> : <StoreLinkAction />}
         </section>
         <section className="card order-option" aria-labelledby="order-preorder-title">
-          <Package size={24} aria-hidden />
-          <div className="row">
+          <div className="row order-option-title">
             <h2 id="order-preorder-title">Предзаказ</h2>
             <HelpTip label="Как работает предзаказ">Уточните у менеджера возможность поставки, срок и итоговую цену.</HelpTip>
           </div>

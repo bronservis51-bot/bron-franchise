@@ -36,7 +36,8 @@ export function workspaceRole({ me, isManager, isTechnical, isStaff, isTeamManag
   return isTeamManager ? 'team' : 'franchisee';
 }
 
-export const canOpenStaffDirectory = (can: PermissionCheck) => can('staff.manage') || can('staff.view') || can('staff.create');
+export const canOpenStaffDirectory = (can: PermissionCheck) =>
+  can('staff.manage') || can('staff.view') || can('staff.create') || can('staff.pay_edit');
 export const canOrderMaterials = (can: PermissionCheck) => can('procurement.order');
 
 export function workspaceAccess(role: WorkspaceRole, can: PermissionCheck) {

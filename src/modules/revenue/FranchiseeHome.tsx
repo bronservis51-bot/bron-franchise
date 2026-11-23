@@ -228,7 +228,7 @@ export function FranchiseeHome() {
                           <span className="faint">изменить</span>
                         </button>
                       : todayOff ? <Button block className="btn-lg" onClick={() => setEdit({ day: d.today, dayOff: true })}>Сегодня выходной</Button>
-                      : <Button variant="primary" block className="btn-lg" onClick={() => setEdit({ day: d.today })}><Plus size={20} aria-hidden />Внести выручку за сегодня</Button>
+                      : <Button variant="primary" block className="btn-lg" data-tour-target="revenue-entry" onClick={() => setEdit({ day: d.today })}><Plus size={20} aria-hidden />Внести выручку за сегодня</Button>
                   )}
                   {!readOnly && d.missing_days.length > 0 && (
                     <div className="alert tone-warning" role="status">

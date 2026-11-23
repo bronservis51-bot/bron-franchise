@@ -1,5 +1,86 @@
 dialog.first-run-dialog {
-  --dialog-width: 492px;
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  --guide-scrim: rgb(8 13 27 / 76%);
+  --guide-ring: #85a4ff;
+}
+
+dialog.first-run-dialog::backdrop {
+  background: transparent;
+}
+
+.first-run-dialog[data-targeted="false"]::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: var(--guide-scrim);
+}
+
+.guide-spotlight {
+  position: absolute;
+  border-radius: 11px;
+  outline: 2px solid var(--guide-ring);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 200vmax var(--guide-scrim), inset 0 0 14px rgb(133 164 255 / 23%);
+  pointer-events: none;
+}
+
+.guide-arrow {
+  position: absolute;
+  height: 2px;
+  background: var(--guide-ring);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.guide-arrow::after {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  content: "";
+  border-top: 2px solid var(--guide-ring);
+  border-right: 2px solid var(--guide-ring);
+  rotate: 45deg;
+}
+
+.guide-card {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: min(386px, 100% - 24px);
+  max-height: calc(100% - 24px);
+  padding: clamp(12px, 3.5vw, 18px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-2);
+}
+
+.guide-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+  color: var(--text-2);
+  font-size: var(--fs-s);
+  font-weight: 600;
 }
 
 .guide-progress {
@@ -9,65 +90,64 @@ dialog.first-run-dialog {
 
 .guide-progress > span {
   flex: 1;
-  height: 4px;
+  height: 3px;
   border-radius: 4px;
-  background: var(--border);
+  background: var(--border-strong);
 }
 
 .guide-progress > [data-current="true"] {
   background: var(--link);
 }
 
-.guide-meta {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  margin: var(--space-2) 0 var(--space-4);
-  color: var(--text-2);
-  font-size: var(--fs-s);
-}
-
-.guide-card {
-  padding: clamp(14px, 4vw, 22px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
+.guide-content {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block: var(--space-3);
 }
 
 .guide-icon {
   display: inline-grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: var(--space-3);
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius);
   background: var(--primary-weak);
   color: var(--link);
 }
 
-.guide-card h3 {
+.guide-content h2 {
   font-size: var(--fs-xl);
+  outline: none;
 }
 
-.guide-card p {
-  margin: var(--space-2) 0 0;
+.guide-content p {
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--text-2);
 }
 
-.guide-link {
-  display: inline-flex;
-  align-items: center;
+.guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--space-1);
+}
+
+.guide-actions .btn {
   min-height: var(--touch);
-  margin-top: var(--space-2);
-  font-weight: 650;
+  height: auto;
+  max-width: 100%;
+  padding: 6px 10px;
+  line-height: 1.25;
+  white-space: normal;
 }
 
-.guide-link svg {
-  flex: none;
-}
-
-.first-run-dialog .dialog-foot > :first-child {
+.guide-actions .btn:first-child {
   margin-inline-end: auto;
+}
+
+.guide-actions svg {
+  flex: none;
 }

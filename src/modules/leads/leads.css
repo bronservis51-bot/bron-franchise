@@ -1,0 +1,17 @@
+.leads-workspace .lead-open strong {
+  font-size: var(--fs);
+}
+
+.leads-workspace :is(.lead-tile-top, .lead-factors > span, .lead-tile-foot a, .lead-tile-foot > span, .lead-note) {
+  font-size: var(--fs-xs);
+}
+
+.lead-evidence {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.lead-evidence .lead-factors {
+  margin-top: var(--space-1);
+}

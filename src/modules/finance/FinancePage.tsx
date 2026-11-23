@@ -15,6 +15,7 @@ import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceEditor } from './FinanceEditor';
 import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, payrollAccrualLabels } from './financeReport';
+import './finance.css';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
   payroll_minor: number; payroll_halves?: readonly [MinorInput, MinorInput]; shifts: number; rate_bp: number; royalty_minor: number;
@@ -48,30 +49,35 @@ function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) 
     { key: 'expenses', label: 'Расходы', v: Number(financeExpensesMinor(m)) },
     ...(hasReturns ? [{ key: 'returns', label: 'Возвраты', v: n(m.return_minor ?? 0) }] : []),
   ];
+  const selected = hover === null ? null : months[hover];
   return (
     <figure className="fin-chart viz-root" aria-label="Выручка по месяцам">
       <div className="fin-legend" aria-hidden>
         <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw expenses" />Расходы</span>
         {hasReturns && <span><i className="sw returns" />Возвраты</span>}
       </div>
-      <div className="fin-bars" onMouseLeave={() => setHover(null)}>
-        {months.map((m, i) => (
-          <div key={m.month} className="fin-col" onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={0}
-            aria-label={`${monthLabel(m.month)}: выручка ${formatMoneyShort(m.revenue_minor, currency)}`}>
-            <div className="fin-stack" style={{ height: `${(n(m.revenue_minor) / max) * 100}%` }}>
-              {parts(m).map((p) => p.v > 0 && <span key={p.key} className={`seg ${p.key}`} style={{ flexGrow: p.v }} />)}
-            </div>
-            <span className="fin-month">{monthLabel(m.month, false).slice(0, 3)}{m.is_open ? '*' : ''}</span>
-            {hover === i && (
-              <div className="fin-tip" role="tooltip">
-                <strong>{monthLabel(m.month)}{m.is_open ? ' (идёт)' : ''}</strong>
-                <span>Выручка <b>{formatMoneyShort(m.revenue_minor, currency)}</b></span>
-                {parts(m).map((p) => <span key={p.key}><i className={`sw ${p.key}`} />{p.label} <b>{formatMoneyShort(p.v, currency)}</b></span>)}
+      <div className="fin-plot" onMouseLeave={event => { if (!event.currentTarget.contains(document.activeElement)) setHover(null); }}
+        onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHover(null); }}
+        onKeyDown={event => { if (event.key === 'Escape') setHover(null); }}>
+        <div className="fin-bars">
+          {months.map((m, i) => (
+            <div key={m.month} className="fin-col" onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={0}
+              aria-label={`${monthLabel(m.month)}: выручка ${formatMoneyShort(m.revenue_minor, currency)}`}>
+              <div className="fin-stack" style={{ height: `${(n(m.revenue_minor) / max) * 100}%` }}>
+                {parts(m).map((p) => p.v > 0 && <span key={p.key} className={`seg ${p.key}`} style={{ flexGrow: p.v }} />)}
               </div>
-            )}
-          </div>
-        ))}
+              <span className="fin-month">{monthLabel(m.month, false).slice(0, 3)}{m.is_open ? '*' : ''}</span>
+            </div>
+          ))}
+        </div>
       </div>
+      {selected && <div className="fin-tip" role="tooltip">
+        <strong>{monthLabel(selected.month)}{selected.is_open ? ' (идёт)' : ''}</strong>
+        <div className="fin-tip-row">Выручка <b>{formatMoneyShort(selected.revenue_minor, currency)}</b></div>
+        {parts(selected).map(p => <div className="fin-tip-row" key={p.key}>
+          <span><i className={`sw ${p.key}`} />{p.label}</span><b>{formatMoneyShort(p.v, currency)}</b>
+        </div>)}
+      </div>}
       <figcaption className="faint">* текущий месяц — данные на сегодня</figcaption>
     </figure>
   );
@@ -199,7 +205,7 @@ export function FinancePage() {
   const showEditor = editing && !readOnly;
 
   return (
-    <div className="home" style={{ maxWidth: 980 }}>
+    <div className="home finance-page" style={{ maxWidth: 980 }}>
       <PageHeader title="Финансы"
         actions={<>
           {!readOnly && <Button variant={showEditor ? 'primary' : 'secondary'} aria-pressed={showEditor} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
@@ -271,7 +277,7 @@ export function FinancePage() {
 
               {f.by_location && f.by_location.length > 1 && (
                 <Card title={`По точкам — ${monthLabel(f.month)}`} bodyless>
-                  <div className="table-wrap" role="region" aria-label="Финансы по точкам" tabIndex={0}>
+                  <div className="table-wrap finance-points-table" role="region" aria-label="Финансы по точкам" tabIndex={0}>
                     <table className="table">
                       <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
                       <tbody>{f.by_location.map((l) => (

@@ -1,7 +1,7 @@
 // Экран сотрудника: закрытие смены с выручкой и личные начисления.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { addDays, dayLabel, formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort, sumMinor, type MinorInput } from '../../platform/money';
@@ -15,6 +15,7 @@ import { ShiftReturnField, validShiftReturn } from './ShiftReturnField';
 import { recordShiftReturn } from './shiftReturns';
 import { PayrollSchedule } from './PayrollSchedule';
 import { splitPayroll } from './payrollPeriods';
+import './shift-home.css';
 
 /** Advisory UI only: the server checks its clock after locking the shift. */
 function canCorrect(shift: Shift) {
@@ -192,9 +193,9 @@ function ShiftHistory({ userId, current, pointRevenue }: { userId: string; curre
       {pointRevenue?.(month)}
     </>
   );
-  return compact ? <Card title="Итоги месяца" className="team-monthly">{content}</Card> : (
+  return compact ? <Card title={<h2 className="card-title" data-tour-target="payroll-history">Итоги месяца</h2>} className="team-monthly">{content}</Card> : (
     <section className="stack">
-      <h2 className="section-title">Мои смены и начисления</h2>
+      <h2 className="section-title" data-tour-target="payroll-history">Мои смены и начисления</h2>
       {content}
     </section>
   );
@@ -328,14 +329,14 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                   <div className="shift-label"><span className="on-dot" />Незакрытая смена · {d.open_shift.location_name}</div>
                   <div className="faint">За {dayLabel(d.open_shift.day)}</div>
                   {d.locations.find(l=>l.location_id===d.open_shift!.location_id)?.today!==d.open_shift.day&&<p className="danger-text">Эта смена открыта за прошлую дату. Не записывайте сюда сегодняшнюю выручку. Уточните итог с руководителем или отмените ошибочное открытие.</p>}
-                  <Button variant="primary" block className="btn-lg" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ shift: d.open_shift! })}>
+                  <Button variant="primary" block className="btn-lg" data-tour-target="shift-close" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setClosing({ shift: d.open_shift! })}>
                     Закрыть смену и внести выручку
                   </Button>
                   <button type="button" className="link-btn" disabled={shiftBlocked(d.open_shift.id)} onClick={() => setCancelling(d.open_shift)}>Открыл по ошибке — отменить</button>
                 </section>
               ) : d.locations.length ? (
                 <section className="stack" aria-label="Смены сегодня">
-                  {available.length > 0 && <Button disabled={!pending.isSuccess} variant="primary" block className="btn-lg" onClick={() => setClosing({})}>Закрыть смену</Button>}
+                  {available.length > 0 && <Button disabled={!pending.isSuccess} variant="primary" block className="btn-lg" data-tour-target="shift-close" onClick={() => setClosing({})}>Закрыть смену</Button>}
                   {d.locations.map(point => {
                     if (available.some(item => item.location_id === point.location_id)) return null;
                     const restriction = shiftDateRestriction(point, point.today) ?? shiftDateRestriction(point, addDays(point.today, -1));
@@ -354,17 +355,26 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
               ) : <EmptyState title="Вам пока не назначены точки" text="Попросите франчайзи добавить вас на точку." />}
 
               {!readOnly && d.locations.filter(point => point.missing_periods?.length).map(point => (
-                <details className="point-missing" key={point.location_id}>
-                  <summary>{point.location_name} · нет выручки за {point.missing_count} дн.</summary>
-                  <p className="faint">Если вы работали в один из этих дней, внесите выручку своей смены.</p>
-                  <ul className="day-list2">
-                    {point.missing_periods!.map(period => {
-                      const label = formatDate(period.from) + (period.until === period.from ? '' : ` — ${formatDate(period.until)}`);
-                      return <li key={period.from}>{d.open_shift ? label :
-                        <Button variant="ghost" disabled={!pending.isSuccess}
-                          onClick={() => setClosing({ locationId: point.location_id, day: period.from })}>{label}</Button>}</li>;
-                    })}
-                  </ul>
+                <details className="shift-gaps" key={point.location_id}>
+                  <summary>
+                    <span className="shift-gaps-icon"><CalendarDays size={19} aria-hidden /></span>
+                    <span className="shift-gaps-title"><strong>{point.location_name}</strong>
+                      <span>{point.missing_count ? `Нет выручки за ${point.missing_count} дн.` : 'Пропущенные дни'}</span></span>
+                    <ChevronDown className="shift-gaps-chevron" size={18} aria-hidden />
+                  </summary>
+                  <div className="shift-gaps-content">
+                    <p>{d.open_shift ? 'Сначала закройте открытую смену.' : 'Если вы работали в эти дни, выберите дату своей смены.'}</p>
+                    <ul>
+                      {point.missing_periods!.map(period => {
+                        const label = formatDate(period.from) + (period.until === period.from ? '' : ` — ${formatDate(period.until)}`);
+                        return <li key={period.from}>{d.open_shift ? <span>{label}</span> :
+                          <button type="button" disabled={!pending.isSuccess}
+                            onClick={() => setClosing({ locationId: point.location_id, day: period.from })}>
+                            {label}<ChevronRight size={16} aria-hidden />
+                          </button>}</li>;
+                      })}
+                    </ul>
+                  </div>
                 </details>
               ))}
 

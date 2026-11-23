@@ -139,6 +139,7 @@ export const CONTRACT = {
   staff_motivation_set: { args: ['user', 'enabled'], returns: 'void' },
   staff_onboarding_set: { args: ['user', 'settings'], returns: 'void' },
   staff_open_shifts: { args: ['partner'], returns: 'scalar' },
+  staff_pay_save: { args: ['partner', 'user', 'rate_bp', 'shift_fee', 'use_partner', 'custom_pay', 'pay_effective_from', 'expected_pay_revision', 'internship_floor_minor'], returns: 'void' },
   staff_profile_save: { args: ['user', 'partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee', 'use_partner', 'settings'], returns: 'scalar' },
   staff_profile_save_phone: { args: ['user', 'partner', 'full_name', 'phone', 'password', 'locations', 'rate_bp', 'shift_fee', 'use_partner', 'settings'], returns: 'scalar' },
   staff_set_active: { args: ['user', 'active'], returns: 'void' },

@@ -202,8 +202,10 @@ export function KbHomePage() {
           </>
         ) : (
           <>
-            <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
-            <HelpTip label="Где посмотреть ответ">Ответы команды сети появляются в «Моих вопросах». Вопрос по инструкции можно задать из самой статьи.</HelpTip>
+            <div className="kb-questions-action">
+              <LinkButton to="/kb/questions">Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
+              <HelpTip label="Где посмотреть ответ">Ответы команды сети появляются в «Моих вопросах». Вопрос по инструкции можно задать из самой статьи.</HelpTip>
+            </div>
             <Button onClick={() => setAsking('')}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
           </>
         )} />
