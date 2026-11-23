@@ -7,11 +7,13 @@ After=network-online.target
 Type=oneshot
 DynamicUser=true
 User=bron-recovery
-WorkingDirectory=/opt/bron/manager-recovery
+BindReadOnlyPaths=/opt/bron/manager-recovery:/run/bron-recovery-app
+BindReadOnlyPaths=/opt/bron/node-v22.23.5-linux-x64:/run/bron-recovery-node
+BindReadOnlyPaths=/etc/bron-franchise/google-finance-db-ca.crt:/run/bron-recovery-db-ca.crt
+WorkingDirectory=/run/bron-recovery-app
 EnvironmentFile=/etc/bron-franchise/manager-recovery.env
-Environment=PATH=/opt/bron/node-v22.23.5-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
 UnsetEnvironment=NODE_DEBUG NODE_DEBUG_NATIVE NODE_OPTIONS
-ExecStart=/usr/bin/env node scripts/manager-recovery-delivery.mjs --run
+ExecStart=/usr/bin/env BRON_DB_CA_FILE=/run/bron-recovery-db-ca.crt /run/bron-recovery-node/bin/node scripts/manager-recovery-delivery.mjs --run
 TimeoutStartSec=80s
 TimeoutStopSec=5s
 NoNewPrivileges=true
