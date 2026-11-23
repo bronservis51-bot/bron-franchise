@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueuedOperation } from '../../src/platform/offline';
 
-const { rpc, add, list, remove, getSession, records } = vi.hoisted(() => ({
-  rpc: vi.fn(), add: vi.fn(), list: vi.fn(), remove: vi.fn(), getSession: vi.fn(),
+const { rpc, add, list, remove, recordFailure, getSession, records } = vi.hoisted(() => ({
+  rpc: vi.fn(), add: vi.fn(), list: vi.fn(), remove: vi.fn(), recordFailure: vi.fn(), getSession: vi.fn(),
   records: new Map<string, QueuedOperation>(),
 }));
 vi.mock('../../src/platform/backend', () => ({
   command: rpc, toAppError: (e: unknown) => e,
   AppError: class extends Error { constructor(public code: string, public detail: string) { super(detail); } },
 }));
-vi.mock('../../src/platform/offline', () => ({ opQueue: { add, list, remove } }));
+vi.mock('../../src/platform/offline', () => ({ opQueue: { add, list, remove, recordFailure } }));
 vi.mock('../../src/platform/supabase', () => ({ requireClient: () => ({ auth: { getSession } }) }));
-import { flushOutbox, sendOrQueue } from '../../src/platform/outbox';
+import { flushOutbox, queuedOps, sendOrQueue } from '../../src/platform/outbox';
 
 const payload = { operation: 'original-operation', location: 'location', day: '2026-11-10', total: '12345', expected_version: 'original-version', comment: null };
 const operation = (changes: Partial<QueuedOperation> = {}): QueuedOperation => ({
@@ -27,6 +27,10 @@ beforeEach(() => {
   add.mockImplementation(async (op: QueuedOperation) => { records.set(op.clientOpId, structuredClone(op)); });
   list.mockImplementation(async (userId: string) => [...records.values()].filter(op => op.userId === userId));
   remove.mockImplementation(async (_userId: string, id: string) => { records.delete(id); });
+  recordFailure.mockImplementation(async (op: QueuedOperation, lastError: string, lastErrorCode: string) => {
+    const current = records.get(op.clientOpId);
+    if (current) put({ ...current, attempts: current.attempts + 1, lastError, lastErrorCode });
+  });
 });
 
 describe('offline storage truthfulness', () => {
@@ -51,9 +55,38 @@ describe('offline storage truthfulness', () => {
     await expect(flushOutbox('user')).resolves.toEqual({ sent: 1, failed: 0 });
     expect(rpc.mock.calls).toEqual([['revenue_total_set', payload, { accessToken: 'fixture-user-token' }], ['revenue_total_set', payload, { accessToken: 'fixture-user-token' }]]);
   });
+  it('does not recreate an operation after another tab sends it and removes it', async () => {
+    put();
+    rpc.mockImplementationOnce(async () => {
+      await remove('user', payload.operation);
+      throw { code: 'maintenance', detail: 'Переключение базы' };
+    });
+    await flushOutbox('user');
+    expect(records.size).toBe(0);
+  });
 });
 
 describe('outbox recovery preserves the original actor and operation', () => {
+  it('lists and replays records chronologically even when UUID and timestamp strings sort differently', async () => {
+    const newer = operation({ clientOpId: 'a-newer', payload: { ...payload, operation: 'a-newer' }, createdAt: '2026-11-10T10:30:00Z' });
+    const older = operation({ clientOpId: 'z-older', payload: { ...payload, operation: 'z-older' }, createdAt: '2026-11-10T12:00:00+03:00' });
+    put(newer); put(older);
+    expect(await queuedOps('user')).toEqual([older, newer]);
+    await expect(flushOutbox('user')).resolves.toEqual({ sent: 2, failed: 0 });
+    expect(rpc.mock.calls.map(([, args]) => args)).toEqual([older.payload, newer.payload]);
+  });
+  it('pauses at a temporary error without sending newer records ahead of it', async () => {
+    const oldest = operation();
+    const later = operation({ clientOpId: 'later', payload: { ...payload, operation: 'later' }, createdAt: '2026-11-10T12:01:00Z' });
+    put(oldest); put(later);
+    rpc.mockRejectedValueOnce({ code: 'external-unavailable', detail: 'Сервер недоступен' });
+    await expect(flushOutbox('user')).resolves.toEqual({ sent: 0, failed: 1 });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(records.get(oldest.clientOpId)).toMatchObject({ lastErrorCode: 'external-unavailable', attempts: 1 });
+    expect(records.get(later.clientOpId)).toEqual(later);
+    await expect(flushOutbox('user')).resolves.toEqual({ sent: 2, failed: 0 });
+    expect(rpc.mock.calls.map(([, args]) => args)).toEqual([oldest.payload, oldest.payload, later.payload]);
+  });
   it('replays a shift submission blocked by a tab that did not yet know the command', async () => {
     const shift = { operation: payload.operation, location: 'location', day: '2026-11-10', cash: '300', card: '800', comment: null };
     put(operation({ kind: 'shift_submit', payload: shift, lastErrorCode: 'unknown', lastError: 'Не удалось выполнить действие' }));
@@ -86,6 +119,14 @@ describe('outbox recovery preserves the original actor and operation', () => {
     await flushOutbox('user'); await flushOutbox('user');
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(records.get(payload.operation)).toMatchObject({ payload, lastErrorCode: code });
+  });
+  it('can send a later record while retaining an earlier conflict for reconciliation', async () => {
+    const blocked = operation({ lastError: 'Данные уже изменились', lastErrorCode: 'version-conflict', attempts: 1 });
+    const later = operation({ clientOpId: 'later', payload: { ...payload, operation: 'later' }, createdAt: '2026-11-10T12:01:00Z' });
+    put(blocked); put(later);
+    await expect(flushOutbox('user')).resolves.toEqual({ sent: 1, failed: 1 });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith(later.kind, later.payload, { accessToken: 'fixture-user-token' });
+    expect([...records.values()]).toEqual([blocked]);
   });
   it('does not reinterpret an old unclassified error as retryable', async () => {
     put(operation({ lastError: 'Сессия истекла' }));

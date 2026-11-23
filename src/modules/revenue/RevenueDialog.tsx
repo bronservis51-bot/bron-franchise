@@ -9,6 +9,7 @@ import { useToast } from '../../ui/toast';
 import { revenueDayOffSet, revenueMonth, revenueTotalSet, type DayRow, type MonthDetail } from './api';
 
 const MAX_TOTAL_MINOR = 100_000_000_000; // revenue_total_set limit in the database
+type RevenueAction = 'save-total' | 'mark-off' | 'unmark-off';
 
 export function hasRevenueDiscrepancy(row: DayRow | undefined): row is DayRow & { reported_total_minor: number } {
   return row?.reported_total_minor != null && Number(row.total_minor) > Number(row.reported_total_minor);
@@ -34,12 +35,13 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
   const exceedsLimit = Number(total) > MAX_TOTAL_MINOR;
   const belowStaffTotal = Number(total) < staffTotal;
   const canSave = total !== '' && totalValid && !exceedsLimit && !belowStaffTotal;
-  const offChange = dayOff || markOff;
+  const action: RevenueAction = dayOff ? 'unmark-off' : markOff ? 'mark-off' : 'save-total';
   const newlyMarkedOff = !dayOff && freshMonth?.days_off?.includes(day);
-  const locked = Boolean(freshMonth && (freshMonth.status !== 'active' || day > freshMonth.today ||
+  const periodLocked = Boolean(freshMonth && (day > freshMonth.today ||
     (freshMonth.editable_from && day < freshMonth.editable_from)));
+  const locked = periodLocked || (Boolean(freshMonth && freshMonth.status !== 'active') && action !== 'unmark-off');
   const refreshBlocksSave = refreshStatus === 'loading' || refreshStatus === 'error';
-  const saveDisabled = refreshBlocksSave || locked || newlyMarkedOff || (!canSave && !offChange);
+  const saveDisabled = refreshBlocksSave || locked || newlyMarkedOff || (action === 'save-total' && !canSave);
   const refreshDay = async () => {
     setRefreshStatus('loading');
     const month = `${day.slice(0, 7)}-01`;
@@ -61,27 +63,39 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
   };
   const save = useMutation({
     networkMode: 'always',
-    mutationFn: (changeDayOff: boolean) => changeDayOff
-      ? revenueDayOffSet(location, day, !dayOff)
-      : revenueTotalSet(me!.user.id, location, day, total, row?.day_version ?? 'empty', comment.trim() || null),
-    onSuccess: (r, changeDayOff) => {
-      toast(changeDayOff ? (dayOff ? 'Отметка о выходном снята' : 'Отмечено как выходной')
+    mutationFn: (action: RevenueAction) => action === 'save-total'
+      ? revenueTotalSet(me!.user.id, location, day, total, row?.day_version ?? 'empty', comment.trim() || null)
+      : revenueDayOffSet(location, day, action === 'mark-off'),
+    onSuccess: (r, action) => {
+      toast(action !== 'save-total' ? (action === 'unmark-off' ? 'Отметка о выходном снята' : 'Отмечено как выходной')
         : r && typeof r === 'object' && 'queued' in r ? 'Сохранено на устройстве — отправится при появлении сети' : 'Выручка сохранена');
+      if (action === 'unmark-off' && !dayOff) {
+        void qc.invalidateQueries({ queryKey: ['rating'] });
+        return refreshDay();
+      }
       void qc.invalidateQueries({ queryKey: ['revenue'] }); void qc.invalidateQueries({ queryKey: ['finance'] });
       void qc.invalidateQueries({ queryKey: ['royalty'] }); void qc.invalidateQueries({ queryKey: ['rating'] }); onClose();
     },
-    onError: (error) => {
-      if (toAppError(error).code === 'version-conflict') return refreshDay();
+    onError: (error, action) => {
+      const err = toAppError(error);
+      // Calendar guards reject a day off with sales and sales on a day off as validation errors.
+      if (err.code === 'version-conflict' || err.code === 'period-locked' ||
+        (err.code === 'validation' && (action !== 'save-total' || err.field === 'day'))) {
+        if (action === 'mark-off') setMarkOff(false);
+        return refreshDay();
+      }
     },
   });
-  const submit = () => { if (!saveDisabled && !save.isPending) save.mutate(offChange); };
+  const submit = () => { if (!saveDisabled && !save.isPending) save.mutate(action); };
   const conflict = save.error && toAppError(save.error).code === 'version-conflict';
   return <ConfirmDialog open title={dayOff ? `Выходной · ${dayLabel(day)}` : `Выручка за ${dayLabel(day)}`}
     confirmLabel={dayOff ? 'Отменить выходной' : 'Сохранить'} cancelLabel={readOnly ? 'Закрыть' : undefined} busy={save.isPending} error={conflict ? null : save.error}
     dirty={!readOnly && (markOff || !totalValid || total !== initialTotal || comment !== savedComment)} disabled={saveDisabled} onClose={onClose} onConfirm={readOnly ? undefined : submit}>
     <p className="muted">{locationName}</p>
-    {refreshStatus === 'loading' && <p role="status">Выручка изменилась. Загружаем данные дня…</p>}
-    {refreshStatus === 'ready' && <p role="status">Данные дня обновлены. Сверьте сумму перед сохранением.</p>}
+    {refreshStatus === 'loading' && <p role="status">Загружаем данные дня…</p>}
+    {refreshStatus === 'ready' && !newlyMarkedOff && <p role="status">Данные дня обновлены.
+      {row && !hasRevenueDiscrepancy(row) ? <> Сейчас учтено <Money minor={row.total_minor} currency={currency} />.</> : ' Сверьте сумму перед сохранением.'}
+    </p>}
     {refreshStatus === 'error' && <div className="stack">
       <p role="alert">Не удалось загрузить обновлённые данные дня. Введённая сумма сохранена в форме.</p>
       <Button size="sm" onClick={() => void refreshDay()}>Обновить данные дня</Button>
@@ -91,10 +105,14 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
       В выручку включено <Money minor={row.total_minor} currency={currency} />.
     </p>}
     {(readOnly || locked) && <p>Редактирование за эту дату недоступно.</p>}
-    {newlyMarkedOff && <p>Дата отмечена как выходной. Снимите отметку в выручке точки, чтобы внести сумму.</p>}
+    {newlyMarkedOff && <div className="stack">
+      <p role="status">Дату отметили как выходной. Чтобы внести выручку, сначала снимите отметку.</p>
+      {!locked && !readOnly && <Button size="sm" disabled={refreshBlocksSave || save.isPending}
+        onClick={() => save.mutate('unmark-off')}>Снять отметку о выходном</Button>}
+    </div>}
     {dayOff && <p>Если точка работала, снимите отметку и внесите выручку за этот день.</p>}
-    {!readOnly && canMarkOff && !row && !dayOff && <Checkbox label="Точка не работала" checked={markOff} onChange={setMarkOff} hint={markOff ? 'Сохранится отметка «Выходной».' : undefined} />}
-    <div hidden={offChange || readOnly}>
+    {!readOnly && !locked && !newlyMarkedOff && canMarkOff && !row && !dayOff && <Checkbox label="Точка не работала" checked={markOff} onChange={setMarkOff} hint={markOff ? 'Сохранится отметка «Выходной».' : undefined} />}
+    <div hidden={action !== 'save-total' || readOnly}>
     <Field label="Вся выручка точки за день" hint="Включая продажи сотрудников" error={!totalValid ? 'Укажите сумму, например 12,50.' : undefined} required>{(id, describedBy) => (
       <MoneyInput id={id} describedBy={describedBy} value={total} onChange={setTotal} onValidityChange={setTotalValid} onEnter={() => commentInput.current?.focus()} enterKeyHint="next" requireExplicitValue currency={currency} placeholder="0" invalid={exceedsLimit || belowStaffTotal} />
     )}</Field>

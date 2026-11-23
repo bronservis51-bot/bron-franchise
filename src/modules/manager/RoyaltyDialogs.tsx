@@ -1,5 +1,5 @@
 // Роялти у менеджера: отметить оплату, исправить начисление месяца, добавить прошлый долг — и отменить любое из этих действий.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Undo2 } from 'lucide-react';
 import { command } from '../../platform/backend';
@@ -32,8 +32,11 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
   partner: { id: string; name: string }; currency: string; month?: string; suggested?: number; onClose: () => void;
 }) {
   const done = useUndoable();
-  const [m, setM] = useState(month ?? shiftMonth(monthStart(), -1));
-  const [amount, setAmount] = useState(suggested && suggested > 0 ? String(suggested) : '');
+  const initialMonth = month ?? shiftMonth(monthStart(), -1);
+  const [m, setM] = useState(initialMonth);
+  const [enteredAmount, setEnteredAmount] = useState<string>();
+  const [amountValid, setAmountValid] = useState(true);
+  const amount = enteredAmount ?? (m === initialMonth && suggested && suggested > 0 ? String(suggested) : '');
   const [paidOn, setPaidOn] = useState(isoDate());
   const [note, setNote] = useState('');
   const save = useMutation({
@@ -42,7 +45,7 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
   });
   return (
     <ConfirmDialog open title={`Отметить оплату — ${partner.name}`} confirmLabel="Отметить оплату" cancelLabel="Закрыть" busy={save.isPending} error={save.error}
-      disabled={!amount || amount === '0'} onClose={onClose} onConfirm={() => save.mutate()}>
+      disabled={!amountValid || !amount || amount === '0' || !paidOn} onClose={onClose} onConfirm={() => save.mutate()}>
       <p className="muted">Деньги поступили — отметьте сумму. Ошиблись — нажмите «Отменить» в уведомлении или в журнале операций.</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="За месяц">{(id) => (
@@ -50,9 +53,12 @@ export function PaymentDialog({ partner, currency, month, suggested, onClose }: 
             {monthOptions().map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
           </Select>
         )}</Field>
-        <Field label="Дата оплаты">{(id) => <Input id={id} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />}</Field>
+        <Field label="Дата оплаты" required>{(id) => <Input id={id} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />}</Field>
       </div>
-      <Field label={`Сумма, ${currency}`} required>{(id) => <MoneyInput id={id} value={amount} onChange={setAmount} currency={currency} />}</Field>
+      <Field label={`Сумма, ${currency}`} required error={!amountValid ? 'Проверьте сумму оплаты.' : undefined}>
+        {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} value={amount} onChange={setEnteredAmount}
+          onValidityChange={setAmountValid} currency={currency} />}
+      </Field>
       <Field label="Комментарий" hint="Например: номер платёжки">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
     </ConfirmDialog>
   );
@@ -66,11 +72,12 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
   const row = ledger.data?.months.find((x) => x.month === m);
   const auto = Number(row?.accrued_minor ?? 0);
   const manual = Number(row?.manual_minor ?? 0);
-  const [target, setTarget] = useState('');
+  const [targetDraft, setTargetDraft] = useState<string>();
+  const target = targetDraft ?? (ledger.data ? String(auto + manual) : '');
+  const [targetValid, setTargetValid] = useState(true);
   const [note, setNote] = useState('');
-  useEffect(() => { setTarget(String(auto + manual)); }, [m, auto, manual]);
   const save = useMutation({
-    mutationFn: () => command<{ id: string | null; delta_minor: number }>('royalty_set_accrual', { partner: partner.id, month: m, target: target || '0', note }),
+    mutationFn: () => command<{ id: string | null; delta_minor: number }>('royalty_set_accrual', { partner: partner.id, month: m, target, note }),
     onSuccess: (r) => {
       if (!r.id) { onClose(); return; }
       done(`Начисление ${partner.name} за ${monthLabel(m)} исправлено: ${r.delta_minor > 0 ? '+' : ''}${formatMoneyShort(r.delta_minor, currency)}`, () => manualDelete(r.id!));
@@ -80,10 +87,14 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
   const delta = Number(target || 0) - auto - manual;
   return (
     <ConfirmDialog open title={`Исправить начисление — ${partner.name}`} confirmLabel="Сохранить исправление" cancelLabel="Закрыть" busy={save.isPending}
-      error={save.error} disabled={!note.trim() || delta === 0} onClose={onClose} onConfirm={() => save.mutate()}>
+      error={save.error} disabled={!ledger.isSuccess || !targetValid || target === '' || !note.trim() || delta === 0} onClose={onClose} onConfirm={() => save.mutate()}>
       <p className="muted">Система считает роялти сама. Если она ошиблась (например, выручку внесли неверно, а исправлять поздно), укажите, сколько должно быть начислено. Разница сохранится отдельной корректировкой — её можно отменить.</p>
       <Field label="Месяц">{(id) => (
-        <Select id={id} value={m} onChange={(e) => setM(e.target.value)}>
+        <Select id={id} value={m} onChange={(e) => {
+          setM(e.target.value);
+          setTargetDraft(undefined);
+          setTargetValid(true);
+        }}>
           {monthOptions(24).map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
         </Select>
       )}</Field>
@@ -98,9 +109,12 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
           </div>
         )}
       </DataState>
-      <Field label={`Должно быть начислено, ${currency}`} required hint={delta ? `Корректировка: ${delta > 0 ? '+' : ''}${formatMoneyShort(delta, currency)}` : 'Сумма совпадает с текущей'}>
-        {(id) => <MoneyInput id={id} value={target} onChange={setTarget} currency={currency} />}</Field>
-      <Field label="Причина" required hint="Её увидит франчайзи в своих финансах">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: пересчитали по акту сверки" />}</Field>
+      <Field label={`Должно быть начислено, ${currency}`} required error={!targetValid ? 'Укажите итоговую сумму начисления.' : undefined}
+        hint={targetValid ? delta ? `Корректировка: ${delta > 0 ? '+' : ''}${formatMoneyShort(delta, currency)}` : 'Сумма совпадает с текущей' : undefined}>
+        {(id, describedBy) => <MoneyInput key={m} id={id} describedBy={describedBy} value={target} onChange={setTargetDraft}
+          onValidityChange={setTargetValid} currency={currency} requireExplicitValue />}
+      </Field>
+      <Field label="Причина" required hint="Сохранится в журнале операций">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: пересчитали по акту сверки" />}</Field>
     </ConfirmDialog>
   );
 }
@@ -109,6 +123,7 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
   const done = useUndoable();
   const [m, setM] = useState(shiftMonth(monthStart(), -1));
   const [amount, setAmount] = useState('');
+  const [amountValid, setAmountValid] = useState(true);
   const [note, setNote] = useState('');
   const save = useMutation({
     mutationFn: () => manualAdd(partner.id, m, amount, note.trim() || null) as Promise<string>,
@@ -116,7 +131,7 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
   });
   return (
     <ConfirmDialog open title={`Прошлый долг — ${partner.name}`} confirmLabel="Добавить долг" cancelLabel="Закрыть" busy={save.isPending} error={save.error}
-      disabled={!amount || amount === '0'} onClose={onClose} onConfirm={() => save.mutate()}>
+      disabled={!amountValid || !amount || amount === '0'} onClose={onClose} onConfirm={() => save.mutate()}>
       <p className="muted">Неоплаченные роялти за период до начала учёта в приложении. Сумма прибавится к долгу франчайзи.</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="За месяц">{(id) => (
@@ -124,7 +139,10 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
             {monthOptions(60).map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
           </Select>
         )}</Field>
-        <Field label={`Сумма, ${currency}`} required>{(id) => <MoneyInput id={id} value={amount} onChange={setAmount} currency={currency} />}</Field>
+        <Field label={`Сумма, ${currency}`} required error={!amountValid ? 'Проверьте сумму долга.' : undefined}>
+          {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} value={amount} onChange={setAmount}
+            onValidityChange={setAmountValid} currency={currency} />}
+        </Field>
       </div>
       <Field label="Комментарий">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: долг за май по акту сверки" />}</Field>
     </ConfirmDialog>

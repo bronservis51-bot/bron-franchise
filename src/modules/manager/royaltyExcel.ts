@@ -6,9 +6,14 @@ import type { RoyaltySummary } from './api';
 const money = (minor: number, currency: string) => ({ value: Number(minorToDecimal(minor, currency)), type: Number, format: '#,##0.00' });
 const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC', wrap: true });
 
+export function royaltyRubleTotal(summary: RoyaltySummary) {
+  return summary.rows.some(row => Number(row.debt_minor) !== 0 && row.fx_rub == null) ? null : summary.debt_rub_minor;
+}
+
 export async function downloadRoyaltyExcel(s: RoyaltySummary) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const balanceLabel = s.month && s.month >= s.current_month ? 'Предварительный остаток' : 'Долг';
+  const rubleTotal = royaltyRubleTotal(s);
   const period = s.month ? `за ${monthLabel(s.month)}` : `закрытые месяцы на ${formatDate(new Date().toISOString())}`;
   const header = ['Франчайзи', 'Страна', 'Валюта', 'Ставка, %', 'Выручка', 'Начислено', 'Корректировки', 'Оплачено', balanceLabel,
     ...(s.month ? [] : ['Текущий месяц: начисляется', 'Месяцев с долгом']), 'Последняя оплата'].map(head);
@@ -32,11 +37,12 @@ export async function downloadRoyaltyExcel(s: RoyaltySummary) {
     ...rows,
     [],
     ...totals,
-    ...(s.debt_rub_minor !== null ? [[{ value: `${balanceLabel} в рублях по курсу`, fontWeight: 'bold' as const }, ...blank(7), money(s.debt_rub_minor, 'RUB')]] : []),
+    ...(rubleTotal !== null ? [[{ value: `${balanceLabel} в рублях по курсу`, fontWeight: 'bold' as const }, ...blank(7), money(rubleTotal, 'RUB')]] : []),
   ];
   const byMonth = [
     ['Франчайзи', 'Валюта', 'Месяц', 'Долг'].map(head),
-    ...s.rows.flatMap((r) => r.debt_months.map((d) => [r.partner_name, r.currency, monthLabel(d.month), money(d.debt_minor, r.currency)])),
+    ...s.rows.flatMap((r) => r.debt_months.filter(d => !s.month || d.month === s.month)
+      .map(d => [r.partner_name, r.currency, monthLabel(d.month), money(d.debt_minor, r.currency)])),
   ];
   const width = [28, 9, 8, 9, 14, 14, 14, 14, 14, 16, 12, 14].map((w) => ({ width: w }));
   await writeXlsxFile([

@@ -86,6 +86,15 @@ function setInFlight(delta: number) {
   listeners.forEach((l) => l(inFlight));
 }
 
+export async function captureSession(expectedUserId?: string) {
+  const { data, error } = await requireClient().auth.getSession();
+  if (error) throw toAppError(error);
+  if (!data.session?.access_token || (expectedUserId && data.session.user.id !== expectedUserId)) {
+    throw new AppError('unauthenticated', 'Войдите в исходную учётную запись и повторите действие.', '', getLastRequestId());
+  }
+  return data.session;
+}
+
 /**
  * Вызов команды по контракту (contract.generated.ts). Аргументы — без префикса p_: адаптер добавляет его.
  * Неизвестный аргумент — ошибка программиста, а не сервера. Однострочный результат нормализуется в объект.
@@ -100,13 +109,14 @@ export async function command<T>(name: CommandName, args: Record<string, unknown
   try {
     const client = requireClient();
     const financial = ['royalty_payment_add', 'royalty_manual_add', 'royalty_set_accrual', 'expense_save', 'manager_company_expense_save'].includes(name);
-    const uid = financial ? (await client.auth.getSession()).data.session?.user.id ?? '' : '';
-    const receipt = financial ? await operationKey(uid, name, params) : null;
+    const actor = financial ? await captureSession() : null;
+    const receipt = actor ? await operationKey(actor.user.id, name, params) : null;
     const request = client.rpc(receipt ? 'financial_operation' : name,
       receipt ? { p_command: name, p_args: params, p_operation: receipt.id } : params);
     // A queued operation belongs to the captured session, even if another tab signs in meanwhile.
     // This header is request-local; the shared client and other callers retain their own session.
-    if (options) request.setHeader('Authorization', `Bearer ${options.accessToken}`);
+    const accessToken = actor?.access_token ?? options?.accessToken;
+    if (accessToken) request.setHeader('Authorization', `Bearer ${accessToken}`);
     const { data, error } = await request;
     if (!error) receipt?.complete();
     if (error) throw toAppError(error);

@@ -67,6 +67,18 @@ export const opQueue = {
   // A storage failure is not an empty queue or a successful removal.
   list: async (userId: string) => (await db()).getAllFromIndex('queue', 'byUser', userId),
   remove: async (userId: string, clientOpId: string) => { await (await db()).delete('queue', [userId, clientOpId]); },
+  recordFailure: async (op: QueuedOperation, lastError: string, lastErrorCode: string) => {
+    const tx = (await db()).transaction('queue', 'readwrite');
+    const store = tx.objectStore('queue');
+    const update = store.get([op.userId, op.clientOpId]).then(current => {
+      // Another tab may have already sent, replaced or advanced this operation.
+      if (current && current.attempts === op.attempts && current.kind === op.kind &&
+          current.createdAt === op.createdAt && sameJson(current.payload, op.payload)) {
+        return store.put({ ...current, attempts: current.attempts + 1, lastError, lastErrorCode });
+      }
+    });
+    await Promise.all([update, tx.done]);
+  },
 };
 
 /** A consistent copy of one account only. Other accounts on a shared device are never read. */

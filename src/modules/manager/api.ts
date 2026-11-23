@@ -1,12 +1,12 @@
 import { command, from, rows } from '../../platform/backend';
 import { loginEmail } from '../../platform/login';
 
-export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string;
+export interface Partner { id: string; code: string; name: string; country: string; currency: string; status: string; updated_at?: string;
   preparation_stage?: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null;
   /** Ссылка контрагента в МойСклад для заказа материалов. */
   order_url: string | null }
-export interface Location { id: string; code: string; name: string; partner_id: string; city: string; address: string | null;
+export interface Location { id: string; code: string; name: string; partner_id: string; city: string; address: string | null; updated_at?: string;
   timezone: string; currency: string; status: string; opened_on: string | null }
 export interface Country { code: string; name: string; default_currency: string }
 
@@ -22,10 +22,10 @@ export interface ManagerPartnerStatus {
 export const managerPartnerStatusKey = ['manager-partner-status'] as const;
 export const managerPartnerStatus = () => command<ManagerPartnerStatus[]>('manager_partner_status');
 
-export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null }) =>
-  command<string>('partner_save_preparation', p);
-export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null }) =>
-  command<string>('location_save', l);
+export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null; expected_updated_at: string | null }) =>
+  command<string>('partner_save_preparation_checked', p);
+export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null; expected_updated_at: string | null }) =>
+  command<string>('location_save_checked', l);
 
 export interface Access { users: { assignment_id: string; user_id: string; full_name: string; email: string; phone?: string | null; can_manage?: boolean; since: string }[]; invites: { id: number; email: string; created_at: string }[] }
 export const partnerAccess = (partner: string) => command<Access>('partner_access', { partner });

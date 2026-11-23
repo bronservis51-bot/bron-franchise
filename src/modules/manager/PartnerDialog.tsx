@@ -5,6 +5,7 @@ import { monthLabel } from '../../platform/dates';
 import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
 import { CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
+import { toAppError } from '../../platform/backend';
 import { planSet } from '../revenue/api';
 import { accessGrant, accountCreatePhone, countries, locationSave, managerPartnerStatusKey, partnerSave, type Location, type Partner } from './api';
 import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
@@ -23,8 +24,10 @@ export function PartnerDialog({ partner, working, onClose, onSaved }: { partner?
     contact_phone: partner?.contact_phone ?? '', contact_email: partner?.contact_email ?? '', status: partner?.status ?? 'active',
     preparation_stage: partner?.preparation_stage ?? '' }));
   const [f, setF] = useState(original);
+  const [version] = useState(() => ({ id: partner?.id ?? null, updatedAt: partner?.updated_at ?? null }));
   const m = useMutation({
-    mutationFn: () => partnerSave({ id: partner?.id ?? null, ...f, preparation_stage: f.preparation_stage || null }),
+    mutationFn: () => partnerSave({ id: version.id, ...f, preparation_stage: f.preparation_stage || null, expected_updated_at: version.updatedAt }),
+    onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['partners'] }); },
     onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -64,8 +67,10 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
   const [original] = useState(() => ({ name: location?.name ?? '', city: location?.city ?? '', address: location?.address ?? '',
     status: location?.status ?? 'active', opened_on: location?.opened_on ?? '' }));
   const [f, setF] = useState(original);
+  const [version] = useState(() => ({ id: location?.id ?? null, updatedAt: location?.updated_at ?? null }));
   const m = useMutation({
-    mutationFn: () => locationSave({ id: location?.id ?? null, partner: partnerId, ...f, opened_on: f.opened_on || null }),
+    mutationFn: () => locationSave({ id: version.id, partner: partnerId, ...f, opened_on: f.opened_on || null, expected_updated_at: version.updatedAt }),
+    onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['locations', partnerId] }); },
     onSuccess: () => { void qc.invalidateQueries(); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -75,11 +80,11 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
       <Field label="Название точки" required hint="Например: Волгоград Европа">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Город" required>{(id) => <Input id={id} value={f.city} onChange={set('city')} />}</Field>
-        <Field label="Дата открытия" hint="С этого дня считаются пропуски">{(id) => <Input id={id} type="date" value={f.opened_on} onChange={set('opened_on')} />}</Field>
+        <Field label="Дата открытия" hint="С этого дня доступны новые смены и считаются пропуски">{(id) => <Input id={id} type="date" value={f.opened_on} onChange={set('opened_on')} />}</Field>
       </div>
       <Field label="Адрес">{(id) => <Input id={id} value={f.address} onChange={set('address')} />}</Field>
-      {location && <Field label="Статус">{(id) => (
-        <Select id={id} value={f.status} onChange={set('status')}><option value="active">Работает</option><option value="closed">Закрыта</option></Select>
+      {location && <Field label="Статус точки">{(id) => (
+        <Select id={id} value={f.status} onChange={set('status')}><option value="active">Активна</option><option value="closed">Закрыта</option></Select>
       )}</Field>}
     </ConfirmDialog>
   );

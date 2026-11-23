@@ -1,6 +1,7 @@
 // Сессия и профиль пользователя. Разрешения в клиенте — только подсказка интерфейсу; сервер проверяет каждый запрос.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { Session } from '@supabase/supabase-js';
 import { command, from, rows, toAppError } from './backend';
 import { setCurrencyMinorUnits } from './money';
 import { clearUserData, PendingLocalWorkError } from './offline';
@@ -42,31 +43,80 @@ export { snapshot };
 
 const Ctx = createContext<SessionState | null>(null);
 
+function accessKey(me: Me) {
+  return me.assignments.map(a => JSON.stringify([a.role, a.scope_type, a.scope_id, [...a.permissions].sort()])).sort().join('\n');
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<SessionState['status']>('loading');
   const [me, setMe] = useState<Me | null>(null);
+  const profileRequest = useRef(0);
+  const renderedProfile = useRef<Me | null>(null);
+  const signingOut = useRef(false);
 
   const applyMe = useCallback((data: Me) => {
+    renderedProfile.current = data;
     setMe(data);
     setStatus('signed-in');
   }, []);
 
-  const loadMe = useCallback(async () => {
-    const data = await command<Me>('me');
-    if (!data?.user) {
-      snapshot.clear();
-      setMe(null);
-      setStatus('signed-out');
-      return;
+  const resetSession = useCallback((next: 'loading' | 'signed-out') => {
+    profileRequest.current++;
+    qc.clear();
+    snapshot.clear();
+    renderedProfile.current = null;
+    setMe(null);
+    setStatus(next);
+  }, [qc]);
+
+  const loadMe = useCallback(async (knownSession?: Session) => {
+    if (!supabase || signingOut.current) return;
+    const request = ++profileRequest.current;
+    const isCurrent = () => request === profileRequest.current;
+    try {
+      let session: Session | null = knownSession ?? null;
+      if (!knownSession) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        session = data.session;
+      }
+      if (!isCurrent()) return;
+      if (!session) { resetSession('signed-out'); return; }
+
+      let cached = renderedProfile.current ?? snapshot.get<Me>('me');
+      if (cached && cached.user.id !== session.user.id) {
+        qc.clear();
+        snapshot.clear();
+        renderedProfile.current = null;
+        setMe(null);
+        setStatus('loading');
+        cached = null;
+      }
+      if (cached && !renderedProfile.current) {
+        const currency = snapshot.get<{ code: string; minor_unit: number }[]>('currency');
+        if (currency) setCurrencyMinorUnits(currency);
+        applyMe(cached);
+      }
+      const data = await command<Me>('me', {}, { accessToken: session.access_token });
+      if (!isCurrent()) return;
+      if (data?.user?.id !== session.user.id) { resetSession('signed-out'); return; }
+      if (cached && accessKey(cached) !== accessKey(data)) qc.clear();
+      snapshot.set('me', data);
+      applyMe(data);
+      if (!snapshot.get('currency')) {
+        rows<{ code: string; minor_unit: number }>(from('currency').select('code, minor_unit')).then((c) => {
+          if (!isCurrent()) return;
+          snapshot.set('currency', c);
+          setCurrencyMinorUnits(c);
+        }, () => undefined);
+      }
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (toAppError(error).code === 'unauthenticated' || !renderedProfile.current) resetSession('signed-out');
+      throw error;
     }
-    snapshot.set('me', data);
-    applyMe(data);
-    rows<{ code: string; minor_unit: number }>(from('currency').select('code, minor_unit')).then((c) => {
-      snapshot.set('currency', c);
-      setCurrencyMinorUnits(c);
-    }, () => undefined);
-  }, [applyMe]);
+  }, [applyMe, qc, resetSession]);
 
   useEffect(() => {
     if (!supabase) {
@@ -74,72 +124,62 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      if (!data.session) {
-        snapshot.clear();
-        setStatus('signed-out');
-        return;
-      }
-      // Повторный вход: кабинет открывается сразу по сохранённому профилю, а профиль с сервера обновляет его в фоне
-      const cached = snapshot.get<Me>('me');
-      const fresh = cached?.user?.id === data.session.user.id;
-      if (fresh) {
-        const cur = snapshot.get<{ code: string; minor_unit: number }[]>('currency');
-        if (cur) setCurrencyMinorUnits(cur);
-        applyMe(cached);
-      }
-      loadMe().catch((e) => {
-        // Без сети остаёмся в кабинете с сохранённым профилем; выход — только если сессия недействительна
-        if (!fresh || toAppError(e).code === 'unauthenticated') setStatus('signed-out');
-      });
-    });
+    void loadMe().catch(() => undefined);
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session && snapshot.get<Me>('me')?.user.id !== session.user.id) {
-        qc.clear(); snapshot.clear(); setMe(null); setStatus('loading');
-        setTimeout(() => { if (active) void loadMe().catch(() => setStatus('signed-out')); }, 0);
-      }
-      if (event === 'SIGNED_OUT') {
-        snapshot.clear();
-        setMe(null);
-        setStatus('signed-out');
-      }
+      if (signingOut.current || (event !== 'SIGNED_OUT' && event !== 'SIGNED_IN')) return;
+      if (event === 'SIGNED_IN' && session?.user.id === renderedProfile.current?.user.id) return;
+      // Auth broadcasts can come from a tab with an independent sessionStorage.
+      const next = ++profileRequest.current;
+      setTimeout(() => { if (active && next === profileRequest.current) void loadMe().catch(() => undefined); }, 0);
     });
+    const refresh = () => { if (renderedProfile.current) void loadMe().catch(() => undefined); };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
     return () => {
       active = false;
+      profileRequest.current++;
       sub.subscription.unsubscribe();
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
     };
-  }, [loadMe, applyMe, qc]);
+  }, [loadMe]);
 
   const signIn = useCallback(
     async (email: string, password: string, remember: boolean) => {
       if (!supabase) throw new Error('Supabase не настроен');
+      if (signingOut.current) throw new Error('Дождитесь завершения выхода.');
       setRememberDevice(remember);
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
       qc.clear();
-      await loadMe();
+      await loadMe(data.session ?? undefined);
     },
     [loadMe, qc],
   );
 
   const signOut = useCallback(async () => {
-    const uid = me?.user.id;
-    if (uid) {
-      try {
-        await clearUserData(uid);
-      } catch (cause) {
-        if (cause instanceof PendingLocalWorkError) throw cause;
-        throw new Error('Не удалось проверить неотправленные записи на устройстве. Повторите выход позже.', { cause });
+    if (signingOut.current) return;
+    signingOut.current = true;
+    try {
+      if (me?.user.id) {
+        try {
+          await clearUserData(me.user.id);
+        } catch (cause) {
+          if (cause instanceof PendingLocalWorkError) throw cause;
+          throw new Error('Не удалось проверить неотправленные записи на устройстве. Повторите выход позже.', { cause });
+        }
       }
+      resetSession('loading');
+      try {
+        await supabase?.auth.signOut({ scope: 'local' });
+        setRememberDevice(false);
+      } finally {
+        setStatus('signed-out');
+      }
+    } finally {
+      signingOut.current = false;
     }
-    qc.clear();
-    snapshot.clear();
-    await supabase?.auth.signOut({ scope: 'local' });
-    setRememberDevice(false);
-    setMe(null);
-    setStatus('signed-out');
-  }, [me, qc]);
+  }, [me, resetSession]);
 
   const changePassword = useCallback(async (password: string) => {
     if (!supabase) throw new Error('Supabase не настроен');

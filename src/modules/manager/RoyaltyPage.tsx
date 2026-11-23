@@ -8,7 +8,7 @@ import { formatMoneyShort } from '../../platform/money';
 import { Button, DataState, Money, PageHeader, Select } from '../../ui';
 import { ActionError } from '../../ui';
 import { pct, royaltySummary, type RoyaltyRow } from './api';
-import { downloadRoyaltyExcel } from './royaltyExcel';
+import { downloadRoyaltyExcel, royaltyRubleTotal } from './royaltyExcel';
 import { CorrectionDialog, ManualDebtDialog, monthOptions, PaymentDialog, RoyaltyOps } from './RoyaltyDialogs';
 
 export function RoyaltyPage() {
@@ -21,6 +21,7 @@ export function RoyaltyPage() {
   const all = !month;
   const open = Boolean(q.data?.month && q.data.month >= q.data.current_month);
   const balanceLabel = open ? 'Предварительный остаток' : 'Долг';
+  const rubleTotal = q.data ? royaltyRubleTotal(q.data) : null;
 
   return (
     <>
@@ -44,8 +45,8 @@ export function RoyaltyPage() {
                   <span className="l">{balanceLabel} в {t.currency}</span>
                 </div>
               ))}
-              {s.debt_rub_minor !== null && s.totals.length > 1 && (
-                <div className="kpi"><span className="v">{formatMoneyShort(Math.round(Number(s.debt_rub_minor) / 100) * 100, 'RUB')}</span><span className="l">{balanceLabel} в рублях по курсу</span></div>
+              {rubleTotal !== null && s.totals.length > 1 && (
+                <div className="kpi"><span className="v">{formatMoneyShort(Math.round(Number(rubleTotal) / 100) * 100, 'RUB')}</span><span className="l">{balanceLabel} в рублях по курсу</span></div>
               )}
             </div>
             {open && <p className="faint">Месяц ещё открыт. Предварительный остаток учитывает начисления, корректировки и оплаты за этот месяц.</p>}

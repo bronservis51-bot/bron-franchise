@@ -40,7 +40,7 @@ describe('сотрудники: франчайзи управляет сам', (
 
   it('смена: открыть → закрыть с выручкой → сразу видно заработок (за выход + %)', async () => {
     const shift = (await t.as<{ id: string }>(PETR, `select (public.shift_open($1)).id`, [await id('location', 'ALPHA-3')]))[0].id;
-    const r = await one<{ shift: { earned_minor: string; total_minor: string }; month_earned_minor: string }>(PETR,
+    const r = await one<{ shift: { earned_minor: string; total_minor: string; revision: number }; month_earned_minor: string }>(PETR,
       `select public.shift_close($1, 400000, 600000, null) j`, [shift]);
     expect(Number(r.shift.total_minor)).toBe(1000000);
     expect(Number(r.shift.earned_minor)).toBe(50000 + 100000); // 500 ₽ за выход + 10 % от 10 000 ₽
@@ -50,7 +50,7 @@ describe('сотрудники: франчайзи управляет сам', (
       `select public.revenue_month($1, current_date) j`, [await id('location', 'ALPHA-3')])).days[0];
     expect(day.entries.find((e) => e.employee_id === petr)?.total_minor).toBe(1000000);
     // сегодняшнюю смену сотрудник может поправить, новая смена на ту же точку в тот же день — нет
-    await one(PETR, `select public.shift_close($1, 500000, 600000, null) j`, [shift]);
+    await one(PETR, `select public.shift_close_versioned($1, 500000, 600000, $2, $3, null) j`, [shift, r.shift.revision, crypto.randomUUID()]);
     await t.expectError(PETR, `select public.shift_open($1)`, 'validation', [await id('location', 'ALPHA-3')]);
   });
 

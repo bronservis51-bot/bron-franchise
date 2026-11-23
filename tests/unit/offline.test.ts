@@ -5,7 +5,7 @@ vi.mock('idb', () => ({ openDB }));
 
 function device() {
   const queueCount = vi.fn().mockResolvedValue(0);
-  const queueStore = { index: vi.fn(() => ({ count: queueCount })) };
+  const queueStore = { index: vi.fn(() => ({ count: queueCount })), get: vi.fn(), put: vi.fn() };
   const draftDelete = vi.fn().mockResolvedValue(undefined);
   const draftContinue = vi.fn().mockResolvedValue(null);
   const draftCursor = vi.fn().mockResolvedValue({ delete: draftDelete, continue: draftContinue });
@@ -36,6 +36,34 @@ describe('durable queue storage fails closed', () => {
     const { opQueue } = await import('../../src/platform/offline');
     await expect(opQueue.list('user')).rejects.toThrow('read failed');
     await expect(opQueue.remove('user', 'operation')).rejects.toThrow('delete failed');
+  });
+});
+
+describe('cross-tab queue failure updates', () => {
+  const op = { userId: 'user', clientOpId: 'operation', kind: 'revenue_total_set' as const,
+    payload: { operation: 'operation', total: '12300' }, createdAt: '2026-11-12T10:00:00Z', attempts: 0 };
+
+  it('only updates failure metadata inside the transaction that reads the current row', async () => {
+    const { db, queueStore } = device();
+    const current = { ...op, payload: { total: '12300', operation: 'operation' } };
+    queueStore.get.mockResolvedValue(current);
+    const { opQueue } = await import('../../src/platform/offline');
+    await opQueue.recordFailure(op, 'Сервер недоступен', 'maintenance');
+    expect(db.transaction).toHaveBeenCalledExactlyOnceWith('queue', 'readwrite');
+    expect(queueStore.get).toHaveBeenCalledExactlyOnceWith(['user', 'operation']);
+    expect(queueStore.put).toHaveBeenCalledExactlyOnceWith({ ...current, attempts: 1, lastError: 'Сервер недоступен', lastErrorCode: 'maintenance' });
+  });
+
+  it.each([
+    ['removed', undefined],
+    ['retried', { ...op, attempts: 1 }],
+    ['replaced', { ...op, payload: { ...op.payload, total: '99999' } }],
+  ])('keeps a %s row untouched when an earlier failure arrives', async (_label, current) => {
+    const { queueStore } = device();
+    queueStore.get.mockResolvedValue(current);
+    const { opQueue } = await import('../../src/platform/offline');
+    await opQueue.recordFailure(op, 'Сервер недоступен', 'maintenance');
+    expect(queueStore.put).not.toHaveBeenCalled();
   });
 });
 

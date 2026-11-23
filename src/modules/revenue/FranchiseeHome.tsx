@@ -5,7 +5,7 @@ import { CalendarX, Check, Plus } from 'lucide-react';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { Button, DataState, EmptyState, ErrorState, Money, PageHeader, Skeleton } from '../../ui';
+import { Alert, Button, DataState, EmptyState, ErrorState, Money, PageHeader, Skeleton } from '../../ui';
 import { DayList, MonthNav, PlanCard } from './components';
 import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
 import { revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
@@ -13,6 +13,7 @@ import { hasRevenueDiscrepancy, RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
+const monthOf = (day: string) => `${day.slice(0, 7)}-01`;
 
 /** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
 function AllPoints({ points, month, onPick, onEnter }: {
@@ -21,16 +22,19 @@ function AllPoints({ points, month, onPick, onEnter }: {
 }) {
   const details = useQueries({ queries: points.map((p) => ({ queryKey: ['revenue', 'month', p.location_id, month], queryFn: () => revenueMonth(p.location_id, month) })) });
   const sameCurrency = points.every((p) => p.currency === points[0].currency);
+  const sameDay = points.every((p) => p.today === points[0].today);
   const currency = points[0].currency;
   const sum = (f: (p: LocationMonth) => number | null) => points.reduce((a, p) => a + Number(f(p) ?? 0), 0);
   const plan = points.every((p) => p.plan_minor !== null) ? sum((p) => p.plan_minor) : null;
   const fact = sum((p) => p.fact_minor);
   const total = {
-    ...points[0], month, fact_minor: fact, plan_minor: plan, pct: plan ? Math.round((fact * 1000) / plan) / 10 : null,
-    need_per_day_minor: plan && points[0].days_left > 0 ? Math.ceil(Math.max(0, plan - fact) / points[0].days_left) : null,
+    ...points[0], month, today: points.find(p => monthOf(p.today) === month)?.today ?? points[0].today,
+    fact_minor: fact, plan_minor: plan, pct: plan ? Math.round((fact * 1000) / plan) / 10 : null,
+    need_per_day_minor: sameDay && plan && points[0].days_left > 0 ? Math.ceil(Math.max(0, plan - fact) / points[0].days_left) : null,
   } as unknown as MonthDetail;
   const ready = details.every((q) => q.data);
-  const isCurrent = month === monthStart();
+  const failed = details.flatMap((query, i) => query.isError ? [{ query, name: points[i].location_name }] : []);
+  const loading = details.some(query => !query.data && !query.isError);
   // Дни месяца: сумма по точкам и кто сколько; день с пропуском хоть одной точки подсвечен
   type DaySummary = {
     total: number; parts: string[]; missing: string[]; daysOff: string[];
@@ -44,8 +48,9 @@ function AllPoints({ points, month, onPick, onEnter }: {
     days.set(day, result);
     return result;
   };
-  if (ready) details.forEach((q, i) => {
-    const d = q.data!; const point = points[i];
+  details.forEach((q, i) => {
+    if (!q.data) return;
+    const d = q.data; const point = points[i];
     for (const r of d.days) {
       const x = daySummary(r.day);
       x.total += Number(r.total_minor); x.parts.push(`${point.location_name} ${formatMoneyShort(r.total_minor, d.currency)}`);
@@ -74,7 +79,7 @@ function AllPoints({ points, month, onPick, onEnter }: {
                   {p.plan_minor ? <span className="point-bar" aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span> : null}
                   {p.missing_days.length > 0 && <span className="point-miss"><CalendarX size={13} aria-hidden /> не внесено дней: {p.missing_days.length}</span>}
                 </button>
-                {isCurrent && d && (today
+                {d && monthOf(d.today) === month && (today
                   ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, d.today, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
                   : todayOff ? <Button size="sm" onClick={() => onEnter(p, d, d.today)}>Выходной</Button>
                   : <Button size="sm" variant="primary" onClick={() => onEnter(p, d, d.today)}><Plus size={15} aria-hidden />Внести</Button>)}
@@ -85,14 +90,20 @@ function AllPoints({ points, month, onPick, onEnter }: {
       </section>
       <section>
         <h2 className="section-title">Дни месяца по всем точкам</h2>
-        {!ready ? <p className="faint">Загружаем…</p> : !list.length ? <EmptyState title="В этом месяце записей нет" /> : (
+        {failed.length > 0 && <Alert tone="warning" title="Не удалось обновить данные по точкам"
+          action={<Button size="sm" onClick={() => void Promise.all(failed.map(({ query }) => query.refetch()))}>Повторить</Button>}>
+          {failed.map(({ name }) => name).join(', ')}. Показаны загруженные данные.
+        </Alert>}
+        {loading && <p className="faint" role="status">Загружаем дни по точкам…</p>}
+        {ready && !list.length && <EmptyState title="В этом месяце записей нет" />}
+        {list.length > 0 && (
           <ul className="day-list2">
             {list.map(([day, x]) => (
               <li key={day}>
                 <div className={`day-row2${x.missing.length ? ' missing' : ''}`}>
                   <span className="day-date2">{dayLabel(day)}</span>
                   <span className="day-sum2">
-                    {x.total > 0 && sameCurrency && <Money minor={x.total} currency={currency} short />}
+                    {ready && sameCurrency && x.parts.length > 0 && <Money minor={x.total} currency={currency} short />}
                     {x.parts.length > 0 && <span className="day-split">{x.parts.join(' · ')}</span>}
                     {x.daysOff.length > 0 && <span className="day-split">Выходной · {x.daysOff.join(', ')}</span>}
                     {x.missing.length > 0 && <span className="day-split"><CalendarX size={13} aria-hidden /> не внесено: {x.missing.join(', ')}</span>}
@@ -121,7 +132,7 @@ export function FranchiseeHome() {
     .map(a => a.scope_id));
   const partner = ownedPartners.size === 1 ? ownedPartners.values().next().value : undefined;
   const launch = usePartnerLaunch(partner);
-  const [month, setMonth] = useState(monthStart());
+  const [{ month, followCurrent }, setPeriod] = useState(() => ({ month: monthStart(), followCurrent: true }));
   const [loc, setLoc] = useState<string | null>(() => { try { return localStorage.getItem(LOC_KEY); } catch { return null; } });
   const [edit, setEdit] = useState<{ day: string; row?: DayRow; dayOff?: boolean } | null>(null);
   const overview = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
@@ -135,7 +146,14 @@ export function FranchiseeHome() {
   const m = detail.data;
   const todayRow = m?.days.find((d) => d.day === m.today);
   const todayOff = m?.days_off?.includes(m.today);
-  const isCurrent = month === monthStart();
+  const latestDay = current?.today ?? points.reduce((latest, point) => point.today > latest ? point.today : latest, '');
+  const currentMonth = latestDay ? monthOf(latestDay) : month;
+  const headerDay = current?.today ?? (points.every(point => point.today === latestDay) ? latestDay : '');
+  useEffect(() => {
+    if (!edit && !enter && currentMonth !== month && (followCurrent || month > currentMonth)) {
+      setPeriod({ month: currentMonth, followCurrent: true });
+    }
+  }, [currentMonth, month, followCurrent, edit, enter]);
 
   // A launch refresh must not unmount a revenue form with unsaved input.
   if (!edit && !enter) {
@@ -149,7 +167,8 @@ export function FranchiseeHome() {
   return (
     <div className="home">
       <header className="home-head">
-        <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        {headerDay && <div className="home-date">{new Date(`${headerDay}T12:00:00Z`).toLocaleDateString('ru-RU',
+          { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}</div>}
         <h1>Выручка</h1>
         {points.length === 1 && <p className="faint">{points[0].location_name}</p>}
       </header>
@@ -167,13 +186,13 @@ export function FranchiseeHome() {
                 ))}
               </div>
             )}
-            <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+            <MonthNav month={month} onChange={(next) => setPeriod({ month: next, followCurrent: next === currentMonth })} max={currentMonth} />
             {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(point, detail, day, row) => setEnter({ point, detail, day, row })} /> : (
             <DataState query={detail} skeleton={3}>
               {(d) => (
                 <>
                   <PlanCard m={d} />
-                  {isCurrent && (
+                  {monthOf(d.today) === month && (
                     todayRow
                       ? <button type="button" className="today-entered" onClick={() => setEdit({ day: d.today, row: todayRow })}>
                           <span className="ok-icon"><Check size={18} aria-hidden /></span>

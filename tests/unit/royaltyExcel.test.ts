@@ -37,6 +37,32 @@ describe('выгрузка роялти в Excel', () => {
     const sheets = calls.at(-1)![0] as { data: {value:string}[][] }[];
     expect(sheets[0].data[2][8].value).toBe('Предварительный остаток');
     expect(sheets[0].data.at(-1)![0].value).toContain('Предварительный остаток');
+    expect(sheets[1].data).toHaveLength(1);
+  });
+
+  it('помесячная выгрузка показывает долг только за выбранный месяц', async () => {
+    const { downloadRoyaltyExcel } = await import('../../src/modules/manager/royaltyExcel');
+    await downloadRoyaltyExcel({
+      ...summary, month: '2026-09-01',
+      rows: summary.rows.map((row, index) => index === 0
+        ? { ...row, debt_months: [...row.debt_months, { month: '2026-08-01', debt_minor: 1000 }] }
+        : row),
+    });
+    const sheets = calls.at(-1)![0] as { data: unknown[][] }[];
+    expect(sheets[1].data).toHaveLength(2);
+    expect(sheets[1].data[1][2]).toBe('сентябрь 2026');
+  });
+
+  it('не показывает неполный рублёвый итог, если для ненулевой суммы нет курса', async () => {
+    const { downloadRoyaltyExcel } = await import('../../src/modules/manager/royaltyExcel');
+    await downloadRoyaltyExcel({
+      ...summary,
+      rows: [summary.rows[0], { ...summary.rows[1], currency: 'KZT', debt_minor: 5000, fx_rub: null }],
+    });
+    const sheets = calls.at(-1)![0] as { data: unknown[][] }[];
+    expect(sheets[0].data).not.toContainEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 'Долг в рублях по курсу' }),
+    ]));
   });
 
 });

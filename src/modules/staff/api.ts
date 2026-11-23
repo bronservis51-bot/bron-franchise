@@ -1,5 +1,5 @@
 import type { PayPolicy, ShiftPolicy } from './Motivation';
-import { command } from '../../platform/backend';
+import { captureSession, command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
@@ -55,8 +55,9 @@ export const shiftClose = async (userId: string, shift: string, cash: string, ca
 };
 export async function staffShiftCorrect(userId: string, shift: PayrollShift, cash: string, card: string, reason: string) {
   const args = { shift: shift.id, cash, card, expected_revision: shift.revision, reason: reason.trim() };
+  const actor = await captureSession(userId);
   const receipt = await operationKey(userId, 'staff_shift_correct', args);
-  await command('staff_shift_correct', { ...args, operation: receipt.id });
+  await command('staff_shift_correct', { ...args, operation: receipt.id }, { accessToken: actor.access_token });
   receipt.complete();
 }
 

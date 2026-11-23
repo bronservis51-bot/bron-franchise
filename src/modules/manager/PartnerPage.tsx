@@ -4,7 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Edit3, KeyRound, Landmark, Phone, Plus, Target, UserPlus, X } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
-import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
+import { ActionError, Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 import { CopyCredential } from '../../ui/CredentialFields';
 import { PartnerCardPanel } from './PartnerCard';
 import { useToast } from '../../ui/toast';
@@ -34,10 +34,11 @@ function AccessCard({ partnerId, ownerAccess }: { partnerId: string; ownerAccess
     void qc.invalidateQueries({ queryKey: ['access', partnerId] });
     void qc.invalidateQueries({ queryKey: managerPartnerStatusKey });
   };
-  const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); refreshAccess(); } });
-  const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: refreshAccess });
+  const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); refreshAccess(); }, onError: refreshAccess });
+  const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: refreshAccess, onError: refreshAccess });
   return (
     <Card title="Доступ в кабинет" actions={<Button size="sm" onClick={() => setAdding(true)}><UserPlus size={15} aria-hidden />Выдать</Button>}>
+      <ActionError error={revoke.error ?? cancel.error} />
       <DataState query={q}>
         {(a) => (
           <>
@@ -149,7 +150,7 @@ export function PartnerPage() {
               </section>
             </div>
             <div className="stack">
-              <PartnerCardPanel partner={partner} />
+              <PartnerCardPanel partner={partner} locations={locs.data ?? []} />
               <AccessCard partnerId={partner.id} ownerAccess={current?.owner_access} />
               <TeamAccounts partner={partner.id} />
             </div>

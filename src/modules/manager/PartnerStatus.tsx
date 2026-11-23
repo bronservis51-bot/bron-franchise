@@ -1,15 +1,17 @@
 import { Badge, type Tone } from '../../ui';
-import { PARTNER_PREPARATION, PARTNER_STATUS, st } from '../../ui/status';
+import { PARTNER_PREPARATION, PARTNER_STATUS } from '../../ui/status';
 import type { ManagerPartnerStatus, Partner } from './api';
 
 export function PartnerStatus({ partner, current }: { partner?: Partner; current?: ManagerPartnerStatus }) {
   if (!partner) return null;
   let status: [string, Tone];
-  if (partner.status !== 'active') status = st(PARTNER_STATUS, partner.status);
+  if (partner.status !== 'active') status = Object.hasOwn(PARTNER_STATUS, partner.status)
+    ? PARTNER_STATUS[partner.status] : ['Статус партнёра неизвестен', 'neutral'];
   else {
     if (!current) return null;
     if (current.working) status = ['Работает', 'success'];
-    else if (partner.preparation_stage) status = st(PARTNER_PREPARATION, partner.preparation_stage);
+    else if (partner.preparation_stage) status = Object.hasOwn(PARTNER_PREPARATION, partner.preparation_stage)
+      ? PARTNER_PREPARATION[partner.preparation_stage] : ['Этап подготовки неизвестен', 'neutral'];
     else status = ['Нет открытой точки', 'neutral'];
   }
   const [label, tone] = status;

@@ -147,6 +147,25 @@ describe('роялти', () => {
     await t.admin(`delete from public.partner where id = $1`, [p]);
   });
 
+  it('5.2 — долг в валютах сохраняется, рублёвый итог без нужного курса отсутствует', async () => {
+    const read = () => one<{ debt_rub_minor: number | null; totals: Pick<Row, 'currency' | 'debt_minor'>[] }>(
+      FM, 'select public.royalty_summary(null) j');
+    const before = await read();
+    expect(before.totals.find(row => row.currency === 'KZT')?.debt_minor).toBeGreaterThan(0);
+    expect(before.debt_rub_minor).not.toBeNull();
+    const rates = await t.admin<{ day: string; rub_per_unit: string; set_by: string | null }>(
+      "delete from public.fx_rate where currency = 'KZT' returning day::text, rub_per_unit::text, set_by");
+    try {
+      const after = await read();
+      expect(after.debt_rub_minor).toBeNull();
+      expect(after.totals).toEqual(before.totals);
+    } finally {
+      for (const rate of rates) await t.admin(
+        "insert into public.fx_rate(currency, day, rub_per_unit, set_by) values ('KZT', $1, $2, $3)",
+        [rate.day, rate.rub_per_unit, rate.set_by]);
+    }
+  });
+
   it('прошлый долг и оплата меняют долг; фильтр по месяцу показывает только этот месяц', async () => {
     const p = await partner('ALPHA');
     const before = (await summary(null)).rows.find((r) => r.partner_name.startsWith('Виктор'))!;
