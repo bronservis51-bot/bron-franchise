@@ -55,11 +55,11 @@ const oldMonth = '2026-10-01';
 const historic = { ...detail, month: oldMonth, status: 'closed', days_in_month: 31, missing_days: [], fact_minor: 15000, editable_days: ['2026-10-31'],
   days: [{ day: '2026-10-31', total_minor: 15000, comment: 'Историческая выручка', entries: [] }] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
-const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }] };
+const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.enter', 'plan.manage', 'royalty.manage', 'staff.manage', 'team.manage', 'rating.read'] }] };
 const leadFixture=createLeadFixture(qaParams);
 if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
-  const owner = { id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] };
+  const owner = { id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.enter', 'staff.manage', 'team.manage', 'procurement.order'] };
   me.assignments = [owner];
   if (lifecycle === 'legacy') me.assignments.push({ ...owner, id: 'qa-legacy-owner', scope_id: 'legacy-partner' });
 }
@@ -74,6 +74,15 @@ if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
  me.assignments=[{id:'qa-worker',role:team?'franchisee_manager':'franchisee_staff',role_name:team?'Управляющий':'Менеджер продаж',scope_type:'partner',scope_id:partner.id,scope_name:partner.name,permissions}];
 }
 if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
+if (qaParams.get('role') === 'pending') me.assignments = [];
+if (qaParams.has('access-refresh')) {
+  const original = me.assignments;
+  window.addEventListener('qa:access', event => {
+    const permissions = (event as CustomEvent<string[] | null>).detail;
+    me.assignments = permissions === null ? [] : original.map(assignment => ({ ...assignment, permissions }));
+    window.dispatchEvent(new Event('focus'));
+  });
+}
 const qaPolicy={floor_minor:100000,tiers:[{from_minor:0,rate_bp:1700,bonus_minor:0},{from_minor:500000,rate_bp:1800,bonus_minor:0},{from_minor:600000,rate_bp:1900,bonus_minor:0},{from_minor:800000,rate_bp:2000,bonus_minor:0},{from_minor:1000000,rate_bp:2200,bonus_minor:20000},{from_minor:1300000,rate_bp:2300,bonus_minor:20000},{from_minor:1800000,rate_bp:2500,bonus_minor:30000}]};
 const qaTask={id:'qa-task',article_id:'qa-article',revision_id:'qa-revision',title:'Учебный материал для проверки',read_at:null as string|null,completed_at:null as string|null,score:null as number|null,total:1,questions:[{prompt:'Какой ответ указан в учебном материале?',choices:['Проверенный','Случайный']}]};
 const shiftFixture=createShiftFixture(qaParams,location,partner,qaPolicy);
@@ -136,6 +145,10 @@ window.fetch = async (input, init) => {
       royalty_partner: { partner_id: partner.id, partner_name: partner.name, currency: 'RUB', rate_bp: 700,
         months: [{ month: '2026-10-01', revenue_minor: 123456789, rate_bp: 700, accrued_minor: 8641975, manual_minor: 125000, paid_minor: 100000, debt_minor: 8666975, is_open: false }, { month, revenue_minor: 950000, rate_bp: 700, accrued_minor: 66500, manual_minor: 0, paid_minor: 0, debt_minor: 66500, is_open: true }], payments: [], manual: [], rates: [] },
       manager_supply_snapshot: {month, fetched_at:null, period_to:null, currency:'RUB', rows:[{partner_id:partner.id,partner_name:partner.name,mapped_count:0,counterparties:[],sales_minor:0,cost_minor:0,profit_minor:0}], unmapped:[]},
+      manager_economy: { month, company_expenses: [], company_expense_totals: [],
+        partners: [{ partner_id: partner.id, partner_name: partner.name, currency: 'RUB', payroll_minor: 4250750,
+          payroll_halves: [2000000, 2250750], closed_shifts: 16, expenses_minor: 900000,
+          expense_categories: [{ category: 'Аренда', amount_minor: 900000 }] }] },
       rating: { rows: [{rank:1,partner_id:partner.id,partner_name:partner.name,cities:location.city,is_me:false,forecast_pct:123.4,pct_to_date:90,fill_pct:100,growth_pct:20,badges:['leader','no_gaps'],points:1,currency:'RUB',fact_minor:1234567890,plan_minor:1500000000,forecast_minor:1900000000,fact_rub_minor:1234567890,forecast_rub_minor:1900000000}], month },
     };
     if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
@@ -153,8 +166,14 @@ window.fetch = async (input, init) => {
   if (name === 'location') return Response.json(qaParams.get('access')==='filled'?[location,teamLocation]:[location]);
   if (name === 'currency') return Response.json([{ code: 'RUB', minor_unit: 2 }]);
   if (name === 'country') return Response.json([{ code: 'RU', name: 'Россия', default_currency: 'RUB' }]);
-  if (name === 'article') return Response.json([{ ...articles[0], slug: 'qa', published_revision_id: 'qa-revision', published: { ...articles[0], rev_no: 1 }, revision: 1, tags: [] }]);
+  const draftPreview = qaParams.get('kb-draft') === '1';
+  const mayEditKnowledge = me.assignments.some(assignment => assignment.permissions.includes('kb.edit'));
+  if (name === 'article') {
+    if (draftPreview) return Response.json(mayEditKnowledge ? [{ ...articles[0], status: 'draft', published_revision_id: null }] : []);
+    return Response.json([{ ...articles[0], slug: 'qa', published_revision_id: 'qa-revision', published: { ...articles[0], rev_no: 1 }, revision: 1, tags: [] }]);
+  }
   if (name === 'article_revision') {
+    if (draftPreview) return Response.json(mayEditKnowledge ? [{ id: 'qa-draft', article_id: 'qa-article', title: 'Вымышленный черновик', status: 'draft' }] : []);
     const revision = { id: 'qa-revision', article_id: 'qa-article', rev_no: 1, title: articles[0].title, summary: 'Проверка статьи', body: '## Заголовок\n\n' + 'Тест длинной строки и содержания. '.repeat(50) + '\n\nhttps://www.youtube.com/watch?v=5CZntWrxKl8', status: 'published', published_at: '2026-11-04T12:00:00Z' };
     return Response.json([revision]);
   }

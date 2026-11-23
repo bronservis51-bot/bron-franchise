@@ -129,21 +129,23 @@ function AllPoints({ points, month, readOnly, onPick, onEnter }: {
 }
 
 export function FranchiseeHome() {
-  const { me } = useSession();
+  const { me, can } = useSession();
   const ownedPartners = franchiseePartnerCards(me);
   const partner = ownedPartners.length === 1 ? ownedPartners[0] : undefined;
   const launch = usePartnerLaunch(partner);
   const lifecycle = usePartnerLifecycle(partner);
   const status = lifecycle.data?.status;
-  const readOnly = isPartnerReadOnly(status);
+  const partnerPaused = isPartnerReadOnly(status);
+  const canReadRevenue = can('revenue.read');
+  const readOnly = partnerPaused || !can('revenue.enter');
   const [historyCycle, setHistoryCycle] = useState<number | null>(null);
   const launchCycle = launch.data?.cycle ?? 0;
   const inLaunchHistory = launchCycle > 0 && historyCycle === launchCycle;
   const [{ month, followCurrent }, setPeriod] = useState(() => ({ month: monthStart(), followCurrent: true }));
   const [loc, setLoc] = useState<string | null>(() => { try { return localStorage.getItem(LOC_KEY); } catch { return null; } });
   const [edit, setEdit] = useState<{ day: string; row?: DayRow; dayOff?: boolean } | null>(null);
-  const overview = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
-  const points = overview.data?.rows ?? [];
+  const overview = useQuery({ queryKey: ['revenue', 'overview', month], enabled: canReadRevenue, queryFn: () => revenueOverview(month) });
+  const points = (canReadRevenue ? overview.data?.rows : undefined) ?? [];
   const all = points.length > 1 && (loc === ALL || loc === null);
   const current = all ? undefined : points.find((p) => p.location_id === loc) ?? points[0];
   useEffect(() => { if (!all && current && current.location_id !== loc) setLoc(current.location_id); }, [all, current, loc]);
@@ -165,7 +167,7 @@ export function FranchiseeHome() {
 
   // A launch refresh must not unmount a revenue form with unsaved input.
   if (!edit && !enter) {
-    if (partner && !readOnly && launch.data && !launch.isError && !inLaunchHistory) {
+    if (partner && !partnerPaused && launch.data && !launch.isError && !inLaunchHistory) {
       return <LaunchChecklist partner={partner} launch={launch.data}
         onHistory={launchCycle > 0 ? () => setHistoryCycle(launchCycle) : undefined} />;
     }
@@ -174,6 +176,12 @@ export function FranchiseeHome() {
       <PageHeader title="Главная" /><ErrorState error={launch.error} onRetry={() => void launch.refetch()} />
     </div>;
   }
+
+  if (!canReadRevenue) return <div className="home">
+    <PageHeader title="Главная" />
+    <EmptyState title="Выручка недоступна с вашими текущими правами" />
+    {inLaunchHistory && <Button onClick={() => { setHistoryCycle(null); setEdit(null); setEnter(null); }}>К подготовке открытия</Button>}
+  </div>;
 
   return (
     <div className="home">
@@ -184,12 +192,13 @@ export function FranchiseeHome() {
         {points.length === 1 && <p className="faint">{points[0].location_name}</p>}
       </header>
 
-      {readOnly && <Alert tone="warning" title={status === 'terminated' ? 'Сотрудничество завершено' : 'Работа франчайзи приостановлена'}>
+      {partnerPaused && <Alert tone="warning" title={status === 'terminated' ? 'Сотрудничество завершено' : 'Работа франчайзи приостановлена'}>
         История и отчёты доступны для просмотра.
       </Alert>}
       {ownedPartners.length > 1 && <Alert title="Уточните доступ к карточке франчайзи">{FRANCHISEE_CARD_AMBIGUITY}</Alert>}
-      {!readOnly && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>К подготовке открытия</Button>}
-      {!readOnly && noActivePoints && !inLaunchHistory && <Alert title="Нет действующих точек">
+      {!partnerPaused && readOnly && <Alert title="Выручка доступна для просмотра">Внести или изменить выручку может пользователь с правом редактирования.</Alert>}
+      {!partnerPaused && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>К подготовке открытия</Button>}
+      {!partnerPaused && noActivePoints && !inLaunchHistory && <Alert title="Нет действующих точек">
         История и отчёты доступны.
       </Alert>}
       <MonthNav month={month} onChange={(next) => setPeriod({ month: next, followCurrent: next === currentMonth })} max={currentMonth} />

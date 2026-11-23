@@ -23,7 +23,7 @@ const answered: Question = {
 function renderQuestions(editor: boolean, questions: Question[]) {
   permissions.editor = editor;
   const client = new QueryClient();
-  client.setQueryData(['kb', 'questions'], questions);
+  client.setQueryData(['kb', 'questions', editor], questions);
   client.setQueryData(['kb', 'manage'], [
     { id: 'published', title: 'Памятка по плоттеру', status: 'published' },
     { id: 'draft', title: 'Черновик инструкции', status: 'draft' },

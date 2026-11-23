@@ -375,7 +375,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const [access, setAccess] = useState<{ staff: StaffRow; dirty: boolean } | null>(null);
   const [correction, setCorrection] = useState<{ employee: string; shift: PayrollShift } | null>(null);
   const locs = useQuery({ queryKey: ['locations', partnerId], enabled: canManageEmployees || canCreateStaff, queryFn: () => locationsOf(partnerId) });
-  const q = useQuery({ queryKey: ['staff-list', partnerId, month], enabled: canViewStaff, queryFn: () => staffList(partnerId, month),
+  const q = useQuery({ queryKey: ['staff-list', partnerId, month, canManageEmployees], enabled: canViewStaff, queryFn: () => staffList(partnerId, month),
     refetchInterval: visibleSection === 'shifts' ? 120_000 : false });
   const openShifts = useOpenShifts(partnerId, canManageEmployees);
   const overdueShifts = openShifts.data?.filter(shift => shift.day < shift.today).length ?? 0;
@@ -512,12 +512,12 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
           }}</DataState>
         </section>
       </div>}
-      {correction && me && <ClosedShiftCorrection employee={correction.employee} shift={correction.shift}
+      {correction && me && canManageEmployees && <ClosedShiftCorrection employee={correction.employee} shift={correction.shift}
         currency={currency} userId={me.user.id} onClose={() => setCorrection(null)} />}
       {edit && (edit === 'new' ? canCreateStaff : canManageEmployees) && <StaffDialog key={selectedStaff?.user_id ?? 'new'} partnerId={partnerId} locations={locs} staff={selectedStaff}
         canSetAccess={canSetAccess} canSetCustomPay={canManageEmployees} initialSection={edit === 'new' ? undefined : edit.section}
         onClose={() => setEdit(null)} onChangeAccess={changeAccess} />}
-      {access && <ConfirmDialog open danger={access.staff.active} title={`${access.staff.active ? 'Закрыть' : 'Вернуть'} доступ?`} confirmLabel={access.staff.active ? 'Закрыть доступ' : 'Вернуть доступ'}
+      {access && canManageEmployees && <ConfirmDialog open danger={access.staff.active} title={`${access.staff.active ? 'Закрыть' : 'Вернуть'} доступ?`} confirmLabel={access.staff.active ? 'Закрыть доступ' : 'Вернуть доступ'}
         busy={setActive.isPending} error={setActive.error} onClose={() => setAccess(null)} onConfirm={() => setActive.mutate({ user: access.staff.user_id, active: !access.staff.active })}>
         <p><strong>{access.staff.full_name}</strong></p>
         <p>{access.staff.active ? 'Сотрудник сразу потеряет доступ к кабинету. Смены и начисления сохранятся.' : 'Сотрудник сможет снова войти в кабинет.'}</p>

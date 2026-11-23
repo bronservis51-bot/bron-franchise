@@ -25,6 +25,7 @@ export interface Me {
 interface SessionState {
   status: 'loading' | 'signed-out' | 'signed-in';
   me: Me | null;
+  scopeRevision: number;
   can: (perm: string) => boolean;
   /** Менеджер по франшизе: вся сеть. */
   isManager: boolean;
@@ -43,14 +44,17 @@ export { snapshot };
 
 const Ctx = createContext<SessionState | null>(null);
 
-function accessKey(me: Me) {
-  return me.assignments.map(a => JSON.stringify([a.role, a.scope_type, a.scope_id, [...a.permissions].sort()])).sort().join('\n');
+function accessKey(me: Me, includePermissions = true) {
+  return me.assignments.map(a => JSON.stringify([
+    a.role, a.scope_type, a.scope_id, includePermissions ? [...a.permissions].sort() : null,
+  ])).sort().join('\n');
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<SessionState['status']>('loading');
   const [me, setMe] = useState<Me | null>(null);
+  const [scopeRevision, setScopeRevision] = useState(0);
   const profileRequest = useRef(0);
   const renderedProfile = useRef<Me | null>(null);
   const signingOut = useRef(false);
@@ -101,7 +105,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const data = await command<Me>('me', {}, { accessToken: session.access_token });
       if (!isCurrent()) return;
       if (data?.user?.id !== session.user.id) { resetSession('signed-out'); return; }
-      if (cached && accessKey(cached) !== accessKey(data)) qc.clear();
+      if (cached && accessKey(cached) !== accessKey(data)) {
+        const remoteQueries = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[0] !== 'local-queue' };
+        if (accessKey(cached, false) !== accessKey(data, false)) {
+          qc.removeQueries(remoteQueries);
+          setScopeRevision(revision => revision + 1);
+        } else {
+          qc.removeQueries({ ...remoteQueries, type: 'inactive' });
+          void qc.invalidateQueries({ ...remoteQueries, type: 'active' });
+        }
+      }
       snapshot.set('me', data);
       applyMe(data);
       if (!snapshot.get('currency')) {
@@ -133,14 +146,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setTimeout(() => { if (active && next === profileRequest.current) void loadMe().catch(() => undefined); }, 0);
     });
     const refresh = () => { if (renderedProfile.current) void loadMe().catch(() => undefined); };
+    const refreshVisible = () => { if (document.visibilityState === 'visible' && navigator.onLine) refresh(); };
     window.addEventListener('focus', refresh);
     window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const profileTimer = window.setInterval(refreshVisible, 60_000);
     return () => {
       active = false;
       profileRequest.current++;
       sub.subscription.unsubscribe();
       window.removeEventListener('focus', refresh);
       window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.clearInterval(profileTimer);
     };
   }, [loadMe]);
 
@@ -192,6 +210,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return {
       status,
       me,
+      scopeRevision,
       can: (perm) => perms.has(perm),
       isTeamManager: !!me?.assignments.some(a => a.role === 'franchisee_manager') && !me.assignments.some(a=>a.role==='franchisee' || a.role==='franchise_manager'),
       isTechnical: !!me?.assignments.some(a=>a.role==='technical_specialist') && !me.assignments.some(a=>a.role==='franchise_manager'),
@@ -202,7 +221,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOut,
       reload: loadMe,
     };
-  }, [status, me, signIn, signOut, loadMe, changePassword]);
+  }, [status, me, scopeRevision, signIn, signOut, loadMe, changePassword]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

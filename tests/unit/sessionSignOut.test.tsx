@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { cleanup, clearQueries, clearSnapshot, signOut, remember, setState, getSession, readProfile, saveSnapshot, getSnapshot, from } = vi.hoisted(() => ({
+const { cleanup, clearQueries, removeQueries, invalidateQueries, clearSnapshot, signOut, remember, setState, getSession, readProfile, saveSnapshot, getSnapshot, from } = vi.hoisted(() => ({
   cleanup: vi.fn(), clearQueries: vi.fn(), clearSnapshot: vi.fn(), signOut: vi.fn(), remember: vi.fn(), setState: vi.fn(),
-  getSession: vi.fn(), readProfile: vi.fn(), saveSnapshot: vi.fn(), getSnapshot: vi.fn(), from: vi.fn(),
+  getSession: vi.fn(), readProfile: vi.fn(), saveSnapshot: vi.fn(), getSnapshot: vi.fn(), from: vi.fn(), removeQueries: vi.fn(), invalidateQueries: vi.fn(),
 }));
 // Supply a signed-in provider state without a DOM or a live Auth connection.
 vi.mock('react', async importOriginal => ({
@@ -10,7 +10,7 @@ vi.mock('react', async importOriginal => ({
   useState: (initial: unknown) => [initial === null ? { user: { id: 'original-user' }, assignments: [] } : initial, setState],
   useEffect: vi.fn(), useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn(), useRef: (value: unknown) => ({ current: value }),
 }));
-vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ clear: clearQueries }) }));
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ clear: clearQueries, removeQueries, invalidateQueries }) }));
 vi.mock('../../src/platform/offline', async importOriginal => ({
   ...await importOriginal<typeof import('../../src/platform/offline')>(),
   clearUserData: cleanup,
@@ -115,11 +115,28 @@ describe('profile refresh follows the active session', () => {
     expect(saveSnapshot.mock.calls.filter(([key]) => key === 'me')).toEqual([['me', profile('next-user')]]);
   });
 
-  it('discards cached screens when a refresh changes scoped permissions', async () => {
+  it('discards scoped screen data and retains the local work queue when permissions change', async () => {
     getSnapshot.mockImplementation(key => key === 'me' ? profile('original-user', ['procurement.order']) : null);
     readProfile.mockResolvedValue(profile('original-user'));
     await SessionProvider({ children: null }).props.value.reload();
-    expect(clearQueries).toHaveBeenCalledTimes(1);
+    expect(removeQueries).toHaveBeenCalledOnce();
+    const { predicate, type } = removeQueries.mock.calls[0][0];
+    expect(type).toBe('inactive');
+    expect(predicate({ queryKey: ['staff', 'home', 'original-user'] })).toBe(true);
+    expect(predicate({ queryKey: ['local-queue', 'original-user'] })).toBe(false);
+    expect(invalidateQueries).toHaveBeenCalledExactlyOnceWith({ type: 'active', predicate });
+    expect(clearQueries).not.toHaveBeenCalled();
+  });
+
+  it('returns to login when the current Auth session no longer has an active profile', async () => {
+    const cached = profile('original-user');
+    getSnapshot.mockImplementation(key => key === 'me' ? cached : null);
+    readProfile.mockResolvedValue({ user: null, assignments: [] });
+    await SessionProvider({ children: null }).props.value.reload();
+    expect(setState).toHaveBeenLastCalledWith('signed-out');
+    expect(clearQueries).toHaveBeenCalledOnce();
+    expect(clearSnapshot).toHaveBeenCalledOnce();
+    expect(cleanup).not.toHaveBeenCalled();
   });
 
   it('restores a matching stored profile before a first refresh that fails offline', async () => {

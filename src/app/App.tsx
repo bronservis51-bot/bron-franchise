@@ -5,11 +5,12 @@ import { isConfigured } from '../platform/config';
 import { SessionProvider, useSession } from '../platform/session';
 import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
-import { ErrorState, Skeleton } from '../ui';
+import { EmptyState, ErrorState, PageHeader, Skeleton } from '../ui';
 import { Shell } from './Shell';
-import { TeamAccessPage, TeamHome } from '../modules/staff/TeamAccounts';
+import { ownedTeamPartner, TeamAccessPage, TeamHome } from '../modules/staff/TeamAccounts';
 import { LoginPage, SetupPage } from './LoginPage';
-import { canOpenStaffDirectory, canOrderMaterials, type PermissionCheck } from './nav';
+import { workspaceAccess, workspaceRole } from './nav';
+import { franchiseePartnerCards } from '../modules/revenue/partnerLifecycle';
 
 // Экраны менеджера и редактор статей загружаются по требованию: франчайзи их код не скачивает
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,24 +79,24 @@ const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'learning', element: <LearningPage /> },
-      { path: 'learning/manage', element: <LearningManagePage /> },
-      { path: 'learning/lesson/:id', element: <LearningLessonPage /> },
-      { path: 'order', element: <PartnerRoute delegated={canOrderMaterials}><OrderPage /></PartnerRoute> },
-      { path: 'partners/:id', element: <ManagerOnly><PartnerPage /></ManagerOnly> },
-      { path: 'leads', element: <ManagerOnly><LeadsPage /></ManagerOnly> },
+      { path: 'learning', element: <LearningEntry /> },
+      { path: 'learning/manage', element: <WorkspaceRoute feature="learningManage"><LearningManagePage /></WorkspaceRoute> },
+      { path: 'learning/lesson/:id', element: <WorkspaceRoute feature="learning"><LearningLessonPage /></WorkspaceRoute> },
+      { path: 'order', element: <WorkspaceRoute feature="order"><OrderPage /></WorkspaceRoute> },
+      { path: 'partners/:id', element: <WorkspaceRoute feature="network"><PartnerPage /></WorkspaceRoute> },
+      { path: 'leads', element: <WorkspaceRoute feature="network"><LeadsPage /></WorkspaceRoute> },
       { path: 'royalty', element: <Navigate to="/finance" replace /> },
-      { path: 'finance', element: <ByRole manager={<SupplyFinancePage />} franchisee={<FinancePage />} /> },
-      { path: 'staff', element: <PartnerRoute delegated={canOpenStaffDirectory}><StaffPage /></PartnerRoute> },
-      { path: 'team-access', element: <ByRole franchisee={<TeamAccessPage />} /> },
-      { path: 'rating', element: <ManagerOnly><RatingPage /></ManagerOnly> },
+      { path: 'finance', element: <WorkspaceRoute feature="finance"><FinanceEntry /></WorkspaceRoute> },
+      { path: 'staff', element: <WorkspaceRoute feature="staffDirectory"><StaffPage /></WorkspaceRoute> },
+      { path: 'team-access', element: <TeamAccessEntry /> },
+      { path: 'rating', element: <WorkspaceRoute feature="rating"><RatingPage /></WorkspaceRoute> },
       { path: 'kb/questions', element: <QuestionsPage /> },
       { path: 'kb/s/:id', element: <SectionPage /> },
-      { path: 'kb/manage', element: <KbManagePage /> },
-      { path: 'royalty/:id', element: <ManagerOnly><RoyaltyPartnerPage /></ManagerOnly> },
+      { path: 'kb/manage', element: <WorkspaceRoute feature="knowledgeEdit"><KbManagePage /></WorkspaceRoute> },
+      { path: 'royalty/:id', element: <WorkspaceRoute feature="royalty"><RoyaltyPartnerPage /></WorkspaceRoute> },
       { path: 'kb', element: <KbHomePage /> },
       { path: 'kb/articles/:id', element: <ArticlePage /> },
-      { path: 'kb/articles/:id/edit', element: <ArticleEditPage /> },
+      { path: 'kb/articles/:id/edit', element: <WorkspaceRoute feature="knowledgeEdit"><ArticleEditPage /></WorkspaceRoute> },
       { path: '*', element: <NotFound /> },
     ],
   },
@@ -112,33 +113,49 @@ function BootScreen() {
 }
 
 function Home() {
-  const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
-  return isManager ? <NetworkPage /> : isTechnical ? <QuestionsPage home /> : isStaff ? <StaffHome /> : isTeamManager ? <TeamHome /> : <FranchiseeHome />;
+  const session = useSession();
+  const role = workspaceRole(session);
+  const network = workspaceAccess(role, session.can).network;
+  const pages = { manager: network ? <NetworkPage /> : <>
+    <PageHeader title="Главная" />
+    <EmptyState title="Откройте нужный раздел" text="В меню показаны доступные вам разделы кабинета." />
+  </>, support: <QuestionsPage home />, staff: <StaffHome />,
+    team: <TeamHome />, franchisee: <FranchiseeHome />, pending: null };
+  return pages[role];
 }
 
-/** Один адрес — разные экраны по роли; сотруднику недоступные разделы не открываются. */
-function ByRole({ manager, franchisee }: { manager?: ReactNode; franchisee?: ReactNode }) {
-  const { isManager, isStaff, isTeamManager, isTechnical } = useSession();
-  const el = isManager ? manager : isTechnical || isStaff || isTeamManager ? null : franchisee;
-  return el ? <>{el}</> : <Navigate to="/" replace />;
+function UnavailableRoute() {
+  return <Navigate to="/" replace state={{ missingAccess: true }} />;
 }
 
-function ManagerOnly({ children }: { children: ReactNode }) {
-  const { isManager } = useSession();
-  return isManager ? <>{children}</> : <Navigate to="/" replace />;
+function WorkspaceRoute({ feature, children }: { feature: keyof ReturnType<typeof workspaceAccess>; children: ReactNode }) {
+  const session = useSession();
+  return workspaceAccess(workspaceRole(session), session.can)[feature] ? children : <UnavailableRoute />;
 }
 
-function PartnerRoute({ children, delegated }: { children: ReactNode; delegated: (can: PermissionCheck) => boolean }) {
-  const { isManager, isTechnical, isStaff, isTeamManager, can } = useSession();
-  if (isManager || isTechnical || ((isStaff || isTeamManager) && !delegated(can))) return <Navigate to="/" replace />;
-  return <>{children}</>;
+function LearningEntry() {
+  const session = useSession();
+  const access = workspaceAccess(workspaceRole(session), session.can);
+  if (access.learning) return <LearningPage />;
+  return access.learningManage ? <Navigate to="/learning/manage" replace /> : <UnavailableRoute />;
+}
+
+function FinanceEntry() {
+  return workspaceRole(useSession()) === 'manager' ? <SupplyFinancePage /> : <FinancePage />;
+}
+
+function TeamAccessEntry() {
+  const session = useSession();
+  const owner = workspaceRole(session) === 'franchisee';
+  return owner && (ownedTeamPartner(session.me) || franchiseePartnerCards(session.me).length > 1)
+    ? <TeamAccessPage /> : <UnavailableRoute />;
 }
 
 function Guard() {
-  const { status } = useSession();
+  const { status, me } = useSession();
   if (status === 'loading') return <BootScreen />;
   if (status === 'signed-out') return <Navigate to="/login" replace />;
-  return <Shell />;
+  return <Shell key={me?.user.id} />;
 }
 
 export function App() {

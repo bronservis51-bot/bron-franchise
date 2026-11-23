@@ -69,7 +69,7 @@ try {
   app.IDBIndex.prototype.count = queueRead(count);
 
   doc.querySelector('button[aria-label="Профиль"]').click();
-  const signOut = await until(() => [...doc.querySelectorAll('[role="menuitem"]')].find(button => button.textContent.trim() === 'Выйти'), 'В меню нет выхода');
+  const signOut = await until(() => [...doc.querySelectorAll('dialog[open] button')].find(button => button.textContent.trim() === 'Выйти'), 'В профиле нет выхода');
   signOut.click();
   if (scenario === 'late') {
     await until(() => app.location.hash.startsWith('#/login'), 'Обычный выход при первоначально пустой очереди не завершился');

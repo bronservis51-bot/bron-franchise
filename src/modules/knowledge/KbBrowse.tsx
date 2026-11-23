@@ -184,7 +184,7 @@ export function KbHomePage() {
   const [searching, setSearching] = useState(false);
   const [creating, setCreating] = useState(false);
   const [asking, setAsking] = useState<string | null>(null);
-  const home = useQuery({ queryKey: ['kb', 'home'], queryFn: kbHome });
+  const home = useQuery({ queryKey: ['kb', 'home', editor], queryFn: kbHome });
   const reading = useQuery({ queryKey: ['kb', 'to-read'], enabled: !editor, queryFn: toRead });
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const misses = useQuery({ queryKey: ['kb', 'misses'], enabled: editor, queryFn: kbMisses });
@@ -308,7 +308,7 @@ export function SectionPage() {
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
   const [query, setQuery] = useState('');
-  const q = useQuery({ queryKey: ['kb', 'section', id], queryFn: () => kbSectionPage(id) });
+  const q = useQuery({ queryKey: ['kb', 'section', id, editor], queryFn: () => kbSectionPage(id) });
   useEffect(() => setType('all'), [id]);
   return (
     <div className="kb">
@@ -390,11 +390,11 @@ export function ArticlePage() {
   const editor = can('kb.edit');
   const qc = useQueryClient();
   const toast = useToast();
-  const art = useQuery({ queryKey: ['kb', 'article', id], queryFn: () => getArticle(id) });
-  const open = useQuery({ queryKey: ['kb', 'open', id], queryFn: () => kbArticleOpen(id), staleTime: 60_000 });
+  const art = useQuery({ queryKey: ['kb', 'article', id, editor], queryFn: () => getArticle(id) });
+  const open = useQuery({ queryKey: ['kb', 'open', id, editor], queryFn: () => kbArticleOpen(id), staleTime: 60_000 });
   const rev = useQuery({ queryKey: ['kb', 'rev', art.data?.published_revision_id], enabled: Boolean(art.data?.published_revision_id), queryFn: () => getRevision(art.data!.published_revision_id!) });
   const acks = useQuery({ queryKey: ['kb', 'my-ack', id], enabled: Boolean(art.data?.required_ack && !editor), queryFn: () => myAcks(id, me!.user.id) });
-  const revs = useQuery({ queryKey: ['kb', 'revs', id], enabled: editor, queryFn: () => revisionsOf(id) });
+  const revs = useQuery({ queryKey: ['kb', 'revs', id, editor], enabled: editor, queryFn: () => revisionsOf(id) });
   const refresh = () => qc.invalidateQueries({ queryKey: ['kb'] });
   const acknowledge = useMutation({ mutationFn: () => kbCommands.acknowledge(id), onSuccess: () => { toast('Отмечено: вы ознакомились'); void refresh(); } });
   const archive = useMutation({ mutationFn: (v: boolean) => kbCommands.archive(id, v), onSuccess: (_, v) => { toast(v ? 'Статья в архиве' : 'Статья возвращена'); void refresh(); } });
@@ -407,7 +407,7 @@ export function ArticlePage() {
         if (!a) return null;
         const r = rev.data;
         const o = open.data;
-        const draft = revs.data?.find((x) => x.status === 'draft');
+        const draft = editor ? revs.data?.find((x) => x.status === 'draft') : undefined;
         const ack = acks.data?.find((x) => a.ack_rev_no !== null && x.rev_no >= a.ack_rev_no);
         const minutes = Math.max(1, Math.round((r?.body.length ?? 0) / 1300));
         return (
@@ -539,7 +539,7 @@ export function KbManagePage() {
   const [tab, setTab] = useState<'articles' | 'sections'>('articles');
   const [edit, setEdit] = useState<SectionNode | 'new' | null>(null);
   const rows = useQuery({ queryKey: ['kb', 'manage'], queryFn: kbManage });
-  const secs = useQuery({ queryKey: ['kb', 'home'], queryFn: kbHome });
+  const secs = useQuery({ queryKey: ['kb', 'home', true], queryFn: kbHome });
   const tree = useMemo(() => sectionTree(secs.data?.sections ?? []), [secs.data]);
   if (!can('kb.edit')) return <EmptyState title="Раздел для менеджера по франшизе" />;
   const list = (rows.data ?? []).filter((a) =>

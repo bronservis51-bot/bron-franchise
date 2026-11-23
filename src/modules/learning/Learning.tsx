@@ -51,7 +51,7 @@ type Overview = {day:string;audience:string;items:Lesson[]};
 type Catalog = Lesson & {position:number;ready:boolean;local_current:boolean;local_questions:number;for_sales:boolean;for_trainees:boolean;for_managers:boolean;for_franchisees:boolean};
 export function LearningPage(){
  const {isStaff,isTeamManager}=useSession();
- return isStaff||isTeamManager?<><PageHeader title="Обучение"/><MyLessons/></>:<Navigate to="/learning/manage" replace/>;
+ return isStaff||isTeamManager?<MyLessons/>:<Navigate to="/learning/manage" replace/>;
 }
 export function LearningManagePage() {
  const {me,isManager,isTechnical,can}=useSession(); const [params]=useSearchParams();
@@ -79,7 +79,9 @@ function MyLessons(){
  const qc=useQueryClient();
  const q=useQuery({queryKey:['learning','overview'],queryFn:()=>command<Overview>('learning_overview')});
  useEffect(()=>{void command('learning_visit').then(()=>qc.invalidateQueries({queryKey:['learning','notice']}));},[qc]);
- return <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены"/>}>{d=>{
+ return <>
+ <PageHeader title="Обучение" sub={q.data?.audience === 'trainees' ? 'Программа стажировки' : undefined} />
+ <DataState query={q} empty={d=>d.items.length?null:<EmptyState title="Уроки пока не назначены"/>}>{d=>{
   const next = d.items.find(l => l.active) ?? d.items.find(l => !l.completed || (l.due !== null && l.due <= d.day));
   const nextReview = next ? undefined : d.items.map(l => l.due).filter(due => due !== null).sort()[0];
   return <div className="stack">
@@ -96,7 +98,8 @@ function MyLessons(){
     </div></Card>)}</div>
    </details>
   </div>;
- }}</DataState>;
+ }}</DataState>
+ </>;
 }
 function Program({partner,editable}:{partner:string|null;editable:boolean}) {
  const q=useQuery({queryKey:['learning','catalog',partner],queryFn:()=>command<Catalog[]>('learning_catalog',{partner})});

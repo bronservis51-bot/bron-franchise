@@ -6,7 +6,7 @@ export function learningFixture(name:string|undefined,a:Record<string,any>,param
  if(!name?.startsWith('learning_'))return null;
  if(name==='learning_notice')return Response.json({new_day:true});
  if(name==='learning_visit')return Response.json(null);
- if(name==='learning_overview')return Response.json({day:'2026-11-09',audience:'sales',items:params.get('learning')==='empty'?[]:lessons});
+ if(name==='learning_overview')return Response.json({day:'2026-11-09',audience:params.get('learning')==='trainee'?'trainees':'sales',items:params.get('learning')==='empty'?[]:lessons});
  if(name==='learning_catalog')return Response.json(lessons);
  const review=params.get('learningReview');
  const lessonKey=a.p_article+':'+a.p_partner;

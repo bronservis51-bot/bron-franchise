@@ -12,6 +12,7 @@ export function startViewport() {
       const height = vv?.height ?? window.innerHeight;
       root.style.setProperty('--app-height', `${height}px`);
       root.style.setProperty('--visual-top', `${vv?.offsetTop ?? 0}px`);
+      root.classList.toggle('short-viewport', height <= 360);
       const input = document.activeElement?.matches('input, textarea, [contenteditable="true"]');
       if (Math.abs(window.innerWidth-width)>80) { width=window.innerWidth; unfocusedHeight=window.innerHeight; }
       if (!input) unfocusedHeight=Math.max(window.innerHeight,height);

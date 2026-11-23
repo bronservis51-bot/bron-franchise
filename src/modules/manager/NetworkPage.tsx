@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarX, ChevronRight } from 'lucide-react';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
+import { useSession } from '../../platform/session';
 import { Button, DataState, EmptyState, Field, Input, PageHeader } from '../../ui';
 import { MonthNav } from '../revenue/components';
 import { revenueOverview, type LocationMonth } from '../revenue/api';
@@ -20,12 +21,15 @@ function PctBadge({ r }: { r: LocationMonth }) {
 }
 
 export function NetworkPage() {
+  const { can } = useSession();
+  const canReadRevenue = can('revenue.read');
+  const canPlan = can('plan.manage');
   const navigate = useNavigate();
   const [month, setMonth] = useState(monthStart());
   const [adding, setAdding] = useState(false);
   const [suggest, setSuggest] = useState(false);
   const [search, setSearch] = useState('');
-  const q = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
+  const q = useQuery({ queryKey: ['revenue', 'overview', month], enabled: canReadRevenue, queryFn: () => revenueOverview(month) });
   const partnerList = useQuery({ queryKey: ['partners'], queryFn: partners });
   const status = useQuery({ queryKey: managerPartnerStatusKey, queryFn: managerPartnerStatus });
   const partnerById = new Map(partnerList.data?.map(p => [p.id, p]));
@@ -34,21 +38,21 @@ export function NetworkPage() {
   const matching = partnerList.data?.filter(p => !term || `${p.name} ${p.code}`.toLocaleLowerCase('ru').includes(term)) ?? [];
   const matchingIds = new Set(matching.map(p => p.id));
   const monthlyPartnerIds = new Set(q.data?.rows.map(r => r.partner_id));
-  const outsideReport = q.isPending ? [] : matching.filter(p => !monthlyPartnerIds.has(p.id));
+  const outsideReport = canReadRevenue && q.isPending ? [] : matching.filter(p => !canReadRevenue || !monthlyPartnerIds.has(p.id));
 
   return (
-    <>
+    <div className="network-workspace">
       <PageHeader title="Франчайзи"
         actions={<>
-          <Button onClick={() => setSuggest(true)}>Предложить план</Button>
           <Button variant="primary" onClick={() => setAdding(true)}>Добавить франчайзи</Button>
+          {canPlan && <Button onClick={() => setSuggest(true)}>Предложить план</Button>}
         </>} />
-      <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+      {canReadRevenue && <MonthNav month={month} onChange={setMonth} max={monthStart()} />}
       <Field label="Поиск франчайзи">{id => (
         <Input id={id} type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Название или код" />
       )}</Field>
       {term && partnerList.isSuccess && !matching.length && <p role="status" className="faint">Франчайзи не найдены.</p>}
-      <DataState query={q} skeleton={6} empty={(o) => (o.rows.length ? null : <EmptyState title="Пока нет ни одной точки" text="Добавьте франчайзи и его точки." />)}>
+      {canReadRevenue && <DataState query={q} skeleton={6} empty={(o) => (o.rows.length ? null : <EmptyState title="Пока нет ни одной точки" text="Добавьте франчайзи и его точки." />)}>
         {(o) => {
           const missing = o.rows.filter((r) => r.missing_days.length > 0).length;
           const pct = o.plan_rub_minor ? Math.round((Number(o.fact_rub_minor ?? 0) / Number(o.plan_rub_minor)) * 1000) / 10 : null;
@@ -66,27 +70,27 @@ export function NetworkPage() {
                 <div className={`kpi${missing ? ' warn' : ''}`}><span className="v">{missing}</span><span className="l">точек с невнесёнными днями</span></div>
               </div>
               {o.missing_fx.length > 0 && <p className="faint">Точки с валютами {o.missing_fx.join(', ')} не вошли в итог в рублях. Для них нет курса.</p>}
-              {groups.size > 0 && <div className="net-table" role="table" aria-label="Точки сети">
-                <div className="net-tr net-th" role="row">
-                  <span role="columnheader">Точка</span><span role="columnheader" className="r">План</span><span role="columnheader" className="r">Факт</span>
-                  <span role="columnheader" className="r">Выполнение</span><span role="columnheader" className="r">Не внесено</span><span />
+              {groups.size > 0 && <div className="net-table" role="region" aria-label="Точки сети">
+                <div className="net-tr net-th" aria-hidden>
+                  <span>Точка</span><span className="r">План</span><span className="r">Факт</span>
+                  <span className="r">Выполнение</span><span className="r">Не внесено</span><span />
                 </div>
                 {[...groups.entries()].map(([pid, list]) => (
-                  <div key={pid} role="rowgroup" className="net-group">
-                    <Link to={`/partners/${pid}`} className="net-partner" role="row">
+                  <div key={pid} className="net-group">
+                    <Link to={`/partners/${pid}`} className="net-partner">
                       <span className="row" style={{ minWidth: 0, flexWrap: 'wrap' }}><span style={{ overflowWrap: 'anywhere' }}>{list[0].partner_name}</span>
                         <PartnerStatus partner={partnerById.get(pid)} current={statusById.get(pid)} /></span>
                       <ChevronRight size={16} style={{ flexShrink: 0 }} aria-hidden /></Link>
                     {list.map((r) => (
-                      <button type="button" key={r.location_id} className="net-tr" role="row" onClick={() => navigate(`/partners/${pid}?location=${r.location_id}&month=${month}`)}>
-                        <span role="cell" className="net-name"><strong>{r.location_name}</strong><span className="faint">{r.city} · {r.currency}</span></span>
-                        <span role="cell" className="r" data-label="План">{r.plan_minor ? formatMoneyShort(r.plan_minor, r.currency) : '—'}</span>
-                        <span role="cell" className="r num" data-label="Факт"><strong>{formatMoneyShort(r.fact_minor, r.currency)}</strong></span>
-                        <span role="cell" className="r" data-label="Выполнение"><PctBadge r={r} /></span>
-                        <span role="cell" className="r" data-label="Не внесено">{r.missing_days.length
+                      <Link key={r.location_id} className="net-tr" to={`/partners/${pid}?location=${r.location_id}&month=${month}`}>
+                        <span className="net-name"><strong>{r.location_name}</strong><span className="faint">{r.city} · {r.currency}</span></span>
+                        <span className="r"><span className="net-metric-label">План</span>{r.plan_minor ? formatMoneyShort(r.plan_minor, r.currency) : '—'}</span>
+                        <span className="r num"><span className="net-metric-label">Факт</span><strong>{formatMoneyShort(r.fact_minor, r.currency)}</strong></span>
+                        <span className="r"><span className="net-metric-label">Выполнение</span><PctBadge r={r} /></span>
+                        <span className="r"><span className="net-metric-label">Не внесено</span>{r.missing_days.length
                           ? <span className="danger-text"><CalendarX size={14} aria-hidden /> {r.missing_days.length} дн.</span> : <span className="faint">—</span>}</span>
                         <ChevronRight size={16} className="faint hide-mobile" aria-hidden />
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 ))}
@@ -94,9 +98,9 @@ export function NetworkPage() {
             </>
           );
         }}
-      </DataState>
+      </DataState>}
       {outsideReport.length > 0 && <section className="stack" style={{ marginTop: 24 }}>
-        <h2 className="section-title">{q.isError ? 'Карточки франчайзи' : 'Франчайзи вне отчёта за месяц'}</h2>
+        <h2 className="section-title">{!canReadRevenue || q.isError ? 'Карточки франчайзи' : 'Франчайзи вне отчёта за месяц'}</h2>
         {outsideReport.map(partner => {
           const current = statusById.get(partner.id);
           return <Link key={partner.id} to={`/partners/${partner.id}`} className="read-card">
@@ -111,7 +115,7 @@ export function NetworkPage() {
         })}
       </section>}
       {adding && <PartnerDialog onClose={() => setAdding(false)} onSaved={(id) => navigate(`/partners/${id}`)} />}
-      {suggest && <PlanSuggestDialog onClose={() => setSuggest(false)} />}
-    </>
+      {suggest && canPlan && <PlanSuggestDialog onClose={() => setSuggest(false)} />}
+    </div>
   );
 }

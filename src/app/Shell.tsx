@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { phoneLoginDigits } from '../platform/login';
 import { changeManagerPhoneLogin } from '../platform/managerLogin';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOperationState, queuedOps } from '../platform/outbox';
-import { canOpenStaffDirectory, canOrderMaterials, navFor, type NavItem } from './nav';
+import { navFor, workspaceAccess, workspaceRole, workspaceTitle, type NavItem, type WorkspaceRole } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
@@ -16,7 +16,7 @@ import { HelpTip } from '../ui/HelpTip';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
-import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunRole } from './FirstRunGuide';
+import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
@@ -151,69 +151,73 @@ function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: FirstRunRole }) {
+function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: WorkspaceRole }) {
   const { me, isManager, signOut } = useSession();
-  const [open, setOpen] = useState(false);
-  const [pw, setPw] = useState(false);
-  const [phone, setPhone] = useState(false);
-  const [recovery, setRecovery] = useState(false);
-  const [installOpen, setInstallOpen] = useState(false);
-  const guideUserId = me?.assignments.length ? me.user.id : undefined;
-  const [guideSeen, setGuideSeen] = useState(() => Boolean(me?.user.id && hasSeenFirstRunGuide(me.user.id, role)));
-  const [replayGuide, setReplayGuide] = useState(false);
+  const [view, setView] = useState<'profile' | 'password' | 'login' | 'recovery' | 'install' | 'guide' | null>(null);
+  const [guideSeen, setGuideSeen] = useState(() => role === 'pending' || Boolean(me?.user.id && hasSeenFirstRunGuide(me.user.id, role)));
   const installState = useInstallState();
-  const ref = useRef<HTMLDivElement>(null);
   const profileButton = useRef<HTMLButtonElement>(null);
   const restoreProfileFocus = useRef(false);
+  const guideOpen = role !== 'pending' && (!guideSeen || view === 'guide');
+  const close = () => setView(null);
   useEffect(() => {
-    if (replayGuide || !restoreProfileFocus.current) return;
+    if (view || guideOpen || !restoreProfileFocus.current) return;
     restoreProfileFocus.current = false;
     profileButton.current?.focus({ preventScroll: true });
-  }, [replayGuide]);
-  useEffect(() => {
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
+  }, [view, guideOpen]);
   const toast = useToast();
   const out = () => {
+    close();
     if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
     void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
   };
-  const closeGuide = () => {
-    if (guideUserId) markFirstRunGuideSeen(guideUserId, role);
+  const closeGuide = (navigating = false) => {
+    if (role !== 'pending' && me) markFirstRunGuideSeen(me.user.id, role);
+    if (navigating) restoreProfileFocus.current = false;
     setGuideSeen(true);
-    restoreProfileFocus.current = replayGuide;
-    setReplayGuide(false);
+    close();
   };
   return (
-    <div style={{ position: 'relative' }} ref={ref}>
-      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+    <>
+      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="dialog" onClick={() => {
+        restoreProfileFocus.current = true;
+        setView('profile');
+      }}>
         <User size={20} aria-hidden />
       </button>
-      {open && (
-        <div className="menu" role="menu">
-          <div style={{ padding: '8px 10px' }}>
-            <div style={{ fontWeight: 650 }}>{me?.user.full_name}</div>
-            <div className="faint">{me?.user.email?.endsWith('@staff.bron.local') ? `вход по телефону +${me.user.email.split('@')[0]}` : me?.user.email}</div>
+      {view === 'profile' && (
+        <ConfirmDialog open title="Профиль" cancelLabel="Закрыть" onClose={close} className="profile-dialog">
+          <div className="profile-identity">
+            <div className="profile-avatar"><User size={22} aria-hidden /></div>
+            <div className="profile-name">
+              <strong>{me?.user.full_name}</strong>
+              <span>{me?.user.email?.endsWith('@staff.bron.local') ? `+${me.user.email.split('@')[0]}` : me?.user.email}</span>
+            </div>
           </div>
-          <div className="sep" />
-          <button role="menuitem" onClick={() => { setOpen(false); setPw(true); }}><KeyRound size={16} aria-hidden />Сменить пароль</button>
-          {isManager && <button role="menuitem" onClick={() => { setOpen(false); setPhone(true); }}><Phone size={16} aria-hidden />Сменить логин</button>}
-          {isManager && <button role="menuitem" onClick={() => { setOpen(false); setRecovery(true); }}><Mail size={16} aria-hidden />Почта для восстановления</button>}
-          {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
-          <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
-          {guideUserId && <button role="menuitem" onClick={() => { setOpen(false); setReplayGuide(true); }}><GraduationCap size={16} aria-hidden />Первые шаги</button>}
-          {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
-          <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
-        </div>
+          {!!me?.assignments.length && <ul className="profile-scopes" aria-label="Роли и область доступа">
+            {me.assignments.map(assignment => <li key={assignment.id}>
+              <strong>{assignment.role_name || workspaceTitle[role]}</strong>
+              <span>{assignment.scope_name}</span>
+            </li>)}
+          </ul>}
+          <div className="profile-actions">
+            <button type="button" onClick={() => setView('password')}><KeyRound size={18} aria-hidden />Сменить пароль<ChevronRight size={16} aria-hidden /></button>
+            {isManager && <button type="button" onClick={() => setView('login')}><Phone size={18} aria-hidden />Сменить логин<ChevronRight size={16} aria-hidden /></button>}
+            {isManager && <button type="button" onClick={() => setView('recovery')}><Mail size={18} aria-hidden />Почта для восстановления<ChevronRight size={16} aria-hidden /></button>}
+            {showTeamAccess && <Link to="/team-access" onClick={() => { restoreProfileFocus.current = false; close(); }}><Users size={18} aria-hidden />Управляющие<ChevronRight size={16} aria-hidden /></Link>}
+            <button type="button" onClick={() => { close(); onLocalWork(); }}><CloudOff size={18} aria-hidden />Локальные записи<ChevronRight size={16} aria-hidden /></button>
+            {role !== 'pending' && <button type="button" onClick={() => setView('guide')}><GraduationCap size={18} aria-hidden />Первые шаги<ChevronRight size={16} aria-hidden /></button>}
+            {!installState.installed && <button type="button" onClick={() => setView('install')}><Smartphone size={18} aria-hidden />Как установить приложение<ChevronRight size={16} aria-hidden /></button>}
+            <button type="button" onClick={out}><LogOut size={18} aria-hidden />Выйти</button>
+          </div>
+        </ConfirmDialog>
       )}
-      {pw && <PasswordDialog onClose={() => setPw(false)} />}
-      {isManager && phone && <ManagerLoginDialog onClose={() => setPhone(false)} />}
-      {isManager && recovery && <ManagerRecoverySettings onClose={() => setRecovery(false)} />}
-      {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
-      {guideUserId && (!guideSeen || replayGuide) && <FirstRunGuide role={role} replay={replayGuide} onClose={closeGuide} />}
-    </div>
+      {view === 'password' && <PasswordDialog onClose={close} />}
+      {isManager && view === 'login' && <ManagerLoginDialog onClose={close} />}
+      {isManager && view === 'recovery' && <ManagerRecoverySettings onClose={close} />}
+      {view === 'install' && <InstallDialog onClose={close} />}
+      {guideOpen && <FirstRunGuide role={role} replay={view === 'guide'} onClose={closeGuide} />}
+    </>
   );
 }
 
@@ -234,23 +238,30 @@ function InstallHint() {
 }
 
 export function Shell() {
-  const { isManager, isStaff, isTeamManager, isTechnical, me, can } = useSession();
+  const session = useSession();
+  const { me, can, scopeRevision } = session;
   const online = useOnline();
   const loc = useLocation();
-  const role = isManager ? 'manager' : isTechnical ? 'support' : isStaff ? 'staff' : isTeamManager ? 'team' : 'franchisee';
-  const nav = navFor(role, canOpenStaffDirectory(can)).filter((n) => n.to !== '/rating' || can('rating.read'));
-  const showOrder = role === 'franchisee' || ((role === 'staff' || role === 'team') && canOrderMaterials(can));
+  const role = workspaceRole(session);
+  const nav = navFor(role, can);
+  const access = workspaceAccess(role, can);
   const mainRef = useRef<HTMLElement>(null);
   const outbox = useOutbox(me?.user.id, online);
   const [queueOpen, setQueueOpen] = useState(false);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
   const kbCount = can('kb.edit') ? inbox.data?.unanswered ?? 0 : inbox.data?.new_answers ?? 0;
-  const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: isManager && loc.pathname !== '/leads', staleTime: 120_000, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
-  const learning = useQuery({queryKey:['learning','notice'],queryFn:()=>command<{new_day:boolean}>('learning_notice'),staleTime:60_000,refetchInterval:60_000});
+  const leads = useQuery({ queryKey: ['leads', 'inbox'], enabled: access.network && loc.pathname !== '/leads', staleTime: 120_000, refetchInterval: 120_000, queryFn: () => command<number>('lead_inbox') });
+  const learning = useQuery({queryKey:['learning','notice',scopeRevision],enabled:access.learning,queryFn:()=>command<{new_day:boolean}>('learning_notice'),staleTime:60_000,refetchInterval:60_000});
   const leadCount = leads.data ?? 0;
   // Фокус на основное содержимое при смене экрана — для экранных дикторов
-  useEffect(() => mainRef.current?.focus({ preventScroll: true }), [loc.pathname]);
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    main.scrollTop = 0;
+    window.scrollTo(0, 0);
+    main.focus({ preventScroll: true });
+  }, [loc.pathname]);
 
   const link = (n: NavItem, mobile = false) => (
     <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
@@ -262,13 +273,13 @@ export function Shell() {
   );
 
   return (
-    <div className="app">
+    <div className={nav.length ? 'app' : 'app access-pending'}>
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); mainRef.current?.focus(); }}>К содержимому</a>
       <aside className="sidebar" aria-label="Основная навигация">
         <div className="brand">
           <LogoFull height={40} />
         </div>
-        <nav className="nav">{nav.map((n) => link(n))}</nav>
+        {nav.length > 0 && <nav className="nav">{nav.map((n) => link(n))}</nav>}
         <div className="sidebar-foot">
           <BrandPattern rows={3} cols={6} />
         </div>
@@ -276,14 +287,20 @@ export function Shell() {
       <div className="main">
         <header className="topbar">
           <span className="mobile-mark"><LogoMark height={28} /></span>
-          <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
-          {showOrder && <OrderTopButton />}
+          <div className="grow topbar-account">
+            <span className="topbar-title">{me?.user.full_name}</span>
+            <span className="topbar-role">{workspaceTitle[role]}</span>
+          </div>
+          {access.order && <OrderTopButton />}
           <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)}
             showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
         {queueOpen && me && <QueueDialog key={me.user.id} userId={me.user.id} outbox={outbox} online={online} onClose={() => setQueueOpen(false)} />}
         <main id="main" className="content" ref={mainRef} tabIndex={-1} style={{ outline: 'none' }}>
           <AppUpdateBanner hasQueuedWork={outbox.ops.length > 0 || outbox.readError != null} />
+          {loc.state?.missingAccess && role !== 'pending' && (
+            <p className="alert tone-info access-notice" role="status">Этот раздел недоступен с вашими текущими правами.</p>
+          )}
           {!online && (
             <div className="alert tone-warning" role="status" style={{ marginBottom: 12 }}>
               <WifiOff size={18} aria-hidden />
@@ -306,14 +323,14 @@ export function Shell() {
             </div>
           )}
           <InstallHint />
-          {me && !me.assignments.length ? (
-            <div className="state"><h3>Доступ ещё не выдан</h3><div>Попросите менеджера по франшизе (или своего франчайзи) выдать доступ.</div></div>
-          ) : <Outlet />}
+          {role === 'pending' ? (
+            <div className="state"><h1>Доступ ещё не выдан</h1><div>За доступом обратитесь к франчайзи или менеджеру по франшизе.</div></div>
+          ) : <Outlet key={scopeRevision} />}
         </main>
       </div>
-      <nav className={`bottom-nav cols-${nav.length}`} aria-label="Навигация">
+      {nav.length > 0 && <nav className="bottom-nav" aria-label="Навигация" style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}>
         {nav.map((n) => link(n, true))}
-      </nav>
+      </nav>}
     </div>
   );
 }

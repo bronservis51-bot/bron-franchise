@@ -261,9 +261,9 @@ export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
 }
 
 /** Подтверждение необратимого/финансового действия с итогом операции (UX-06). */
-export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, children, busy, error, disabled, dirty, className = '' }: {
+export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, onBack, children, busy, error, disabled, dirty, className = '' }: {
   open: boolean; title: string; summary?: [string, ReactNode][]; confirmLabel?: string; cancelLabel?: string; danger?: boolean;
-  onConfirm?: () => void; onClose: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
+  onConfirm?: () => void; onClose: () => void; onBack?: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
   className?: string; dirty?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -323,6 +323,7 @@ export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel 
           <Button variant="danger" onClick={onClose}>Отбросить изменения</Button>
         </> : <>
           <Button onClick={requestClose} disabled={busy}>{cancelLabel}</Button>
+          {onBack && <Button variant="ghost" onClick={onBack} disabled={busy}>Назад</Button>}
           {confirmLabel && onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>}
         </>}
       </div>

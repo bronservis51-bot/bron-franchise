@@ -1,9 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NetworkPage } from '../../src/modules/manager/NetworkPage';
 import { monthStart } from '../../src/platform/dates';
+
+vi.mock('../../src/platform/session', () => ({
+  useSession: () => ({ can: (permission: string) => ['org.manage', 'revenue.read', 'plan.manage'].includes(permission) }),
+}));
 
 function renderNetwork() {
   const client = new QueryClient();
