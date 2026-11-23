@@ -48,14 +48,18 @@ export async function flushOutbox(userId: string): Promise<{ sent: number; faile
   try {
     for (const op of await opQueue.list(userId)) {
       if (op.userId !== userId) throw new AppError('forbidden', 'Сохранённая запись принадлежит другой учётной записи.', '', '');
-      if (op.lastError && (!op.lastErrorCode || !temporaryErrors.has(op.lastErrorCode))) { failed++; continue; }
+      // A pre-release tab could put an unrecognized shift_submit in this state.
+      const olderTabError = op.kind === 'shift_submit' && op.lastErrorCode === 'unknown' && op.lastError === 'Не удалось выполнить действие';
+      if (op.lastError && !olderTabError && (!op.lastErrorCode || !temporaryErrors.has(op.lastErrorCode))) { failed++; continue; }
       try {
         if (op.kind === 'revenue_save' || op.kind === 'shift_close') throw new AppError('version-conflict', 'Запись создана старой версией приложения. Сверьте суммы с актуальным днём перед повторным вводом.', '', '');
         const accessToken = await requireQueueOwner(userId);
         await command(op.kind, op.payload, { accessToken });
       } catch (e) {
         const error = toAppError(e);
-        await opQueue.add({ ...op, attempts: op.attempts + 1, lastError: error.detail || error.code, lastErrorCode: error.code });
+        const detail = op.kind === 'shift_submit' && error.code === 'unknown'
+          ? error.hint || 'Не удалось отправить смену' : error.detail || error.code;
+        await opQueue.add({ ...op, attempts: op.attempts + 1, lastError: detail, lastErrorCode: error.code });
         failed++;
         if (isTemporary(error)) break;
         continue;

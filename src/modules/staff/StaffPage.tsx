@@ -3,15 +3,15 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { Download, Plus } from 'lucide-react';
 import { command, from, rows } from '../../platform/backend';
-import { dayLabel, monthStart } from '../../platform/dates';
+import { dayLabel, formatDate, monthStart } from '../../platform/dates';
 import { formatMoneyShort, minorToDecimal } from '../../platform/money';
 import { sameJson } from '../../platform/offline';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, KV, MoneyInput, PageHeader, Select } from '../../ui';
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
-import { CustomPayFields, customPayDraft, customPayPolicy, percentToBp } from './CustomPayFields';
-import { MotivationPanel } from './Motivation';
+import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, percentToBp, tierPolicy } from './CustomPayFields';
+import { MotivationPanel, PayExample, payTiming, useMotivation, type ShiftPolicy } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
@@ -30,6 +30,12 @@ const cardSections = [
 type CardSection = (typeof cardSections)[number]['id'];
 type PayMode = 'partner' | 'fixed' | 'custom';
 
+const payChoices = [
+  { id: 'partner', title: 'Общая схема', hint: 'Гарантия, процент и премии по ступеням франчайзи.' },
+  { id: 'fixed', title: 'Фикс + процент', hint: 'За каждый выход — ставка плюс доля выручки смены.' },
+  { id: 'custom', title: 'Свои ступени', hint: 'Своя гарантия, пороги выручки, проценты и премии.' },
+] as const;
+
 const positionLabels: Record<StaffPosition, string> = { sales_manager: 'Менеджер продаж', trainee: 'Стажёр', manager: 'Управляющий' };
 const accessLabels: Record<keyof StaffAccess, string> = { view_staff: 'Видеть сотрудников', create_staff: 'Добавлять сотрудников', procurement: 'Закупки' };
 const defaultAccess = { view_staff: false, create_staff: false, procurement: false };
@@ -47,7 +53,7 @@ function payModeOf(staff?: StaffRow): PayMode {
 
 function payTerms(staff: StaffRow, currency: string) {
   if (payModeOf(staff) === 'partner') return 'Общая схема франчайзи';
-  if (staff.custom_pay) return staff.custom_pay.name;
+  if (staff.custom_pay) return `Свои ступени · ${staff.custom_pay.name}`;
   return [staff.shift_fee_minor && `${formatMoneyShort(staff.shift_fee_minor, currency)} за смену`,
     staff.rate_bp && `${pctBp(staff.rate_bp)} от выручки`].filter(Boolean).join(' + ') || 'Фикс и процент равны нулю';
 }
@@ -60,7 +66,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const toast = useToast();
   const [section, setSection] = useState(initialSection);
   const [loginAction, setLoginAction] = useState<'phone' | 'password' | null>(null);
-  const currency = locations.data?.[0]?.currency ?? 'RUB';
+  const common = useMotivation(partnerId, canSetCustomPay && section === 'pay');
+  const currency = common.data?.currency ?? locations.data?.[0]?.currency ?? 'RUB';
+  const unit = currencySymbol(currency);
   const activeLocs = (locations.data ?? []).filter((l) => l.status === 'active');
   const availableLocs = (locations.data ?? []).filter((l) => l.status === 'active' || staff?.location_ids.includes(l.id));
   const initialLocations = staff?.location_ids ?? (activeLocs.length === 1 ? [activeLocs[0].id] : []);
@@ -89,6 +97,10 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const digits = phoneLoginDigits(phone);
   const bp = percentToBp(rate);
   const customPolicy = payMode === 'custom' ? customPayPolicy(formula) : null;
+  const teamPolicy = canSetCustomPay && !common.error ? common.data?.policy : undefined;
+  const payPreview: ShiftPolicy | null = payMode === 'partner' ? teamPolicy ?? null
+    : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
+    : validFee && bp !== null && Number.isSafeInteger(Number(fee)) ? { mode: 'legacy', rate_bp: bp, fee_minor: Number(fee) } : null;
   const formulaChanged = payMode === 'custom' && (!customPolicy || !sameJson(customPolicy, initialCustomPay));
   const positionChanged = position !== initialPosition;
   const managerPositionChanged = positionChanged && (position === 'manager' || initialPosition === 'manager');
@@ -178,26 +190,45 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           <Checkbox label="Обучение включено" checked={learningEnabled} onChange={setLearningEnabled} />
           {!validPay && <p className="hint">Проверьте настройки в разделе «Оплата».</p>}
         </div>
-        <div hidden={!editable || section !== 'pay'}>
-          <DataState query={locations} skeleton={2}>{() => <>
-            {kind === 'trainee' && <Field label={`Минимум стажёра за смену, ${currency}`} hint="Начисляется большее из минимума и процента, затем прибавляется премия."
-                error={validTraineeFee ? undefined : 'Введите корректную сумму'}>{id =>
-                <MoneyInput id={id} currency={currency} value={traineeFee} onChange={setTraineeFee} onValidityChange={setValidTraineeFee} />}</Field>}
-            <Field label={kind === 'trainee' ? 'Условия оплаты после стажировки' : 'Условия оплаты'}>
-              {id => <Select id={id} value={payMode} onChange={e => setPayMode(e.target.value as PayMode)}>
-                <option value="partner">Общая схема франчайзи</option><option value="fixed">Фикс за смену + процент</option>
-                {canSetCustomPay && <option value="custom">Своя формула за смену</option>}</Select>}
-            </Field>
-            <div hidden={payMode !== 'fixed'}><div className="grid grid-2" style={{ gap: 12 }}>
-              <Field label={`За выход, ${currency}`} error={validFee ? undefined : 'Введите корректную сумму'}>{(id) =>
-                <MoneyInput id={id} value={fee} onChange={setFee} onValidityChange={setValidFee} currency={currency} placeholder="0" />}</Field>
-              <Field label="% от выручки смены" error={bp !== null ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
+        <div hidden={!editable || section !== 'pay'} className="pay-settings">
+          <DataState query={locations} skeleton={2}>{() => <div className="pay-layout">
+            {staff && <div className="pay-current">
+              <span>Сохранённые условия{staff.employee_kind === 'trainee' ? ' после стажировки' : ''}</span>
+              <strong>{payTerms(staff, currency)}</strong>
+              {initialPayMode === 'partner' && teamPolicy && <span>Гарантия за смену {formatMoneyShort(teamPolicy.floor_minor, currency)}</span>}
+              {initialPayMode === 'custom' && initialCustomPay && <span>Гарантия за смену {formatMoneyShort(initialCustomPay.floor_minor, currency)}</span>}
+              {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined &&
+                <span>На стажировке — гарантия {formatMoneyShort(staff.internship_floor_minor, currency)}</span>}
+            </div>}
+            {kind === 'trainee' && <section className="pay-trainee">
+              <h4>На время стажировки</h4>
+              <p className="pay-help">Действуют ступени общей схемы и отдельная гарантия{until ? ` по ${formatDate(until)} включительно` : ''}.</p>
+              <Field label={`Гарантия стажёра за смену, ${unit}`} error={validTraineeFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
+                <MoneyInput id={id} describedBy={describedBy} currency={currency} value={traineeFee} placeholder="0"
+                  onChange={setTraineeFee} onValidityChange={setValidTraineeFee} />}</Field>
+            </section>}
+            <fieldset className="pay-choices"><legend>{kind === 'trainee' ? 'Схема после стажировки' : 'Схема оплаты за смену'}</legend>
+              {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
+                <label className="pay-choice" key={choice.id}>
+                  <input type="radio" name="staff-pay-mode" checked={payMode === choice.id} onChange={() => setPayMode(choice.id)} />
+                  <span><strong>{choice.title}</strong><small>{choice.hint}</small></span>
+                </label>)}
+            </fieldset>
+            <div hidden={payMode !== 'fixed'}><div className="pay-field-grid">
+              <Field label={`Ставка за выход, ${unit}`} error={validFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
+                <MoneyInput id={id} describedBy={describedBy} value={fee} onChange={setFee} onValidityChange={setValidFee} currency={currency} placeholder="0" />}</Field>
+              <Field label="Доля выручки, %" error={bp !== null ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} aria-invalid={bp === null || undefined} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
             </div></div>
             {canSetCustomPay && <div hidden={payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
-            {staff && <p className="faint">Новая оплата применяется к сменам, открытым после сохранения.</p>}
+            {(payMode === 'partner' || kind === 'trainee') && canSetCustomPay && !teamPolicy &&
+              <DataState query={common} skeleton={1}>{() => null}</DataState>}
+            {(payPreview || (kind === 'trainee' && teamPolicy && validTraineeFee)) && <PayExample currency={currency} policy={payPreview}
+              traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee && Number.isSafeInteger(Number(traineeFee))
+                ? { ...teamPolicy, floor_minor: Number(traineeFee) } : null : undefined} />}
+            <p className="pay-help">{payTiming}</p>
             {!validProfile && !locations.error && <p className="hint">Проверьте поля в разделе «Основное».</p>}
-          </>}</DataState>
+          </div>}</DataState>
         </div>
         {staff && !staff.active && section !== 'login' && <div style={{ containerType: 'inline-size' }}>
           {section === 'profile' ? <KV items={[
@@ -415,7 +446,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       </section>}
       {canManageEmployees && <div hidden={visibleSection !== 'pay'}>
         <section className="stack" aria-label="Оплата">
-          <MotivationPanel partner={partnerId} />
+          <MotivationPanel partner={partnerId} canEdit={canSetAccess} />
           <DataState query={q}>{(list) => {
             const activeStaff = list.filter((staff) => staff.active);
             return activeStaff.length ? <Card title="Условия сотрудников"><ul className="list">

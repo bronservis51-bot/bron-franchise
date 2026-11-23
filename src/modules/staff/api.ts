@@ -8,7 +8,8 @@ export interface Shift { revision: number; id: string; location_id: string; loca
 export interface StaffHomeData {
   pay_policy?: ShiftPolicy | null; use_partner_motivation?: boolean; month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
   open_shift: (Shift & { location_name: string; currency: string }) | null;
-  locations: { location_id: string; location_name: string; currency: string; today: string; my_today: Shift | null }[];
+  locations: { location_id: string; location_name: string; currency: string; today: string;
+    my_today: Shift | null; my_yesterday?: Shift | null; pay_today?: ShiftPolicy; pay_yesterday?: ShiftPolicy }[];
   month_earned_minor: number; month_revenue_minor: number; month_shifts: number;
   shifts: Shift[];
 }
@@ -30,7 +31,13 @@ export interface StaffRow {
 export interface CloseResult { shift: Shift; month_earned_minor: number; month_shifts: number; currency: string }
 
 export const staffHome = (month: string | null) => command<StaffHomeData>('staff_home', { month });
-export const shiftOpen = (location: string) => command<Shift>('shift_open', { location });
+export const shiftSubmit = async (userId: string, location: string, day: string, cash: string, card: string, comment: string | null) => {
+  const args = { location, day, cash, card, comment };
+  const receipt = await operationKey(userId, 'shift_submit', args);
+  const result = await sendOrQueue<CloseResult>(userId, 'shift_submit', { ...args, operation: receipt.id });
+  receipt.complete();
+  return result;
+};
 export const shiftClose = async (userId: string, shift: string, cash: string, card: string, comment: string | null, expected_revision: number) => {
   const args = { shift, cash, card, comment, expected_revision };
   const receipt = await operationKey(userId, 'shift_close_versioned', args);

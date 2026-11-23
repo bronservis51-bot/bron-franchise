@@ -8,6 +8,7 @@
 const frame = document.querySelector('#app');
 const result = document.querySelector('#result');
 const params = new URLSearchParams(location.search);
+const testOffline = params.get('scenario') === 'offline';
 frame.width = String(Number(params.get('width')) || 390);
 frame.src = `/tests/ui/responsive-app.html?role=team&text=${params.get('text') === '200' ? '200' : '100'}#/kb`;
 const previousMonth = '2026-10-01';
@@ -29,12 +30,13 @@ try {
   const link = await until(() => frame.contentDocument.querySelector('.bottom-nav a[href="#/"]'), 'Главная недоступна');
   const app = frame.contentWindow;
   const fallbackFetch = app.fetch;
-  const requested = { pay: [], revenue: [], opening: [] };
-  let openedShift = null;
+  const requested = { pay: [], revenue: [], submissions: [] };
+  let closedShift = null;
+  let connectionLost = testOffline;
   app.fetch = (request, init) => {
     const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
     const name = url.pathname.split('/').at(-1);
-    if (url.pathname.includes('/rpc/') && ['staff_home', 'team_revenue_month', 'shift_open'].includes(name)) {
+    if (url.pathname.includes('/rpc/') && ['staff_home', 'team_revenue_month', 'shift_submit'].includes(name)) {
       const args = JSON.parse(init.body);
       if (name === 'staff_home') {
         const month = args.p_month ?? currentMonth;
@@ -42,7 +44,7 @@ try {
         const earned = month === currentMonth ? 123000 : 456000;
         return Promise.resolve(app.Response.json({
           month, currency: 'RUB', partner_name: 'Вымышленный франчайзи', rate_bp: 500, shift_fee_minor: 0,
-          open_shift: openedShift, locations: points, month_earned_minor: earned,
+          open_shift: null, locations: points.map(point => ({ ...point, my_today: closedShift?.location_id === point.location_id ? closedShift : null })), month_earned_minor: earned,
           month_revenue_minor: 1230000, month_shifts: 1,
           shifts: [{ id: 'qa-prior-shift', day: `${month.slice(0, 7)}-11`, location_name: points[0].location_name, earned_minor: earned, total_minor: 1230000 }],
         }));
@@ -56,10 +58,11 @@ try {
         }))));
       }
       const point = points.find(p => p.location_id === args.p_location);
-      assert(point, 'смена открывается вне назначенных точек');
-      requested.opening.push(point.location_id);
-      openedShift = { ...point, id: 'qa-team-shift', day: point.today, status: 'open', opened_at: new Date().toISOString(), revision: 0 };
-      return Promise.resolve(app.Response.json(openedShift));
+      assert(point, 'смена сдаётся вне назначенных точек');
+      requested.submissions.push(args);
+      if (connectionLost) return Promise.reject(new TypeError('Failed to fetch'));
+      closedShift = { ...point, id: 'qa-team-shift', day: args.p_day, status: 'closed', closed_at: new Date().toISOString(), revision: 1, earned_minor: 100000 };
+      return Promise.resolve(app.Response.json({ shift: closedShift, currency: 'RUB', month_earned_minor: 223000, month_shifts: 2 }));
     }
     return fallbackFetch(request, init);
   };
@@ -89,25 +92,52 @@ try {
   navigation.querySelector('button').click();
   await until(() => requested.pay.includes(previousMonth) && requested.revenue.includes(previousMonth), 'Выручка и начисления запрашивают разные месяцы');
   await until(() => compact(doc.querySelector('main').textContent).includes('202000₽') && compact(doc.querySelector('main').textContent).includes('4560₽'), 'Нет итогов выбранного месяца');
-  const open = button('Открыть смену');
-  assert(open && [...doc.querySelectorAll('main button')].filter(item => item.textContent.trim().startsWith('Открыть смену')).length === 1, 'Нужно одно действие для открытия смены');
-  open.click();
+  const close = button('Закрыть смену');
+  assert(close && !button('Открыть смену'), 'Нужно одно действие для сдачи смены');
+  close.click();
   const dialog = await until(() => doc.querySelector('dialog[open]'), 'Не открылся выбор точки');
   await doc.fonts.ready;
   assert(dialog.scrollWidth <= dialog.clientWidth + 1, 'Диалог выбора точки шире экрана');
   const point = dialog.querySelector('select');
-  assert(point && button('Открыть смену'), 'Нет доступного выбора точки');
-  const confirm = [...dialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Да, начать');
-  assert(confirm?.disabled, 'Смену можно открыть без выбора точки');
+  assert(point, 'Нет доступного выбора точки');
+  const confirm = [...dialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Закрыть смену');
+  assert(confirm?.disabled, 'Смену можно сдать без выбора точки и кассы');
   point.value = points[1].location_id;
   point.dispatchEvent(new app.Event('change', { bubbles: true }));
-  await until(() => !confirm.disabled, 'Выбор точки не принят');
+  const [cash, card] = dialog.querySelectorAll('input[inputmode="decimal"]');
+  Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(cash, '999999999999999999');
+  cash.dispatchEvent(new app.Event('input', { bubbles: true }));
+  await until(() => dialog.textContent.includes('Сумма смены не может превышать'), 'Форма не объясняет предел суммы');
+  assert(confirm.disabled, 'Форма позволяет отправить сумму выше ограничения');
+  for (const [input, value] of [[cash, '8301'], [card, '5702']]) {
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event('input', { bubbles: true }));
+  }
+  await until(() => !confirm.disabled, 'Выбор точки и кассы не принят');
   confirm.click();
-  await until(() => requested.opening[0] === points[1].location_id && doc.querySelector('.shift-card'), 'На главной не появилась смена выбранной точки');
-  assert(requested.revenue.at(-1) === previousMonth, 'Открытие сегодняшней смены сбрасывает выбранный месяц');
+  if (testOffline) {
+    await until(() => doc.querySelector('.earn-result')?.textContent.includes('Итог сохранён на телефоне'), 'Нет подтверждения локальной записи');
+    button('Закрыть смену').click();
+    const pendingDialog = await until(() => doc.querySelector('dialog[open]'), 'Не открылся список доступных точек');
+    const pendingPoint = pendingDialog.querySelector('select');
+    pendingPoint.value = points[1].location_id;
+    pendingPoint.dispatchEvent(new app.Event('change', { bubbles: true }));
+    await until(() => pendingDialog.textContent.includes('чт, 19 нояб.'), 'Дата записи в очереди осталась доступна для повторной сдачи');
+    assert(!pendingDialog.textContent.includes('пт, 20 нояб.'), 'День в очереди всё ещё доступен');
+    [...pendingDialog.querySelectorAll('button')].find(item => item.textContent.trim() === 'Отмена').click();
+    connectionLost = false;
+    app.dispatchEvent(new app.Event('focus'));
+    await until(() => closedShift && doc.querySelector('.today-entered')?.textContent.includes('смена закрыта'), 'Закрытие из очереди не появилось');
+    assert(requested.submissions.length === 2 && requested.submissions[0].p_operation === requested.submissions[1].p_operation, 'При отправке очереди сменился ключ операции');
+  } else {
+    await until(() => doc.querySelector('.earn-result'), 'На главной не появилось подтверждение');
+    assert(requested.submissions.length === 1, 'Смена отправилась больше одного раза');
+  }
+  assert(requested.submissions[0]?.p_location === points[1].location_id && requested.submissions[0].p_day === points[1].today, 'Смена сдана в другую точку или за другую дату');
+  assert(requested.revenue.at(-1) === previousMonth, 'Закрытие сегодняшней смены сбрасывает выбранный месяц');
   assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Содержимое шире экрана');
   result.dataset.status = 'passed';
-  result.textContent = 'Главная, общий месяц и открытие смены проверены';
+  result.textContent = 'Главная, общий месяц и сдача смены проверены';
 } catch (error) {
   result.dataset.status = 'failed';
   result.textContent = error.message;

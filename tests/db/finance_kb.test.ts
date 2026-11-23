@@ -20,7 +20,7 @@ describe('сотрудник не видит выручку точки', () => {
     const h = await one<{ locations: Record<string, unknown>[] }>(DINA, `select public.staff_home() j`);
     expect(h.locations.length).toBeGreaterThan(0);
     for (const l of h.locations) {
-      expect(Object.keys(l).sort()).toEqual(['currency', 'location_id', 'location_name', 'my_today', 'today']);
+      expect(Object.keys(l).sort()).toEqual(['currency', 'location_id', 'location_name', 'my_today', 'my_yesterday', 'pay_today', 'pay_yesterday', 'today']);
     }
     await t.expectError(DINA, `select public.finance_my(current_date, null)`, 'forbidden');
   });

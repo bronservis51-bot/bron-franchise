@@ -1,24 +1,100 @@
-import { useEffect,useState } from 'react';
-import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query';
-import { command } from '../../platform/backend';
-import { useSession } from '../../platform/session';
-import { formatMoneyShort } from '../../platform/money';
-import { ActionError,Button,DataState,Field,Input,MoneyInput } from '../../ui';
-export type PayPolicy={floor_minor:number;tiers:{from_minor:number;rate_bp:number;bonus_minor:number}[]};
-export type ShiftPolicy=PayPolicy|{mode:'legacy';rate_bp:number;fee_minor:number};
-export function calculatePay(total:bigint,rate:number,fee:number,policy?:ShiftPolicy|null):bigint{
- if(!policy)return BigInt(fee)+(total*BigInt(rate)+5000n)/10000n;
- if('mode' in policy)return BigInt(policy.fee_minor)+(total*BigInt(policy.rate_bp)+5000n)/10000n;
- const tier=[...policy.tiers].reverse().find(t=>BigInt(t.from_minor)<=total);
- if(!tier)return 0n;
- const percentage=(total*BigInt(tier.rate_bp)+5000n)/10000n;
- return (percentage>BigInt(policy.floor_minor)?percentage:BigInt(policy.floor_minor))+BigInt(tier.bonus_minor);
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { command, toAppError } from '../../platform/backend';
+import { formatMoneyShort, parseMoney } from '../../platform/money';
+import { ActionError, Button, Card, DataState, Field, MoneyInput } from '../../ui';
+import { CustomPayFields, currencySymbol, customPayDraft, tierPolicy } from './CustomPayFields';
+import { pctBp } from './api';
+import './pay-settings.css';
+
+export type PayPolicy = { floor_minor: number; tiers: { from_minor: number; rate_bp: number; bonus_minor: number }[] };
+export type ShiftPolicy = PayPolicy | { mode: 'legacy'; rate_bp: number; fee_minor: number };
+type Motivation = { version: number; policy: PayPolicy; currency: string };
+
+function reachedTier(policy: PayPolicy, total: bigint) {
+  return [...policy.tiers].reverse().find(t => BigInt(t.from_minor) <= total);
 }
-export function MotivationPanel({partner}:{partner:string}){
- const {can}=useSession();const qc=useQueryClient();const [edit,setEdit]=useState(false);
- const q=useQuery({queryKey:['motivation',partner],queryFn:()=>command<{version:number;policy:PayPolicy;currency:string}>('motivation_get',{partner})});
- const [policy,setPolicy]=useState<PayPolicy|null>(null);useEffect(()=>{if(q.data&&!policy)setPolicy(q.data.policy);},[q.data,policy]);
- const m=useMutation({mutationFn:()=>command('motivation_set',{partner,policy,expected_version:q.data!.version}),onSuccess:async()=>{await qc.invalidateQueries({queryKey:['motivation',partner]});setEdit(false);setPolicy(null);}});
- return <details className="team-accounts" data-unsaved={edit?'true':undefined}><summary>Мотивация сотрудников</summary><DataState query={q}>{d=>policy&&<><p>За день: максимум (минимум за смену, выручка смены × процент ступени) + премия.</p><p className="faint">Выручка включает наличные и оплату картой. Граница «касса от» включается в новую ступень. Открытая смена сохраняет условия на момент её открытия; прошлые начисления не пересчитываются. Суммы указаны в {d.currency}. Режим «фикс за смену + процент» настраивается отдельно в карточке сотрудника.</p>
- {edit?<><Field label="Минимум за смену">{id=><MoneyInput id={id} value={String(policy.floor_minor)} currency={d.currency} onChange={v=>setPolicy({...policy,floor_minor:Number(v)})}/>}</Field>{policy.tiers.map((t,i)=><div className="grid grid-3 quiz-question" key={i}><Field label="Касса от">{id=><MoneyInput id={id} currency={d.currency} value={String(t.from_minor)} onChange={v=>i!==0&&setPolicy({...policy,tiers:policy.tiers.map((x,n)=>n===i?{...x,from_minor:Number(v)}:x)})}/>}</Field><Field label="Процент">{id=><Input id={id} inputMode="decimal" value={t.rate_bp/100} onChange={e=>setPolicy({...policy,tiers:policy.tiers.map((x,n)=>n===i?{...x,rate_bp:Math.round(Number(e.target.value.replace(',','.'))*100)}:x)})}/>}</Field><Field label="Премия">{id=><MoneyInput id={id} currency={d.currency} value={String(t.bonus_minor)} onChange={v=>setPolicy({...policy,tiers:policy.tiers.map((x,n)=>n===i?{...x,bonus_minor:Number(v)}:x)})}/>}</Field></div>)}<div className="row"><Button onClick={()=>{setEdit(false);setPolicy(d.policy);}}>Отмена</Button><Button loading={m.isPending} variant="primary" onClick={()=>m.mutate()}>Сохранить мотивацию</Button></div></>:<><p>Минимум за смену: <strong>{formatMoneyShort(policy.floor_minor,d.currency)}</strong></p><div className="table-wrap"><table className="table"><thead><tr><th>Касса от</th><th>%</th><th>Премия</th></tr></thead><tbody>{policy.tiers.map(t=><tr key={t.from_minor}><td>{formatMoneyShort(t.from_minor,d.currency)}</td><td>{t.rate_bp/100}%</td><td>{formatMoneyShort(t.bonus_minor,d.currency)}</td></tr>)}</tbody></table></div>{can('team.manage')&&<Button onClick={()=>setEdit(true)}>Изменить условия</Button>}</>}<ActionError error={m.error}/></>}</DataState></details>;
+
+export function calculatePay(total: bigint, rate: number, fee: number, policy?: ShiftPolicy | null): bigint {
+  if (!policy) return BigInt(fee) + (total * BigInt(rate) + 5000n) / 10000n;
+  if ('mode' in policy) return BigInt(policy.fee_minor) + (total * BigInt(policy.rate_bp) + 5000n) / 10000n;
+  const tier = reachedTier(policy, total);
+  if (!tier) return 0n;
+  const percentage = (total * BigInt(tier.rate_bp) + 5000n) / 10000n;
+  return (percentage > BigInt(policy.floor_minor) ? percentage : BigInt(policy.floor_minor)) + BigInt(tier.bonus_minor);
+}
+
+export function useMotivation(partner: string, enabled = true) {
+  return useQuery({ queryKey: ['motivation', partner], enabled, queryFn: () => command<Motivation>('motivation_get', { partner }) });
+}
+
+function ExampleResult({ policy, total, currency, label }: { policy: ShiftPolicy; total: bigint; currency: string; label: string }) {
+  const tier = 'tiers' in policy ? reachedTier(policy, total) : null;
+  const terms = 'mode' in policy
+    ? `${formatMoneyShort(policy.fee_minor, currency)} за выход + ${pctBp(policy.rate_bp)} от выручки`
+    : tier && `${pctBp(tier.rate_bp)} от выручки, гарантия ${formatMoneyShort(policy.floor_minor, currency)}, премия ${formatMoneyShort(tier.bonus_minor, currency)}`;
+  return <div className="pay-result">
+    <span>{label}</span>
+    <strong className="num">{formatMoneyShort(calculatePay(total, 0, 0, policy), currency)}</strong>
+    <small>{terms}</small>
+  </div>;
+}
+
+export function PayExample({ currency, policy, traineePolicy }: { currency: string; policy: ShiftPolicy | null; traineePolicy?: PayPolicy | null }) {
+  const [revenue, setRevenue] = useState(() => String(parseMoney('10000', currency)));
+  const [valid, setValid] = useState(true);
+  return <section className="pay-example" aria-label="Пример расчёта">
+    <h4>Пример расчёта</h4>
+    <Field label={`Выручка за смену, ${currencySymbol(currency)}`} error={!valid ? 'Введите сумму выручки' : undefined}>{(id, describedBy) =>
+      <MoneyInput id={id} value={revenue} currency={currency} describedBy={describedBy} placeholder="0"
+        onChange={setRevenue} onValidityChange={setValid} />}</Field>
+    <div aria-live="polite">
+      {valid && !policy && !traineePolicy && <p className="pay-help">Для расчёта проверьте поля схемы.</p>}
+      {valid && traineePolicy && <ExampleResult label="На стажировке" currency={currency} total={BigInt(revenue || '0')} policy={traineePolicy} />}
+      {valid && policy && <ExampleResult label={traineePolicy !== undefined ? 'После стажировки' : 'Сотрудник получит'} currency={currency} total={BigInt(revenue || '0')} policy={policy} />}
+    </div>
+  </section>;
+}
+
+export const payTiming = 'Условия фиксируются при первом сохранении смены. У ранее открытых смен остаются условия открытия. Прошлые начисления сохраняются.';
+
+function TeamPayEditor({ partner, saved, onClose }: { partner: string; saved: Motivation; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [version] = useState(saved.version);
+  const [draft, setDraft] = useState(() => customPayDraft(saved.policy));
+  const policy = tierPolicy(draft);
+  const m = useMutation({
+    mutationFn: (next: PayPolicy) => command('motivation_set', { partner, policy: next, expected_version: version }),
+    onError: error => {
+      if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['motivation', partner] });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['motivation', partner] });
+      onClose();
+    },
+  });
+  return <div className="pay-layout" data-unsaved="true">
+    <PayExample currency={saved.currency} policy={policy} />
+    <CustomPayFields named={false} currency={saved.currency} draft={draft} setDraft={setDraft} />
+    <p className="pay-help">{payTiming}</p>
+    <ActionError error={m.error} />
+    <div className="row"><Button disabled={m.isPending} onClick={onClose}>Отмена</Button>
+      <Button variant="primary" loading={m.isPending} disabled={!policy} onClick={() => policy && m.mutate(policy)}>Сохранить схему</Button></div>
+  </div>;
+}
+
+export function MotivationPanel({ partner, canEdit }: { partner: string; canEdit: boolean }) {
+  const q = useMotivation(partner);
+  const [edit, setEdit] = useState(false);
+  return <Card title="Общая схема" className="pay-settings"><DataState query={q}>{d =>
+    edit && canEdit ? <TeamPayEditor partner={partner} saved={d} onClose={() => setEdit(false)} /> : <div className="pay-layout">
+      <p>Гарантия за смену <strong className="num">{formatMoneyShort(d.policy.floor_minor, d.currency)}</strong></p>
+      <p className="pay-help">Для сотрудников на общей схеме процент и премия зависят от выручки смены. У стажёра своя гарантия.</p>
+      <details className="pay-table"><summary>Ступени по выручке ({d.policy.tiers.length})</summary>
+        <div className="table-wrap"><table className="table"><thead><tr><th>Выручка от</th><th>Доля</th><th>Премия</th></tr></thead>
+          <tbody>{d.policy.tiers.map(t => <tr key={t.from_minor}><td>{formatMoneyShort(t.from_minor, d.currency)}</td><td>{pctBp(t.rate_bp)}</td><td>{formatMoneyShort(t.bonus_minor, d.currency)}</td></tr>)}</tbody></table></div>
+      </details>
+      {canEdit && <Button onClick={() => setEdit(true)}>Изменить общую схему</Button>}
+    </div>}
+  </DataState></Card>;
 }
