@@ -6,6 +6,7 @@ import { formatMoney, minorToDecimal, parseMoney } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, EmptyState, ErrorState, Field, Input, PageHeader, Select, Skeleton, Tabs, Textarea, type Tone } from '../../ui';
 import { useToast } from '../../ui/toast';
+import { useOwnPartnerLifecycle } from '../revenue/partnerLifecycle';
 import { PersonalStoreLink } from './OrderLink';
 import { procurementAction, procurementCatalog, procurementCheckout, procurementIncomingSet, procurementList, procurementSubmit } from './api';
 import { emptyCart, quantityNumber, readCart, saveCart, type CartDraft } from './draft';
@@ -188,13 +189,13 @@ function OfferForm({ request, counterparties, busy, onOffer }: { request: Procur
     await onOffer({ items: items.map(l => ({ ...l, now_price_minor: l.now_price_minor === null ? null : Number(l.now_price_minor), later_price_minor: l.later_price_minor === null ? null : Number(l.later_price_minor) })), currency, shipment_mode: shipment, valid_until: new Date(validUntil).toISOString(), note, counterparty_id: counterparty });
   };
   return <form className="card procurement-offer-form" data-unsaved="true" onSubmit={e => { e.preventDefault(); void submit(); }}>
-    <h2>Предложить условия</h2><p className="procurement-muted">Проверьте индивидуальные цены, остаток и срок с поставщиком. Партнёр должен принять эти условия. Резерв в МойСклад оформляется отдельно.</p>
+    <h2>Предложить условия</h2><p className="procurement-muted">Проверьте индивидуальные цены, остаток и срок с поставщиком. Франчайзи должен принять эти условия. Резерв в МойСклад оформляется отдельно.</p>
     <div className="procurement-form-grid">
       <Field label="Контрагент МойСклад" required>{id => <Select id={id} required value={counterparty} disabled={busy} onChange={e => setCounterparty(e.target.value)}><option value="">Выберите контрагента</option>{counterparties.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>}</Field>
       <Field label="Валюта" required>{id => <Select id={id} value={currency} disabled={busy} onChange={e => setCurrency(e.target.value)}>{['RUB', 'KZT', 'TRY'].map(c => <option key={c}>{c}</option>)}</Select>}</Field>
       <Field label="Предложение действует до" required>{id => <Input id={id} type="datetime-local" required value={validUntil} disabled={busy} onChange={e => setValidUntil(e.target.value)} />}</Field>
     </div>
-    {!counterparties.length && <p className="error">У партнёра нет проверенной привязки к контрагенту МойСклад. Сначала проверьте и добавьте её в разделе «Экономика».</p>}
+    {!counterparties.length && <p className="error">У франчайзи нет проверенной привязки к контрагенту МойСклад. Сначала проверьте и добавьте её в разделе «Экономика».</p>}
     {lines.map((l, index) => <fieldset className="procurement-line" key={l.product_id} disabled={busy}><legend>{request.items[index].name} · {qty(request.items[index].quantity)} {request.items[index].uom}</legend><div className="procurement-form-grid">
       <Field label="Из наличия">{id => <Input id={id} inputMode="decimal" value={l.now} onChange={e => change(l.product_id, 'now', e.target.value)} />}</Field>
       <Field label={`Цена из наличия, ${currency} за ${request.items[index].uom}`}>{id => <Input id={id} inputMode="decimal" value={l.nowPrice} onChange={e => change(l.product_id, 'nowPrice', e.target.value)} />}</Field>
@@ -237,29 +238,29 @@ function ProgressForm({ request, manager, busy, onProgress }: { request: Procure
   </form>;
 }
 
-export function RequestDetail({ request, manager, counterparties, busy, error, onAction, onBack, onRefresh }: { request: ProcurementRequest; manager: boolean; counterparties: { id: string; name: string }[]; busy: boolean; error: unknown; onAction: (action: ProcurementAction, data: unknown) => Promise<void>; onBack: () => void; onRefresh: () => void }) {
+export function RequestDetail({ request, manager, readOnly = false, counterparties, busy, error, onAction, onBack, onRefresh }: { request: ProcurementRequest; manager: boolean; readOnly?: boolean; counterparties: { id: string; name: string }[]; busy: boolean; error: unknown; onAction: (action: ProcurementAction, data: unknown) => Promise<void>; onBack: () => void; onRefresh: () => void }) {
   const [reason, setReason] = useState('');
   const [offerOpen, setOfferOpen] = useState(false);
   const offered = request.source === 'checkout' || request.status !== 'submitted' && !!request.offered_at;
   const expired = request.valid_until !== null && new Date(request.valid_until).getTime() <= Date.now();
-  return <div className="procurement-detail" data-unsaved={reason ? 'true' : undefined}>
+  return <div className="procurement-detail" data-unsaved={!readOnly && reason ? 'true' : undefined}>
     <div><Button size="sm" variant="ghost" onClick={onBack}><ArrowLeft size={16} aria-hidden />К заявкам</Button></div>
     <div className="procurement-detail-head"><div><h2>{request.source === 'checkout' ? 'Заказ' : 'Заявка'} № {request.number}</h2><div className="procurement-muted">{manager ? request.partner_name + ' · ' : ''}{date(request.created_at, true)} · версия {request.version}</div></div><Badge tone={STATUS[request.status][1]}>{fulfillment(request)}</Badge></div>
     <IntegrationStatus request={request} manager={manager} />
-    <div className="procurement-note"><strong>{request.shipment_mode === 'partial' ? 'Отправка частями' : 'Отправка одной поставкой'}</strong>{request.note && <p>Комментарий партнёра: {request.note}</p>}{request.offer_note && <p>Условия менеджера: {request.offer_note}</p>}</div>
+    <div className="procurement-note"><strong>{request.shipment_mode === 'partial' ? 'Отправка частями' : 'Отправка одной поставкой'}</strong>{request.note && <p>Комментарий франчайзи: {request.note}</p>}{request.offer_note && <p>Условия менеджера: {request.offer_note}</p>}</div>
     <div className="procurement-lines">{request.items.map(i => <LineSummary key={i.product_id} line={i} currency={request.currency} offered={offered} direct={request.source === 'checkout'} />)}</div>
     {offered && request.currency && <div className="procurement-note"><strong>Товары: {formatMoney(offerTotal(request), request.currency)}</strong><div>Доставка — отдельно по согласованным условиям.</div>{request.status === 'offered' && <div>Предложение действует до {date(request.valid_until, true)}{expired ? ' — срок истёк, запросите новые условия' : ''}.</div>}</div>}
-    {request.status === 'offered' && !manager && <section className="card procurement-summary" data-unsaved="true"><h3>Согласование</h3><p className="procurement-muted">Проверьте количества, индивидуальные цены, дату и доставку. Принятие фиксирует эту версию условий. Резерв подтверждается отдельным этапом.</p><Field label="Комментарий / причина отказа">{id => <Textarea id={id} value={reason} maxLength={2000} rows={2} disabled={busy} onChange={e => setReason(e.target.value)} />}</Field><div className="procurement-actions"><Button variant="primary" loading={busy} disabled={expired || request.items.every(i => i.now_qty + i.later_qty === 0)} onClick={() => void onAction('accept', { note: reason })}>Принять условия</Button><Button disabled={busy || !reason.trim()} onClick={() => void onAction('decline', { note: reason })}>Отказаться</Button></div></section>}
+    {request.status === 'offered' && !manager && !readOnly && <section className="card procurement-summary" data-unsaved="true"><h3>Согласование</h3><p className="procurement-muted">Проверьте количества, индивидуальные цены, дату и доставку. Принятие фиксирует эту версию условий. Резерв подтверждается отдельным этапом.</p><Field label="Комментарий / причина отказа">{id => <Textarea id={id} value={reason} maxLength={2000} rows={2} disabled={busy} onChange={e => setReason(e.target.value)} />}</Field><div className="procurement-actions"><Button variant="primary" loading={busy} disabled={expired || request.items.every(i => i.now_qty + i.later_qty === 0)} onClick={() => void onAction('accept', { note: reason })}>Принять условия</Button><Button disabled={busy || !reason.trim()} onClick={() => void onAction('decline', { note: reason })}>Отказаться</Button></div></section>}
     {manager && ['submitted', 'offered'].includes(request.status) && <><Button onClick={() => setOfferOpen(v => !v)} disabled={busy}>{offerOpen ? 'Скрыть редактор' : request.status === 'offered' ? 'Изменить предложение' : 'Подготовить предложение'}</Button>{offerOpen && <OfferForm key={request.version} request={request} counterparties={counterparties} busy={busy} onOffer={async o => { await onAction('offer', o); }} />}</>}
-    {request.status === 'accepted' && (!request.integration || request.integration.status === 'created') && <ProgressForm key={request.version} request={request} manager={manager} busy={busy} onProgress={onAction} />}
-    {['submitted', 'offered'].includes(request.status) && <details><summary>Отменить запрос</summary><Field label="Причина отмены">{id => <Input id={id} maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} />}</Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void onAction('cancel', { note: reason })}>Отменить запрос</Button></details>}
+    {!readOnly && request.status === 'accepted' && (!request.integration || request.integration.status === 'created') && <ProgressForm key={request.version} request={request} manager={manager} busy={busy} onProgress={onAction} />}
+    {!readOnly && ['submitted', 'offered'].includes(request.status) && <details><summary>Отменить запрос</summary><Field label="Причина отмены">{id => <Input id={id} maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} />}</Field><Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void onAction('cancel', { note: reason })}>Отменить запрос</Button></details>}
     <ActionError error={error} />{!!error && <div><Button onClick={onRefresh}>Обновить состояние заявки</Button></div>}
     <section><h3 style={{ marginBottom: 14 }}>История</h3><ol className="procurement-timeline">{request.history.map((event, i) => <li key={`${event.version}:${i}`}><strong>{ACTION[event.action] ?? event.action}</strong><time>{date(event.at, true)} · {event.actor_name}</time>{event.note && <p>{event.note}</p>}{typeof event.data.document_id === 'string' && <p className="procurement-muted">Документ МойСклад: {event.data.document_id}</p>}</li>)}</ol></section>
   </div>;
 }
 
 export function DemandView({ demand }: { demand: ProcurementDemand[] }) {
-  return <><p className="procurement-muted">Принятые партнёрами количества под заказ, для которых ещё не подтверждён заказ поставщику. Отказы и отмены сюда не входят.</p>{demand.length ? <div className="procurement-lines">{demand.map(d => <article key={d.product_id} className="card procurement-line"><h3>{d.name}</h3><div><strong>{qty(d.quantity)} {d.uom}</strong> · заявок: {d.request_count}</div></article>)}</div> : <EmptyState title="Новой потребности в закупке нет" text="Она появится после согласования партнёрами товаров под заказ." />}</>;
+  return <><p className="procurement-muted">Принятые франчайзи количества под заказ, для которых ещё не подтверждён заказ поставщику. Отказы и отмены сюда не входят.</p>{demand.length ? <div className="procurement-lines">{demand.map(d => <article key={d.product_id} className="card procurement-line"><h3>{d.name}</h3><div><strong>{qty(d.quantity)} {d.uom}</strong> · заявок: {d.request_count}</div></article>)}</div> : <EmptyState title="Новой потребности в закупке нет" text="Она появится после согласования франчайзи товаров под заказ." />}</>;
 }
 
 function IncomingManager({ catalog, user, onSaved }: { catalog: ProcurementCatalog; user: string; onSaved: () => Promise<void> }) {
@@ -301,8 +302,11 @@ export function ProcurementPage() {
 
 function ProcurementWorkspace() {
   const { isManager, me } = useSession();
+  const { readOnly: commercialPause } = useOwnPartnerLifecycle();
+  const readOnly = !isManager && commercialPause;
   const user = me?.user.id ?? '';
-  const [tab, setTab] = useState<'catalog' | 'cart' | 'requests' | 'demand'>(isManager ? 'requests' : 'catalog');
+  const [requestedTab, setTab] = useState<'catalog' | 'cart' | 'requests' | 'demand'>(isManager ? 'requests' : 'catalog');
+  const tab = readOnly ? 'requests' : requestedTab;
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<CartDraft>(() => readCart(user));
   const [saved, setSaved] = useState(true);
@@ -310,16 +314,16 @@ function ProcurementWorkspace() {
   const [error, setError] = useState<unknown>(null);
   const [clock, setClock] = useState(Date.now());
   const qc = useQueryClient(); const toast = useToast();
-  const catalog = useQuery({ queryKey: ['procurement', 'catalog'], queryFn: procurementCatalog, staleTime: 30_000, refetchInterval: 60_000 });
+  const catalog = useQuery({ queryKey: ['procurement', 'catalog'], queryFn: procurementCatalog, enabled: !readOnly, staleTime: 30_000, refetchInterval: 60_000 });
   const list = useQuery({ queryKey: ['procurement', 'list'], queryFn: procurementList, staleTime: 15_000, refetchInterval: 30_000 });
   useEffect(() => { setSaved(saveCart(user, draft)); }, [draft, user]);
   useEffect(() => { const id = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(id); }, []);
   useEffect(() => {
-    if (!draft.items.length) return;
+    if (readOnly || !draft.items.length) return;
     const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
-  }, [draft.items.length]);
+  }, [draft.items.length, readOnly]);
   const catalogBlocked = catalog.error && ['forbidden', 'unauthenticated'].includes(toAppError(catalog.error).code);
   const currentCatalog = catalog.data && !catalogBlocked ? { ...catalog.data, stale: catalog.data.stale || !catalog.data.fetched_at || clock - new Date(catalog.data.fetched_at).getTime() > 5 * 60_000 || !!catalog.error || !navigator.onLine } : undefined;
   const request = list.data?.requests.find(r => r.id === selected);
@@ -363,17 +367,19 @@ function ProcurementWorkspace() {
   const tabs: { id: 'catalog' | 'cart' | 'requests' | 'demand'; label: string }[] = isManager ? [{ id: 'requests', label: `Заявки${needsAttention ? ` · ${needsAttention}` : ''}` }, { id: 'demand', label: 'К закупке' }, { id: 'catalog', label: 'Каталог' }] : [{ id: 'catalog', label: 'Каталог' }, { id: 'cart', label: `Корзина${draft.items.length ? ` · ${draft.items.length}` : ''}` }, { id: 'requests', label: `Мои заказы${needsAttention ? ` · ${needsAttention}` : ''}` }];
   const blocked = list.error && ['forbidden', 'unauthenticated'].includes(toAppError(list.error).code);
   const refreshing = catalog.isFetching || list.isFetching;
-  return <div className="procurement" data-testid="procurement-page" data-unsaved={draft.items.length ? 'true' : undefined}>
-    <PageHeader title={isManager ? 'Закупки партнёров' : 'Материалы'} actions={<Button size="sm" aria-label={refreshing ? 'Обновляем каталог и заказы' : 'Обновить каталог и заказы'} title="Обновить" onClick={refreshManually} disabled={busy} loading={refreshing}>{!refreshing && <RefreshCw size={18} aria-hidden />}</Button>} />
-    {!isManager && <PersonalStoreLink />}
-    <div className="procurement-top"><Tabs tabs={tabs} value={tab} onChange={v => { setTab(v); setSelected(null); setError(null); }} label="Закупки" /></div>
+  return <div className="procurement" data-testid="procurement-page" data-unsaved={!readOnly && draft.items.length ? 'true' : undefined}>
+    <PageHeader title={isManager ? 'Закупки франчайзи' : 'Материалы'} actions={<Button size="sm" aria-label={refreshing ? 'Обновляем каталог и заказы' : 'Обновить каталог и заказы'} title="Обновить" onClick={refreshManually} disabled={busy} loading={refreshing}>{!refreshing && <RefreshCw size={18} aria-hidden />}</Button>} />
+    {!isManager && !readOnly && <PersonalStoreLink />}
+    {readOnly
+      ? <div className="procurement-note" role="status">Мои заказы доступны для просмотра.</div>
+      : <div className="procurement-top"><Tabs tabs={tabs} value={tab} onChange={v => { setTab(v); setSelected(null); setError(null); }} label="Закупки" /></div>}
     {!navigator.onLine && <div className="procurement-note warning" role="status">Нет сети. Черновик остаётся на этом устройстве; отправка и подтверждение недоступны.</div>}
     {tab === 'catalog' && (currentCatalog ? <><CatalogView catalog={currentCatalog} cartIds={new Set(draft.items.map(i => i.product_id))} manager={isManager} locked={draft.attempted} onAdd={p => { setDraft(d => ({ ...d, items: [...d.items, { product_id: p.product_id, quantity: '1', name: p.name, uom: p.uom }] })); toast('Товар добавлен в корзину'); }} />{isManager && <IncomingManager catalog={currentCatalog} user={user} onSaved={refresh} />}{!isManager && draft.items.length > 0 && <Button variant="primary" onClick={() => setTab('cart')}><ShoppingCart size={17} aria-hidden />Открыть корзину · {draft.items.length}</Button>}</> : catalog.error ? <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} /> : <Skeleton lines={6} />)}
     {tab === 'cart' && <CartView draft={draft} catalog={currentCatalog} partnerName={me?.assignments.find(a => a.role === 'franchisee')?.scope_name ?? me?.user.full_name ?? ''} onChange={setDraft} onSubmit={() => void submit()} busy={busy} error={error} saved={saved} onRequests={() => { setTab('requests'); setSelected(null); void refresh(); }} onNew={() => { setDraft(emptyCart()); setError(null); setTab('catalog'); }} />}
     {(tab === 'requests' || tab === 'demand') && (blocked || (!list.data && list.error) ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : !list.data ? <Skeleton lines={5} /> : <>
       {list.error && <div className="procurement-note warning">Не удалось обновить заявки. Показано последнее состояние.</div>}{list.data.total > list.data.requests.length && <div className="procurement-note">Показаны последние {list.data.requests.length} из {list.data.total} заявок. Более ранняя история сохранена; для её просмотра обратитесь к менеджеру.</div>}
-      {tab === 'demand' ? <DemandView demand={list.data.demand} /> : request ? <RequestDetail key={request.id} request={request} manager={isManager} counterparties={request.counterparties} busy={busy || !navigator.onLine} error={error} onAction={safeAction} onBack={() => { setSelected(null); setError(null); }} onRefresh={() => void refresh()} /> : <RequestList requests={list.data.requests} manager={isManager} onOpen={id => { setSelected(id); setError(null); }} />}
+      {tab === 'demand' ? <DemandView demand={list.data.demand} /> : request ? <RequestDetail key={request.id} request={request} manager={isManager} readOnly={readOnly} counterparties={request.counterparties} busy={busy || !navigator.onLine} error={error} onAction={safeAction} onBack={() => { setSelected(null); setError(null); }} onRefresh={() => void refresh()} /> : <RequestList requests={list.data.requests} manager={isManager} onOpen={id => { setSelected(id); setError(null); }} />}
     </>)}
-    {!isManager && <div className="procurement-catalog-reference"><a href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">Дополнительный каталог плёнок</a><span className="procurement-muted">Наличие и условия для отсутствующих товаров уточняются в заявке.</span></div>}
+    {!isManager && !readOnly && <div className="procurement-catalog-reference"><a href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">Дополнительный каталог плёнок</a><span className="procurement-muted">Наличие и условия для отсутствующих товаров уточняются в заявке.</span></div>}
   </div>;
 }

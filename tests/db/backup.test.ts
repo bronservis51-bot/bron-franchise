@@ -45,6 +45,27 @@ describe('резервная копия и восстановление', () => 
     await src.query(`insert into app_private.partner_launch_task(partner_id,task,completed_by)
       select p.id,'island_brief',u.id from public.partner p, public.app_user u
       where p.code='ALPHA' and u.email='alpha.owner@demo.example.com'`);
+    const leadId = '10000000-0000-0000-0000-000000000086';
+    await src.query(`insert into public.franchise_lead(id,name,phone,phone_digits,contact_via,city,score,tier,status,deleted_at,note,partner_id)
+      select $1,'Проверка связи','+70000000086','70000000086','call','Мурманск',0,'cold','won',now()-interval '1 day','История',id
+      from public.partner where code='ALPHA'`, [leadId]);
+    await src.query(`insert into app_private.lead_recontact(lead_id,received_at,name,phone,city,contact_via)
+      values($1,now(),'Повторное обращение','+70000000086','Мурманск','telegram')`, [leadId]);
+    await src.exec(`update public.location set closed_days='{[2026-03-02,2026-03-05)}' where code='ALPHA-1';
+      insert into app_private.motivation_scheme(partner_id,policy)
+      select id,app_private.motivation_default(currency) from public.partner where code='ALPHA';
+      insert into app_private.team_pay_version(partner_id,effective_from,policy)
+      select partner_id,effective_from,policy from app_private.motivation_scheme cross join (values ('-infinity'::date),(current_date+30)) dates(effective_from);
+      insert into app_private.employee_pay_version(employee_id,effective_from,terms)
+      select user_id,current_date+30,app_private.employee_pay_fields(s) from public.staff_member s limit 1;
+      insert into app_private.employee_daily_exit(employee_id,day,location_id)
+      select user_id,date '2020-01-01',location_ids[1] from public.staff_member limit 1;`);
+    const payState = async (db: typeof src) => (await db.query(`select jsonb_build_object(
+      'team',(select jsonb_agg(to_jsonb(v) order by partner_id,effective_from) from app_private.team_pay_version v),
+      'employee',(select jsonb_agg(to_jsonb(v)-'employee_id'||jsonb_build_object('email',u.email) order by u.email,effective_from)
+        from app_private.employee_pay_version v join public.app_user u on u.id=v.employee_id),
+      'exits',(select jsonb_agg(to_jsonb(v)-'employee_id'||jsonb_build_object('email',u.email) order by u.email,day)
+        from app_private.employee_daily_exit v join public.app_user u on u.id=v.employee_id)) as facts`)).rows[0].facts;
     const dump = await exportData(src);
     // Older private-table backups must receive defaults for columns added later.
     for (const key of ['for_trainees','for_franchisees','stage','position','pass_percent','quiz_size']) delete dump.private_tables.learning_config[0][key];
@@ -55,6 +76,10 @@ describe('резервная копия и восстановление', () => 
     expect(dump.private_tables.procurement_incoming).toHaveLength(1);
     expect(dump.private_tables.revenue_day_off).toHaveLength(1);
     expect(dump.private_tables.partner_launch_task).toHaveLength(1);
+    expect(dump.private_tables.lead_recontact).toHaveLength(1);
+    expect(dump.private_tables.team_pay_version).toHaveLength(2);
+    expect(dump.private_tables.employee_pay_version.length).toBeGreaterThan(1);
+    expect(dump.private_tables.employee_daily_exit.length).toBeGreaterThan(1);
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_account');
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_job');
 
@@ -78,6 +103,12 @@ describe('резервная копия и восстановление', () => 
     expect(restoredDayOff).toEqual({ ...dump.private_tables.revenue_day_off[0], marked_by: restoredOwner });
     const restoredLaunchTask = (await dst.query('select to_jsonb(t) as task from app_private.partner_launch_task t')).rows[0].task;
     expect(restoredLaunchTask).toEqual({ ...dump.private_tables.partner_launch_task[0], completed_by: restoredOwner });
+    expect((await dst.query('select app_private.lead_json($1) as lead', [leadId])).rows[0].lead).toMatchObject({
+      partner_id: dump.tables.franchise_lead[0].partner_id, note: 'История', pending_recontact: true,
+      last_recontact: { name: 'Повторное обращение', contact_via: 'telegram' },
+    });
+    expect((await dst.query(`select closed_days::text days from public.location where code='ALPHA-1'`)).rows[0].days).toBe('{[2026-03-02,2026-03-05)}');
+    expect(await payState(dst)).toEqual(await payState(src));
     expect(restored.id).toBe(request.id);
     expect(restored.items).toEqual(request.items);
     expect(restored.created_by).toBe(restoredOwner);
@@ -108,5 +139,20 @@ describe('резервная копия и восстановление', () => 
     await dst.exec('set role authenticated');
     expect((await dst.query(`select distinct partner_id from public.daily_revenue`)).rows).toHaveLength(1);
     await dst.exec('reset role');
+
+    const historical = structuredClone(dump);
+    for (const name of ['team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact']) delete historical.private_tables[name];
+    for (const shift of historical.tables.work_shift) delete shift.counts_as_exit;
+    await restoreData(dst, historical, { wipe: true });
+    expect((await dst.query(`select effective_from::text,policy from app_private.team_pay_version`)).rows)
+      .toEqual([{ effective_from: '-infinity', policy: historical.private_tables.motivation_scheme[0].policy }]);
+    expect((await dst.query(`select count(*)::int n from public.staff_member s left join app_private.employee_pay_version v
+      on v.employee_id=s.user_id and v.effective_from='-infinity' and v.terms=app_private.employee_pay_fields(s) where v.employee_id is null`)).rows[0].n).toBe(0);
+    expect((await dst.query(`select employee_id,day::text,location_id from app_private.employee_daily_exit order by employee_id,day`)).rows)
+      .toEqual((await dst.query(`select distinct on (employee_id,day) employee_id,day::text,location_id from public.work_shift
+        where status='closed' order by employee_id,day,closed_at,opened_at,id`)).rows);
+    expect((await dst.query('select * from app_private.lead_recontact')).rows).toEqual([]);
+    await src.close();
+    await dst.close();
   }, 240_000);
 });

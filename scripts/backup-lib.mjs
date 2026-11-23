@@ -38,7 +38,8 @@ async function privateTablesInOrder(db) {
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='app_private' and c.relkind='r'
       and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme',
-        'learning_config','learning_task','revenue_day_off','partner_launch_task')
+        'learning_config','learning_task','revenue_day_off','partner_launch_task',
+        'team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact')
         or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid
@@ -122,6 +123,7 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   // Целевая установка очищается (кроме профилей пользователей, созданных заново): справочники тоже берутся из копии
   const wipeList = order.filter((t) => t !== 'app_user').map((t) => `public.${JSON.stringify(t)}`).join(', ');
   const privateOrder = await privateTablesInOrder(db);
+  const privateDump = dump.private_tables ?? {};
   const privateWipe = privateOrder.map(t => `app_private.${JSON.stringify(t)}`).join(', ');
   await db.query(`truncate table ${privateWipe}, ${wipeList} restart identity`);
   // Ссылка откладывается, если указывает на эту же или ещё не восстановленную таблицу (цикл)
@@ -178,7 +180,7 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
   }
   for (const name of privateOrder) {
     const cols = (await columns(db, `app_private.${name}`)).filter(c => !c.generated);
-    for (const row of dump.private_tables?.[name] ?? []) {
+    for (const row of privateDump[name] ?? []) {
       const rowCols = cols.filter(c => Object.hasOwn(row,c.name));
       const values = rowCols.map(c => {
         let v = row[c.name] ?? null;
@@ -194,6 +196,22 @@ export async function restoreData(db, dump, { log = () => {}, wipe = false } = {
         coalesce((select max(${JSON.stringify(c.name)}) from app_private.${name}), 1),
         exists(select 1 from app_private.${name}))`);
     }
+  }
+  // Older exports predate pay timelines and the per-day guarantee reservation.
+  // Rebuild their baselines from restored rows without rewriting accepted shifts.
+  const missingHistory = name => privateOrder.includes(name) && !Object.hasOwn(privateDump, name);
+  if (missingHistory('team_pay_version')) {
+    await db.query(`insert into app_private.team_pay_version(partner_id,effective_from,policy)
+      select partner_id,'-infinity',policy from app_private.motivation_scheme`);
+  }
+  if (missingHistory('employee_pay_version')) {
+    await db.query(`insert into app_private.employee_pay_version(employee_id,effective_from,terms)
+      select s.user_id,'-infinity',app_private.employee_pay_fields(s) from public.staff_member s`);
+  }
+  if (missingHistory('employee_daily_exit')) {
+    await db.query(`insert into app_private.employee_daily_exit(employee_id,day,location_id)
+      select distinct on (employee_id,day) employee_id,day,location_id from public.work_shift where status='closed'
+      order by employee_id,day,counts_as_exit desc,closed_at,opened_at,id`);
   }
   return inserted;
 }

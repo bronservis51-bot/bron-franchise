@@ -40,6 +40,27 @@ it('failed attempt permits immediate reread/retry; partial pass repeats sooner',
   expect(result.interval_days).toBe(days);expect(result.passed).toBe(wrong===1);
  }
 });
+it('reports the recorded verdict and threshold, preserving legacy scores without a threshold', async () => {
+ const article = articles[0];
+ const [attempt] = await t.as<{ task: { id: string } }>(STAFF, 'select learning_start($1) task', [article.id]);
+ await t.as(STAFF, 'select learning_attempt_read($1)', [attempt.task.id]);
+ await t.as(STAFF, 'select learning_attempt_submit($1,$2)', [attempt.task.id, JSON.stringify(bank.map((_, i) => i === 0 ? 1 : 0))]);
+ await t.admin('update app_private.learning_config set pass_percent=100 where article_id=$1', [article.id]);
+ try {
+  await t.admin(`insert into app_private.learning_task(user_id,partner_id,day,article_id,revision_id,title,questions,read_at,completed_at,score)
+   values($1,$2,current_date,$3,$4,'Старый урок без порога',$5,now(),now(),1)`,
+   [uid,p,article.id,article.revision,JSON.stringify(bank)]);
+  const [{ report }] = await t.as<{ report: {article_title: string; score: number; passed?: boolean; pass_percent?: number}[] }>(
+   OWNER, 'select learning_report($1,current_date) report', [p]);
+  expect(report.find(row => row.score === 11)).toMatchObject({ passed: true, pass_percent: 80 });
+  const legacy = report.find(row => row.article_title === 'Старый урок без порога');
+  expect(legacy?.score).toBe(1);
+  expect(legacy?.passed).toBeNull();
+  expect(legacy?.pass_percent).toBeNull();
+ } finally {
+  await t.admin('update app_private.learning_config set pass_percent=80 where article_id=$1', [article.id]);
+ }
+});
 it('local questions are scoped, version checked and corporate content stays intact',async()=>{
  const a=articles[0];
  await t.as(OWNER,'select learning_lesson_save($1,$2,$3,$4,0)',[a.id,p,a.revision,JSON.stringify({enabled:true,questions:bank})]);
@@ -121,4 +142,68 @@ it('requires a fresh pass after a lesson revision is published and approved for 
  expect(overview.items[0]).toMatchObject({article_id:article,revision_id:revised,completed:false,percent:null,due:null,active:false});
  const repeatedResult = (await t.as<{j:unknown}>(seller, "select learning_attempt_submit($1,'[0]') j", [attempt]))[0].j;
  expect(repeatedResult).toEqual(result);
+});
+
+it('hands off obsolete attempts after publication and keeps their history distinct from grades', async () => {
+ const seller = '79000000011@staff.bron.local';
+ const title = 'Передача попытки на новую редакцию';
+ const [section] = await t.admin<{id: string}>('select id from kb_section where parent_id is null limit 1');
+ const [{ j: {article_id: article} }] = await t.as<{j:{article_id:string}}>(FM, "select article_create($1,'article',$2) j", [section.id,title]);
+ const settings = JSON.stringify({for_sales:true,stage:'Практика',position:1,pass_percent:80,quiz_size:0,questions:bank.slice(0,1)});
+ const publish = async (body: string) => {
+  await t.as(FM,'select article_save_draft($1,$2,null,$3)',[article,title,body]);
+  return (await t.as<{j:{revision_id:string}}>(FM,'select article_publish($1) j',[article]))[0].j.revision_id;
+ };
+ const original = await publish('Действует исходная инструкция.');
+ await t.as(FM,'select learning_lesson_save($1,null,$2,$3,0)',[article,original,settings]);
+ const old = (await t.as<{j:{id:string}}>(seller,'select learning_start($1) j',[article]))[0].j.id;
+ await t.as(seller,'select learning_attempt_read($1)',[old]);
+ const revised = await publish('Действует изменённая инструкция.');
+ await t.expectError(seller,"select learning_attempt_submit($1,'[0]')",'version-conflict',[old]);
+ await t.expectError(seller,'select learning_start($1)','not-found',[article]);
+ const report = async () => (await t.as<{j:{article_id:string;superseded?:boolean;score:number|null;material_current?:boolean}[]}>(
+  OWNER,'select learning_report($1,current_date) j',[p]))[0].j.filter(row => row.article_id === article);
+ expect(await report()).toEqual([expect.objectContaining({score:null,superseded:true,material_current:false})]);
+ await t.as(FM,'select learning_lesson_save($1,null,$2,$3,1)',[article,revised,settings]);
+ const next = (await t.as<{j:{id:string;revision_id:string}}>(seller,'select learning_start($1) j',[article]))[0].j;
+ expect(next.id).not.toBe(old);
+ expect(next.revision_id).toBe(revised);
+ await t.expectError(seller,"select learning_attempt_submit($1,'[0]')",'version-conflict',[old]);
+ await t.as(seller,'select learning_attempt_read($1)',[next.id]);
+ await t.as(seller,"select learning_attempt_submit($1,'[0]')",[next.id]);
+ expect(await report()).toEqual(expect.arrayContaining([expect.objectContaining({score:1,superseded:false,material_current:true}),
+  expect.objectContaining({score:null,superseded:true,material_current:false})]));
+});
+
+it('resumes only an assigned attempt after reactivation and preserves its questions and passing score', async () => {
+ const article = articles[1];
+ const login = 'handoff.learner';
+ const learner = login+'@access.bron.local';
+ const [{ id: user }] = await t.as<{id:string}>(OWNER,
+  "select staff_account_create($1,'Ученик для передачи',$2,'test-only-password',array[$3::uuid],false) id",[p,login,loc]);
+ const save = async (threshold: number, questions: typeof bank) => {
+  const [{j: {version}}] = await t.as<{j:{version:number}}>(FM,'select learning_lesson_get($1,null) j',[article.id]);
+  await t.as(FM,'select learning_lesson_save($1,null,$2,$3,$4)',[article.id,article.revision,
+   JSON.stringify({for_sales:true,for_trainees:false,for_managers:false,stage:'Практика',position:2,pass_percent:threshold,quiz_size:0,questions}),version]);
+ };
+ await save(80,bank);
+ const start = async () => (await t.as<{j:{id:string;pass_percent:number;questions:unknown[]}}>(learner,'select learning_start($1) j',[article.id]))[0].j;
+ const attempt = await start();
+ await t.as(learner,'select learning_attempt_read($1)',[attempt.id]);
+ await save(100,bank.slice(0,1));
+ await t.as(OWNER,"select staff_onboarding_set($1,'{\"employee_kind\":\"trainee\",\"learning_enabled\":true}')",[user]);
+ await t.expectError(learner,'select learning_start($1)','not-found',[article.id]);
+ const answers = JSON.stringify(bank.map((_,i)=>i === 0 ? 1 : 0));
+ await t.expectError(learner,'select learning_attempt_submit($1,$2)','version-conflict',[attempt.id,answers]);
+ await t.as(OWNER,'select staff_set_active($1,false)',[user]);
+ await expect(t.as(learner,'select learning_attempt_read($1)',[attempt.id])).rejects.toThrow();
+ await t.as(OWNER,'select staff_set_active($1,true)',[user]);
+ await t.expectError(learner,'select learning_start($1)','not-found',[article.id]);
+ await t.as(OWNER,"select staff_onboarding_set($1,'{\"employee_kind\":\"employee\",\"learning_enabled\":true}')",[user]);
+ expect(await start()).toMatchObject({id:attempt.id,pass_percent:80,questions:attempt.questions});
+ const [{j: result}] = await t.as<{j:{passed:boolean;percent:number}}>(learner,'select learning_attempt_submit($1,$2) j',[attempt.id,answers]);
+ expect(result).toMatchObject({passed:true,percent:91});
+ const next = await start();
+ expect(next.pass_percent).toBe(100);
+ expect(next.questions).toHaveLength(1);
 });

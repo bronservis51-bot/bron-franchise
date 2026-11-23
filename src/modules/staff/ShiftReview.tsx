@@ -16,7 +16,12 @@ export function ShiftReview({partner}:{partner:string}){
  const qc=useQueryClient();const [selected,setSelected]=useState<OpenShift|null>(null);
  const q=useOpenShifts(partner);
  return <><DataState query={q}>{list=>list.length>0&&<Card title="Незакрытые смены"><div className="stack">{list.map(s=><div className="access-row row between" key={s.id}><div><strong>{s.user_name} · {dayLabel(s.day)}</strong><p className="faint">{s.location_name}{s.day<s.today?' · прошлая дата — нужна проверка':''}</p></div>{s.can_resolve&&<Button onClick={()=>setSelected(s)}>Разобрать</Button>}</div>)}</div></Card>}</DataState>
- {selected&&<Resolve shift={selected} onClose={()=>setSelected(null)} onDone={()=>{setSelected(null);void qc.invalidateQueries({queryKey:['staff']});void qc.invalidateQueries({queryKey:['staff-list']});void qc.invalidateQueries({queryKey:['revenue']});void qc.invalidateQueries({queryKey:['finance']});}}/>}
+ {selected&&<Resolve shift={selected} onClose={()=>setSelected(null)} onDone={()=>{
+   setSelected(null);
+   for (const name of ['staff', 'staff-list', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
+     void qc.invalidateQueries({queryKey:[name]});
+   }
+ }}/>}
  </>;
 }
 function Resolve({shift:s,onClose,onDone}:{shift:OpenShift;onClose:()=>void;onDone:()=>void}){

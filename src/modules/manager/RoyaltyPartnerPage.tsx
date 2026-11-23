@@ -67,7 +67,7 @@ export function RoyaltyPartnerPage() {
               <Card title="По месяцам" bodyless>
                 <div className="table-wrap" role="region" aria-label="Роялти франчайзи по месяцам" tabIndex={0}>
                   <table className="table">
-                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
+                    <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
                     <tbody>
                       {r.months.map((m) => (
                         <tr key={m.month}>
@@ -75,7 +75,8 @@ export function RoyaltyPartnerPage() {
                           <td className="r num">{formatMoneyShort(m.revenue_minor, r.currency)}</td>
                           <td className="r">{pct(m.rate_bp)}</td>
                           <td className="r num">{formatMoneyShort(m.accrued_minor, r.currency)}</td>
-                          <td className="r num">{m.manual_minor ? formatMoneyShort(m.manual_minor, r.currency) : '—'}</td>
+                          <td className="r num">{(m.correction_minor ?? m.manual_minor) ? formatMoneyShort(m.correction_minor ?? m.manual_minor, r.currency) : '—'}</td>
+                          <td className="r num">{m.past_debt_minor ? formatMoneyShort(m.past_debt_minor, r.currency) : '—'}</td>
                           <td className="r num">{formatMoneyShort(m.paid_minor, r.currency)}</td>
                           <td className={`r num${m.debt_minor > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={r.currency} short strong />}</td>
                           <td className="r"><span className="table-actions">

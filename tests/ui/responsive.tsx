@@ -2,6 +2,7 @@
 import { createRoot } from 'react-dom/client';
 import { startViewport } from '../../src/platform/viewport';
 import { App } from '../../src/app/App';
+import { markFirstRunGuideSeen } from '../../src/app/FirstRunGuide';
 import '../../src/ui/styles.css';
 import { procurementFixture } from './procurement-fixture';
 import {createShiftFixture} from './shift-fixture';
@@ -12,8 +13,13 @@ import { opQueue } from '../../src/platform/offline';
 
 const uid = '00000000-0000-4000-8000-000000000001';
 const qaParams = new URLSearchParams(window.location.search);
+if (qaParams.get('guide') !== 'show') {
+  for (const role of ['manager', 'franchisee', 'team', 'staff', 'support'] as const) markFirstRunGuideSeen(uid, role);
+}
 const launchRequest = qaParams.get('launch');
-let launchStage = launchRequest === 'contract_signed' || launchRequest === 'location_search' || launchRequest === 'opening_preparation' ? launchRequest : null;
+const lifecycle = qaParams.get('lifecycle');
+const launchCycle = lifecycle === 'reopened' ? 1 : 0;
+let launchStage = launchRequest === 'contract_signed' || launchRequest === 'location_search' || launchRequest === 'opening_preparation' ? launchRequest : launchCycle ? 'opening_preparation' : null;
 const launchDone = new Set<string>();
 if (!crypto.randomUUID) crypto.randomUUID = () => `00000000-0000-4000-8000-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`;
 const user = { id: uid, aud: 'authenticated', role: 'authenticated', email: 'qa@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
@@ -24,7 +30,7 @@ const authSession = { access_token: token, refresh_token: 'synthetic-qa-only', t
 localStorage.removeItem('bron.remember-device');
 if (qaParams.get('login') === 'fresh') sessionStorage.removeItem('bron.auth');
 else sessionStorage.setItem('bron.auth', JSON.stringify(authSession));
-const partner = { id: 'qa-partner', name: 'Франчайзи с очень длинным названием города и несколькими торговыми точками', country: 'RU', currency: 'RUB', status: 'active', preparation_stage: launchStage ?? 'opening_preparation', contact_name: 'Вымышленный владелец', contact_phone: null, contact_email: 'long-contact-address-for-responsive-test@example.invalid', order_url: null };
+const partner = { id: 'qa-partner', name: 'Франчайзи с очень длинным названием города и несколькими торговыми точками', country: 'RU', currency: 'RUB', status: lifecycle === 'suspended' || lifecycle === 'terminated' ? lifecycle : 'active', preparation_stage: launchStage ?? 'opening_preparation', contact_name: 'Вымышленный владелец', contact_phone: null, contact_email: 'long-contact-address-for-responsive-test@example.invalid', order_url: null };
 const location = { id: 'qa-location', name: 'Торговый центр с очень длинным названием', partner_id: partner.id, city: 'Вымышленный город', currency: 'RUB', status: 'active', opened_on: null, address: null };
 const teamLocation = {...location,id:'qa-location-rotation',name:'Вторая точка для подмен и ротации с очень длинным названием'};
 const section = { id: 'qa-section', slug: 'qa-section', title: 'Гарантии и жалобы', description: 'Что делать, если клиент недоволен', icon: 'shield', sort: 10, parent_id: null, count: 3 };
@@ -45,12 +51,17 @@ const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
   last_payment_on: '2026-11-02', fx_rub: 1,
 }));
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
+const oldMonth = '2026-10-01';
+const historic = { ...detail, month: oldMonth, status: 'closed', days_in_month: 31, missing_days: [], fact_minor: 15000, editable_days: ['2026-10-31'],
+  days: [{ day: '2026-10-31', total_minor: 15000, comment: 'Историческая выручка', entries: [] }] };
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.write', 'royalty.read', 'royalty.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }] };
 const leadFixture=createLeadFixture(qaParams);
 if (qaParams.get('theme') === 'light' || qaParams.get('theme') === 'dark') document.documentElement.dataset.theme = qaParams.get('theme')!;
 if (qaParams.get('role') === 'franchisee') {
-  me.assignments = [{ id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] }];
+  const owner = { id: 'qa-owner', role: 'franchisee', role_name: 'Франчайзи', scope_type: 'partner', scope_id: partner.id, scope_name: partner.name, permissions: ['kb.read', 'revenue.read', 'revenue.write', 'staff.manage', 'team.manage', 'rating.read', 'finance.read'] };
+  me.assignments = [owner];
+  if (lifecycle === 'legacy') me.assignments.push({ ...owner, id: 'qa-legacy-owner', scope_id: 'legacy-partner' });
 }
 const originalFetch = window.fetch;
 if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
@@ -79,8 +90,9 @@ window.fetch = async (input, init) => {
   const knowledgeResponse = knowledgeFixture(url, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
   if (knowledgeResponse) return knowledgeResponse;
   if (url.pathname.includes('/rpc/')) {
-    if (name === 'partner_launch_get') return Response.json(launchStage ? { stage: launchStage, completed_task_ids: [...launchDone] } : null);
-    if (name === 'partner_launch_task_set') {
+    const launchAnswer = () => ({ stage: launchStage, completed_task_ids: [...launchDone], ...(launchCycle ? { cycle: launchCycle } : {}) });
+    if (name === 'partner_launch_get') return Response.json(launchStage ? launchAnswer() : null);
+    if (name === 'partner_launch_task_set' || name === 'partner_launch_task_set_checked') {
       const save = qaParams.get('launch-save');
       if (save === 'offline') throw new TypeError('Failed to fetch');
       if (save === 'stale') {
@@ -90,7 +102,7 @@ window.fetch = async (input, init) => {
       if (save === 'error') return Response.json({ message: 'validation', details: 'Не удалось сохранить отметку' }, { status: 400 });
       const task = JSON.parse(String(init?.body));
       if (task.p_completed) launchDone.add(task.p_task); else launchDone.delete(task.p_task);
-      return Response.json({ stage: launchStage, completed_task_ids: [...launchDone] });
+      return Response.json(launchAnswer());
     }
     const leadResponse=leadFixture(name??'',init?.body?JSON.parse(String(init.body)):{});if(leadResponse)return leadResponse;
     const procurementResponse = procurementFixture(name, init?.body ? JSON.parse(String(init.body)) : {}, qaParams);
@@ -101,6 +113,7 @@ window.fetch = async (input, init) => {
     const learningResponse=learningFixture(name,init?.body?JSON.parse(String(init.body)):{},qaParams);
     if(learningResponse)return learningResponse;
     const answers: Record<string, unknown> = {
+      manager_partner_status: [{ partner_id: partner.id, working: !launchStage, owner_access: 'granted' }],
       support_accounts:[],learning_config_get:{for_managers:false,for_sales:false,questions:[],version:0},
       motivation_get:{version:0,policy:qaPolicy,currency:'RUB'},learning_report:[],learning_today:{day:'2026-11-09',items:qaParams.get('learning')==='empty'?[]:[qaTask]},
       staff_home:{month,currency:'RUB',partner_name:partner.name,rate_bp:0,shift_fee_minor:0,pay_policy:qaPolicy,use_partner_motivation:true,open_shift:null,locations:[{location_id:location.id,location_name:location.name,currency:'RUB',today:'2026-11-09',my_today:null}],month_earned_minor:0,month_revenue_minor:0,month_shifts:0,shifts:[]},
@@ -127,6 +140,11 @@ window.fetch = async (input, init) => {
     };
     if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
     if (name === 'manager_supply_snapshot' && qaParams.get('supply') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой МойСклад' }, { status: 503 });
+    if (lifecycle && (name === 'revenue_month' || name === 'revenue_overview')) {
+      const selected = JSON.parse(String(init?.body)).p_month;
+      if (name === 'revenue_month') return Response.json(selected === oldMonth ? historic : detail);
+      return Response.json({ ...answers.revenue_overview as object, month: selected, rows: selected === oldMonth ? [historic] : [] });
+    }
     if (name && name in answers) return Response.json(answers[name]);
     console.warn('Missing QA response', name);
     return Response.json({ message: 'not-found', details: `Нет тестовых данных для ${name}` }, { status: 400 });

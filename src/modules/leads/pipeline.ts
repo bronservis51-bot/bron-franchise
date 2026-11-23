@@ -1,4 +1,5 @@
 import type { Lead, LeadStatus } from './api';
+import { canonicalLeadPhone } from './contact';
 
 export type Readiness = { money: boolean; place: boolean; now: boolean };
 export type PipelineColumn = { id: string; title: string; hint: string; factors?: Readiness; status?: LeadStatus };
@@ -32,12 +33,12 @@ export function columnFor(lead: Pick<Lead, 'budget' | 'place' | 'timing' | 'stat
 }
 export function groupLeads(leads: Lead[], search: string, onlyNew: boolean) {
   const query = search.trim().toLocaleLowerCase('ru');
+  const digits = /^[\d\s+().-]+$/.test(query) ? canonicalLeadPhone(query) : '';
   const groups = new Map(COLUMNS.map(c => [c.id, [] as Lead[]]));
   for (const lead of leads) {
     if (onlyNew && lead.status !== 'new') continue;
     const text = `${lead.name} ${lead.instagram ?? ''} ${lead.city} ${lead.phone}`.toLocaleLowerCase('ru');
-    const digits = query.replace(/\D/g, '');
-    if (query && !text.includes(query) && !(digits.length >= 3 && /^[\d\s+()-]+$/.test(query) && lead.phone.replace(/\D/g, '').includes(digits))) continue;
+    if (query && !text.includes(query) && !(digits.length >= 3 && canonicalLeadPhone(lead.phone).includes(digits))) continue;
     groups.get(columnFor(lead))!.push(lead);
   }
   for (const list of groups.values()) list.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));

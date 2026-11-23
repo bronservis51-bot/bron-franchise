@@ -1,0 +1,33 @@
+.help-tip {
+  display: inline-flex;
+  flex: none;
+  vertical-align: middle;
+}
+
+.help-tip-trigger {
+  width: var(--touch);
+  height: var(--touch);
+}
+
+.help-tip-popover {
+  position: fixed;
+  inset: auto;
+  z-index: 60;
+  width: max-content;
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-s);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: start;
+  white-space: normal;
+}
+
+.help-tip-popover[hidden] { display: none; }

@@ -1,14 +1,17 @@
 import type { PayPolicy, ShiftPolicy } from './Motivation';
-import { command } from '../../platform/backend';
+import { captureSession, command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
-export interface Shift { revision: number; id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
-  pay_policy?: ShiftPolicy | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
+export interface Shift { counts_as_exit?: boolean; revision: number; id: string; location_id: string; location_name?: string; day: string; status: 'open' | 'closed'; opened_at: string; closed_at: string | null;
+  pay_policy?: ShiftPolicy | null; cash_minor: number; card_minor: number; total_minor: number; return_minor?: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
 export interface StaffHomeData {
   pay_policy?: ShiftPolicy | null; use_partner_motivation?: boolean; month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
+  today?: string;
   open_shift: (Shift & { location_name: string; currency: string }) | null;
   locations: { location_id: string; location_name: string; currency: string; today: string;
+    missing_count?: number; missing_periods?: { from: string; until: string }[]; recent_corrections?: Shift[];
+    opened_on?: string | null; awaiting_opening_date?: boolean; days_off?: string[];
     my_today: Shift | null; my_yesterday?: Shift | null; pay_today?: ShiftPolicy; pay_yesterday?: ShiftPolicy }[];
   month_earned_minor: number; month_revenue_minor: number; month_shifts: number;
   shifts: Shift[];
@@ -17,16 +20,26 @@ export type StaffPosition = 'trainee' | 'sales_manager' | 'manager';
 export interface StaffAccess { view_staff: boolean; create_staff: boolean; procurement: boolean }
 export type CustomShiftPay = PayPolicy & { name: string };
 
+export interface PayrollShift {
+  counts_as_exit?: boolean;
+  id: string; day: string; location_name: string; timezone?: string; total_minor: number; earned_minor: number;
+  opened_at: string; closed_at: string; submitted_without_open?: boolean;
+  cash_minor: number; card_minor: number; return_minor?: number; revision: number; can_correct?: boolean;
+}
+
 export interface StaffRow {
+  pay_revision?: number; pay_effective_from?: string | null;
+  pay_scheduled?: { effective_from: string; label: string }[]; pay_policy?: ShiftPolicy | null;
   can_manage?: boolean; is_manager?: boolean;
   position?: StaffPosition;
-  access?: StaffAccess;
+  access?: StaffAccess & { legacy_staff_management?: boolean };
   custom_pay?: CustomShiftPay | null;
   employee_kind?: 'employee'|'trainee'; internship_from?:string|null; internship_until?:string|null; internship_floor_minor?:number; learning_enabled?:boolean;
+  internship_completed?: boolean | null;
   user_id: string; full_name: string; phone: string; active: boolean; use_partner_motivation?: boolean; location_ids: string[]; location_names: string[];
   rate_bp: number; shift_fee_minor: number; open_shift: { id: string; location_name: string; opened_at: string } | null;
   month_shifts: number; month_revenue_minor: number; month_earned_minor: number;
-  shifts: { id: string; day: string; location_name: string; total_minor: number; earned_minor: number; opened_at: string; closed_at: string }[];
+  shifts: PayrollShift[];
 }
 export interface CloseResult { shift: Shift; month_earned_minor: number; month_shifts: number; currency: string }
 
@@ -45,6 +58,14 @@ export const shiftClose = async (userId: string, shift: string, cash: string, ca
   receipt.complete();
   return result;
 };
+export async function staffShiftCorrect(userId: string, shift: PayrollShift, cash: string, card: string, reason: string) {
+  const args = { shift: shift.id, cash, card, expected_revision: shift.revision, reason: reason.trim() };
+  const actor = await captureSession(userId);
+  const receipt = await operationKey(userId, 'staff_shift_correct', args);
+  await command('staff_shift_correct', { ...args, operation: receipt.id }, { accessToken: actor.access_token });
+  receipt.complete();
+}
+
 export const shiftCancel = (shift: string) => command('shift_cancel', { shift });
 
 export const staffList = (partner: string, month: string) => command<StaffRow[]>('staff_list', { partner, month });

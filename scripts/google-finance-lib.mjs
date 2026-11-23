@@ -5,7 +5,7 @@ const OWNER = 'bron-finance-export';
 const TYPES = {
   plan: 'План', revenue: 'Выручка', day_off: 'Выходной', payroll: 'Зарплата',
   expense: 'Расход', royalty: 'Роялти по ставке', royalty_adjustment: 'Корректировка роялти',
-  royalty_payment: 'Оплата роялти',
+  royalty_payment: 'Оплата роялти', royalty_past_debt: 'Прошлый долг по роялти', return: 'Возврат покупателю',
 };
 
 export function validateReportBooks(books) {
@@ -57,9 +57,10 @@ function monthRows(records) {
   return [...groups.values()].map(({ row, totals }) => {
     const amount = (key) => amountCell(totals.get(key), row.minor_unit);
     const sum = (key) => totals.get(key) ?? 0n;
-    const net = totals.has('revenue') ? sum('revenue') - sum('payroll') - sum('expense') - sum('royalty') : null;
+    const net = totals.has('revenue') ? sum('revenue') - sum('return') - sum('payroll') - sum('expense') - sum('royalty') : null;
     return [row.month.slice(0, 7), row.partner, row.currency, amount('plan'), amount('revenue'), amount('payroll'),
-      amount('expense'), amount('royalty'), amount('royalty_adjustment'), amount('royalty_payment'), amountCell(net, row.minor_unit)];
+      amount('expense'), amount('royalty'), amount('royalty_adjustment'), amount('royalty_payment'), amountCell(net, row.minor_unit),
+      amount('return'), amount('royalty_past_debt')];
   });
 }
 
@@ -86,7 +87,7 @@ export function buildGoogleReports(books, records, observedAt) {
           ['Обновлено из кабинета', observedAt],
           ['Периоды календарные. Остаток рассчитан по внесённым данным. Оплаты показаны отдельно.'],
           ['Месяц', 'Партнёр', 'Валюта', 'Планы по внесённым точкам', 'Выручка', 'Зарплата', 'Прочие расходы', 'Роялти по ставке',
-            'Корректировки роялти', 'Оплаты роялти по месяцу начисления', 'Остаток по внесённым данным'],
+            'Корректировки роялти', 'Оплаты роялти по месяцу начисления', 'Остаток по внесённым данным', 'Возвраты покупателям', 'Прошлый долг по роялти'],
           ...monthRows(recordsForBook),
         ],
       }, {

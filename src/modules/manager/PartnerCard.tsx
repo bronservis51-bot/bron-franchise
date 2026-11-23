@@ -8,7 +8,7 @@ import { formatDate } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, KV, MoneyInput, Select, Textarea } from '../../ui';
 import { useToast } from '../../ui/toast';
-import type { Partner } from './api';
+import type { Location, Partner } from './api';
 
 export interface Profile {
   owner_name: string | null; phone2: string | null; telegram: string | null; whatsapp: string | null; contact_notes: string | null;
@@ -219,7 +219,7 @@ function OrderLinkCard({ partnerId, url }: { partnerId: string; url: string | nu
 }
 
 /** Правая колонка карточки франчайзи: данные, договор, точки, документы. */
-export function PartnerCardPanel({ partner }: { partner: Partner }) {
+export function PartnerCardPanel({ partner, locations }: { partner: Partner; locations: Location[] }) {
   const [edit, setEdit] = useState(false);
   const q = useQuery({ queryKey: ['partner-card', partner.id], queryFn: () => partnerCard(partner.id) });
   return (
@@ -228,6 +228,13 @@ export function PartnerCardPanel({ partner }: { partner: Partner }) {
         const p = c.profile;
         const until = p?.contract_until ? daysTo(p.contract_until) : null;
         const cur = partner.currency;
+        const now = new Date();
+        const todayByLocation = new Map(locations.map(l => [l.id, now.toLocaleDateString('sv-SE', { timeZone: l.timezone })]));
+        const firstOpening = c.locations.flatMap(l => {
+          const day = l.opened_on ?? l.first_day;
+          const today = todayByLocation.get(l.id);
+          return day && today && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= today ? [day] : [];
+        }).sort()[0];
         return (
           <div className="stack">
             {until !== null && until <= 60 && (
@@ -238,16 +245,17 @@ export function PartnerCardPanel({ partner }: { partner: Partner }) {
             )}
             <Card title="Карточка франчайзи" actions={<Button size="sm" onClick={() => setEdit(true)}><Edit3 size={15} aria-hidden />{p ? 'Изменить' : 'Заполнить'}</Button>}>
               <KV items={[
-                ['Работает с', or(c.stats.opened_on ? `${formatDate(c.stats.opened_on)} · ${since(c.stats.opened_on)}` : null)],
+                ...(firstOpening ? [['Первое открытие', `${formatDate(firstOpening)} · ${since(firstOpening)} назад`] as [string, ReactNode]] : []),
                 ['Выручка за 12 мес.', formatMoneyShort(c.stats.revenue_12m_minor, cur)],
                 ['Роялти', `${(c.stats.rate_bp / 100).toLocaleString('ru-RU')} %`],
-                ['Вход в кабинет', c.stats.users ? `${c.stats.users} чел.` : <span className="faint">не выдан</span>],
                 ['Сотрудников', String(c.stats.staff)],
               ]} />
               <h3 className="section-title" style={{ marginTop: 14 }}>Владелец и связь</h3>
               <KV items={[
                 ['Владелец', or(p?.owner_name ?? partner.contact_name)],
                 ['Телефон', or(partner.contact_phone && <a href={`tel:${partner.contact_phone}`}>{partner.contact_phone}</a>)],
+                ...(c.partner.contact_city ? [['Город', c.partner.contact_city] as [string, ReactNode]] : []),
+                ...(c.partner.contact_instagram ? [['Instagram', <a key="instagram" href={`https://www.instagram.com/${c.partner.contact_instagram}/`} target="_blank" rel="noopener noreferrer">@{c.partner.contact_instagram}</a>] as [string, ReactNode]] : []),
                 ...(p?.phone2 ? [['Второй телефон', <a key="p2" href={`tel:${p.phone2}`}>{p.phone2}</a>] as [string, ReactNode]] : []),
                 ['Email', or(partner.contact_email && <a href={`mailto:${partner.contact_email}`}>{partner.contact_email}</a>)],
                 ['Telegram', or(p?.telegram)], ['WhatsApp', or(p?.whatsapp)],
@@ -271,13 +279,19 @@ export function PartnerCardPanel({ partner }: { partner: Partner }) {
               {p && <p className="faint" style={{ marginTop: 10 }}>Обновлено {formatDate(p.updated_at)}{c.updated_by_name ? ` · ${c.updated_by_name}` : ''}</p>}
             </Card>
             <Card title="Точки">
-              {c.locations.map((l) => (
-                <div key={l.id} className="access-row">
-                  <strong>{l.name}</strong>{l.status !== 'active' && <span className="faint"> · закрыта</span>}
+              {c.locations.map(l => {
+                const today = todayByLocation.get(l.id);
+                const date = l.opened_on && /^\d{4}-\d{2}-\d{2}$/.test(l.opened_on) ? l.opened_on : null;
+                const scheduled = l.status === 'active' && date && today && date > today;
+                return <div key={l.id} className="access-row">
+                  <strong>{l.name}</strong>{l.status === 'closed' && <span className="faint"> · Закрыта</span>}
                   <span className="faint" style={{ display: 'block' }}>{[l.city, l.address].filter(Boolean).join(', ')}</span>
-                  <span className="faint" style={{ display: 'block' }}>открыта {l.opened_on ? formatDate(l.opened_on) : '—'}{l.last_day ? ` · последняя выручка ${formatDate(l.last_day)}` : ' · выручки ещё нет'}</span>
-                </div>
-              ))}
+                  <span className="faint" style={{ display: 'block' }}>
+                    {date ? `${scheduled ? 'Открытие запланировано на' : 'Дата открытия'} ${formatDate(date)}` : 'Дата открытия не указана'}
+                    {l.last_day ? ` · последняя выручка ${formatDate(l.last_day)}` : ' · выручки ещё нет'}
+                  </span>
+                </div>;
+              })}
             </Card>
             <OrderLinkCard partnerId={partner.id} url={c.partner.order_url} />
             <DocumentsCard partnerId={partner.id} docs={c.documents} />

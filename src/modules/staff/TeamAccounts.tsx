@@ -8,6 +8,7 @@ import { Button, Card, Checkbox, ConfirmDialog, DataState, EmptyState, Field, In
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { MonthlyDetails, StaffHome } from './StaffHome';
 import { MonthNav } from '../revenue/components';
+import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards } from '../revenue/partnerLifecycle';
 import { formatPhone, randomPassword, staffList, userSetPassword } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
@@ -15,16 +16,23 @@ import { NewAccountCredentials } from './NewAccountCredentials';
 
 type Team = { user_id: string; full_name: string; phone: string; active: boolean; location_ids: string[]; location_names: string[] };
 type TeamAction = 'new' | 'assign' | { type: 'password' | 'active'; user: Team } | {type:'scope';user:Team};
-type RevenuePoint = {location_id:string; location_name:string; currency:string; total_minor:number; days:{day:string;total_minor:number}[]};
+type RevenuePoint = {location_id:string; location_name:string; currency:string; total_minor:number; missing_days?:string[];
+  days:{day:string;total_minor:number;return_minor?:number}[]};
 
 export function ownedTeamPartner(me: Me | null) {
-  return me?.assignments.find((assignment) => assignment.role === 'franchisee' && assignment.scope_type === 'partner'
-    && assignment.permissions.includes('team.manage'))?.scope_id;
+  const cards = franchiseePartnerCards(me);
+  if (cards.length !== 1) return;
+  return me?.assignments.find(assignment => assignment.role === 'franchisee' && assignment.scope_type === 'partner'
+    && assignment.scope_id === cards[0] && assignment.permissions.includes('team.manage'))?.scope_id;
 }
 
 export function TeamAccessPage() {
   const { me } = useSession();
   const partner = ownedTeamPartner(me);
+  if (franchiseePartnerCards(me).length > 1) return <>
+    <PageHeader title="Управляющие" />
+    <EmptyState title="Уточните доступ к карточке франчайзи" text={FRANCHISEE_CARD_AMBIGUITY} />
+  </>;
   if (!partner) return <Navigate to="/" replace />;
   return <>
     <PageHeader title="Управляющие" />
@@ -41,20 +49,27 @@ export function TeamHome() {
     <PageHeader title="Главная" />
     {partner && <Card title="Итоги месяца" className="team-monthly">
       <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-      <TeamRevenue partner={partner} month={month} />
+      <TeamRevenue partner={partner} month={month} showMissing />
     </Card>}
   </div>;
 }
-function TeamRevenue({ partner, month }: { partner: string; month: string }) {
+function TeamRevenue({ partner, month, showMissing }: { partner: string; month: string; showMissing?: boolean }) {
   const q = useQuery({ queryKey: ['team-revenue', partner, month], queryFn: () => command<RevenuePoint[]>('team_revenue_month', { partner, month }) });
   return <section className="team-point-revenue">
     <h3>Выручка моих точек</h3>
     <DataState query={q}>{points => points.length ? points.map(point => (
-      <MonthlyDetails key={point.location_id} label={point.location_name} total={point.total_minor} currency={point.currency}>
-        {point.days.length > 0 ? <ul className="list">{point.days.map(day => (
-          <li key={day.day} className="row between"><span>{dayLabel(day.day)}</span><Money minor={day.total_minor} currency={point.currency} short /></li>
-        ))}</ul> : <p className="faint">За этот месяц нет выручки.</p>}
-      </MonthlyDetails>
+      <div key={point.location_id}>
+        {showMissing && point.missing_days?.length ? <p role="status" className="faint">
+          {point.location_name} · нет выручки за {point.missing_days.length} дн.
+        </p> : null}
+        <MonthlyDetails label={point.location_name} total={point.total_minor} currency={point.currency}>
+          {point.days.length > 0 ? <ul className="list">{point.days.map(day => (
+            <li key={day.day} className="row between"><span>{dayLabel(day.day)}
+              {day.return_minor ? <span className="faint" style={{ display: 'block' }}>Возвраты · <Money minor={day.return_minor} currency={point.currency} short /></span> : null}
+            </span><Money minor={day.total_minor} currency={point.currency} short /></li>
+          ))}</ul> : <p className="faint">За этот месяц нет выручки.</p>}
+        </MonthlyDetails>
+      </div>
     )) : <p className="faint">Франчайзи ещё не назначил точки управления.</p>}</DataState>
   </section>;
 }
@@ -77,7 +92,7 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
   };
   const actionLabel:Record<string,string>={'team.create':'Создан доступ управляющего','staff.create':'Создан доступ','staff.update':'Изменён профиль','staff.access':'Изменены роль или точки','user.password':'Изменён пароль','user.login':'Изменён телефон для входа','staff.remove':'Доступ закрыт','staff.restore':'Доступ возвращён','team.active':'Изменён доступ','staff.active':'Изменён доступ','team.remove':'Доступ закрыт','team.restore':'Доступ возвращён'};
   const content = <>
-    <p className="faint">Управляющий видит выручку и сотрудников назначенных точек и может заказывать материалы.</p>
+    <p className="faint">Управляющий видит выручку назначенных точек. Права на работу с сотрудниками и заказы настраиваются в карточке сотрудника на вкладке «Вход».</p>
     <div className="row"><Button size="sm" onClick={() => setAction('assign')}>Назначить управляющего</Button><Button size="sm" onClick={() => setAction('new')}>Новый управляющий</Button></div>
     <DataState query={q} empty={list => list.length ? null : <EmptyState title="Управляющих пока нет" />}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
       <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
@@ -149,6 +164,7 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
       {action === 'new' && <><Field label="Имя" required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>
         <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{id => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 900 123-45-67" />}</Field></>}
       {action === 'new' && <Field label="Точки работы и управления" required>{() => locations.data?.map(l => <Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v => setSelected(v ? [...selected, l.id] : selected.filter(x => x !== l.id))} />)}</Field>}
+      {action === 'new' && <p className="faint">Управляющий сможет добавлять сотрудников на выбранные точки и заказывать материалы. Право «Видеть сотрудников» также позволит редактировать их карточки и просматривать начисления.</p>}
       <Field label="Пароль" required>{id => <Input id={id} value={password} onChange={e => setPassword(e.target.value)} />}</Field>
     </>}
   </ConfirmDialog>;

@@ -13,6 +13,14 @@ const changed = notifyOutboxChange;
 const temporaryErrors = new Set(['offline', 'external-unavailable', 'unauthenticated', 'maintenance']);
 const isTemporary = (e: unknown) => temporaryErrors.has(toAppError(e).code);
 
+export function queuedOperationState(op: QueuedOperation): 'pending' | 'retryable' | 'blocked' {
+  if (!op.lastError) return 'pending';
+  // A tab running an older release can see the same IndexedDB before it knows the command.
+  if ((op.kind === 'shift_submit' || op.kind === 'shift_record_with_return') &&
+    op.lastErrorCode === 'unknown' && op.lastError === 'Не удалось выполнить действие') return 'retryable';
+  return op.lastErrorCode && temporaryErrors.has(op.lastErrorCode) ? 'retryable' : 'blocked';
+}
+
 async function requireQueueOwner(userId: string) {
   const { data, error } = await requireClient().auth.getSession();
   if (!data.session || data.session.user.id !== userId || !data.session.access_token) {
@@ -46,11 +54,9 @@ export async function flushOutbox(userId: string): Promise<{ sent: number; faile
   let sent = 0;
   let failed = 0;
   try {
-    for (const op of await opQueue.list(userId)) {
+    for (const op of await queuedOps(userId)) {
       if (op.userId !== userId) throw new AppError('forbidden', 'Сохранённая запись принадлежит другой учётной записи.', '', '');
-      // A pre-release tab could put an unrecognized shift_submit in this state.
-      const olderTabError = op.kind === 'shift_submit' && op.lastErrorCode === 'unknown' && op.lastError === 'Не удалось выполнить действие';
-      if (op.lastError && !olderTabError && (!op.lastErrorCode || !temporaryErrors.has(op.lastErrorCode))) { failed++; continue; }
+      if (queuedOperationState(op) === 'blocked') { failed++; continue; }
       try {
         if (op.kind === 'revenue_save' || op.kind === 'shift_close') throw new AppError('version-conflict', 'Запись создана старой версией приложения. Сверьте суммы с актуальным днём перед повторным вводом.', '', '');
         const accessToken = await requireQueueOwner(userId);
@@ -59,7 +65,7 @@ export async function flushOutbox(userId: string): Promise<{ sent: number; faile
         const error = toAppError(e);
         const detail = op.kind === 'shift_submit' && error.code === 'unknown'
           ? error.hint || 'Не удалось отправить смену' : error.detail || error.code;
-        await opQueue.add({ ...op, attempts: op.attempts + 1, lastError: detail, lastErrorCode: error.code });
+        await opQueue.recordFailure(op, detail, error.code);
         failed++;
         if (isTemporary(error)) break;
         continue;
@@ -76,5 +82,9 @@ export async function flushOutbox(userId: string): Promise<{ sent: number; faile
   return { sent, failed };
 }
 
-export const queuedOps = (userId: string) => opQueue.list(userId);
+export async function queuedOps(userId: string) {
+  const operations = await opQueue.list(userId);
+  // The IndexedDB user index orders matching rows by their primary key, not by creation time.
+  return operations.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
 export const dropOp = async (userId: string, id: string) => { await opQueue.remove(userId, id); changed(); };

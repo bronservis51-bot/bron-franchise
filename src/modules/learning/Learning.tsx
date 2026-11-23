@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useBlocker, useParams, useSearchParams, Navigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { command, from, rows } from '../../platform/backend';
+import { command, from, rows, toAppError } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { formatDate, formatDateTime, monthStart } from '../../platform/dates';
 import { Button, Card, Checkbox, ConfirmDialog, DataState, Field, Input, Select, ActionError, EmptyState, NoResults, PageHeader, Badge } from '../../ui';
@@ -152,20 +152,28 @@ export function LearningLessonPage(){
  const {id}=useParams();const qc=useQueryClient();const {isStaff,isTeamManager}=useSession();
  const q=useQuery({queryKey:['learning-attempt',id],enabled:isStaff||isTeamManager,queryFn:()=>command<Attempt>('learning_start',{article:id}),staleTime:Infinity,gcTime:0,retry:false});
  if(!isStaff&&!isTeamManager)return <Navigate to="/learning/manage" replace/>;
+ if(q.error && ['not-found','forbidden'].includes(toAppError(q.error).code)) return <Card title="Урок недоступен">
+  <p role="alert">{toAppError(q.error).detail}</p>
+  <Link className="btn btn-primary" to="/learning" onClick={()=>void qc.invalidateQueries({queryKey:['learning']})}>К списку уроков</Link>
+ </Card>;
  return <DataState query={q}>{t=><Study key={t.id} attempt={t} onFinish={()=>{void qc.invalidateQueries({queryKey:['learning']});}}/>}</DataState>;
 }
 function Study({attempt:t,onFinish}:{attempt:Attempt;onFinish:()=>void}) {
  const [quiz,setQuiz]=useState(Boolean(t.read_at));const [result,setResult]=useState<Result|null>(t.result);
  const [answers,setAnswers]=useState<Record<number,number>>(()=>{try{return JSON.parse(sessionStorage.getItem(`bron.lesson.${t.id}`)??'{}');}catch{return {};}});
  const rev=useQuery({queryKey:['learning','revision',t.revision_id],queryFn:()=>getRevision(t.revision_id)});
- const blocked=useBlocker(({currentLocation,nextLocation})=>!result&&(currentLocation.pathname!==nextLocation.pathname||currentLocation.search!==nextLocation.search));
- useEffect(()=>{if(result)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[result]);
  const read=useMutation({mutationFn:()=>command('learning_attempt_read',{attempt:t.id}),onSuccess:()=>setQuiz(true)});
  const submit=useMutation({mutationFn:()=>command<Result>('learning_attempt_submit',{attempt:t.id,answers:t.questions.map((_,i)=>answers[i])}),onSuccess:r=>{setResult(r);try{sessionStorage.removeItem(`bron.lesson.${t.id}`);}catch{/* optional draft */}onFinish();}});
+ const error = read.error || submit.error ? toAppError(read.error ?? submit.error) : null;
+ const unavailable = Boolean(error && ['not-found','version-conflict','idempotency-conflict','forbidden'].includes(error.code));
+ const blocked=useBlocker(({currentLocation,nextLocation})=>!result&&!unavailable&&(currentLocation.pathname!==nextLocation.pathname||currentLocation.search!==nextLocation.search));
+ useEffect(()=>{if(result||unavailable)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[result,unavailable]);
  const choose=(i:number,n:number)=>{const a={...answers,[i]:n};setAnswers(a);try{sessionStorage.setItem(`bron.lesson.${t.id}`,JSON.stringify(a));}catch{/* current attempt remains available */}};
- return <div className="learning-study" data-unsaved={!result?'true':undefined}>
+ return <div className="learning-study" data-unsaved={!result&&!unavailable?'true':undefined}>
  <PageHeader title={t.title} back={{to:'/learning',label:'Обучение'}}/>
- {result?<Card title={result.passed?'Урок пройден':'Нужно повторить'}><h2>{result.percent}% · {result.score} из {result.total}</h2><p>{result.passed?`Повторение: ${formatDate(result.next_due)}. Следующий урок можно начать сейчас.`:'Перечитайте материал и попробуйте ещё раз. Ждать следующего дня не нужно.'}</p>
+ {unavailable ? <Card title="Попытка недоступна"><p role="alert">{error?.detail}</p>
+  <Link className="btn btn-primary" to="/learning" onClick={onFinish}>К списку уроков</Link>
+ </Card> : result?<Card title={result.passed?'Урок пройден':'Нужно повторить'}><h2>{result.percent}% · {result.score} из {result.total}</h2><p>{result.passed?`Повторение: ${formatDate(result.next_due)}.`:'Перечитайте материал и попробуйте ещё раз. Ждать следующего дня не нужно.'}</p>
  <details><summary>Разобрать ответы</summary>{result.feedback?.map((x,i)=><div className="quiz-question" key={i}><strong>{x.prompt}</strong><p>Ваш ответ: {x.choices[x.chosen]}</p>{String(x.chosen)!==x.correct&&<p>Верно: {x.choices[Number(x.correct)]}</p>}</div>)}</details>
  <Link className="btn btn-primary" to="/learning">К списку уроков</Link></Card>:!quiz?<DataState query={rev} empty={r=>r?null:<EmptyState title="Материал урока недоступен"/>}>{r=><Card className="learning-material">
   <Markdown source={r?.body??''}/>
@@ -177,8 +185,18 @@ function Study({attempt:t,onFinish}:{attempt:Attempt;onFinish:()=>void}) {
  </div>;
 }
 
-type Report={user_id:string;user_name:string;day:string;article_id:string;article_title:string;read_at:string|null;completed_at:string|null;score:number|null;total:number;next_due?:string};
+type Report={user_id:string;user_name:string;day:string;article_id:string;article_title:string;read_at:string|null;completed_at:string|null;score:number|null;total:number;passed?:boolean|null;pass_percent?:number|null;superseded?:boolean;material_current?:boolean;next_due?:string|null};
 export function LearningReport({partner,month}:{partner:string;month:string}) {
  const q=useQuery({queryKey:['learning','report',partner,month],queryFn:()=>command<Report[]>('learning_report',{partner,month})});
- return <DataState query={q} empty={d=>d.length?null:<EmptyState title="В этом месяце занятий пока нет" text="Здесь появятся даты, материалы и результаты каждого сотрудника."/>}>{list=><div className="stack">{list.map((x,i)=><Card key={i}><strong>{x.user_name} · {formatDate(x.day)}</strong><div><Link to={`/kb/articles/${x.article_id}`}>{x.article_title}</Link></div><p className="faint">{x.completed_at&&x.score!==null?`Тест: ${x.score} из ${x.total} · ${formatDateTime(x.completed_at)}`:x.read_at?'Материал изучен, тест не завершён':'Урок начат, изучение не подтверждено'}{x.next_due?` · повтор ${formatDate(x.next_due)}`:''}</p></Card>)}</div>}</DataState>;
+ return <DataState query={q} empty={d=>d.length?null:<EmptyState title="В этом месяце занятий пока нет" text="Здесь появятся даты, материалы и результаты каждого сотрудника."/>}>{list=>
+  <div className="stack">{list.map((x,i)=><Card key={i}>
+   <strong>{x.user_name} · {formatDate(x.day)}</strong>
+   <div>{x.material_current === false ? x.article_title : <Link to={`/kb/articles/${x.article_id}`}>{x.article_title}</Link>}</div>
+   <p className="faint">{x.completed_at && x.score !== null ? <>
+    {typeof x.passed === 'boolean' && <strong>{x.passed ? 'Зачёт' : 'Незачёт'} · </strong>}
+    {x.score} из {x.total}{x.pass_percent != null && ` · проходной балл ${x.pass_percent}%`} · {formatDateTime(x.completed_at)}
+    {x.next_due && ` · повтор ${formatDate(x.next_due)}`}
+   </> : x.superseded ? 'Попытка завершена без оценки из-за новой редакции' : x.read_at ? 'Материал изучен, тест не завершён' : 'Урок начат, изучение не подтверждено'}</p>
+  </Card>)}</div>}
+ </DataState>;
 }

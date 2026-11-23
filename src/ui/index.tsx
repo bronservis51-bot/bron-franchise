@@ -1,5 +1,5 @@
 // Компоненты дизайн-системы. Состояния экранов: загрузка, пусто, нет результатов, ошибка, нет прав, офлайн, конфликт.
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { AlertTriangle, ArrowLeft, Ban, CheckCircle2, CircleDashed, Clock, FlaskConical, Inbox, Info, Lock, RefreshCw, SearchX, WifiOff } from 'lucide-react';
 import { AppError, toAppError } from '../platform/backend';
@@ -8,7 +8,7 @@ import { formatMoney, formatMoneyShort, minorToDecimal, parseMoney, type MinorIn
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'demo';
 
 export function Button({ variant = 'secondary', size, loading, block, children, ...rest }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'silver'; size?: 'sm'; loading?: boolean; block?: boolean }) {
+  ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'silver'; size?: 'sm'; loading?: boolean; block?: boolean }) {
   return (
     <button
       type="button"
@@ -224,10 +224,10 @@ export function Money({ minor, currency, strong, short }: { minor: MinorInput; c
 }
 
 /** Ввод суммы в рублях/тенге/лирах с запятой; наружу — минорные единицы строкой (без float). */
-export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, enterKeyHint = 'done', onValidityChange, describedBy, requireExplicitValue = false }: {
+export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, enterKeyHint = 'done', onValidityChange, describedBy, requireExplicitValue = false, disabled }: {
   id: string; value: string; onChange: (minor: string) => void; currency: string; invalid?: boolean; placeholder?: string;
   inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void; enterKeyHint?: ComponentProps<'input'>['enterKeyHint'];
-  onValidityChange?: (valid:boolean) => void; describedBy?: string; requireExplicitValue?:boolean;
+  onValidityChange?: (valid:boolean) => void; describedBy?: string; requireExplicitValue?:boolean; disabled?: boolean;
 }) {
   const show = (v: string) => (v && (v !== '0' || requireExplicitValue) ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
   const [text, setText] = useState(() => show(value));
@@ -238,7 +238,7 @@ export function MoneyInput({ id, value, onChange, currency, invalid, placeholder
     if (cur === null || cur.toString() !== (value || '0')) { setText(show(value)); setBad(false); }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Input id={id} ref={inputRef} inputMode="decimal" enterKeyHint={onEnter ? enterKeyHint : undefined} placeholder={placeholder} value={text} aria-invalid={bad || invalid || undefined} aria-describedby={describedBy}
+    <Input id={id} ref={inputRef} inputMode="decimal" enterKeyHint={onEnter ? enterKeyHint : undefined} placeholder={placeholder} value={text} disabled={disabled} aria-invalid={bad || invalid || undefined} aria-describedby={describedBy}
       onKeyDown={onEnter ? (e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onEnter(); } } : undefined}
       onChange={(e) => {
         setText(e.target.value);

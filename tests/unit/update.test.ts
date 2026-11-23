@@ -69,3 +69,102 @@ it('shares one upgrade attempt and reports newly pending work before reloading',
    vi.useRealTimers();
  }
 });
+
+async function rollbackDevice() {
+ vi.useFakeTimers();
+ vi.resetModules();
+ const current = 'test-current-release';
+ vi.stubEnv('VITE_BUILD_TIME', current);
+ let release = 'test-new-release';
+ let pending = true;
+ const browser = new EventTarget();
+ const reload = vi.fn();
+ const update = vi.fn(async () => undefined);
+ const attempt = vi.fn();
+ vi.stubGlobal('document', Object.assign(new EventTarget(), {
+   activeElement: null, visibilityState: 'visible', querySelector: () => null, querySelectorAll: () => [],
+ }));
+ vi.stubGlobal('window', browser);
+ vi.stubGlobal('navigator', { onLine: true, serviceWorker: { register: async () => ({ update }) } });
+ vi.stubGlobal('location', { reload });
+ vi.stubGlobal('sessionStorage', { getItem: () => null, setItem: attempt });
+ vi.stubGlobal('fetch', async () => Response.json({ build: release }));
+ const { hasPendingLocalWork } = await import('../../src/platform/offline');
+ const checkPending = vi.mocked(hasPendingLocalWork);
+ checkPending.mockImplementation(async () => pending);
+ const { onAvailableUpdate, startAppUpdates } = await import('../../src/platform/update');
+ let apply: (() => Promise<void>) | null = null;
+ const stop = onAvailableUpdate(value => { apply = value; });
+ startAppUpdates();
+ await vi.advanceTimersByTimeAsync(0);
+ return {
+   get apply() { return apply; }, browser, reload, update, attempt,
+   rollback() { release = current; }, unblock() { pending = false; }, block() { pending = true; },
+   stop() { stop(); checkPending.mockReset(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); },
+ };
+}
+
+it('clears a pending update when a foreground check finds the open build again', async () => {
+ const device = await rollbackDevice();
+ try {
+   expect(device.apply).toBeTypeOf('function');
+   device.rollback();
+   await vi.advanceTimersByTimeAsync(30_000);
+   device.browser.dispatchEvent(new Event('focus'));
+   await vi.advanceTimersByTimeAsync(0);
+   expect(device.apply).toBeNull();
+   expect(device.reload).not.toHaveBeenCalled();
+ } finally { device.stop(); }
+});
+
+it('does not update a worker or reload when the advertised build was rolled back before clicking', async () => {
+ const device = await rollbackDevice();
+ try {
+   const apply = device.apply!;
+   expect(apply).toBeTypeOf('function');
+   device.rollback();
+   device.unblock();
+   await apply();
+   expect(device.apply).toBeNull();
+   expect(device.update).not.toHaveBeenCalled();
+   expect(device.attempt).not.toHaveBeenCalled();
+   expect(device.reload).not.toHaveBeenCalled();
+ } finally { device.stop(); }
+});
+
+it('restores the worker when the applied update is rolled back during installation', async () => {
+ const device = await rollbackDevice();
+ try {
+   let activeWorker = 'current';
+   device.update.mockImplementationOnce(async () => {
+     activeWorker = 'new';
+     device.rollback();
+     device.block();
+   }).mockImplementationOnce(async () => { activeWorker = 'current'; });
+   device.unblock();
+   await device.apply!();
+   expect(device.update).toHaveBeenCalledTimes(2);
+   expect(activeWorker).toBe('current');
+   expect(device.apply).toBeNull();
+   expect(device.attempt).not.toHaveBeenCalled();
+   expect(device.reload).not.toHaveBeenCalled();
+ } finally { device.stop(); }
+});
+
+it('retries failed worker reconciliation on the next online check without reloading', async () => {
+ const device = await rollbackDevice();
+ try {
+   device.update.mockImplementationOnce(async () => { device.rollback(); })
+     .mockRejectedValueOnce(new Error('network disconnected'));
+   device.unblock();
+   await device.apply!();
+   expect(device.update).toHaveBeenCalledTimes(2);
+   device.block();
+   await vi.advanceTimersByTimeAsync(30_000);
+   device.browser.dispatchEvent(new Event('online'));
+   await vi.advanceTimersByTimeAsync(0);
+   expect(device.update).toHaveBeenCalledTimes(3);
+   expect(device.attempt).not.toHaveBeenCalled();
+   expect(device.reload).not.toHaveBeenCalled();
+ } finally { device.stop(); }
+});

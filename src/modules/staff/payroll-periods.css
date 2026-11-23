@@ -1,0 +1,23 @@
+.payroll-schedule {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 235px), 1fr));
+  gap: 8px;
+}
+.payroll-schedule-period {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.payroll-schedule-period dt span { display: block; }
+.payroll-schedule-period dd {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

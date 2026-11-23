@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudOff, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { phoneLoginDigits } from '../platform/login';
 import { changeManagerPhoneLogin } from '../platform/managerLogin';
-import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOps } from '../platform/outbox';
+import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOperationState, queuedOps } from '../platform/outbox';
 import { canOpenStaffDirectory, canOrderMaterials, navFor, type NavItem } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
+import { HelpTip } from '../ui/HelpTip';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
+import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunRole } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
@@ -39,34 +41,57 @@ function useOnline() {
 function useOutbox(userId: string | undefined, online: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [ops, setOps] = useState<{ id: string; error?: string }[]>([]);
-  const [error, setError] = useState<unknown>(null);
+  const queue = useQuery({
+    queryKey: ['local-queue', userId],
+    queryFn: () => queuedOps(userId!),
+    enabled: Boolean(userId),
+    networkMode: 'always',
+  });
   const [sendError, setSendError] = useState<unknown>(null);
+  const [sending, setSending] = useState(false);
+  const sendNow = useRef<() => void>(() => undefined);
   useEffect(() => {
-    let active = true;
-    setOps([]); setError(null); setSendError(null);
     if (!userId) return;
-    const load = () => void queuedOps(userId).then((l) => {
-      if (active) { setOps(l.map((o) => ({ id: o.clientOpId, error: o.lastError }))); setError(null); }
-    }).catch(e => { if (active) setError(e); });
-    load();
-    const unsubscribe = onOutboxChange(load);
-    return () => { active = false; unsubscribe(); };
-  }, [userId]);
+    return onOutboxChange(() => void qc.invalidateQueries({ queryKey: ['local-queue', userId], exact: true }));
+  }, [userId, qc]);
   useEffect(() => {
+    setSending(false);
+    setSendError(null);
     if (!userId || !online) return;
     let active = true;
-    const send = () => void flushOutbox(userId).then((r) => {
-      if (!active) return;
+    let running = false;
+    const send = () => {
+      if (running) return;
+      running = true;
+      setSending(true);
       setSendError(null);
-      if (r.sent) { toast(`Отправлено записей, сохранённых без сети: ${r.sent}`); void qc.invalidateQueries(); }
-    }).catch(e => { if (active) setSendError(e); });
+      void flushOutbox(userId).then((result) => {
+        if (active && result.sent) {
+          toast(`Отправлено записей, сохранённых без сети: ${result.sent}`);
+          void qc.invalidateQueries();
+        }
+      }).catch(e => { if (active) setSendError(e); }).finally(() => {
+        running = false;
+        if (active) setSending(false);
+      });
+    };
+    sendNow.current = send;
     send();
     const timer = window.setInterval(send, 30000);
     window.addEventListener('focus', send);
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', send); };
+    return () => {
+      active = false;
+      sendNow.current = () => undefined;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', send);
+    };
   }, [userId, online, qc, toast]);
-  return { ops, error: error ?? sendError };
+  const ops = queue.data ?? [];
+  const waiting = ops.filter(op => queuedOperationState(op) !== 'blocked').length;
+  return {
+    ops, waiting, blocked: ops.length - waiting, loading: queue.isLoading, readError: queue.error, sendError, sending,
+    retry: () => sendNow.current(), refresh: () => void queue.refetch(),
+  };
 }
 
 function PasswordDialog({ onClose }: { onClose: () => void }) {
@@ -126,15 +151,25 @@ function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean }) {
+function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: FirstRunRole }) {
   const { me, isManager, signOut } = useSession();
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
   const [phone, setPhone] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const guideUserId = me?.assignments.length ? me.user.id : undefined;
+  const [guideSeen, setGuideSeen] = useState(() => Boolean(me?.user.id && hasSeenFirstRunGuide(me.user.id, role)));
+  const [replayGuide, setReplayGuide] = useState(false);
   const installState = useInstallState();
   const ref = useRef<HTMLDivElement>(null);
+  const profileButton = useRef<HTMLButtonElement>(null);
+  const restoreProfileFocus = useRef(false);
+  useEffect(() => {
+    if (replayGuide || !restoreProfileFocus.current) return;
+    restoreProfileFocus.current = false;
+    profileButton.current?.focus({ preventScroll: true });
+  }, [replayGuide]);
   useEffect(() => {
     const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
     document.addEventListener('click', close);
@@ -145,9 +180,15 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
     if (pending) { toast('Сначала отправьте записи из очереди. При выходе данные не удаляются.'); return; }
     void signOut().catch(e => toast(e instanceof Error ? e.message : 'Не удалось выйти'));
   };
+  const closeGuide = () => {
+    if (guideUserId) markFirstRunGuideSeen(guideUserId, role);
+    setGuideSeen(true);
+    restoreProfileFocus.current = replayGuide;
+    setReplayGuide(false);
+  };
   return (
     <div style={{ position: 'relative' }} ref={ref}>
-      <button className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <User size={20} aria-hidden />
       </button>
       {open && (
@@ -162,6 +203,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
           {isManager && <button role="menuitem" onClick={() => { setOpen(false); setRecovery(true); }}><Mail size={16} aria-hidden />Почта для восстановления</button>}
           {showTeamAccess && <Link role="menuitem" to="/team-access" onClick={() => setOpen(false)}><Users size={16} aria-hidden />Управляющие</Link>}
           <button role="menuitem" onClick={() => { setOpen(false); onLocalWork(); }}><CloudOff size={16} aria-hidden />Локальные записи</button>
+          {guideUserId && <button role="menuitem" onClick={() => { setOpen(false); setReplayGuide(true); }}><GraduationCap size={16} aria-hidden />Первые шаги</button>}
           {!installState.installed && <button role="menuitem" onClick={() => { setOpen(false); setInstallOpen(true); }}><Smartphone size={16} aria-hidden />Как установить приложение</button>}
           <button role="menuitem" onClick={out}><LogOut size={16} aria-hidden />Выйти</button>
         </div>
@@ -170,6 +212,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess }: { pending: number; o
       {isManager && phone && <ManagerLoginDialog onClose={() => setPhone(false)} />}
       {isManager && recovery && <ManagerRecoverySettings onClose={() => setRecovery(false)} />}
       {installOpen && <InstallDialog onClose={() => setInstallOpen(false)} />}
+      {guideUserId && (!guideSeen || replayGuide) && <FirstRunGuide role={role} replay={replayGuide} onClose={closeGuide} />}
     </div>
   );
 }
@@ -198,7 +241,7 @@ export function Shell() {
   const nav = navFor(role, canOpenStaffDirectory(can)).filter((n) => n.to !== '/rating' || can('rating.read'));
   const showOrder = role === 'franchisee' || ((role === 'staff' || role === 'team') && canOrderMaterials(can));
   const mainRef = useRef<HTMLElement>(null);
-  const { ops, error: queueError } = useOutbox(me?.user.id, online);
+  const outbox = useOutbox(me?.user.id, online);
   const [queueOpen, setQueueOpen] = useState(false);
   const inbox = useQuery({ queryKey: ['kb', 'inbox'], enabled: Boolean(me?.assignments.length), refetchInterval: 120_000, staleTime: 120_000,
     queryFn: () => command<{ unanswered: number; new_answers: number }>('kb_inbox') });
@@ -235,24 +278,33 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-title">{me?.user.full_name ?? ''}</div>
           {showOrder && <OrderTopButton />}
-          <UserMenu pending={ops.length} onLocalWork={() => setQueueOpen(true)} showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
+          <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)}
+            showTeamAccess={role === 'franchisee' && Boolean(ownedTeamPartner(me))} />
         </header>
-        <AppUpdateBanner hasQueuedWork={ops.length > 0} />
-        {!online && (
-          <div className="alert tone-warning" role="status" style={{ margin: '12px 24px 0' }}>
-            <WifiOff size={18} aria-hidden />
-            <div className="alert-body">Нет сети. Выручку и закрытие смены можно сохранить — они отправятся сами, когда связь вернётся.</div>
-          </div>
-        )}
-        {(ops.length > 0 || queueError != null) && (
-          <div className="alert tone-info" role="status" style={{ margin: '12px 24px 0' }}>
-            <CloudOff size={18} aria-hidden />
-            <div className="alert-body">{queueError != null ? 'Не удалось проверить очередь на устройстве. Повторите проверку перед выходом.' : <>Сохранено на устройстве и ждёт отправки: {ops.length}.</>}{ops.some((o) => o.error) && <span className="faint" style={{ display: 'block' }}>Сервер не принял запись: {ops.find((o) => o.error)?.error}</span>}</div>
-            <Button size="sm" onClick={() => setQueueOpen(true)}>Посмотреть записи</Button>
-          </div>
-        )}
-        {queueOpen && me && <QueueDialog userId={me.user.id} onClose={() => setQueueOpen(false)} />}
+        {queueOpen && me && <QueueDialog key={me.user.id} userId={me.user.id} outbox={outbox} online={online} onClose={() => setQueueOpen(false)} />}
         <main id="main" className="content" ref={mainRef} tabIndex={-1} style={{ outline: 'none' }}>
+          <AppUpdateBanner hasQueuedWork={outbox.ops.length > 0 || outbox.readError != null} />
+          {!online && (
+            <div className="alert tone-warning" role="status" style={{ marginBottom: 12 }}>
+              <WifiOff size={18} aria-hidden />
+              <div className="alert-body">Нет сети. Выручку и закрытие смены можно сохранить — они отправятся сами, когда связь вернётся.</div>
+            </div>
+          )}
+          {(outbox.ops.length > 0 || outbox.readError != null || outbox.sendError != null) && (
+            <div className="alert tone-info" style={{ marginBottom: 12 }}>
+              <CloudOff size={18} aria-hidden />
+              <div className="alert-body">
+                <div role="status">
+                  {outbox.readError != null ? 'Не удалось проверить очередь на устройстве.' : <>
+                    {outbox.waiting > 0 && <div>Сохранено на устройстве и ждёт отправки: {outbox.waiting}.</div>}
+                    {outbox.blocked > 0 && <div>Требуют сверки: {outbox.blocked}.</div>}
+                  </>}
+                  {outbox.sendError != null && <div>Отправка не завершилась.</div>}
+                </div>
+                <Button size="sm" style={{ marginTop: 8 }} onClick={() => setQueueOpen(true)}>Посмотреть записи</Button>
+              </div>
+            </div>
+          )}
           <InstallHint />
           {me && !me.assignments.length ? (
             <div className="state"><h3>Доступ ещё не выдан</h3><div>Попросите менеджера по франшизе (или своего франчайзи) выдать доступ.</div></div>
@@ -266,9 +318,7 @@ export function Shell() {
   );
 }
 
-function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
-  const qc=useQueryClient();
-  const q=useQuery({queryKey:['local-queue',userId],queryFn:()=>queuedOps(userId)});
+function QueueDialog({userId,outbox,online,onClose}:{userId:string;outbox:ReturnType<typeof useOutbox>;online:boolean;onClose:()=>void}) {
   const [copied,setCopied]=useState<Map<string,QueuedOperation>>(new Map());
   const [error,setError]=useState<unknown>(null);
   const fail=(value:unknown)=>setError(value instanceof Error ? new AppError('validation',value.message,'','') : value);
@@ -287,10 +337,13 @@ function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
       setNotice('Копия подготовлена. Проверьте, что файл сохранился на устройстве.');
     } catch(e) {fail(e);} finally {setBusy(false);}
   };
-  return <ConfirmDialog open title="Локальные записи" confirmLabel="Закрыть" onConfirm={onClose} onClose={onClose} busy={busy} error={error ?? q.error}>
-    <p className="faint">Копия содержит только ваши неотправленные записи и сохранённые черновики. Храните её в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
+  return <ConfirmDialog open title="Локальные записи" cancelLabel="Закрыть" onClose={onClose} busy={busy} error={error ?? outbox.readError ?? outbox.sendError}>
+    <p className="faint">Храните копию в закрытом месте. На новом адресе войдите с прежним логином и загрузите этот файл.</p>
     <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
-      <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
+      <div className="row">
+        <Button disabled={busy} onClick={()=>void download()}>Скачать копию записей</Button>
+        <HelpTip label="Что входит в копию">В копию входят ваши неотправленные записи и сохранённые черновики.</HelpTip>
+      </div>
       <Field label="Загрузить сохранённую копию">{id=><Input id={id} type="file" accept=".json,application/json" disabled={busy} onChange={event=>{
         const file=event.target.files?.[0]; event.target.value=''; setImportFile(null); setError(null);setNotice('');
         if(!file)return;
@@ -303,18 +356,35 @@ function QueueDialog({userId,onClose}:{userId:string;onClose:()=>void}) {
       <div className="alert-body" style={{flex:'1 1 240px',overflowWrap:'anywhere'}}>В копии: записей — {importFile.data.operations.length}, черновиков — {importFile.data.drafts.length}. После добавления очередь отправится при наличии связи. Существующие записи не перезаписываются.</div>
       <Button disabled={busy} onClick={()=>{
         setBusy(true);setError(null);
-        void importLocalRecovery(userId,importFile.text).then(added=>{setImportFile(null);setNotice(`Добавлено локальных записей: ${added}.`);notifyOutboxChange();return qc.invalidateQueries({queryKey:['local-queue',userId]});}).catch(fail).finally(()=>setBusy(false));
+        void importLocalRecovery(userId,importFile.text).then(added=>{
+          setImportFile(null);setNotice(`Добавлено локальных записей: ${added}.`);notifyOutboxChange();
+          if (added > 0) outbox.retry();
+        }).catch(fail).finally(()=>setBusy(false));
       }}>Добавить записи из копии</Button>
     </div>}
     {notice&&<p role="status">{notice}</p>}
-    <p className="faint">При конфликте откройте день заново и сверьте суммы. Удаляйте обработанную запись только после проверки сохранённой копии.</p>
-    {q.data?.map(o=><div key={o.clientOpId} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
-      <strong>{o.kind.startsWith('revenue') ? `Выручка за ${String(o.payload.day)}` : 'Закрытие смены'}</strong>
-      <div className="faint">{o.kind === 'revenue_total_set' ? `Всего: ${(Number(o.payload.total)/100).toLocaleString('ru-RU')}` : `Наличные: ${(Number(o.payload.cash)/100).toLocaleString('ru-RU')} · карта: ${(Number(o.payload.card)/100).toLocaleString('ru-RU')}`}</div>
-      <div className="faint">{o.lastError ?? 'Ожидает отправки'}</div>
-      {o.lastError && <Button variant="ghost" size="sm" disabled={busy||copied.get(o.clientOpId)?.kind!==o.kind||!sameJson(copied.get(o.clientOpId)?.payload,o.payload)} onClick={()=>{
-        void dropOp(userId,o.clientOpId).then(()=>qc.invalidateQueries({queryKey:['local-queue',userId]})).catch(fail);
-      }}>Копия сохранена — удалить из очереди</Button>}
-    </div>)}
+    {outbox.readError != null && <Button size="sm" onClick={outbox.refresh}>Проверить очередь снова</Button>}
+    {(outbox.waiting > 0 || outbox.sendError != null) && <Button size="sm" disabled={!online || busy} loading={outbox.sending}
+      onClick={outbox.retry}>Повторить отправку</Button>}
+    {outbox.loading ? <p role="status">Проверяем очередь…</p> : !outbox.readError && outbox.ops.length === 0 && <p role="status">Неотправленных записей нет.</p>}
+    {outbox.blocked > 0 && <p className="faint">При конфликте откройте день заново и сверьте суммы. Удаляйте обработанную запись только после проверки сохранённой копии.</p>}
+    {outbox.ops.map(op => {
+      const state = queuedOperationState(op);
+      const saved = copied.get(op.clientOpId);
+      const savedInCopy = saved?.kind === op.kind && sameJson(saved.payload, op.payload);
+      return <div key={op.clientOpId} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+        <strong>{op.kind.startsWith('revenue') ? `Выручка за ${String(op.payload.day)}` : 'Закрытие смены'}</strong>
+        <div className="faint">{op.kind === 'revenue_total_set' ? `Всего: ${(Number(op.payload.total) / 100).toLocaleString('ru-RU')}`
+          : `Наличные: ${(Number(op.payload.cash) / 100).toLocaleString('ru-RU')} · карта: ${(Number(op.payload.card) / 100).toLocaleString('ru-RU')}`}</div>
+        {op.kind === 'shift_record_with_return' && Number(op.payload.return) > 0 &&
+          <div className="faint">Возврат: {(Number(op.payload.return) / 100).toLocaleString('ru-RU')}</div>}
+        <div className="faint">{state === 'pending' ? 'Ожидает отправки' : state === 'retryable'
+          ? `Отправка пока недоступна. ${op.lastError}` : `Требует сверки. ${op.lastError}`}</div>
+        {state === 'blocked' && <Button variant="ghost" size="sm" disabled={busy || !savedInCopy} onClick={() => {
+          setBusy(true); setError(null);
+          void dropOp(userId, op.clientOpId).catch(fail).finally(() => setBusy(false));
+        }}>Копия сохранена — удалить из очереди</Button>}
+      </div>;
+    })}
   </ConfirmDialog>;
 }

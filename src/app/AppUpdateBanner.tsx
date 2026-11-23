@@ -6,7 +6,10 @@ export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boo
   const [update, setUpdate] = useState<(() => Promise<void>) | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => onAvailableUpdate(fn => setUpdate(() => fn)), []);
+  useEffect(() => onAvailableUpdate(fn => {
+    setUpdate(() => fn);
+    if (!fn) setError('');
+  }), []);
   if (!update) return null;
 
   async function start(apply: () => Promise<void>) {
@@ -20,6 +23,7 @@ export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boo
       await apply();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось обновить приложение. Повторите попытку.');
+    } finally {
       setUpdating(false);
     }
   }

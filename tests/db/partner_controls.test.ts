@@ -29,9 +29,9 @@ describe('daily declaration includes employee shifts',()=>{
   await expect(save(110000,await version())).rejects.toThrow('validation');
   await t.as(FM,'select public.revenue_delete($1,$2,$3)',[loc,day,employee]);expect(await total()).toBe(100000);
  });
- it('blocks old clients from overwriting a total and checks month locks',async()=>{
+ it('blocks old clients from overwriting a total and rejects a pre-opening total',async()=>{
   await t.expectError(OWNER,'select public.revenue_save($1,$2,100000,0,null,null)','version-conflict',[loc,day]);
-  await t.expectError(OWNER,"select public.revenue_total_set($1,'2020-01-01',100000,'empty',gen_random_uuid(),null)",'period-locked',[loc]);
+  await t.expectError(OWNER,"select public.revenue_total_set($1,'2020-01-01',100000,'empty',gen_random_uuid(),null)",'validation',[loc]);
  });
 });
 
@@ -69,6 +69,7 @@ it('ranking is unavailable to franchisees, retains full metrics for the network 
 });
 
 it('compares March with February without counting March revenue twice',async()=>{
+ await t.admin("update location set opened_on=least(opened_on,'2025-02-28'::date) where id=$1",[loc]);
  await t.as(FM,"select public.revenue_save($1,'2025-02-28',10000,0,null,null)",[loc]);
  await t.as(FM,"select public.revenue_save($1,'2025-03-01',30000,0,null,null)",[loc]);
  const d=(await t.as<{j:{prev_same_period_minor:number}}>(OWNER,"select public.revenue_month($1,'2025-03-01') j",[loc]))[0].j;

@@ -7,9 +7,11 @@ const OTHER_OWNER = 'beta.owner@demo.example.com';
 const STAFF = '79000000011@staff.bron.local';
 const GET = 'select public.partner_launch_get($1) as result';
 const SET = 'select public.partner_launch_task_set($1,$2,$3) as result';
+const CHECKED = 'select public.partner_launch_task_set_checked($1,$2,$3,$4) as result';
 
 interface Launch {
   stage: 'contract_signed' | 'location_search' | 'opening_preparation';
+  cycle?: number;
   completed_task_ids: string[];
 }
 
@@ -36,14 +38,15 @@ async function get(who = OWNER, id = partner) {
 }
 
 async function set(task: string, completed: boolean, who = OWNER) {
-  return (await db.as<{ result: Launch }>(who, SET, [partner,task,completed]))[0].result;
+  const launch = await get(who);
+  return (await db.as<{ result: Launch }>(who, CHECKED, [partner,task,completed,launch?.cycle ?? 0]))[0].result;
 }
 
 it('keeps existing partners out of the launch checklist until a preparation stage is set', async () => {
   expect(await get()).toBeNull();
   await db.expectError(OWNER, SET, 'validation', [partner,'location_requirements',true]);
   await stage('contract_signed');
-  expect(await get()).toEqual({ stage: 'contract_signed', completed_task_ids: [] });
+  expect(await get()).toMatchObject({ stage: 'contract_signed', completed_task_ids: [] });
   expect(await get(OTHER_OWNER, otherPartner)).toBeNull();
   for (const actor of [OTHER_OWNER, STAFF]) {
     await db.expectError(actor, GET, 'not-found', [partner]);
@@ -57,12 +60,13 @@ it('keeps existing partners out of the launch checklist until a preparation stag
 it('lets the owner and network manager complete and reopen tasks without changing stages or locations', async () => {
   await stage('location_search');
   const beforePoints = await db.admin('select id,status,opened_on from public.location where partner_id=$1 order by id', [partner]);
-  await db.expectError(OWNER, SET, 'validation', [partner,'island_design',true]);
-  await db.expectError(OWNER, SET, 'validation', [partner,'invented_task',true]);
-  expect(await set('location_requirements', true)).toEqual({ stage: 'location_search', completed_task_ids: ['location_requirements'] });
+  const cycle = (await get())?.cycle ?? 0;
+  await db.expectError(OWNER, CHECKED, 'validation', [partner,'island_design',true,cycle]);
+  await db.expectError(OWNER, CHECKED, 'validation', [partner,'invented_task',true,cycle]);
+  expect(await set('location_requirements', true)).toMatchObject({ stage: 'location_search', completed_task_ids: ['location_requirements'] });
   await set('location_requirements', true);
   await set('location_review', true, MANAGER);
-  expect(await get(MANAGER)).toEqual({ stage: 'location_search', completed_task_ids: ['location_requirements','location_review'] });
+  expect(await get(MANAGER)).toMatchObject({ stage: 'location_search', completed_task_ids: ['location_requirements','location_review'] });
   expect((await set('location_review', false)).completed_task_ids).toEqual(['location_requirements']);
   await set('location_review', false);
   expect(await db.admin(`select id from public.audit_event where action='partner.launch_task' and entity_id=$1`, [partner])).toHaveLength(3);
@@ -83,12 +87,12 @@ it('rejects checklist reads and writes from a revoked session', async () => {
   expect((await withSession(GET, [partner])).rows[0]).toMatchObject({ result: { stage: 'location_search' } });
   await db.admin('delete from auth.sessions where id=$1', [session]);
   await expect(withSession(GET, [partner])).rejects.toThrow('unauthenticated');
-  await expect(withSession(SET, [partner, 'launch_learning', true])).rejects.toThrow('unauthenticated');
+  await expect(withSession(CHECKED, [partner, 'launch_learning', true, (await get())?.cycle ?? 0])).rejects.toThrow('unauthenticated');
 });
 
 it('allows a direct start at island design and preserves earlier progress when changing stages', async () => {
   await stage('opening_preparation');
-  await db.expectError(OWNER, SET, 'validation', [partner,'location_options',true]);
+  await db.expectError(OWNER, CHECKED, 'validation', [partner,'location_options',true,(await get())?.cycle ?? 0]);
   expect((await set('island_design', true)).completed_task_ids).toEqual(['island_design','location_requirements']);
   expect((await set('purchase_list', true, MANAGER)).stage).toBe('opening_preparation');
   await stage(null);
@@ -110,6 +114,16 @@ it('keeps planned points in the checklist, then returns to working Home when ope
   expect(await db.admin('select preparation_stage from public.partner where id=$1', [partner])).toEqual([{ preparation_stage: 'opening_preparation' }]);
 
   await db.admin("update public.location set status='closed' where id=$1", [point]);
+  expect(await get()).toBeNull();
   await db.admin("update public.location set opened_on=null,status='active' where code='ALPHA-1'");
   expect(await get()).toBeNull();
+});
+
+it('uses the scheduled opening date even if an earlier operation exists', async () => {
+  await stage('opening_preparation');
+  await db.admin(`update location set opened_on=(now() at time zone timezone)::date+1 where code='ALPHA-1'`);
+  const [{ count }] = await db.admin<{ count: number }>(`select count(*)::int from daily_revenue
+    where location_id=(select id from location where code='ALPHA-1')`);
+  expect(count).toBeGreaterThan(0);
+  expect(await get()).toMatchObject({ stage: 'opening_preparation' });
 });

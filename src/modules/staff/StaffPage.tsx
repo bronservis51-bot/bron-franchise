@@ -2,22 +2,26 @@ import { Link } from 'react-router';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { Download, Plus } from 'lucide-react';
-import { command, from, rows } from '../../platform/backend';
+import { command, from, rows, toAppError } from '../../platform/backend';
 import { dayLabel, formatDate, monthStart } from '../../platform/dates';
-import { formatMoneyShort, minorToDecimal } from '../../platform/money';
+import { formatMoneyShort, minorToDecimal, sumMinor, type MinorInput } from '../../platform/money';
 import { sameJson } from '../../platform/offline';
 import { useSession } from '../../platform/session';
 import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, KV, MoneyInput, PageHeader, Select } from '../../ui';
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
-import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, percentToBp, tierPolicy } from './CustomPayFields';
-import { MotivationPanel, PayExample, payTiming, useMotivation, type ShiftPolicy } from './Motivation';
+import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, maxPolicyMinor, percentToBp, tierPolicy, validPolicyMoney } from './CustomPayFields';
+import { MotivationPanel, PayExample, payTiming, teamPolicyForDate, useMotivation, type ShiftPolicy } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
+import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
-import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type StaffRow } from './api';
+import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards } from '../revenue/partnerLifecycle';
+import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type PayrollShift, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 import { NewAccountCredentials } from './NewAccountCredentials';
+import { PayrollSchedule } from './PayrollSchedule';
+import { payrollPeriodLabel, payrollPeriods, splitPayroll } from './payrollPeriods';
 
 interface Loc { id: string; name: string; currency: string; status: string }
 const locationsOf = (partner: string) => rows<Loc>(from('location').select('id, name, currency, status').eq('partner_id', partner).order('name'));
@@ -74,6 +78,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const initialLocations = staff?.location_ids ?? (activeLocs.length === 1 ? [activeLocs[0].id] : []);
   const [initialPosition] = useState(() => positionOf(staff));
   const [initialAccess] = useState(() => staff?.access ?? (initialPosition === 'manager' ? legacyManagerAccess : defaultAccess));
+  const [payRevision] = useState(staff?.pay_revision);
+  const [initialPayStart] = useState(() => staff?.pay_scheduled?.find(v => v.effective_from === staff.pay_effective_from)?.effective_from ?? '');
+  const [payStart, setPayStart] = useState(initialPayStart);
   const [initialPayMode] = useState(() => payModeOf(staff));
   const [initialCustomPay] = useState(() => staff?.custom_pay);
   const [initialPassword] = useState(randomPassword);
@@ -85,7 +92,8 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const [start, setStart] = useState(staff?.internship_from ?? '');
   const [until, setUntil] = useState(staff?.internship_until ?? '');
   const [traineeFee, setTraineeFee] = useState(String(staff?.internship_floor_minor ?? 50000));
-  const [validTraineeFee, setValidTraineeFee] = useState(true);
+  const [traineeFeeParsed, setTraineeFeeParsed] = useState(true);
+  const validTraineeFee = validPolicyMoney({ minor: traineeFee, valid: traineeFeeParsed });
   const [learningEnabled, setLearningEnabled] = useState(staff?.learning_enabled ?? true);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(initialPassword);
@@ -97,7 +105,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const digits = phoneLoginDigits(phone);
   const bp = percentToBp(rate);
   const customPolicy = payMode === 'custom' ? customPayPolicy(formula) : null;
-  const teamPolicy = canSetCustomPay && !common.error ? common.data?.policy : undefined;
+  const commonTerms = canSetCustomPay && !common.error ? common.data : undefined;
+  const teamPolicy = commonTerms && teamPolicyForDate(commonTerms, payStart);
+  const savedTeamPolicy = commonTerms && teamPolicyForDate(commonTerms, initialPayStart);
   const payPreview: ShiftPolicy | null = payMode === 'partner' ? teamPolicy ?? null
     : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
     : validFee && bp !== null && Number.isSafeInteger(Number(fee)) ? { mode: 'legacy', rate_bp: bp, fee_minor: Number(fee) } : null;
@@ -117,13 +127,15 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
     || positionChanged || accessChanged || learningEnabled !== (staff?.learning_enabled ?? true)
     || (kind === 'trainee' && (start !== (staff?.internship_from ?? '') || until !== (staff?.internship_until ?? '')
       || traineeFee !== String(staff?.internship_floor_minor ?? 50000) || !validTraineeFee))
-    || payMode !== initialPayMode
+    || payStart !== initialPayStart || payMode !== initialPayMode
     || formulaChanged
     || (payMode === 'fixed' && (bp !== (staff?.rate_bp ?? 0) || Number(fee) !== (staff?.shift_fee_minor ?? 0) || !validFee));
   const m = useMutation({
     mutationFn: async () => {
       const submittedPassword = password;
       const settings = {
+        ...(payRevision !== undefined ? { expected_pay_revision: payRevision } : {}),
+        ...(payStart ? { pay_effective_from: payStart } : {}),
         employee_kind: kind, internship_from: start || null, internship_until: until || null,
         internship_floor_minor: traineeFee, learning_enabled: learningEnabled,
         ...(canSetAccess && (!staff || positionChanged) ? { position } : {}),
@@ -139,6 +151,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
         settings,
       });
       if (!staff && digits) setCreated({ phone: formatPhone(digits), password: submittedPassword });
+    },
+    onError: error => {
+      if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
@@ -177,7 +192,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           )}</DataState>
           <Field label="Статус сотрудника">{id => <Select id={id} value={position} disabled={!canSetAccess && position === 'manager'} onChange={e => {
             setPosition(e.target.value as StaffPosition);
-            setValidTraineeFee(true);
+            setTraineeFeeParsed(true);
           }}>
             <option value="sales_manager">Менеджер продаж</option><option value="trainee">Стажёр</option>
             {(canSetAccess || position === 'manager') && <option value="manager">Управляющий</option>}
@@ -195,7 +210,10 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {staff && <div className="pay-current">
               <span>Сохранённые условия{staff.employee_kind === 'trainee' ? ' после стажировки' : ''}</span>
               <strong>{payTerms(staff, currency)}</strong>
-              {initialPayMode === 'partner' && teamPolicy && <span>Гарантия за смену {formatMoneyShort(teamPolicy.floor_minor, currency)}</span>}
+              {staff.pay_effective_from && <span>Дата начала этих условий — {formatDate(staff.pay_effective_from)}</span>}
+              {staff.pay_scheduled?.filter(v => v.effective_from !== staff.pay_effective_from).map(v =>
+                <span key={v.effective_from}>С {formatDate(v.effective_from)} — {v.label}</span>)}
+              {initialPayMode === 'partner' && savedTeamPolicy && <span>Гарантия за смену {formatMoneyShort(savedTeamPolicy.floor_minor, currency)}</span>}
               {initialPayMode === 'custom' && initialCustomPay && <span>Гарантия за смену {formatMoneyShort(initialCustomPay.floor_minor, currency)}</span>}
               {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined &&
                 <span>На стажировке — гарантия {formatMoneyShort(staff.internship_floor_minor, currency)}</span>}
@@ -203,10 +221,12 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {kind === 'trainee' && <section className="pay-trainee">
               <h4>На время стажировки</h4>
               <p className="pay-help">Действуют ступени общей схемы и отдельная гарантия{until ? ` по ${formatDate(until)} включительно` : ''}.</p>
-              <Field label={`Гарантия стажёра за смену, ${unit}`} error={validTraineeFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
-                <MoneyInput id={id} describedBy={describedBy} currency={currency} value={traineeFee} placeholder="0"
-                  onChange={setTraineeFee} onValidityChange={setValidTraineeFee} />}</Field>
+              <Field label={`Гарантия стажёра за смену, ${unit}`} error={!traineeFeeParsed ? 'Введите корректную сумму' : !validTraineeFee ? `Максимальная гарантия — ${formatMoneyShort(maxPolicyMinor, currency)}` : undefined}>{(id, describedBy) =>
+                <MoneyInput id={id} describedBy={describedBy} invalid={!validTraineeFee} currency={currency} value={traineeFee} placeholder="0"
+                  onChange={setTraineeFee} onValidityChange={setTraineeFeeParsed} />}</Field>
             </section>}
+            {staff && <Field label="Новые условия действуют с" hint="Если оставить поле пустым, изменения вступят в силу сегодня по времени точки.">{(id, describedBy) =>
+              <Input id={id} type="date" value={payStart} aria-describedby={describedBy} onChange={e => setPayStart(e.target.value)} />}</Field>}
             <fieldset className="pay-choices"><legend>{kind === 'trainee' ? 'Схема после стажировки' : 'Схема оплаты за смену'}</legend>
               {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
                 <label className="pay-choice" key={choice.id}>
@@ -223,8 +243,8 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             {canSetCustomPay && <div hidden={payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
             {(payMode === 'partner' || kind === 'trainee') && canSetCustomPay && !teamPolicy &&
               <DataState query={common} skeleton={1}>{() => null}</DataState>}
-            {(payPreview || (kind === 'trainee' && teamPolicy && validTraineeFee)) && <PayExample currency={currency} policy={payPreview}
-              traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee && Number.isSafeInteger(Number(traineeFee))
+            {(payMode !== 'partner' || teamPolicy) && <PayExample currency={currency} policy={payPreview}
+              traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee
                 ? { ...teamPolicy, floor_minor: Number(traineeFee) } : null : undefined} />}
             <p className="pay-help">{payTiming}</p>
             {!validProfile && !locations.error && <p className="hint">Проверьте поля в разделе «Основное».</p>}
@@ -255,6 +275,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             <strong>Права сотрудника</strong>
             {accessKeys.map(key => <Checkbox key={key} label={accessLabels[key]} checked={access[key]}
               onChange={checked => setAccess(current => ({ ...current, [key]: checked }))} />)}
+            {position === 'manager' && staff?.access?.legacy_staff_management && <p className="faint">
+              Право «Видеть сотрудников» также открывает этому управляющему редактирование карточек и просмотр начислений на назначенных точках.
+            </p>}
             {showSave && (!validProfile || !validPay) && <p className="hint">Проверьте разделы «Основное» и «Оплата».</p>}
           </div>}
           {staff && (staff.active ? <>
@@ -297,16 +320,21 @@ function PasswordReset({ partnerId, staff, onClose }: { partnerId: string; staff
   );
 }
 
-async function downloadPayroll(list: StaffRow[], month: string, currency: string) {
+type PayrollRow = StaffRow & { payHalves: [bigint, bigint] };
+
+async function downloadPayroll(list: PayrollRow[], month: string, currency: string) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const money = (v: number) => ({ value: Number(minorToDecimal(v, currency)), type: Number, format: '#,##0.00' });
+  const money = (v: MinorInput) => ({ value: Number(minorToDecimal(v, currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
+  const periodHeadings = payrollPeriods(month).map(period => `${payrollPeriodLabel(period)} · выплата ${formatDate(period.payOn)}`);
+  const totals = [sumMinor(list.map(row => row.payHalves[0])), sumMinor(list.map(row => row.payHalves[1]))];
   await writeXlsxFile([
-    { sheet: 'Ведомость', columns: [{ width: 26 }, { width: 16 }, { width: 10 }, { width: 16 }, { width: 16 }],
-      data: [['Сотрудник', 'Телефон', 'Смен', 'Выручка смен', 'Заработок'].map(head),
-        ...list.map((s) => [s.full_name, formatPhone(s.phone), { value: s.month_shifts, type: Number }, money(s.month_revenue_minor), money(s.month_earned_minor)]),
-        [{ value: 'Итого', fontWeight: 'bold' as const }, null, null, money(list.reduce((a, s) => a + Number(s.month_revenue_minor), 0)),
-          { ...money(list.reduce((a, s) => a + Number(s.month_earned_minor), 0)), fontWeight: 'bold' as const }]] },
+    { sheet: 'Ведомость', columns: [26, 16, 10, 16, 16, 40, 40].map(width => ({ width })),
+      data: [['Сотрудник', 'Телефон', 'Выходов', 'Выручка смен', 'Начислено за месяц', ...periodHeadings].map(head),
+        ...list.map((s) => [s.full_name, formatPhone(s.phone), { value: s.month_shifts, type: Number }, money(s.month_revenue_minor),
+          money(s.month_earned_minor), ...s.payHalves.map(money)]),
+        [{ value: 'Итого', fontWeight: 'bold' as const }, null, null, money(sumMinor(list.map(s => s.month_revenue_minor))),
+          { ...money(sumMinor(list.map(s => s.month_earned_minor))), fontWeight: 'bold' as const }, ...totals.map(money)]] },
     { sheet: 'Смены', columns: [{ width: 26 }, { width: 14 }, { width: 24 }, { width: 16 }, { width: 16 }],
       data: [['Сотрудник', 'Дата', 'Точка', 'Выручка', 'Заработок'].map(head),
         ...list.flatMap((s) => s.shifts.map((x) => [s.full_name, x.day, x.location_name, money(x.total_minor), money(x.earned_minor)]))] },
@@ -339,15 +367,21 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const visibleSection = canManageEmployees ? section : 'team';
   const [status, setStatus] = useState<(typeof staffStatuses)[number]['id']>('active');
   const [search, setSearch] = useState('');
-  const [month, setMonth] = useState(monthStart());
+  const [month, setMonth] = useState(() => {
+    const today = new Date();
+    return monthStart(today.getDate() === 1 ? -1 : 0, today);
+  });
   const [edit, setEdit] = useState<{ staff: StaffRow; section: CardSection } | 'new' | null>(null);
   const [access, setAccess] = useState<{ staff: StaffRow; dirty: boolean } | null>(null);
+  const [correction, setCorrection] = useState<{ employee: string; shift: PayrollShift } | null>(null);
   const locs = useQuery({ queryKey: ['locations', partnerId], enabled: canManageEmployees || canCreateStaff, queryFn: () => locationsOf(partnerId) });
-  const q = useQuery({ queryKey: ['staff-list', partnerId, month], enabled: canViewStaff, queryFn: () => staffList(partnerId, month) });
+  const q = useQuery({ queryKey: ['staff-list', partnerId, month], enabled: canViewStaff, queryFn: () => staffList(partnerId, month),
+    refetchInterval: visibleSection === 'shifts' ? 120_000 : false });
   const openShifts = useOpenShifts(partnerId, canManageEmployees);
   const overdueShifts = openShifts.data?.filter(shift => shift.day < shift.today).length ?? 0;
   const canAdd = locs.data?.some((l) => l.status === 'active');
-  const currency = locs.data?.[0]?.currency ?? 'RUB';
+  const payrollCurrency = locs.isSuccess ? locs.data[0]?.currency : undefined;
+  const currency = payrollCurrency ?? 'RUB';
   const setActive = useMutation({
     mutationFn: ({ user, active }: { user: string; active: boolean }) => staffSetActive(user, active),
     onSuccess: (_, { user, active }) => {
@@ -359,8 +393,11 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] });
     },
   });
-  const payroll = (q.data ?? []).filter((s) => s.month_shifts > 0);
-  const exp = useMutation({ mutationFn: () => downloadPayroll(payroll, month, currency) });
+  const payroll = (q.data ?? []).filter((s) => s.month_shifts > 0 || s.shifts.length > 0)
+    .map((staff): PayrollRow => ({ ...staff, payHalves: splitPayroll(month, staff.shifts) }));
+  const exp = useMutation({ mutationFn: async () => {
+    if (payrollCurrency) await downloadPayroll(payroll, month, payrollCurrency);
+  } });
   const term = search.trim().toLocaleLowerCase('ru-RU');
   const digits = /^[+\d()\s.-]+$/.test(term) ? (phoneLoginDigits(term) ?? term.replace(/\D/g, '')) : '';
   const visibleStaff = (q.data ?? []).filter((s) => s.active === (status === 'active') && (
@@ -395,6 +432,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     <div className="row">
                       <strong id={`staff-name-${staff.user_id}`}>{staff.full_name}</strong>
                       <Badge tone={positionOf(staff) === 'trainee' ? 'info' : 'neutral'}>{positionLabels[positionOf(staff)]}</Badge>
+                      {positionOf(staff) === 'trainee' && staff.internship_completed && <span className="faint">Стажировка завершена</span>}
                       {canManageEmployees && staff.open_shift && <Badge tone="success">На смене в «{staff.open_shift.location_name}»</Badge>}
                     </div>
                     <div className="faint">{staff.location_names.join(', ') || 'Точки не назначены'}</div>
@@ -415,34 +453,44 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
         <ShiftReview partner={partnerId} />
         <div className="row between">
           <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-          <Button size="sm" onClick={() => exp.mutate()} loading={exp.isPending} disabled={!payroll.length}>
+          <Button size="sm" onClick={() => exp.mutate()} loading={exp.isPending} disabled={!payroll.length || !payrollCurrency}>
             <Download size={15} aria-hidden />Скачать ведомость Excel
           </Button>
         </div>
         <ActionError error={exp.error} />
-        <DataState query={q}>{() => payroll.length ? (
+        <DataState query={q}>{() => <DataState query={locs} empty={points => points.length ? null :
+          <EmptyState title="За этот месяц нет закрытых смен" />}>{() => (
           <div className="stack">
             <div className="kpis">
-              <div className="kpi"><span className="v">{formatMoneyShort(payroll.reduce((a, s) => a + Number(s.month_earned_minor), 0), currency)}</span><span className="l">начислено за месяц</span></div>
+              <div className="kpi"><span className="v">{formatMoneyShort(sumMinor(payroll.map(staff => staff.month_earned_minor)), currency)}</span><span className="l">начислено за месяц</span></div>
             </div>
+            <PayrollSchedule month={month} currency={currency}
+              amounts={[sumMinor(payroll.map(staff => staff.payHalves[0])), sumMinor(payroll.map(staff => staff.payHalves[1]))]} />
+            {!payroll.length && <EmptyState title="За этот месяц нет закрытых смен" />}
             {payroll.map((staff) => <Card key={staff.user_id}>
-              <div className="row between staff-summary">
-                <div style={{ minWidth: 0 }}><strong>{staff.full_name}</strong>
-                  <div className="faint">Смены: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
+              <div className="stack">
+                <div className="row between staff-summary">
+                  <div style={{ minWidth: 0 }}><strong>{staff.full_name}</strong>
+                    <div className="faint">Выходов: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
+                  </div>
+                  <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency)}</strong>
                 </div>
-                <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency)}</strong>
+                <PayrollSchedule month={month} amounts={staff.payHalves} currency={currency} />
               </div>
               {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>Смены за месяц</summary>
                 <ul className="list">{staff.shifts.map((shift) => <li key={shift.id} className="row between access-row">
                   <span>{dayLabel(shift.day)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
-                    {new Date(shift.opened_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}–{new Date(shift.closed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
+                    {payrollShiftTime(shift)}{shift.counts_as_exit === false && ' · Дополнительная точка'} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
                   </span></span>
-                  <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
+                  <div className="row wrap">
+                    <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
+                    {shift.can_correct && canManageStaff(staff) && <Button size="sm" onClick={() => setCorrection({ employee: staff.full_name, shift })}>Исправить смену</Button>}
+                  </div>
                 </li>)}</ul>
               </details>}
             </Card>)}
           </div>
-        ) : <EmptyState title="За этот месяц нет закрытых смен" />}</DataState>
+        )}</DataState>}</DataState>
       </section>}
       {canManageEmployees && <div hidden={visibleSection !== 'pay'}>
         <section className="stack" aria-label="Оплата">
@@ -453,7 +501,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
               {activeStaff.map((staff) => <li key={staff.user_id} className="row between access-row">
                 <div style={{ minWidth: 0 }}>
                   <strong>{staff.full_name}</strong>
-                  <div className="faint">{payTerms(staff, currency)}</div>
+                  <div className="faint">{payTerms(staff, currency)}{staff.pay_effective_from && ` · с ${formatDate(staff.pay_effective_from)}`}</div>
                   {staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined && <div className="faint">
                     Минимум за смену на стажировке: {formatMoneyShort(staff.internship_floor_minor, currency)}
                   </div>}
@@ -464,6 +512,8 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
           }}</DataState>
         </section>
       </div>}
+      {correction && me && <ClosedShiftCorrection employee={correction.employee} shift={correction.shift}
+        currency={currency} userId={me.user.id} onClose={() => setCorrection(null)} />}
       {edit && (edit === 'new' ? canCreateStaff : canManageEmployees) && <StaffDialog key={selectedStaff?.user_id ?? 'new'} partnerId={partnerId} locations={locs} staff={selectedStaff}
         canSetAccess={canSetAccess} canSetCustomPay={canManageEmployees} initialSection={edit === 'new' ? undefined : edit.section}
         onClose={() => setEdit(null)} onChangeAccess={changeAccess} />}
@@ -479,12 +529,15 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
 
 export function StaffPage() {
   const { me } = useSession();
-  const partner = me?.assignments.find(a => a.scope_type === 'partner' && a.role === 'franchisee')
-    ?? me?.assignments.find(a => a.scope_type === 'partner' && a.permissions.some(p => p === 'staff.manage' || p === 'staff.view' || p === 'staff.create'));
+  const ownedCards = franchiseePartnerCards(me);
+  const delegated = ownedCards.length === 0 ? me?.assignments.find(a =>
+    a.scope_type === 'partner' && a.permissions.some(p => p === 'staff.manage' || p === 'staff.view' || p === 'staff.create'))?.scope_id : undefined;
+  const partner = ownedCards.length === 1 ? ownedCards[0] : delegated;
   return (
     <>
       <PageHeader title="Сотрудники" />
-      {partner?.scope_id ? <StaffPanel key={partner.scope_id} partnerId={partner.scope_id} /> : <EmptyState title="Нет франчайзи" />}
+      {ownedCards.length > 1 ? <EmptyState title="Уточните доступ к карточке франчайзи" text={FRANCHISEE_CARD_AMBIGUITY} />
+        : partner ? <StaffPanel key={partner} partnerId={partner} /> : <EmptyState title="Нет франчайзи" />}
     </>
   );
 }

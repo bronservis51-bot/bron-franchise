@@ -11,6 +11,7 @@ import { command } from '../../platform/backend';
 import { useSession } from '../../platform/session';
 import { formatDate, formatDateTime } from '../../platform/dates';
 import { ActionError, Alert, Badge, Button, Card, Chips, ConfirmDialog, DataState, EmptyState, Field, Input, LinkButton, PageHeader, Select } from '../../ui';
+import { HelpTip } from '../../ui/HelpTip';
 import { ARTICLE_STATUS, st } from '../../ui/status';
 import { headings, Markdown } from '../../ui/markdown';
 import { useToast } from '../../ui/toast';
@@ -202,6 +203,7 @@ export function KbHomePage() {
         ) : (
           <>
             <LinkButton to="/kb/questions"><MessageCircleQuestion size={16} aria-hidden />Мои вопросы{inbox.data?.new_answers ? ` · новых ответов: ${inbox.data.new_answers}` : ''}</LinkButton>
+            <HelpTip label="Где посмотреть ответ">Ответы команды сети появляются в «Моих вопросах». Вопрос по инструкции можно задать из самой статьи.</HelpTip>
             <Button onClick={() => setAsking('')}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>
           </>
         )} />

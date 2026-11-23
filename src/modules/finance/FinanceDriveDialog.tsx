@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ConfirmDialog } from '../../ui';
 import { googleDriveClientId, loadGoogleDriveIdentity, saveFinanceReportToDrive, type GoogleDriveIdentity } from './financeDrive';
+import { downloadFinanceFile } from './financeReport';
 
 const clientId = googleDriveClientId(import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID);
 
@@ -16,6 +17,7 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
   const upload = useRef<AbortController | null>(null);
+  const downloadRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -25,7 +27,7 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
         () => { if (active) setError('Не удалось открыть вход в Google. Можно скачать файл и загрузить его вручную.'); },
       );
     }
-    return () => { active = false; upload.current?.abort(); };
+    return () => { active = false; upload.current?.abort(); downloadRequest.current?.abort(); };
   }, []);
 
   async function save() {
@@ -46,20 +48,18 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
   }
 
   async function download() {
+    if (downloadRequest.current) return;
+    const controller = new AbortController();
+    downloadRequest.current = controller;
     setDownloading(true);
     setError(null);
     try {
-      const file = await makeFile();
-      const url = URL.createObjectURL(file);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = file.name;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadFinanceFile(makeFile, controller.signal);
     } catch {
-      setError('Не удалось скачать отчёт. Повторите попытку.');
+      if (!controller.signal.aborted) setError('Не удалось скачать отчёт. Повторите попытку.');
     } finally {
-      setDownloading(false);
+      downloadRequest.current = null;
+      if (!controller.signal.aborted) setDownloading(false);
     }
   }
 

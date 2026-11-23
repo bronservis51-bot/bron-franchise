@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@supabase/supabase-js';
 import type { QueuedOperation } from '../../src/platform/offline';
 
-const { list, add, remove } = vi.hoisted(() => ({ list: vi.fn(), add: vi.fn(), remove: vi.fn() }));
-vi.mock('../../src/platform/offline', () => ({ opQueue: { list, add, remove } }));
+const { list, recordFailure, remove } = vi.hoisted(() => ({ list: vi.fn(), recordFailure: vi.fn(), remove: vi.fn() }));
+vi.mock('../../src/platform/offline', () => ({ opQueue: { list, recordFailure, remove } }));
 vi.mock('../../src/platform/config', () => ({
   isConfigured: true,
   config: { supabaseUrl: 'https://queue-test.invalid', supabaseKey: 'public-fixture-key-for-offline-tests' },
@@ -11,6 +11,7 @@ vi.mock('../../src/platform/config', () => ({
 import { supabase } from '../../src/platform/supabase';
 import { command, toAppError } from '../../src/platform/backend';
 import { flushOutbox } from '../../src/platform/outbox';
+import { staffShiftCorrect, type PayrollShift } from '../../src/modules/staff/api';
 
 // Deliberately fake opaque tokens: requests only reach the fetch stub below.
 const session = (id: string, access_token: string) => ({ data: { session: { user: { id }, access_token } as Session }, error: null });
@@ -23,7 +24,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('fetch', requestFetch);
   vi.stubGlobal('navigator', { onLine: true });
-  list.mockResolvedValue([structuredClone(op)]); add.mockResolvedValue(undefined); remove.mockResolvedValue(undefined);
+  list.mockResolvedValue([structuredClone(op)]); recordFailure.mockResolvedValue(undefined); remove.mockResolvedValue(undefined);
   requestFetch.mockResolvedValue(success());
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -57,11 +58,10 @@ describe('real Supabase RPC authorization for queued work', () => {
     }));
     await expect(flushOutbox('user-A')).resolves.toEqual({ sent: 0, failed: 1 });
     expect(remove).not.toHaveBeenCalled();
-    const retained = add.mock.calls[0][0] as QueuedOperation;
-    expect(retained).toMatchObject({ userId: 'user-A', clientOpId: 'operation-A', payload, lastErrorCode: 'unauthenticated' });
+    expect(recordFailure).toHaveBeenCalledExactlyOnceWith(op, expect.any(String), 'unauthenticated');
     expect(new Headers(requestFetch.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer fixture-revoked-A');
 
-    list.mockResolvedValue([retained]);
+    list.mockResolvedValue([{ ...op, attempts: 1, lastError: 'JWT expired', lastErrorCode: 'unauthenticated' }]);
     vi.mocked(supabase!.auth.getSession).mockResolvedValue(session('user-A', 'fixture-fresh-A'));
     requestFetch.mockResolvedValue(success());
     await expect(flushOutbox('user-A')).resolves.toEqual({ sent: 1, failed: 0 });
@@ -72,6 +72,24 @@ describe('real Supabase RPC authorization for queued work', () => {
 
   it('preserves an explicit server maintenance code for retry classification', () => {
     expect(toAppError({ message: 'maintenance', details: 'Переключение базы' })).toMatchObject({ code: 'maintenance', detail: 'Переключение базы' });
+  });
+
+  it('sends a financial receipt under the same actor it used for the operation key', async () => {
+    vi.spyOn(supabase!.auth, 'getSession')
+      .mockResolvedValueOnce(session('user-A', 'fixture-token-A'))
+      .mockResolvedValue(session('user-B', 'fixture-token-B'));
+    await command('royalty_payment_add', { partner: 'partner', month: '2026-11-01', amount: '12300', paid_on: '2026-11-10', note: null });
+    const [input, init] = requestFetch.mock.calls[0];
+    expect(String(input)).toBe('https://queue-test.invalid/rest/v1/rpc/financial_operation');
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-token-A');
+    expect(JSON.parse(String(init?.body))).toMatchObject({ p_command: 'royalty_payment_add', p_args: { p_amount: '12300' } });
+  });
+
+  it('does not submit a correction opened in A after B has signed in', async () => {
+    vi.spyOn(supabase!.auth, 'getSession').mockResolvedValue(session('user-B', 'fixture-token-B'));
+    const shift = { id: 'shift', revision: 2 } as PayrollShift;
+    await expect(staffShiftCorrect('user-A', shift, '100', '200', 'Причина')).rejects.toMatchObject({ code: 'unauthenticated' });
+    expect(requestFetch).not.toHaveBeenCalled();
   });
 
   it.each([

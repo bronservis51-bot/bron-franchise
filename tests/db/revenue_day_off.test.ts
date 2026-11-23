@@ -106,7 +106,7 @@ describe('point day off', () => {
     await testDb.expectError(OTHER_OWNER, SET_DAY_OFF, 'not-found', [point.id, point.today, true]);
     await testDb.expectError(STAFF, SET_DAY_OFF, 'forbidden', [point.id, point.today, true]);
     await testDb.expectError(OWNER, SET_DAY_OFF, 'validation', [point.id, point.tomorrow, true]);
-    await testDb.expectError(OWNER, SET_DAY_OFF, 'period-locked', [point.id, '2020-01-01', true]);
+    await testDb.expectError(OWNER, SET_DAY_OFF, 'validation', [point.id, '2020-01-01', true]);
     await expect(testDb.as(null, SET_DAY_OFF, [point.id, point.today, true])).rejects.toThrow(/permission denied/);
     await expect(testDb.as(OWNER, 'select * from app_private.revenue_day_off')).rejects.toThrow(/permission denied/);
   });

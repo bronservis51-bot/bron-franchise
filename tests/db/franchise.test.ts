@@ -87,10 +87,10 @@ describe('выручка за день', () => {
     await t.expectError(MARSEL, `select public.revenue_save($1, $2::date, 100, 0, null)`, 'not-found', [l, await today(l)]);
   });
 
-  it('франчайзи не правит закрытые месяцы, менеджер — может', async () => {
+  it('франчайзи и менеджер могут исправить выручку за прошлые месяцы', async () => {
     const l = await loc('ALPHA-2');
     const old = (await t.admin<{ d: string }>(`select to_char((date_trunc('month', app_private.local_today($1)) - interval '2 months')::date + 3, 'YYYY-MM-DD') d`, [l]))[0].d;
-    await t.expectError(VIKTOR, `select public.revenue_save($1, $2::date, 100, 0, null)`, 'period-locked', [l, old]);
+    await t.as(VIKTOR, `select public.revenue_save($1, $2::date, 50, 0, null)`, [l, old]);
     const r = await t.as<{ total_minor: string }>(FM, `select * from public.revenue_save($1, $2::date, 100, 0, 'исправил менеджер')`, [l, old]);
     expect(Number(r[0].total_minor)).toBe(100);
   });
@@ -147,6 +147,25 @@ describe('роялти', () => {
     await t.admin(`delete from public.partner where id = $1`, [p]);
   });
 
+  it('5.2 — долг в валютах сохраняется, рублёвый итог без нужного курса отсутствует', async () => {
+    const read = () => one<{ debt_rub_minor: number | null; totals: Pick<Row, 'currency' | 'debt_minor'>[] }>(
+      FM, 'select public.royalty_summary(null) j');
+    const before = await read();
+    expect(before.totals.find(row => row.currency === 'KZT')?.debt_minor).toBeGreaterThan(0);
+    expect(before.debt_rub_minor).not.toBeNull();
+    const rates = await t.admin<{ day: string; rub_per_unit: string; set_by: string | null }>(
+      "delete from public.fx_rate where currency = 'KZT' returning day::text, rub_per_unit::text, set_by");
+    try {
+      const after = await read();
+      expect(after.debt_rub_minor).toBeNull();
+      expect(after.totals).toEqual(before.totals);
+    } finally {
+      for (const rate of rates) await t.admin(
+        "insert into public.fx_rate(currency, day, rub_per_unit, set_by) values ('KZT', $1, $2, $3)",
+        [rate.day, rate.rub_per_unit, rate.set_by]);
+    }
+  });
+
   it('прошлый долг и оплата меняют долг; фильтр по месяцу показывает только этот месяц', async () => {
     const p = await partner('ALPHA');
     const before = (await summary(null)).rows.find((r) => r.partner_name.startsWith('Виктор'))!;
@@ -172,6 +191,32 @@ describe('роялти', () => {
     expect(v.is_open).toBe(true);
     const all = (await summary(null)).rows.find((r) => r.partner_name.startsWith('Виктор'))! as Row & { current_accrual_minor: number };
     expect(all.current_accrual_minor).toBe(v.accrued_minor);
+  });
+
+  it('5.2 — сводный долг включает операции по месяцу роялти, включая оплату старого долга сегодняшней датой', async () => {
+    const id = await partner('ALPHA');
+    const [{ closed, open }] = await t.admin<{ closed: string; open: string }>(
+      `select (app_private.current_month() - interval '1 month')::date::text closed, app_private.current_month()::text open`);
+    const row = async (month: string | null) => (await summary(month)).rows.find(r => r.partner_name.startsWith('Виктор'))!;
+    const allBefore = await row(null);
+    const openBefore = await row(open);
+    await t.as(FM, "select royalty_manual_add($1,$2,5000,'Долг прошлого месяца')", [id,closed]);
+    await t.as(FM, "select royalty_payment_add($1,$2,2000,current_date,'Оплата прошлого месяца')", [id,closed]);
+    await t.as(FM, "select royalty_payment_add($1,$2,1000,current_date,'Оплата текущего месяца')", [id,open]);
+    const target = openBefore.accrued_minor + openBefore.manual_minor + 3500;
+    await t.as(FM, "select royalty_set_accrual($1,$2,$3,'Уточнение текущего месяца')", [id,open,target]);
+    const all = await row(null);
+    expect(all).toMatchObject({paid_minor: allBefore.paid_minor + 2000, manual_minor: allBefore.manual_minor + 5000,
+      debt_minor: allBefore.debt_minor + 3000});
+    expect(await row(open)).toMatchObject({paid_minor: openBefore.paid_minor + 1000, manual_minor: openBefore.manual_minor + 3500,
+      debt_minor: target - openBefore.paid_minor - 1000});
+    const card = await one<{ months: {is_open: boolean; debt_minor: number}[]; payments: {month:string; note:string}[] }>(
+      FM, 'select royalty_partner($1) j', [id]);
+    expect(all.debt_minor).toBe(card.months.filter(m => !m.is_open).reduce((sum,m) => sum + m.debt_minor,0));
+    const owner = await one<{ debt_minor: number }>(VIKTOR, 'select royalty_my() j');
+    expect(all.debt_minor).toBe(owner.debt_minor);
+    expect(card.payments).toEqual(expect.arrayContaining([expect.objectContaining({month: open,note:'Оплата текущего месяца'}),
+      expect.objectContaining({month: closed,note:'Оплата прошлого месяца'})]));
   });
 
   it('новая ставка действует с указанного месяца', async () => {

@@ -348,6 +348,16 @@ dialog.install-dialog[open] { display: flex; flex-direction: column; max-height:
 .sheet-backdrop { position: fixed; inset: 0; background: rgb(10 15 22 / 45%); z-index: 40; }
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--surface); border-radius: var(--radius-l) var(--radius-l) 0 0; padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom)); max-height: 80dvh; overflow-y: auto; }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 6px; z-index: 50; }
+@media (max-width: 960px) {
+  .menu {
+    min-width: min(260px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: calc(var(--app-height, 100dvh) - 128px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+}
 .menu button, .menu a { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; background: none; border-radius: var(--radius-s); text-align: left; color: var(--text); cursor: pointer; }
 .menu button:hover, .menu a:hover { background: var(--surface-2); text-decoration: none; }
 .menu .sep { border-top: 1px solid var(--border); margin: 6px 0; }
@@ -710,6 +720,7 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, .menu a, a.ch
 .sw.net, .seg.net { background: var(--series-1); }
 .sw.payroll, .seg.payroll { background: var(--series-2); }
 .sw.expenses, .seg.expenses { background: var(--series-4); }
+.sw.returns, .seg.returns { background: var(--series-3); }
 .fin-bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; height: 200px; align-items: end; border-bottom: 1px solid var(--border); position: relative; }
 .fin-col { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; outline: none; cursor: default; }
 .fin-stack { width: min(44px, 70%); display: flex; flex-direction: column-reverse; gap: 2px; min-height: 2px; }

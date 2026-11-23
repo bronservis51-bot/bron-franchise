@@ -156,22 +156,65 @@ it('preserves the finance, learning and CRM call paths across a native split-own
   }
   async function call<T>(email: string, sql: string, params: unknown[] = []) {
    const {rows: [user]} = await migrated.query<{id: string}>('select id from public.app_user where email=$1', [email]);
-   return migrated.transaction(async tx => {
-    await tx.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({sub: user.id, role: 'authenticated'})]);
-    await tx.exec('set local role authenticated');
-    return (await tx.query<{result: T}>(sql, params)).rows[0].result;
-   });
+   try {
+    return await migrated.transaction(async tx => {
+     await tx.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({sub: user.id, role: 'authenticated'})]);
+     await tx.exec('set local role authenticated');
+     return (await tx.query<{result: T}>(sql, params)).rows[0].result;
+    });
+   } catch (error) {
+    const failure = error as { message?: string; detail?: string; where?: string };
+    throw new Error(`${sql}: ${failure.message} ${failure.detail ?? ''} ${failure.where ?? ''}`, { cause: error });
+   }
   }
   const finance = await call<{locations: unknown[]}>(OWNER, 'select public.finance_my(current_date) as result');
   expect(finance.locations.length).toBeGreaterThan(0);
   const learning = await call<{audience: string}>(STAFF, 'select public.learning_overview() as result');
   expect(learning.audience).toBe('sales');
+  const home = await call<{locations: {location_id: string; days_off: string[]}[]}>(
+   STAFF, 'select public.staff_home(null) as result');
+  const target = home.locations[0];
+  expect(target.days_off).toEqual([]);
+  const {rows: [migratedPoint]} = await migrated.query<{partner_id: string}>(
+   'select partner_id from public.location where id=$1', [target.location_id]);
+  const login = 'split.owner.shift';
+  await call<string>(OWNER, "select public.staff_account_create($1,'Проверка смены',$2,'test-only-password',array[$3::uuid],false) as result",
+   [migratedPoint.partner_id, login, target.location_id]);
+  const worker = login + '@access.bron.local';
+  const open = await call<{id: string; day: string}>(worker, 'select to_jsonb(public.shift_open($1)) as result', [target.location_id]);
+  const closed = await call<{shift: {id: string; status: string; revision: number}}>(worker,
+   'select public.shift_submit($1,$2,300000,100000,$3) as result', [target.location_id, open.day, crypto.randomUUID()]);
+  expect(closed.shift).toMatchObject({ id: open.id, status: 'closed', revision: 1 });
+  const correction = await call<{ok: boolean; revision: number}>(OWNER,
+   "select public.staff_shift_correct($1,300000,200000,$2,'Сверка кассы',$3) as result",
+   [open.id, closed.shift.revision, crypto.randomUUID()]);
+  expect(correction).toMatchObject({ ok: true, revision: 2 });
   const operation = crypto.randomUUID();
-  const createLead = () => call<{id: string}>('fm@demo.example.com', 'select public.lead_save($1::jsonb,null,$2) as result',
-   [JSON.stringify({name: 'Проверка сохранения'}), operation]);
+  const crm = 'fm@demo.example.com';
+  const createLead = () => call<{id: string; updated_at: string}>(crm, 'select public.lead_save($1::jsonb,null,$2) as result',
+   [JSON.stringify({name: 'Проверка сохранения', phone: '+7 777 000-00-44'}), operation]);
+  const savedLead = await createLead();
+  expect(savedLead.id).toBe(operation);
   expect((await createLead()).id).toBe(operation);
-  expect((await createLead()).id).toBe(operation);
+  await call(crm, 'select public.lead_set_deleted($1,true,$2) as result', [savedLead.id, savedLead.updated_at]);
+  await migrated.transaction(async tx => {
+   await tx.exec('set local role anon');
+   expect((await tx.query('select public.lead_submit($1::jsonb) result', [JSON.stringify({ name:'Повтор', phone:'8 777 000-00-44',
+    city:'Алматы', contact_via:'call', budget:'partial',timing:'month',manage:'self',experience:'some',place:'options' })])).rows)
+    .toEqual([{ result:{ok:true} }]);
+  });
+  expect(await call(crm, 'select public.lead_pending_recontacts() as result')).toBe(1);
+  expect((await migrated.query(`select actor,has_table_privilege(actor,'app_private.lead_recontact','select') readable
+    from unnest(array['postgres','anon','authenticated']) as actor`)).rows)
+   .toEqual([{actor:'postgres',readable:true},{actor:'anon',readable:false},{actor:'authenticated',readable:false}]);
   for (const fn of ['app_private.fin_month(uuid,uuid[],date,boolean)', 'app_private.expense_rows(uuid,uuid[],date,boolean)']) {
+   const allowed = await migrated.query<{actor: string; allowed: boolean}>(`
+    select actor, has_function_privilege(actor, $1::regprocedure, 'EXECUTE') as allowed
+    from unnest(array['postgres','anon','authenticated']) as actor`, [fn]);
+   expect(allowed.rows).toEqual([{actor:'postgres',allowed:true},{actor:'anon',allowed:false},{actor:'authenticated',allowed:false}]);
+  }
+  for (const fn of ['app_private.point_has_recorded_activity(uuid,date)',
+   'app_private.point_awaits_opening_date(public.location,date)', 'app_private.require_shift_point_open(public.location,date)']) {
    const allowed = await migrated.query<{actor: string; allowed: boolean}>(`
     select actor, has_function_privilege(actor, $1::regprocedure, 'EXECUTE') as allowed
     from unnest(array['postgres','anon','authenticated']) as actor`, [fn]);

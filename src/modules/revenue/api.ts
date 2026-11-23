@@ -3,13 +3,13 @@ import { operationKey } from '../../platform/operation';
 import { sendOrQueue } from '../../platform/outbox';
 
 export interface DayEntry { revision: number; employee_id: string | null; employee_name: string | null; cash_minor: number; card_minor: number; total_minor: number; comment: string | null }
-export interface DayRow { day_version?: string; reported_total_minor?: number | null; unallocated_minor?: number; day: string; cash_minor: number; card_minor: number; total_minor: number; comment: string | null; updated_at: string; entries: DayEntry[] }
+export interface DayRow { day_version?: string; reported_total_minor?: number | null; unallocated_minor?: number; day: string; cash_minor: number; card_minor: number; total_minor: number; return_minor?: number; comment: string | null; updated_at: string; entries: DayEntry[] }
 
 export interface LocationMonth {
   location_id: string; location_name: string; city: string; currency: string; status: string;
   partner_id: string; partner_name: string;
   month: string; today: string;
-  opened_on?: string | null;
+  opened_on?: string | null; editable_days?: string[];
   plan_minor: number | null; fact_minor: number; cash_minor: number; card_minor: number; pct: number | null;
   days_in_month: number; days_left: number; need_per_day_minor: number | null;
   missing_days: string[]; days_off?: string[]; last_day: string | null; fx_rub: number | null;
@@ -17,9 +17,16 @@ export interface LocationMonth {
 
 export interface MonthDetail extends LocationMonth {
   editable_from: string | null; days: DayRow[];
+  return_minor?: number;
   prev_month_total_minor: number; prev_same_period_minor: number; same_period_minor: number;
   weekday_avg: { dow: number; avg_minor: number }[];
   staff: { user_id: string; full_name: string }[];
+}
+
+export function canEditRevenueDay(m: LocationMonth & { editable_from?: string | null }, day: string) {
+  if (m.editable_days) return m.editable_days.includes(day);
+  return m.status === 'active' && day <= m.today && (!m.opened_on || day >= m.opened_on)
+    && (!m.editable_from || day >= m.editable_from);
 }
 
 export interface Overview { month: string; rows: LocationMonth[]; fact_rub_minor: number | null; plan_rub_minor: number | null; missing_fx: string[] }

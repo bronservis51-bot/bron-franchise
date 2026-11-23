@@ -5,8 +5,9 @@ import { monthLabel } from '../../platform/dates';
 import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
 import { CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
+import { toAppError } from '../../platform/backend';
 import { planSet } from '../revenue/api';
-import { accessGrant, accountCreatePhone, countries, locationSave, partnerSave, type Location, type Partner } from './api';
+import { accessGrant, accountCreatePhone, countries, locationSave, managerPartnerStatusKey, partnerCreate, partnerSave, type Location, type Partner, type PartnerFromLead } from './api';
 import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
 import { loginEmail, phoneLoginDigits } from '../../platform/login';
@@ -16,20 +17,35 @@ function formChanged<T extends Record<string, string>>(original: T, draft: T) {
   return Object.keys(original).some(key => original[key] !== draft[key]);
 }
 
-export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
+export function PartnerDialog({ partner, working, fromLead, onClose, onSaved }: {
+  partner?: Partner; working?: boolean; onClose: () => void; onSaved?: (id: string) => void;
+  fromLead?: { initial: Partial<PartnerFromLead>; create: (fields: PartnerFromLead, operation: string) => Promise<string> };
+}) {
   const qc = useQueryClient();
   const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity });
-  const [original] = useState(() => ({ name: partner?.name ?? '', country: partner?.country ?? 'RU', contact_name: partner?.contact_name ?? '',
-    contact_phone: partner?.contact_phone ?? '', contact_email: partner?.contact_email ?? '', status: partner?.status ?? 'active',
-    preparation_stage: partner?.preparation_stage ?? '' }));
+  const [original] = useState(() => ({ name: partner?.name ?? fromLead?.initial.name ?? '', country: partner?.country ?? fromLead?.initial.country ?? 'RU',
+    contact_name: partner?.contact_name ?? fromLead?.initial.contact_name ?? '', contact_phone: partner?.contact_phone ?? fromLead?.initial.contact_phone ?? '',
+    contact_email: partner?.contact_email ?? fromLead?.initial.contact_email ?? '', status: partner?.status ?? 'active',
+    preparation_stage: partner?.preparation_stage ?? fromLead?.initial.preparation_stage ?? '',
+    contact_city: fromLead?.initial.contact_city ?? '', contact_instagram: fromLead?.initial.contact_instagram ?? '' }));
   const [f, setF] = useState(original);
+  const [version] = useState(() => ({ id: partner?.id ?? null, updatedAt: partner?.updated_at ?? null }));
+  const [operation] = useState(() => crypto.randomUUID());
   const m = useMutation({
-    mutationFn: () => partnerSave({ id: partner?.id ?? null, ...f, preparation_stage: f.preparation_stage || null }),
+    mutationFn: () => {
+      const { contact_city, contact_instagram, status, ...draft } = f;
+      const fields = { ...draft, preparation_stage: draft.preparation_stage || null };
+      if (fromLead) return fromLead.create({ ...fields, contact_city, contact_instagram }, operation);
+      return version.id
+        ? partnerSave({ ...fields, status, id: version.id, expected_updated_at: version.updatedAt })
+        : partnerCreate({ ...fields, status, operation });
+    },
+    onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['partners'] }); },
     onSuccess: (id) => { void qc.invalidateQueries(); onSaved?.(id); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
-    <ConfirmDialog open title={partner ? 'Данные франчайзи' : 'Новый франчайзи'} confirmLabel="Сохранить" busy={m.isPending} error={m.error}
+    <ConfirmDialog open title={partner ? 'Данные франчайзи' : 'Новый франчайзи'} confirmLabel={fromLead ? 'Создать франчайзи' : 'Сохранить'} busy={m.isPending} error={m.error}
       disabled={!f.name.trim()} dirty={formChanged(original, f)} onClose={onClose} onConfirm={() => m.mutate()}>
       <Field label="Название" required hint="Например: Виктор (Волгоград)">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
@@ -38,13 +54,13 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
             {(c.data ?? []).map((x) => <option key={x.code} value={x.code}>{x.name} ({x.default_currency})</option>)}
           </Select>
         )}</Field>
-        {partner && <Field label="Статус">{(id) => (
+        {partner && <Field label="Статус франчайзи">{(id) => (
           <Select id={id} value={f.status} onChange={set('status')}>
-            <option value="active">Работает</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
+            <option value="active">Активен</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
           </Select>
         )}</Field>}
       </div>
-      <Field label="Этап подготовки" hint="Меняется свободно; не отключает доступ и работу точек">{(id) => (
+      <Field label="Этап подготовки" hint={working ? 'Сохранённый этап до открытия торговой точки' : 'Этап можно менять в любом порядке'}>{(id) => (
         <Select id={id} value={f.preparation_stage} onChange={set('preparation_stage')}>
           <option value="">Не указан</option>
           {Object.entries(PARTNER_PREPARATION).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
@@ -55,6 +71,10 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
         <Field label="Телефон">{(id) => <Input id={id} type="tel" value={f.contact_phone} onChange={set('contact_phone')} />}</Field>
         <Field label="Email">{(id) => <Input id={id} type="email" value={f.contact_email} onChange={set('contact_email')} />}</Field>
       </div>
+      {fromLead && <div className="grid grid-2" style={{ gap: 12 }}>
+        <Field label="Город">{id => <Input id={id} value={f.contact_city} maxLength={80} onChange={set('contact_city')} />}</Field>
+        <Field label="Instagram">{id => <Input id={id} value={f.contact_instagram} maxLength={30} onChange={set('contact_instagram')} />}</Field>
+      </div>}
     </ConfirmDialog>
   );
 }
@@ -64,8 +84,10 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
   const [original] = useState(() => ({ name: location?.name ?? '', city: location?.city ?? '', address: location?.address ?? '',
     status: location?.status ?? 'active', opened_on: location?.opened_on ?? '' }));
   const [f, setF] = useState(original);
+  const [version] = useState(() => ({ id: location?.id ?? null, updatedAt: location?.updated_at ?? null }));
   const m = useMutation({
-    mutationFn: () => locationSave({ id: location?.id ?? null, partner: partnerId, ...f, opened_on: f.opened_on || null }),
+    mutationFn: () => locationSave({ id: version.id, partner: partnerId, ...f, opened_on: f.opened_on || null, expected_updated_at: version.updatedAt }),
+    onError: error => { if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['locations', partnerId] }); },
     onSuccess: () => { void qc.invalidateQueries(); onClose(); },
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -75,11 +97,11 @@ export function LocationDialog({ partnerId, location, onClose }: { partnerId: st
       <Field label="Название точки" required hint="Например: Волгоград Европа">{(id) => <Input id={id} value={f.name} onChange={set('name')} />}</Field>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Город" required>{(id) => <Input id={id} value={f.city} onChange={set('city')} />}</Field>
-        <Field label="Дата открытия" hint="С этого дня считаются пропуски">{(id) => <Input id={id} type="date" value={f.opened_on} onChange={set('opened_on')} />}</Field>
+        <Field label="Дата открытия" hint="С этого дня доступны новые смены и считаются пропуски">{(id) => <Input id={id} type="date" value={f.opened_on} onChange={set('opened_on')} />}</Field>
       </div>
       <Field label="Адрес">{(id) => <Input id={id} value={f.address} onChange={set('address')} />}</Field>
-      {location && <Field label="Статус">{(id) => (
-        <Select id={id} value={f.status} onChange={set('status')}><option value="active">Работает</option><option value="closed">Закрыта</option></Select>
+      {location && <Field label="Статус точки">{(id) => (
+        <Select id={id} value={f.status} onChange={set('status')}><option value="active">Активна</option><option value="closed">Закрыта</option></Select>
       )}</Field>}
     </ConfirmDialog>
   );
@@ -132,6 +154,7 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['access', partnerId] });
+      void qc.invalidateQueries({ queryKey: managerPartnerStatusKey });
       if (r.status === 'created') return;
       toast(r.status === 'granted' ? 'Доступ выдан' : r.status === 'exists' ? 'У этого пользователя уже есть доступ' : 'Пользователь не найден. Отмените подготовленное приглашение в карточке и затем создайте учётную запись.');
       onClose();
