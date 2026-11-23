@@ -91,7 +91,7 @@ install -m 0644 "$release"/ops/*.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl restart bron-mobile-preview-api.service bron-mobile-preview-gate.service
 if ! curl -fsS --retry 15 --retry-connrefused --retry-delay 2 --max-time 3 http://127.0.0.1:54982/auth/v1/health >/dev/null ||
-   [[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://172.19.0.1:54981/_preview/check)" != 401 ]]; then
+   [[ "$(docker exec "$front" curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://172.19.0.1:54981/_preview/check)" != 401 ]]; then
   restore
   printf 'Preview services did not become ready.\n' >&2
   exit 1
