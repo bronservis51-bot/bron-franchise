@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
-import { addDays, dayLabel, monthLabel, monthStart } from '../../platform/dates';
+import { addDays, dayLabel, formatDate, monthLabel, monthStart } from '../../platform/dates';
 import { formatMoneyShort, sumMinor, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Alert, Button, Card, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox, Select } from '../../ui';
@@ -26,8 +26,16 @@ type ClosePoint = ShiftPoint & { dates: string[] };
 const maxShiftTotal = 100_000_000_000n;
 const targetKey = (location: string, day: string) => `${location}:${day}`;
 
+function shiftDateRestriction(point: ShiftPoint, day: string) {
+  if (point.awaiting_opening_date) return 'Дата открытия ещё не указана. Обратитесь к руководителю.';
+  if (point.opened_on && day < point.opened_on) return `Сдать смену можно с ${formatDate(point.opened_on)}.`;
+  if (point.days_off?.includes(day)) return 'Точка не работала. Если это ошибка, обратитесь к руководителю.';
+  return null;
+}
+
 function availableDates(point: ShiftPoint, history: Shift[], blocked: (key: string) => boolean) {
   return [point.today, addDays(point.today, -1)].filter(day =>
+    !shiftDateRestriction(point, day) &&
     !(day === point.today ? point.my_today : point.my_yesterday) &&
     !history.some(shift => shift.location_id === point.location_id && shift.day === day) &&
     !blocked(targetKey(point.location_id, day)));
@@ -42,8 +50,9 @@ function CloseDialog({ userId, shift, points, blocked, currency: homeCurrency, r
   const editing = shift?.status === 'closed';
   const initialCash = editing ? String(shift.cash_minor) : '';
   const initialCard = editing ? String(shift.card_minor) : '';
-  const [locationId, setLocationId] = useState(points.length === 1 ? points[0].location_id : '');
-  const [selectedDay, setSelectedDay] = useState('');
+  const onlyPoint = points.length === 1 ? points[0] : undefined;
+  const [locationId, setLocationId] = useState(onlyPoint?.location_id ?? '');
+  const [selectedDay, setSelectedDay] = useState(onlyPoint?.dates[0] ?? '');
   const [cash, setCash] = useState(initialCash);
   const [card, setCard] = useState(initialCard);
   const [cashValid,setCashValid]=useState(true); const [cardValid,setCardValid]=useState(true); const [zero,setZero]=useState(false);
@@ -54,7 +63,7 @@ function CloseDialog({ userId, shift, points, blocked, currency: homeCurrency, r
   const exceedsLimit = total > maxShiftTotal;
   const point = points.find(item => item.location_id === locationId);
   const dates = point?.dates ?? [];
-  const day = shift?.day ?? (dates.includes(selectedDay) ? selectedDay : dates[0]);
+  const day = shift?.day ?? (dates.includes(selectedDay) ? selectedDay : '');
   const key = shift?.id ?? (point && day ? targetKey(point.location_id, day) : '');
   const currency = point?.currency ?? homeCurrency;
   const pointTerms = point && (day === point.today ? point.pay_today ?? policy : point.pay_yesterday);
@@ -84,17 +93,26 @@ function CloseDialog({ userId, shift, points, blocked, currency: homeCurrency, r
     <ConfirmDialog open title={editing ? 'Исправить смену' : 'Закрыть смену'} confirmLabel={editing ? 'Сохранить' : 'Закрыть смену'} busy={m.isPending} error={m.error}
       disabled={!canSave} dirty={dirty} onClose={onClose} onConfirm={submit}>
       {shift ? <p className="muted">{dayLabel(shift.day)}{shift.location_name ? `, ${shift.location_name}` : ''}</p> : <>
-        {points.length > 1 ? <Field label="Торговая точка" required>{id => (
-          <Select id={id} value={locationId} disabled={m.isPending} onChange={event => { setLocationId(event.target.value); setSelectedDay(''); }}>
+        {(points.length > 1 || (!point && points.length > 0)) ? <Field label="Торговая точка" required>{id => (
+          <Select id={id} value={point ? locationId : ''} disabled={m.isPending} onChange={event => {
+            setLocationId(event.target.value);
+            setSelectedDay(points.find(item => item.location_id === event.target.value)?.dates[0] ?? '');
+          }}>
             <option value="">Выберите точку</option>
             {points.map(item => <option key={item.location_id} value={item.location_id}>{item.location_name}</option>)}
           </Select>
         )}</Field> : point && <p className="muted">{point.location_name}</p>}
-        {dates.length > 1 ? <Field label="Дата смены">{id => (
+        {(dates.length > 1 || (!day && dates.length > 0)) ? <Field label="Дата смены">{id => (
           <Select id={id} value={day} disabled={m.isPending} onChange={event => setSelectedDay(event.target.value)}>
+            {!day && <option value="">Выберите дату смены</option>}
             {dates.map(date => <option key={date} value={date}>{dayLabel(date)}</option>)}
           </Select>
         )}</Field> : day && <p className="muted">{dayLabel(day)}</p>}
+        {point && [point.today, addDays(point.today, -1)].map(date => {
+          const restriction = shiftDateRestriction(point, date);
+          return restriction && <p key={date} className="faint">{dayLabel(date)} · {restriction}</p>;
+        })}
+        {points.length === 0 && <p className="muted">Доступных дат для сдачи смены больше нет. Проверьте статус точки.</p>}
       </>}
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Наличные" required error={!cashValid ? 'Укажите сумму наличными.' : undefined}>{(id, describedBy) => (
@@ -221,7 +239,7 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
   useEffect(()=>onOutboxChange(()=>void qc.invalidateQueries({queryKey:['staff']})),[qc]);
   const queuedShift = (key: string) => pending.data?.some(op => op.kind === 'shift_submit'
     ? targetKey(String(op.payload.location), String(op.payload.day)) === key : op.payload.shift === key);
-  const [closing, setClosing] = useState<{ shift?: Shift; points?: ClosePoint[] } | null>(null);
+  const [closing, setClosing] = useState<{ shift?: Shift } | null>(null);
   const [result, setResult] = useState<ShiftResult | null>(null);
   const queuedResult = result?.month === null ? result : null;
   // A cached empty queue can predate the write. Only a later successful read can retire this result.
@@ -271,7 +289,12 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                 </section>
               ) : d.locations.length ? (
                 <section className="stack" aria-label="Смены сегодня">
-                  {available.length > 0 && <Button variant="primary" block className="btn-lg" onClick={() => setClosing({ points: available })}>Закрыть смену</Button>}
+                  {available.length > 0 && <Button variant="primary" block className="btn-lg" onClick={() => setClosing({})}>Закрыть смену</Button>}
+                  {d.locations.map(point => {
+                    if (available.some(item => item.location_id === point.location_id)) return null;
+                    const restriction = shiftDateRestriction(point, point.today) ?? shiftDateRestriction(point, addDays(point.today, -1));
+                    return restriction && <p key={point.location_id} className="muted">{point.location_name} · {restriction}</p>;
+                  })}
                   {d.locations.flatMap(location => [location.my_today, location.my_yesterday && canCorrect(location.my_yesterday) ? location.my_yesterday : null]
                     .map(shift => shift && (
                     <button key={shift.id} type="button" disabled={shiftBlocked(shift.id) || !canCorrect(shift)} className="today-entered"
@@ -297,7 +320,7 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
       </div>
       {cancelling&&<ConfirmDialog open title="Отменить ошибочное открытие?" confirmLabel="Отменить открытие" cancelLabel="Вернуться" busy={cancel.isPending} error={cancel.error} onClose={()=>setCancelling(null)} onConfirm={()=>cancel.mutate(cancelling.id)}><p>{cancelling.location_name} · {dayLabel(cancelling.day)}</p><p>Отменяется только пустая открытая смена. Сохранённую выручку это действие не удаляет.</p></ConfirmDialog>}
       {closing && q.data && (
-        <CloseDialog userId={userId} shift={closing.shift} points={closing.points ?? []} blocked={shiftBlocked}
+        <CloseDialog userId={userId} shift={closing.shift} points={closing.shift ? [] : available} blocked={shiftBlocked}
           currency={q.data.currency} policy={q.data.pay_policy} rate={closing.shift?.rate_bp ?? q.data.rate_bp} fee={closing.shift?.shift_fee_minor ?? q.data.shift_fee_minor}
           onClose={() => setClosing(null)}
           onDone={(earned, month, key, currency, day) => {

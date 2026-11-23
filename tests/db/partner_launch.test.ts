@@ -113,3 +113,12 @@ it('keeps planned points in the checklist, then returns to working Home when ope
   await db.admin("update public.location set opened_on=null,status='active' where code='ALPHA-1'");
   expect(await get()).toBeNull();
 });
+
+it('uses the scheduled opening date even if an earlier operation exists', async () => {
+  await stage('opening_preparation');
+  await db.admin(`update location set opened_on=(now() at time zone timezone)::date+1 where code='ALPHA-1'`);
+  const [{ count }] = await db.admin<{ count: number }>(`select count(*)::int from daily_revenue
+    where location_id=(select id from location where code='ALPHA-1')`);
+  expect(count).toBeGreaterThan(0);
+  expect(await get()).toMatchObject({ stage: 'opening_preparation' });
+});

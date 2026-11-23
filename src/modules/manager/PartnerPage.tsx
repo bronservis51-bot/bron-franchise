@@ -7,13 +7,12 @@ import { monthStart } from '../../platform/dates';
 import { Badge, Button, Card, DataState, EmptyState, PageHeader } from '../../ui';
 import { CopyCredential } from '../../ui/CredentialFields';
 import { PartnerCardPanel } from './PartnerCard';
-import { PARTNER_PREPARATION, PARTNER_STATUS, st } from '../../ui/status';
 import { useToast } from '../../ui/toast';
 import { DayList, MonthNav, PlanCard } from '../revenue/components';
 import { RevenueDialog } from '../revenue/RevenueDialog';
 import { PartnerLaunchPreview } from '../revenue/LaunchChecklist';
 import { revenueMonth, type DayRow } from '../revenue/api';
-import { accessRevoke, inviteCancel, locationsOf, partnerAccess, partners, type Location } from './api';
+import { accessRevoke, inviteCancel, locationsOf, managerPartnerStatus, managerPartnerStatusKey, partnerAccess, partners, type Location, type ManagerPartnerStatus } from './api';
 import { AccessDialog, LocationDialog, PartnerDialog, PlanDialog, SetPasswordDialog } from './PartnerDialog';
 import { StaffPanel } from '../staff/StaffPage';
 import { PhoneLoginDialog } from '../staff/PhoneLoginDialog';
@@ -21,8 +20,9 @@ import { TeamAccounts } from '../staff/TeamAccounts';
 import { formatPhone } from '../staff/api';
 import { phoneLoginInitial } from '../../platform/login';
 import { useSession } from '../../platform/session';
+import { OWNER_ACCESS_LABEL, PartnerStatus } from './PartnerStatus';
 
-function AccessCard({ partnerId }: { partnerId: string }) {
+function AccessCard({ partnerId, ownerAccess }: { partnerId: string; ownerAccess?: ManagerPartnerStatus['owner_access'] }) {
   const { me } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
@@ -30,14 +30,19 @@ function AccessCard({ partnerId }: { partnerId: string }) {
   const [pw, setPw] = useState<{ user: string; name: string; login: string } | null>(null);
   const [login, setLogin] = useState<{ user: string; name: string; phone: string } | null>(null);
   const q = useQuery({ queryKey: ['access', partnerId], queryFn: () => partnerAccess(partnerId) });
-  const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); void qc.invalidateQueries({ queryKey: ['access', partnerId] }); } });
-  const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: () => void qc.invalidateQueries({ queryKey: ['access', partnerId] }) });
+  const refreshAccess = () => {
+    void qc.invalidateQueries({ queryKey: ['access', partnerId] });
+    void qc.invalidateQueries({ queryKey: managerPartnerStatusKey });
+  };
+  const revoke = useMutation({ mutationFn: accessRevoke, onSuccess: () => { toast('Доступ отозван'); refreshAccess(); } });
+  const cancel = useMutation({ mutationFn: inviteCancel, onSuccess: refreshAccess });
   return (
     <Card title="Доступ в кабинет" actions={<Button size="sm" onClick={() => setAdding(true)}><UserPlus size={15} aria-hidden />Выдать</Button>}>
       <DataState query={q}>
         {(a) => (
           <>
-            {!a.users.length && !a.invites.length && <p className="faint">Доступа пока ни у кого нет.</p>}
+            {ownerAccess ? <p className="faint">{OWNER_ACCESS_LABEL[ownerAccess]}</p>
+              : !a.users.length && !a.invites.length && <p className="faint">Доступа пока ни у кого нет.</p>}
             {a.users.map((u) => {
               const loginDigits = phoneLoginInitial(u.email);
               const accountLogin = loginDigits ? formatPhone(loginDigits) : u.email.replace(/@access\.bron\.local$/i, '');
@@ -108,7 +113,9 @@ export function PartnerPage() {
   const [adding, setAdding] = useState(false);
   const p = useQuery({ queryKey: ['partners'], queryFn: partners });
   const locs = useQuery({ queryKey: ['locations', id], queryFn: () => locationsOf(id) });
+  const status = useQuery({ queryKey: managerPartnerStatusKey, queryFn: managerPartnerStatus });
   const partner = p.data?.find((x) => x.id === id);
+  const current = status.data?.find(x => x.partner_id === id);
   const sel = locs.data?.find((l) => l.id === params.get('location')) ?? locs.data?.[0];
   useEffect(() => { if (sel && params.get('location') !== sel.id) setParams({ location: sel.id, month }, { replace: true }); }, [sel, params, setParams, month]);
 
@@ -117,8 +124,7 @@ export function PartnerPage() {
       {() => partner && (
         <>
           <PageHeader back={{ to: '/', label: 'Франчайзи' }} title={partner.name}
-            sub={<span className="row"><Badge tone={st(PARTNER_STATUS, partner.status)[1]}>{st(PARTNER_STATUS, partner.status)[0]}</Badge>
-              {partner.preparation_stage && <Badge tone={st(PARTNER_PREPARATION, partner.preparation_stage)[1]}>{st(PARTNER_PREPARATION, partner.preparation_stage)[0]}</Badge>}
+            sub={<span className="row"><PartnerStatus partner={partner} current={current} />
               <span>{partner.currency}</span></span>}
             actions={<>
               <Link className="btn btn-secondary" to={`/royalty/${partner.id}`}><Landmark size={16} aria-hidden />Роялти</Link>
@@ -144,11 +150,11 @@ export function PartnerPage() {
             </div>
             <div className="stack">
               <PartnerCardPanel partner={partner} />
-              <AccessCard partnerId={partner.id} />
+              <AccessCard partnerId={partner.id} ownerAccess={current?.owner_access} />
               <TeamAccounts partner={partner.id} />
             </div>
           </div>
-          {editing && <PartnerDialog partner={partner} onClose={() => setEditing(false)} />}
+          {editing && <PartnerDialog partner={partner} working={current?.working} onClose={() => setEditing(false)} />}
           {adding && <LocationDialog partnerId={partner.id} onClose={() => setAdding(false)} />}
         </>
       )}

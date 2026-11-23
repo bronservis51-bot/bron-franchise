@@ -1,16 +1,21 @@
 // Owner declares the whole day; employee payment breakdown stays in their shifts.
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toAppError } from '../../platform/backend';
 import { dayLabel } from '../../platform/dates';
 import { useSession } from '../../platform/session';
 import { Button, Checkbox, ConfirmDialog, Field, Input, Money, MoneyInput } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { revenueDayOffSet, revenueTotalSet, type DayRow } from './api';
+import { revenueDayOffSet, revenueMonth, revenueTotalSet, type DayRow, type MonthDetail } from './api';
 
 const MAX_TOTAL_MINOR = 100_000_000_000; // revenue_total_set limit in the database
 
-export function RevenueDialog({ location, locationName, currency, day, existing, dayOff = false, canMarkOff, onClose }: {
-  location: string; locationName: string; currency: string; day: string; existing?: DayRow; dayOff?: boolean; canMarkOff: boolean; onClose: () => void;
+export function hasRevenueDiscrepancy(row: DayRow | undefined): row is DayRow & { reported_total_minor: number } {
+  return row?.reported_total_minor != null && Number(row.total_minor) > Number(row.reported_total_minor);
+}
+
+export function RevenueDialog({ location, locationName, currency, day, existing, dayOff = false, canMarkOff, readOnly = false, onClose }: {
+  location: string; locationName: string; currency: string; day: string; existing?: DayRow; dayOff?: boolean; canMarkOff: boolean; readOnly?: boolean; onClose: () => void;
 }) {
   const { me } = useSession();
   const qc = useQueryClient(); const toast = useToast();
@@ -20,31 +25,76 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
   const [totalValid, setTotalValid] = useState(true);
   const [comment, setComment] = useState(initialComment);
   const [markOff, setMarkOff] = useState(false);
+  const [freshMonth, setFreshMonth] = useState<MonthDetail>();
+  const [refreshStatus, setRefreshStatus] = useState<'loading' | 'ready' | 'error'>();
   const commentInput = useRef<HTMLInputElement>(null);
-  const staffTotal = (existing?.entries ?? []).filter(e => e.employee_id).reduce((a,e) => a + Number(e.total_minor), 0);
+  const row = freshMonth ? freshMonth.days.find(entry => entry.day === day) : existing;
+  const savedComment = row?.entries.find(entry => !entry.employee_id)?.comment ?? '';
+  const staffTotal = (row?.entries ?? []).filter(e => e.employee_id).reduce((a,e) => a + Number(e.total_minor), 0);
   const exceedsLimit = Number(total) > MAX_TOTAL_MINOR;
   const belowStaffTotal = Number(total) < staffTotal;
   const canSave = total !== '' && totalValid && !exceedsLimit && !belowStaffTotal;
   const offChange = dayOff || markOff;
+  const newlyMarkedOff = !dayOff && freshMonth?.days_off?.includes(day);
+  const locked = Boolean(freshMonth && (freshMonth.status !== 'active' || day > freshMonth.today ||
+    (freshMonth.editable_from && day < freshMonth.editable_from)));
+  const refreshBlocksSave = refreshStatus === 'loading' || refreshStatus === 'error';
+  const saveDisabled = refreshBlocksSave || locked || newlyMarkedOff || (!canSave && !offChange);
+  const refreshDay = async () => {
+    setRefreshStatus('loading');
+    const month = `${day.slice(0, 7)}-01`;
+    const queryKey = ['revenue', 'month', location, month];
+    void qc.invalidateQueries({ queryKey: ['revenue', 'overview', month], exact: true });
+    try {
+      // A request started before the failed write could still carry the old version.
+      await qc.cancelQueries({ queryKey, exact: true });
+      const fresh = await qc.fetchQuery({
+        queryKey, queryFn: () => revenueMonth(location, month), staleTime: 0, retry: false, networkMode: 'always',
+      });
+      const currentComment = fresh.days.find(entry => entry.day === day)?.entries.find(entry => !entry.employee_id)?.comment ?? '';
+      setComment(draft => draft === savedComment ? currentComment : draft);
+      setFreshMonth(fresh);
+      setRefreshStatus('ready');
+    } catch {
+      setRefreshStatus('error');
+    }
+  };
   const save = useMutation({
     networkMode: 'always',
     mutationFn: (changeDayOff: boolean) => changeDayOff
       ? revenueDayOffSet(location, day, !dayOff)
-      : revenueTotalSet(me!.user.id, location, day, total, existing?.day_version ?? 'empty', comment.trim() || null),
+      : revenueTotalSet(me!.user.id, location, day, total, row?.day_version ?? 'empty', comment.trim() || null),
     onSuccess: (r, changeDayOff) => {
       toast(changeDayOff ? (dayOff ? 'Отметка о выходном снята' : 'Отмечено как выходной')
         : r && typeof r === 'object' && 'queued' in r ? 'Сохранено на устройстве — отправится при появлении сети' : 'Выручка сохранена');
       void qc.invalidateQueries({ queryKey: ['revenue'] }); void qc.invalidateQueries({ queryKey: ['finance'] });
       void qc.invalidateQueries({ queryKey: ['royalty'] }); void qc.invalidateQueries({ queryKey: ['rating'] }); onClose();
     },
+    onError: (error) => {
+      if (toAppError(error).code === 'version-conflict') return refreshDay();
+    },
   });
-  const submit = () => { if ((canSave || offChange) && !save.isPending) save.mutate(offChange); };
-  return <ConfirmDialog open title={dayOff ? `Выходной · ${dayLabel(day)}` : `Выручка за ${dayLabel(day)}`} confirmLabel={dayOff ? 'Отменить выходной' : 'Сохранить'} busy={save.isPending} error={save.error}
-    dirty={markOff || !totalValid || total !== initialTotal || comment !== initialComment} disabled={!canSave && !offChange} onClose={onClose} onConfirm={submit}>
+  const submit = () => { if (!saveDisabled && !save.isPending) save.mutate(offChange); };
+  const conflict = save.error && toAppError(save.error).code === 'version-conflict';
+  return <ConfirmDialog open title={dayOff ? `Выходной · ${dayLabel(day)}` : `Выручка за ${dayLabel(day)}`}
+    confirmLabel={dayOff ? 'Отменить выходной' : 'Сохранить'} cancelLabel={readOnly ? 'Закрыть' : undefined} busy={save.isPending} error={conflict ? null : save.error}
+    dirty={!readOnly && (markOff || !totalValid || total !== initialTotal || comment !== savedComment)} disabled={saveDisabled} onClose={onClose} onConfirm={readOnly ? undefined : submit}>
     <p className="muted">{locationName}</p>
+    {refreshStatus === 'loading' && <p role="status">Выручка изменилась. Загружаем данные дня…</p>}
+    {refreshStatus === 'ready' && <p role="status">Данные дня обновлены. Сверьте сумму перед сохранением.</p>}
+    {refreshStatus === 'error' && <div className="stack">
+      <p role="alert">Не удалось загрузить обновлённые данные дня. Введённая сумма сохранена в форме.</p>
+      <Button size="sm" onClick={() => void refreshDay()}>Обновить данные дня</Button>
+    </div>}
+    {hasRevenueDiscrepancy(row) && <p role="status">
+      Сумма смен больше ранее указанного итога (<Money minor={row.reported_total_minor} currency={currency} />).
+      В выручку включено <Money minor={row.total_minor} currency={currency} />.
+    </p>}
+    {(readOnly || locked) && <p>Редактирование за эту дату недоступно.</p>}
+    {newlyMarkedOff && <p>Дата отмечена как выходной. Снимите отметку в выручке точки, чтобы внести сумму.</p>}
     {dayOff && <p>Если точка работала, снимите отметку и внесите выручку за этот день.</p>}
-    {canMarkOff && !existing && !dayOff && <Checkbox label="Точка не работала" checked={markOff} onChange={setMarkOff} hint={markOff ? 'Сохранится отметка «Выходной».' : undefined} />}
-    <div hidden={offChange}>
+    {!readOnly && canMarkOff && !row && !dayOff && <Checkbox label="Точка не работала" checked={markOff} onChange={setMarkOff} hint={markOff ? 'Сохранится отметка «Выходной».' : undefined} />}
+    <div hidden={offChange || readOnly}>
     <Field label="Вся выручка точки за день" hint="Включая продажи сотрудников" error={!totalValid ? 'Укажите сумму, например 12,50.' : undefined} required>{(id, describedBy) => (
       <MoneyInput id={id} describedBy={describedBy} value={total} onChange={setTotal} onValidityChange={setTotalValid} onEnter={() => commentInput.current?.focus()} enterKeyHint="next" requireExplicitValue currency={currency} placeholder="0" invalid={exceedsLimit || belowStaffTotal} />
     )}</Field>

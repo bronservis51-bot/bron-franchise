@@ -77,7 +77,7 @@ export function TeamAccounts({ partner, standalone = false }: { partner: string;
   };
   const actionLabel:Record<string,string>={'team.create':'Создан доступ управляющего','staff.create':'Создан доступ','staff.update':'Изменён профиль','staff.access':'Изменены роль или точки','user.password':'Изменён пароль','user.login':'Изменён телефон для входа','staff.remove':'Доступ закрыт','staff.restore':'Доступ возвращён','team.active':'Изменён доступ','staff.active':'Изменён доступ','team.remove':'Доступ закрыт','team.restore':'Доступ возвращён'};
   const content = <>
-    <p className="faint">Управляющий видит выручку и сотрудников назначенных точек и может заказывать материалы.</p>
+    <p className="faint">Управляющий видит выручку назначенных точек. Права на работу с сотрудниками и заказы настраиваются в карточке сотрудника на вкладке «Вход».</p>
     <div className="row"><Button size="sm" onClick={() => setAction('assign')}>Назначить управляющего</Button><Button size="sm" onClick={() => setAction('new')}>Новый управляющий</Button></div>
     <DataState query={q} empty={list => list.length ? null : <EmptyState title="Управляющих пока нет" />}>{list => <ul className="list">{list.map(u => <li key={u.user_id} className="access-row row between">
       <span><strong>{u.full_name}</strong><span className="faint"> · {u.active ? 'доступ открыт' : 'доступ закрыт'}</span><span className="faint" style={{display:'block'}}>{u.location_names.join(', ')||'Точки ещё не назначены'}</span></span>
@@ -149,6 +149,7 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
       {action === 'new' && <><Field label="Имя" required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>
         <Field label="Телефон / логин" required hint="Полный номер с кодом страны">{id => <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 900 123-45-67" />}</Field></>}
       {action === 'new' && <Field label="Точки работы и управления" required>{() => locations.data?.map(l => <Checkbox key={l.id} label={l.name} checked={selected.includes(l.id)} onChange={v => setSelected(v ? [...selected, l.id] : selected.filter(x => x !== l.id))} />)}</Field>}
+      {action === 'new' && <p className="faint">Управляющий сможет добавлять сотрудников на выбранные точки и заказывать материалы. Право «Видеть сотрудников» также позволит редактировать их карточки и просматривать начисления.</p>}
       <Field label="Пароль" required>{id => <Input id={id} value={password} onChange={e => setPassword(e.target.value)} />}</Field>
     </>}
   </ConfirmDialog>;

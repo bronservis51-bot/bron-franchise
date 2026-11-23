@@ -13,9 +13,10 @@ import { useToast } from '../../ui/toast';
 import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, percentToBp, tierPolicy } from './CustomPayFields';
 import { MotivationPanel, PayExample, payTiming, useMotivation, type ShiftPolicy } from './Motivation';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
+import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
-import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type StaffRow } from './api';
+import { formatPhone, pctBp, randomPassword, staffList, staffSetActive, userSetPassword, type StaffAccess, type StaffPosition, type PayrollShift, type StaffRow } from './api';
 import { phoneLoginDigits } from '../../platform/login';
 import { NewAccountCredentials } from './NewAccountCredentials';
 
@@ -255,6 +256,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
             <strong>Права сотрудника</strong>
             {accessKeys.map(key => <Checkbox key={key} label={accessLabels[key]} checked={access[key]}
               onChange={checked => setAccess(current => ({ ...current, [key]: checked }))} />)}
+            {position === 'manager' && staff?.access?.legacy_staff_management && <p className="faint">
+              Право «Видеть сотрудников» также открывает этому управляющему редактирование карточек и просмотр начислений на назначенных точках.
+            </p>}
             {showSave && (!validProfile || !validPay) && <p className="hint">Проверьте разделы «Основное» и «Оплата».</p>}
           </div>}
           {staff && (staff.active ? <>
@@ -342,6 +346,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const [month, setMonth] = useState(monthStart());
   const [edit, setEdit] = useState<{ staff: StaffRow; section: CardSection } | 'new' | null>(null);
   const [access, setAccess] = useState<{ staff: StaffRow; dirty: boolean } | null>(null);
+  const [correction, setCorrection] = useState<{ employee: string; shift: PayrollShift } | null>(null);
   const locs = useQuery({ queryKey: ['locations', partnerId], enabled: canManageEmployees || canCreateStaff, queryFn: () => locationsOf(partnerId) });
   const q = useQuery({ queryKey: ['staff-list', partnerId, month], enabled: canViewStaff, queryFn: () => staffList(partnerId, month) });
   const openShifts = useOpenShifts(partnerId, canManageEmployees);
@@ -395,6 +400,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     <div className="row">
                       <strong id={`staff-name-${staff.user_id}`}>{staff.full_name}</strong>
                       <Badge tone={positionOf(staff) === 'trainee' ? 'info' : 'neutral'}>{positionLabels[positionOf(staff)]}</Badge>
+                      {positionOf(staff) === 'trainee' && staff.internship_completed && <span className="faint">Стажировка завершена</span>}
                       {canManageEmployees && staff.open_shift && <Badge tone="success">На смене в «{staff.open_shift.location_name}»</Badge>}
                     </div>
                     <div className="faint">{staff.location_names.join(', ') || 'Точки не назначены'}</div>
@@ -435,9 +441,12 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
               {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>Смены за месяц</summary>
                 <ul className="list">{staff.shifts.map((shift) => <li key={shift.id} className="row between access-row">
                   <span>{dayLabel(shift.day)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
-                    {new Date(shift.opened_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}–{new Date(shift.closed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
+                    {payrollShiftTime(shift)} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
                   </span></span>
-                  <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
+                  <div className="row wrap">
+                    <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
+                    {shift.can_correct && canManageStaff(staff) && <Button size="sm" onClick={() => setCorrection({ employee: staff.full_name, shift })}>Исправить смену</Button>}
+                  </div>
                 </li>)}</ul>
               </details>}
             </Card>)}
@@ -464,6 +473,8 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
           }}</DataState>
         </section>
       </div>}
+      {correction && me && <ClosedShiftCorrection employee={correction.employee} shift={correction.shift}
+        currency={currency} userId={me.user.id} onClose={() => setCorrection(null)} />}
       {edit && (edit === 'new' ? canCreateStaff : canManageEmployees) && <StaffDialog key={selectedStaff?.user_id ?? 'new'} partnerId={partnerId} locations={locs} staff={selectedStaff}
         canSetAccess={canSetAccess} canSetCustomPay={canManageEmployees} initialSection={edit === 'new' ? undefined : edit.section}
         onClose={() => setEdit(null)} onChangeAccess={changeAccess} />}

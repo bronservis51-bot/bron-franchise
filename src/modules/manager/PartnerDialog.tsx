@@ -6,7 +6,7 @@ import { ConfirmDialog, Field, Input, MoneyInput, Select } from '../../ui';
 import { CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { planSet } from '../revenue/api';
-import { accessGrant, accountCreatePhone, countries, locationSave, partnerSave, type Location, type Partner } from './api';
+import { accessGrant, accountCreatePhone, countries, locationSave, managerPartnerStatusKey, partnerSave, type Location, type Partner } from './api';
 import { formatPhone, randomPassword, userSetPassword } from '../staff/api';
 import { PARTNER_PREPARATION } from '../../ui/status';
 import { loginEmail, phoneLoginDigits } from '../../platform/login';
@@ -16,7 +16,7 @@ function formChanged<T extends Record<string, string>>(original: T, draft: T) {
   return Object.keys(original).some(key => original[key] !== draft[key]);
 }
 
-export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner; onClose: () => void; onSaved?: (id: string) => void }) {
+export function PartnerDialog({ partner, working, onClose, onSaved }: { partner?: Partner; working?: boolean; onClose: () => void; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
   const c = useQuery({ queryKey: ['countries'], queryFn: countries, staleTime: Infinity });
   const [original] = useState(() => ({ name: partner?.name ?? '', country: partner?.country ?? 'RU', contact_name: partner?.contact_name ?? '',
@@ -38,13 +38,13 @@ export function PartnerDialog({ partner, onClose, onSaved }: { partner?: Partner
             {(c.data ?? []).map((x) => <option key={x.code} value={x.code}>{x.name} ({x.default_currency})</option>)}
           </Select>
         )}</Field>
-        {partner && <Field label="Статус">{(id) => (
+        {partner && <Field label="Статус партнёра">{(id) => (
           <Select id={id} value={f.status} onChange={set('status')}>
-            <option value="active">Работает</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
+            <option value="active">Активен</option><option value="suspended">Приостановлен</option><option value="terminated">Договор расторгнут</option>
           </Select>
         )}</Field>}
       </div>
-      <Field label="Этап подготовки" hint="Меняется свободно; не отключает доступ и работу точек">{(id) => (
+      <Field label="Этап подготовки" hint={working ? 'Сохранённый этап до открытия торговой точки' : 'Этап можно менять в любом порядке'}>{(id) => (
         <Select id={id} value={f.preparation_stage} onChange={set('preparation_stage')}>
           <option value="">Не указан</option>
           {Object.entries(PARTNER_PREPARATION).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
@@ -132,6 +132,7 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['access', partnerId] });
+      void qc.invalidateQueries({ queryKey: managerPartnerStatusKey });
       if (r.status === 'created') return;
       toast(r.status === 'granted' ? 'Доступ выдан' : r.status === 'exists' ? 'У этого пользователя уже есть доступ' : 'Пользователь не найден. Отмените подготовленное приглашение в карточке и затем создайте учётную запись.');
       onClose();

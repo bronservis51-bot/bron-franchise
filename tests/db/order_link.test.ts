@@ -24,6 +24,31 @@ describe('ссылка для заказа материалов', () => {
     expect((await one<{ url: string | null }>(VIKTOR, `select public.order_link() j`)).url).toBeNull();
   });
 
+  it('6.2 issues a new assignment identifier when the manager restores a previous address', async () => {
+    const alpha = await pid('ALPHA');
+    const a = 'https://b2b.moysklad.ru/TestAddressA';
+    const b = 'https://b2b.moysklad.ru/TestAddressB';
+    const setAddress = (url: string) => t.as(FM, 'select public.partner_order_url_set($1,$2)', [alpha, url]);
+    const getAddress = () => one<{ url: string | null; assignment_id: string | null }>(VIKTOR, 'select public.order_link() j');
+    await setAddress(a);
+    const first = await getAddress();
+    expect(first.url).toBe(a);
+    expect(first.assignment_id).toMatch(/^[a-f0-9-]{36}$/);
+    await setAddress(a);
+    expect(await getAddress()).toEqual(first);
+    await setAddress(b);
+    const second = await getAddress();
+    expect(second).toMatchObject({ url: b });
+    expect(second.assignment_id).not.toBe(first.assignment_id);
+    await setAddress(a);
+    const restored = await getAddress();
+    expect(restored).toMatchObject({ url: a });
+    expect(restored.assignment_id).not.toBe(first.assignment_id);
+    expect(restored.assignment_id).not.toBe(second.assignment_id);
+    await setAddress('');
+    expect(await getAddress()).toEqual({ url: null, assignment_id: null });
+  });
+
   it('только https-ссылка; франчайзи и сотрудник ссылку не меняют', async () => {
     const a = await pid('ALPHA');
     await t.expectError(FM, `select public.partner_order_url_set($1, 'moysklad.ru/x')`, 'validation', [a]);

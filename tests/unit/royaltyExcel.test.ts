@@ -31,4 +31,12 @@ describe('выгрузка роялти в Excel', () => {
     expect((rows[0][8] as { value: number }).value).toBe(5000);
     expect(sheets[1].data).toHaveLength(2); // заголовок + один месяц с долгом
   });
+  it('подписывает остаток открытого месяца как предварительный', async () => {
+    const { downloadRoyaltyExcel } = await import('../../src/modules/manager/royaltyExcel');
+    await downloadRoyaltyExcel({ ...summary, month: summary.current_month });
+    const sheets = calls.at(-1)![0] as { data: {value:string}[][] }[];
+    expect(sheets[0].data[2][8].value).toBe('Предварительный остаток');
+    expect(sheets[0].data.at(-1)![0].value).toContain('Предварительный остаток');
+  });
+
 });

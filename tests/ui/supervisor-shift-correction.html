@@ -1,0 +1,66 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Исправление закрытой смены</title>
+<output id="result">Проверка…</output><iframe id="app" height="950" title="Кабинет с вымышленными данными"></iframe>
+<script type="module">
+const frame = document.querySelector('#app'), result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = '/tests/ui/responsive-app.html?role=franchisee&text=' + (params.get('text') === '200' ? '200' : '100') + '#/';
+async function until(read, message) {
+  const deadline = performance.now() + 15000;
+  while (performance.now() < deadline) {
+    const value = read(); if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error(message);
+}
+function check(value, message) { if (!value) throw new Error(message); }
+try {
+  await until(() => frame.contentDocument.querySelector('main button'), 'Кабинет не открылся');
+  const app = frame.contentWindow, doc = app.document, original = app.fetch;
+  const button = (label, scope = doc) => [...scope.querySelectorAll('button')].find(el => el.textContent.trim() === label);
+  const shift = { id: 'qa-closed-shift', day: '2026-11-22', location_name: 'Вымышленная точка с длинным названием',
+    timezone: 'Europe/Moscow', submitted_without_open: true, opened_at: '2026-11-22T15:00:00Z', closed_at: '2026-11-22T15:00:00Z',
+    can_correct: true, revision: 4, cash_minor: 20000, card_minor: 40000, total_minor: 60000, earned_minor: 30000 };
+  const payloads = [];
+  app.fetch = async (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/staff_shift_correct')) {
+      payloads.push(JSON.parse(init.body)); return app.Response.json({ ok: true, revision: 5 });
+    }
+    const response = await original(request, init);
+    if (!url.pathname.endsWith('/rpc/staff_list')) return response;
+    const [employee] = await response.json();
+    const historical = { ...shift, id: 'qa-historical-shift', submitted_without_open: false, can_correct: false, opened_at: '2026-11-22T06:00:00Z' };
+    return app.Response.json([{ ...employee, can_manage: true, shifts: [shift, historical] }]);
+  };
+  app.location.hash = '#/staff';
+  (await until(() => button('Смены и начисления'), 'Нет раздела начислений')).click();
+  (await until(() => [...doc.querySelectorAll('summary')].find(el => el.textContent === 'Смены за месяц'), 'Нет сведений о сменах')).click();
+  check(doc.body.textContent.includes('Сдана в 18:00') && doc.body.textContent.includes('09:00–18:00'), 'Утеряно различие между сдачей и фактическим интервалом');
+  check([...doc.querySelectorAll('button')].filter(b => b.textContent.trim() === 'Исправить смену').length === 1, 'Появилось исправление недоступной смены');
+  button('Исправить смену').click();
+  const dialog = await until(() => doc.querySelector('dialog[open]'), 'Нет диалога исправления');
+  const fields = [...dialog.querySelectorAll('input')], save = button('Сохранить', dialog);
+  check(fields[0].value === '200' && fields[1].value === '400' && save.disabled, 'Неверные исходные суммы');
+  function fill(el, text) {
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(el, text);
+    el.dispatchEvent(new app.Event('input', { bubbles: true }));
+  }
+  fill(fields[0], '320'); fill(fields[1], '430'); fill(fields[2], 'Сверили с кассой');
+  await until(() => !save.disabled, 'Сохранение осталось недоступно');
+  await doc.fonts.ready;
+  check(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'Страница шире экрана');
+  check(dialog.scrollWidth <= dialog.clientWidth + 1, 'Диалог шире экрана');
+  const text = doc.createRange(); text.selectNodeContents(save);
+  for (const line of text.getClientRects()) {
+    const bounds = save.getBoundingClientRect();
+    check(line.left >= bounds.left && line.right <= bounds.right, 'Подпись выходит за границы кнопки');
+  }
+  save.click();
+  await until(() => payloads.length === 1 && !doc.querySelector('dialog[open]'), 'Смена не сохранилась');
+  const [sent] = payloads;
+  check(sent.p_shift === shift.id && sent.p_expected_revision === 4 && sent.p_cash === '32000' && sent.p_card === '43000' &&
+    sent.p_reason === 'Сверили с кассой' && /^[0-9a-f-]{36}$/.test(sent.p_operation), 'Неверная команда исправления');
+  result.textContent = 'PASS';
+} catch (error) { result.textContent = 'FAIL ' + error.message; }
+</script></html>

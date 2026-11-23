@@ -8,8 +8,9 @@ const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroun
 
 export async function downloadRoyaltyExcel(s: RoyaltySummary) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const period = s.month ? `за ${monthLabel(s.month)}` : `весь долг на ${formatDate(new Date().toISOString())}`;
-  const header = ['Франчайзи', 'Страна', 'Валюта', 'Ставка, %', 'Выручка', 'Начислено', 'Прошлый долг', 'Оплачено', 'Долг',
+  const balanceLabel = s.month && s.month >= s.current_month ? 'Предварительный остаток' : 'Долг';
+  const period = s.month ? `за ${monthLabel(s.month)}` : `закрытые месяцы на ${formatDate(new Date().toISOString())}`;
+  const header = ['Франчайзи', 'Страна', 'Валюта', 'Ставка, %', 'Выручка', 'Начислено', 'Корректировки', 'Оплачено', balanceLabel,
     ...(s.month ? [] : ['Текущий месяц: начисляется', 'Месяцев с долгом']), 'Последняя оплата'].map(head);
   const rows = s.rows.map((r) => [
     r.partner_name, r.country, r.currency, { value: r.rate_bp / 100, type: Number, format: '0.0#' },
@@ -31,7 +32,7 @@ export async function downloadRoyaltyExcel(s: RoyaltySummary) {
     ...rows,
     [],
     ...totals,
-    ...(s.debt_rub_minor !== null ? [[{ value: 'Весь долг в рублях (по курсу)', fontWeight: 'bold' as const }, ...blank(7), money(s.debt_rub_minor, 'RUB')]] : []),
+    ...(s.debt_rub_minor !== null ? [[{ value: `${balanceLabel} в рублях по курсу`, fontWeight: 'bold' as const }, ...blank(7), money(s.debt_rub_minor, 'RUB')]] : []),
   ];
   const byMonth = [
     ['Франчайзи', 'Валюта', 'Месяц', 'Долг'].map(head),

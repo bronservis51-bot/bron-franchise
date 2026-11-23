@@ -14,6 +14,14 @@ export const partners = () => rows<Partner>(from('partner').select('*').order('n
 export const locationsOf = (partner: string) => rows<Location>(from('location').select('*').eq('partner_id', partner).order('name'));
 export const countries = () => rows<Country>(from('country').select('code, name, default_currency').order('name'));
 
+export interface ManagerPartnerStatus {
+  partner_id: string;
+  working: boolean;
+  owner_access: 'granted' | 'pending' | 'none';
+}
+export const managerPartnerStatusKey = ['manager-partner-status'] as const;
+export const managerPartnerStatus = () => command<ManagerPartnerStatus[]>('manager_partner_status');
+
 export const partnerSave = (p: { id: string | null; name: string; country: string; contact_name: string; contact_phone: string; contact_email: string; status: string; preparation_stage: string | null }) =>
   command<string>('partner_save_preparation', p);
 export const locationSave = (l: { id: string | null; partner: string; name: string; city: string; address: string; status: string; opened_on: string | null }) =>

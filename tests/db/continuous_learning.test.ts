@@ -40,6 +40,27 @@ it('failed attempt permits immediate reread/retry; partial pass repeats sooner',
   expect(result.interval_days).toBe(days);expect(result.passed).toBe(wrong===1);
  }
 });
+it('reports the recorded verdict and threshold, preserving legacy scores without a threshold', async () => {
+ const article = articles[0];
+ const [attempt] = await t.as<{ task: { id: string } }>(STAFF, 'select learning_start($1) task', [article.id]);
+ await t.as(STAFF, 'select learning_attempt_read($1)', [attempt.task.id]);
+ await t.as(STAFF, 'select learning_attempt_submit($1,$2)', [attempt.task.id, JSON.stringify(bank.map((_, i) => i === 0 ? 1 : 0))]);
+ await t.admin('update app_private.learning_config set pass_percent=100 where article_id=$1', [article.id]);
+ try {
+  await t.admin(`insert into app_private.learning_task(user_id,partner_id,day,article_id,revision_id,title,questions,read_at,completed_at,score)
+   values($1,$2,current_date,$3,$4,'Старый урок без порога',$5,now(),now(),1)`,
+   [uid,p,article.id,article.revision,JSON.stringify(bank)]);
+  const [{ report }] = await t.as<{ report: {article_title: string; score: number; passed?: boolean; pass_percent?: number}[] }>(
+   OWNER, 'select learning_report($1,current_date) report', [p]);
+  expect(report.find(row => row.score === 11)).toMatchObject({ passed: true, pass_percent: 80 });
+  const legacy = report.find(row => row.article_title === 'Старый урок без порога');
+  expect(legacy?.score).toBe(1);
+  expect(legacy?.passed).toBeNull();
+  expect(legacy?.pass_percent).toBeNull();
+ } finally {
+  await t.admin('update app_private.learning_config set pass_percent=80 where article_id=$1', [article.id]);
+ }
+});
 it('local questions are scoped, version checked and corporate content stays intact',async()=>{
  const a=articles[0];
  await t.as(OWNER,'select learning_lesson_save($1,$2,$3,$4,0)',[a.id,p,a.revision,JSON.stringify({enabled:true,questions:bank})]);

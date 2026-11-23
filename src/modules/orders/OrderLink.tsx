@@ -9,19 +9,19 @@ import { useSession } from '../../platform/session';
 import { ConfirmDialog, ErrorState, PageHeader } from '../../ui';
 
 export function useOrderLink(enabled = true) {
-  const q = useQuery({ queryKey: ['order-link'], enabled, staleTime: 5 * 60_000, queryFn: () => command<{ url: string | null }>('order_link') });
+  const q = useQuery({ queryKey: ['order-link'], enabled, staleTime: 5 * 60_000, queryFn: () => command<{ url: string | null; assignment_id: string | null }>('order_link') });
   const denied = q.error && ['forbidden', 'unauthenticated'].includes(toAppError(q.error).code);
-  return { url: denied ? null : q.data?.url ?? null, loaded: q.isSuccess, pending: q.isPending, error: q.error, retry: () => { void q.refetch(); } };
+  return { url: denied ? null : q.data?.url ?? null, assignmentId: denied ? null : q.data?.assignment_id ?? null,
+    loaded: q.isSuccess, pending: q.isPending, error: q.error, retry: () => { void q.refetch(); } };
 }
 
-const ackKey = (userId: string | undefined, url: string) => `bron.order-ack:${userId ?? ''}:${url}`;
-const acked = (key: string) => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+const acked = (key: string | null) => { try { return key !== null && localStorage.getItem(key) === '1'; } catch { return false; } };
 
 /** Переход к заказу: в первый раз (и после смены ссылки) — предупреждение, что ссылка персональная. */
-function useOrderOpen(url: string | null) {
+function useOrderOpen(url: string | null, assignmentId: string | null) {
   const { me } = useSession();
   const [ask, setAsk] = useState(false);
-  const key = url ? ackKey(me?.user.id, url) : '';
+  const key = assignmentId && me?.user.id ? `bron.order-ack-v2:${me.user.id}:${assignmentId}` : null;
   const onClick = (e: MouseEvent) => {
     if (!url || acked(key)) return; // уже подтверждал — обычный переход по ссылке
     e.preventDefault();
@@ -31,7 +31,7 @@ function useOrderOpen(url: string | null) {
     <ConfirmDialog open title="Ваша персональная ссылка" confirmLabel="Понятно, перейти к заказу" cancelLabel="Отмена"
       onClose={() => setAsk(false)}
       onConfirm={() => {
-        try { localStorage.setItem(key, '1'); } catch { /* удобство */ }
+        try { if (key) localStorage.setItem(key, '1'); } catch { /* удобство */ }
         setAsk(false);
         window.open(url, '_blank', 'noopener,noreferrer');
       }}>
@@ -59,8 +59,8 @@ export function OrderTopButton() {
 
 /** Existing personal links remain visible and usable throughout the in-app store rollout. */
 export function PersonalStoreLink() {
-  const { url, pending, error, retry } = useOrderLink();
-  const open = useOrderOpen(url);
+  const { url, assignmentId, pending, error, retry } = useOrderLink();
+  const open = useOrderOpen(url, assignmentId);
   return <div className="procurement-native-store">
     {url ? <a className="procurement-native-link" href={url} target="_blank" rel="noopener noreferrer" onClick={open.onClick}><ShoppingCart size={17} aria-hidden />Ваш магазин МойСклад<ExternalLink size={15} aria-hidden /></a> : pending ? <span role="status">Загружаем ваш магазин…</span> : error ? <ErrorState error={error} onRetry={retry} compact /> : <span className="procurement-muted">Персональная ссылка ещё не добавлена менеджером.</span>}
     {open.dialog}
@@ -71,8 +71,8 @@ export function OrderPage() { return <><PageHeader title="Заказать" /><O
 
 export function OrderFallback() {
   const { isManager } = useSession();
-  const { url, pending, error, retry } = useOrderLink(!isManager);
-  const open = useOrderOpen(url);
+  const { url, assignmentId, pending, error, retry } = useOrderLink(!isManager);
+  const open = useOrderOpen(url, assignmentId);
   return (
     <div>
       <div className="order-options">

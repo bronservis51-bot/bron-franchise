@@ -67,6 +67,45 @@ it('accepts yesterday in the point timezone, rejects future/older new days and r
   expect(receipt.shift).toMatchObject({ day: days.yesterday, earned_minor: 100_000 });
 });
 
+it('blocks new shifts before the point opens across current and legacy client commands', async () => {
+  await db.admin('update location set opened_on=$2 where id=$1', [point, days.future]);
+  await db.expectError(email, SUBMIT, 'validation', args());
+  await db.expectError(email, 'select shift_open($1)', 'validation', [point]);
+  expect(await db.admin('select id from work_shift where employee_id=$1', [worker])).toEqual([]);
+  expect(await db.admin('select id from daily_revenue where employee_id=$1', [worker])).toEqual([]);
+  const [other] = await db.admin<{ id: string }>(`
+    insert into location(code, name, partner_id, city, timezone, currency, opened_on)
+    values ($1, 'Работающая точка', $2, 'Тест', 'Pacific/Kiritimati', 'RUB', $3) returning id
+  `, [crypto.randomUUID(), partner, days.yesterday]);
+  await db.admin('update staff_member set location_ids=array_append(location_ids,$2) where user_id=$1', [worker, other.id]);
+  expect((await submit([other.id, ...args(days.yesterday).slice(1)])).shift).toMatchObject({ day: days.yesterday });
+  await db.admin('update location set opened_on=$2 where id=$1', [point, days.today]);
+  await db.expectError(email, SUBMIT, 'validation', args(days.yesterday));
+  expect((await submit(args())).shift).toMatchObject({ day: days.today, submitted_without_open: true });
+});
+
+it('distinguishes undated preparation from existing shifts and marked days off', async () => {
+  await db.admin("update partner set preparation_stage='opening_preparation' where id=$1", [partner]);
+  try {
+    await db.expectError(email, SUBMIT, 'validation', args());
+    await db.expectError(email, 'select shift_open($1)', 'validation', [point]);
+    await db.admin('update location set opened_on=$2 where id=$1', [point, days.yesterday]);
+    await db.as(OWNER, 'select revenue_day_off_set($1,$2,true)', [point, days.yesterday]);
+    const [home] = await db.as<{ data: { locations: unknown[] } }>(email, 'select staff_home() data');
+    expect(home.data.locations).toContainEqual(expect.objectContaining({
+      location_id: point, opened_on: days.yesterday, awaiting_opening_date: false,
+      days_off: [days.yesterday],
+    }));
+    const [old] = await db.admin<{ id: string }>(
+      'insert into work_shift(partner_id, location_id, employee_id, day) values ($1,$2,$3,$4) returning id',
+      [partner, point, worker, days.today]);
+    await db.admin('update location set opened_on=$2 where id=$1', [point, days.future]);
+    expect((await submit(args())).shift).toMatchObject({ id: old.id, submitted_without_open: false });
+  } finally {
+    await db.admin('update partner set preparation_stage=null where id=$1', [partner]);
+  }
+});
+
 it('requires resolving an outstanding shift and retains the original historical pay snapshot on close', async () => {
   const [old] = await db.admin<{ id: string; pay_policy: unknown }>(`
     insert into work_shift(partner_id, location_id, employee_id, day) values ($1,$2,$3,$4)

@@ -1,0 +1,9 @@
+@media (max-width: 430px) {
+  dialog.shift-correction-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+  }
+  .shift-correction-dialog :is(.dialog-head, .dialog-body, .dialog-foot) {
+    padding-inline: 16px;
+  }
+}

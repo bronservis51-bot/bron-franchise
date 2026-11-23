@@ -174,6 +174,32 @@ describe('роялти', () => {
     expect(all.current_accrual_minor).toBe(v.accrued_minor);
   });
 
+  it('5.2 — сводный долг включает операции по месяцу роялти, включая оплату старого долга сегодняшней датой', async () => {
+    const id = await partner('ALPHA');
+    const [{ closed, open }] = await t.admin<{ closed: string; open: string }>(
+      `select (app_private.current_month() - interval '1 month')::date::text closed, app_private.current_month()::text open`);
+    const row = async (month: string | null) => (await summary(month)).rows.find(r => r.partner_name.startsWith('Виктор'))!;
+    const allBefore = await row(null);
+    const openBefore = await row(open);
+    await t.as(FM, "select royalty_manual_add($1,$2,5000,'Долг прошлого месяца')", [id,closed]);
+    await t.as(FM, "select royalty_payment_add($1,$2,2000,current_date,'Оплата прошлого месяца')", [id,closed]);
+    await t.as(FM, "select royalty_payment_add($1,$2,1000,current_date,'Оплата текущего месяца')", [id,open]);
+    const target = openBefore.accrued_minor + openBefore.manual_minor + 3500;
+    await t.as(FM, "select royalty_set_accrual($1,$2,$3,'Уточнение текущего месяца')", [id,open,target]);
+    const all = await row(null);
+    expect(all).toMatchObject({paid_minor: allBefore.paid_minor + 2000, manual_minor: allBefore.manual_minor + 5000,
+      debt_minor: allBefore.debt_minor + 3000});
+    expect(await row(open)).toMatchObject({paid_minor: openBefore.paid_minor + 1000, manual_minor: openBefore.manual_minor + 3500,
+      debt_minor: target - openBefore.paid_minor - 1000});
+    const card = await one<{ months: {is_open: boolean; debt_minor: number}[]; payments: {month:string; note:string}[] }>(
+      FM, 'select royalty_partner($1) j', [id]);
+    expect(all.debt_minor).toBe(card.months.filter(m => !m.is_open).reduce((sum,m) => sum + m.debt_minor,0));
+    const owner = await one<{ debt_minor: number }>(VIKTOR, 'select royalty_my() j');
+    expect(all.debt_minor).toBe(owner.debt_minor);
+    expect(card.payments).toEqual(expect.arrayContaining([expect.objectContaining({month: open,note:'Оплата текущего месяца'}),
+      expect.objectContaining({month: closed,note:'Оплата прошлого месяца'})]));
+  });
+
   it('новая ставка действует с указанного месяца', async () => {
     const p = await partner('BETA');
     const m = (await t.admin<{ m: string }>(`select to_char(date_trunc('month', current_date) - interval '1 month', 'YYYY-MM-DD') m`))[0].m;

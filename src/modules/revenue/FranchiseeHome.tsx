@@ -9,14 +9,15 @@ import { Button, DataState, EmptyState, ErrorState, Money, PageHeader, Skeleton 
 import { DayList, MonthNav, PlanCard } from './components';
 import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
 import { revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
-import { RevenueDialog } from './RevenueDialog';
+import { hasRevenueDiscrepancy, RevenueDialog } from './RevenueDialog';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
 
 /** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
 function AllPoints({ points, month, onPick, onEnter }: {
-  points: LocationMonth[]; month: string; onPick: (id: string) => void; onEnter: (p: LocationMonth, d: MonthDetail, row?: DayRow) => void;
+  points: LocationMonth[]; month: string; onPick: (id: string) => void;
+  onEnter: (point: LocationMonth, detail: MonthDetail, day: string, row?: DayRow) => void;
 }) {
   const details = useQueries({ queries: points.map((p) => ({ queryKey: ['revenue', 'month', p.location_id, month], queryFn: () => revenueMonth(p.location_id, month) })) });
   const sameCurrency = points.every((p) => p.currency === points[0].currency);
@@ -31,23 +32,27 @@ function AllPoints({ points, month, onPick, onEnter }: {
   const ready = details.every((q) => q.data);
   const isCurrent = month === monthStart();
   // Дни месяца: сумма по точкам и кто сколько; день с пропуском хоть одной точки подсвечен
-  type DaySummary = { total: number; parts: string[]; missing: string[]; daysOff: string[] };
+  type DaySummary = {
+    total: number; parts: string[]; missing: string[]; daysOff: string[];
+    discrepancies: { point: LocationMonth; detail: MonthDetail; row: DayRow }[];
+  };
   const days = new Map<string, DaySummary>();
   const daySummary = (day: string) => {
     const existing = days.get(day);
     if (existing) return existing;
-    const result: DaySummary = { total: 0, parts: [], missing: [], daysOff: [] };
+    const result: DaySummary = { total: 0, parts: [], missing: [], daysOff: [], discrepancies: [] };
     days.set(day, result);
     return result;
   };
   if (ready) details.forEach((q, i) => {
-    const d = q.data!; const short = points[i].location_name;
+    const d = q.data!; const point = points[i];
     for (const r of d.days) {
       const x = daySummary(r.day);
-      x.total += Number(r.total_minor); x.parts.push(`${short} ${formatMoneyShort(r.total_minor, d.currency)}`);
+      x.total += Number(r.total_minor); x.parts.push(`${point.location_name} ${formatMoneyShort(r.total_minor, d.currency)}`);
+      if (hasRevenueDiscrepancy(r)) x.discrepancies.push({ point, detail: d, row: r });
     }
-    for (const m of d.missing_days) daySummary(m).missing.push(short);
-    for (const day of d.days_off ?? []) daySummary(day).daysOff.push(short);
+    for (const m of d.missing_days) daySummary(m).missing.push(point.location_name);
+    for (const day of d.days_off ?? []) daySummary(day).daysOff.push(point.location_name);
   });
   const list = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   return (
@@ -70,9 +75,9 @@ function AllPoints({ points, month, onPick, onEnter }: {
                   {p.missing_days.length > 0 && <span className="point-miss"><CalendarX size={13} aria-hidden /> не внесено дней: {p.missing_days.length}</span>}
                 </button>
                 {isCurrent && d && (today
-                  ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
-                  : todayOff ? <Button size="sm" onClick={() => onEnter(p, d)}>Выходной</Button>
-                  : <Button size="sm" variant="primary" onClick={() => onEnter(p, d)}><Plus size={15} aria-hidden />Внести</Button>)}
+                  ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, d.today, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
+                  : todayOff ? <Button size="sm" onClick={() => onEnter(p, d, d.today)}>Выходной</Button>
+                  : <Button size="sm" variant="primary" onClick={() => onEnter(p, d, d.today)}><Plus size={15} aria-hidden />Внести</Button>)}
               </li>
             );
           })}
@@ -91,6 +96,12 @@ function AllPoints({ points, month, onPick, onEnter }: {
                     {x.parts.length > 0 && <span className="day-split">{x.parts.join(' · ')}</span>}
                     {x.daysOff.length > 0 && <span className="day-split">Выходной · {x.daysOff.join(', ')}</span>}
                     {x.missing.length > 0 && <span className="day-split"><CalendarX size={13} aria-hidden /> не внесено: {x.missing.join(', ')}</span>}
+                    {x.discrepancies.map(({ point, detail, row }) => (
+                      <button key={point.location_id} type="button" className="link-btn" style={{ textAlign: 'left', overflowWrap: 'anywhere' }}
+                        onClick={() => onEnter(point, detail, day, row)}>
+                        Сумма смен больше итога · {point.location_name}
+                      </button>
+                    ))}
                   </span>
                 </div>
               </li>
@@ -119,7 +130,7 @@ export function FranchiseeHome() {
   const current = all ? undefined : points.find((p) => p.location_id === loc) ?? points[0];
   useEffect(() => { if (!all && current && current.location_id !== loc) setLoc(current.location_id); }, [all, current, loc]);
   const detail = useQuery({ queryKey: ['revenue', 'month', current?.location_id, month], enabled: Boolean(current), queryFn: () => revenueMonth(current!.location_id, month) });
-  const [enter, setEnter] = useState<{ p: LocationMonth; d: MonthDetail; row?: DayRow } | null>(null);
+  const [enter, setEnter] = useState<{ point: LocationMonth; detail: MonthDetail; day: string; row?: DayRow } | null>(null);
   const pick = (id: string) => { setLoc(id); try { localStorage.setItem(LOC_KEY, id); } catch { /* удобство */ } };
   const m = detail.data;
   const todayRow = m?.days.find((d) => d.day === m.today);
@@ -140,6 +151,7 @@ export function FranchiseeHome() {
       <header className="home-head">
         <div className="home-date">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <h1>Выручка</h1>
+        {points.length === 1 && <p className="faint">{points[0].location_name}</p>}
       </header>
 
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title="Точек пока нет" text="Менеджер по франшизе ещё не добавил ваши точки." />)}>
@@ -156,7 +168,7 @@ export function FranchiseeHome() {
               </div>
             )}
             <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-            {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(p, d, row) => setEnter({ p, d, row })} /> : (
+            {all ? <AllPoints points={points} month={month} onPick={pick} onEnter={(point, detail, day, row) => setEnter({ point, detail, day, row })} /> : (
             <DataState query={detail} skeleton={3}>
               {(d) => (
                 <>
@@ -188,7 +200,10 @@ export function FranchiseeHome() {
           </div>
         )}
       </DataState>
-      {enter && <RevenueDialog location={enter.p.location_id} locationName={enter.p.location_name} currency={enter.p.currency} day={enter.d.today} existing={enter.row} dayOff={enter.d.days_off?.includes(enter.d.today)} canMarkOff={enter.p.status === 'active' && (!enter.d.opened_on || enter.d.today >= enter.d.opened_on)} onClose={() => setEnter(null)} />}
+      {enter && <RevenueDialog location={enter.point.location_id} locationName={enter.point.location_name} currency={enter.point.currency}
+        day={enter.day} existing={enter.row} dayOff={enter.detail.days_off?.includes(enter.day)}
+        readOnly={Boolean(enter.detail.editable_from && enter.day < enter.detail.editable_from)}
+        canMarkOff={enter.point.status === 'active' && (!enter.detail.opened_on || enter.day >= enter.detail.opened_on)} onClose={() => setEnter(null)} />}
       {edit && current && <RevenueDialog location={current.location_id} locationName={current.location_name} currency={current.currency} day={edit.day} existing={edit.row} dayOff={edit.dayOff} canMarkOff={current.status === 'active' && (!m?.opened_on || edit.day >= m.opened_on)} onClose={() => setEdit(null)} />}
     </div>
   );

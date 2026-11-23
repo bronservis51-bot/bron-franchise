@@ -101,6 +101,7 @@ window.fetch = async (input, init) => {
     const learningResponse=learningFixture(name,init?.body?JSON.parse(String(init.body)):{},qaParams);
     if(learningResponse)return learningResponse;
     const answers: Record<string, unknown> = {
+      manager_partner_status: [{ partner_id: partner.id, working: !launchStage, owner_access: 'granted' }],
       support_accounts:[],learning_config_get:{for_managers:false,for_sales:false,questions:[],version:0},
       motivation_get:{version:0,policy:qaPolicy,currency:'RUB'},learning_report:[],learning_today:{day:'2026-11-09',items:qaParams.get('learning')==='empty'?[]:[qaTask]},
       staff_home:{month,currency:'RUB',partner_name:partner.name,rate_bp:0,shift_fee_minor:0,pay_policy:qaPolicy,use_partner_motivation:true,open_shift:null,locations:[{location_id:location.id,location_name:location.name,currency:'RUB',today:'2026-11-09',my_today:null}],month_earned_minor:0,month_revenue_minor:0,month_shifts:0,shifts:[]},
