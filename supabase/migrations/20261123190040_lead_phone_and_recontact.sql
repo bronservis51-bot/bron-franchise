@@ -7,6 +7,8 @@ language sql immutable strict set search_path=pg_catalog,pg_temp as $$
 $$;
 revoke execute on function app_private.lead_phone_key(text,text) from public, anon, authenticated, service_role;
 
+-- PostgreSQL вычисляет индекс заполненной таблицы от имени её владельца.
+grant execute on function app_private.lead_phone_key(text,text) to postgres;
 create index franchise_lead_phone_key_created on public.franchise_lead
   (app_private.lead_phone_key(phone,phone_digits), created_at desc, id desc) where phone <> '';
 
@@ -79,7 +81,7 @@ grant execute on function public.lead_pending_recontacts() to authenticated;
 insert into app_private.client_command(fn) values ('public.lead_pending_recontacts()');
 
 -- Создание миграции от supabase_admin сохраняет владельца старых RPC (postgres).
-grant execute on function app_private.lead_phone_key(text,text), app_private.lead_pending_recontacts() to postgres;
+grant execute on function app_private.lead_pending_recontacts() to postgres;
 grant select, insert on app_private.lead_recontact to postgres;
 
 create or replace function public.lead_submit(p_lead jsonb) returns jsonb
