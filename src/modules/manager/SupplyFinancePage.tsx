@@ -6,6 +6,7 @@ import { command, toAppError } from '../../platform/backend';
 import { monthStart } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
+import { payrollAccrualLabels } from '../finance/financeReport';
 import { MonthNav } from '../revenue/components';
 import { revenueOverview } from '../revenue/api';
 import { royaltySummary } from './api';
@@ -17,7 +18,8 @@ interface Unmapped { counterparty_id: string; name: string; sales_minor: number;
 interface SupplySnapshot { month: string; fetched_at: string | null; period_to: string | null; currency: string; rows: SupplyRow[]; unmapped: Unmapped[] }
 interface NetworkExpense { id: string; category: string; amount_minor: number; note: string | null; created_at: string }
 interface CompanyExpenseDraft { id: string; category: string; amount: string; note: string }
-interface PartnerEconomy { partner_id: string; partner_name: string; currency: string; payroll_minor: number; closed_shifts: number; expenses_minor: number;
+interface PartnerEconomy { partner_id: string; partner_name: string; currency: string; payroll_minor: number; payroll_halves?: [number, number];
+  closed_shifts: number; expenses_minor: number;
   expense_categories: { category: string; amount_minor: number }[] }
 interface ManagerEconomy { month: string; company_expenses: NetworkExpense[]; company_expense_totals: { category: string; amount_minor: number }[]; partners: PartnerEconomy[] }
 const money = (n: number | string | undefined, c = 'RUB') => n === undefined ? '—' : formatMoneyShort(n, c);
@@ -35,8 +37,10 @@ export function SupplyFinancePage() {
 
 function FranchiseOverview() {
   const [month, setMonth] = useState(monthStart());
+  const payrollLabels = payrollAccrualLabels(month);
   const q = useQuery({ queryKey: ['supply', month], queryFn: () => command<SupplySnapshot>('manager_supply_snapshot', { month }) });
-  const economy = useQuery({ queryKey: ['manager-economy', month], queryFn: () => command<ManagerEconomy>('manager_economy', { month }) });
+  const economy = useQuery({ queryKey: ['manager-economy', month], queryFn: () => command<ManagerEconomy>('manager_economy', { month }),
+    refetchInterval: 120_000 });
   const rev = useQuery({ queryKey: ['revenue', 'overview', month], queryFn: () => revenueOverview(month) });
   const royalty = useQuery({ queryKey: ['royalty', 'summary', month], queryFn: () => royaltySummary(month) });
   const qc = useQueryClient();
@@ -78,12 +82,16 @@ function FranchiseOverview() {
         <DataState query={economy} skeleton={3}>{e => <>
           <CompanyExpenses month={month} expenses={e.company_expenses} totals={e.company_expense_totals} />
           <Card title="Расходы и зарплаты франчайзи">
-            <p className="faint">Суммы показаны в валюте каждого франчайзи. Зарплаты — по закрытым сменам.</p>
+            <p className="faint">Суммы показаны в валюте каждого франчайзи. Зарплаты начислены по закрытым сменам, даты выплат указаны по графику.</p>
             <div className="economics-table-wrap" role="region" aria-label="Расходы и зарплаты франчайзи" tabIndex={0}><table className="economics-table">
-              <thead><tr><th>Франчайзи</th><th>Зарплаты</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
+              <thead><tr><th>Франчайзи</th><th>Зарплата за месяц</th><th>Закрытые смены</th><th>Расходы</th><th>Структура расходов</th></tr></thead>
               <tbody>{e.partners.map(p => <tr key={p.partner_id}>
                 <td><Link to={`/partners/${p.partner_id}`}>{p.partner_name}</Link></td>
-                <td>{money(p.payroll_minor,p.currency)}</td><td>{p.closed_shifts}</td><td>{money(p.expenses_minor,p.currency)}</td>
+                <td>{money(p.payroll_minor,p.currency)}
+                  {p.payroll_halves?.map((amount, index) => <small key={payrollLabels[index]}>
+                    {payrollLabels[index]} · {money(amount, p.currency)}
+                  </small>)}
+                </td><td>{p.closed_shifts}</td><td>{money(p.expenses_minor,p.currency)}</td>
                 <td>{p.expense_categories.length ? <details><summary>Статьи: {p.expense_categories.length}</summary><small>{p.expense_categories.map(x => `${x.category}: ${money(x.amount_minor,p.currency)}`).join(' · ')}</small></details> : '—'}</td>
               </tr>)}</tbody>
             </table></div>

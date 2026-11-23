@@ -7,6 +7,7 @@ export interface Shift { counts_as_exit?: boolean; revision: number; id: string;
   pay_policy?: ShiftPolicy | null; cash_minor: number; card_minor: number; total_minor: number; return_minor?: number; comment: string | null; rate_bp: number | null; shift_fee_minor: number | null; earned_minor: number | null }
 export interface StaffHomeData {
   pay_policy?: ShiftPolicy | null; use_partner_motivation?: boolean; month: string; rate_bp: number; shift_fee_minor: number; partner_name: string; currency: string;
+  today?: string;
   open_shift: (Shift & { location_name: string; currency: string }) | null;
   locations: { location_id: string; location_name: string; currency: string; today: string;
     missing_count?: number; missing_periods?: { from: string; until: string }[]; recent_corrections?: Shift[];

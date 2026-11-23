@@ -48,7 +48,9 @@ export function ClosedShiftCorrection({ employee, shift, currency, userId, onClo
       if (toAppError(error).code === 'version-conflict') void client.invalidateQueries({ queryKey: ['staff-list'] });
     },
     onSuccess: () => {
-      for (const key of ['staff-list', 'staff', 'revenue', 'finance', 'royalty', 'rating']) void client.invalidateQueries({ queryKey: [key] });
+      for (const key of ['staff-list', 'staff', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
+        void client.invalidateQueries({ queryKey: [key] });
+      }
       toast('Смена исправлена');
       onClose();
     },

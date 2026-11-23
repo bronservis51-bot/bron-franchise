@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
-import { addDays, dayLabel, formatDate, monthLabel, monthStart } from '../../platform/dates';
+import { addDays, dayLabel, formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort, sumMinor, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { ActionError, Alert, Button, Card, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox, Select } from '../../ui';
@@ -13,6 +13,8 @@ import { MonthNav } from '../revenue/components';
 import { useOwnPartnerLifecycle } from '../revenue/partnerLifecycle';
 import { ShiftReturnField, validShiftReturn } from './ShiftReturnField';
 import { recordShiftReturn } from './shiftReturns';
+import { PayrollSchedule } from './PayrollSchedule';
+import { splitPayroll } from './payrollPeriods';
 
 /** Advisory UI only: the server checks its clock after locking the shift. */
 function canCorrect(shift: Shift) {
@@ -170,17 +172,21 @@ type ShiftResult = { earned: number | bigint; month: number; currency: string; d
 function ShiftHistory({ userId, current, pointRevenue }: { userId: string; current?: StaffHomeData; pointRevenue?: PointRevenue }) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const currentMonth = current?.month ?? monthStart();
-  const month = selectedMonth ?? currentMonth;
+  const firstOfMonth = current?.today?.endsWith('-01');
+  const defaultMonth = firstOfMonth ? shiftMonth(currentMonth, -1) : currentMonth;
+  const month = selectedMonth ?? defaultMonth;
+  const currentView = month === currentMonth;
   const history = useQuery({
-    queryKey: ['staff', 'history', userId, selectedMonth],
-    enabled: selectedMonth !== null,
-    queryFn: () => staffHome(selectedMonth),
+    queryKey: ['staff', 'history', userId, month],
+    enabled: !currentView,
+    queryFn: () => staffHome(month),
+    refetchInterval: 120_000,
   });
   const compact = Boolean(pointRevenue);
   const content = (
     <>
-      <MonthNav month={month} max={currentMonth} onChange={(next) => setSelectedMonth(next === currentMonth ? null : next)} />
-      {selectedMonth === null ? current && <ShiftMonth data={current} current compact={compact} /> : history.isPaused && !history.data
+      <MonthNav month={month} max={currentMonth} onChange={setSelectedMonth} />
+      {currentView ? current && <ShiftMonth data={current} current compact={compact} /> : history.isPaused && !history.data
         ? <p className="faint" role="status">Для загрузки этого месяца нужна связь.</p>
         : <DataState query={history}>{(data) => <ShiftMonth data={data} compact={compact} />}</DataState>}
       {pointRevenue?.(month)}
@@ -230,11 +236,15 @@ function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; curren
       ))}
     </ul>
   ) : <p className="faint">Закрытых смен в этом месяце пока нет.</p>;
-  if (compact) return <MonthlyDetails label="Мои начисления" total={d.month_earned_minor} currency={d.currency}>
-    {(d.month_shifts > 0 || d.shifts.length > 0) && <p className="faint">{activity}</p>}
-    {terms && <p className="faint">{terms}</p>}
-    {shifts}
-  </MonthlyDetails>;
+  const schedule = <PayrollSchedule month={d.month} amounts={splitPayroll(d.month, d.shifts)} currency={d.currency} />;
+  if (compact) return <div className="stack">
+    <MonthlyDetails label="Мои начисления" total={d.month_earned_minor} currency={d.currency}>
+      {(d.month_shifts > 0 || d.shifts.length > 0) && <p className="faint">{activity}</p>}
+      {terms && <p className="faint">{terms}</p>}
+      {shifts}
+    </MonthlyDetails>
+    {schedule}
+  </div>;
   return (
     <>
       <div className="plan-card earn-card" aria-label="Начислено за месяц">
@@ -243,6 +253,7 @@ function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; curren
         <div className="plan-of">{activity}</div>
         {terms && <div className="plan-foot"><span>{terms}</span></div>}
       </div>
+      {schedule}
       {shifts}
     </>
   );
@@ -373,7 +384,9 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
             setResult(month === null
               ? { earned, month, key, currency, previousQueue: qc.getQueryData<QueueSnapshot>(queueKey) }
               : { earned: earned ?? 0, month, currency, day });
-            for (const name of ['staff', 'revenue', 'finance', 'royalty', 'rating']) void qc.invalidateQueries({ queryKey: [name] });
+            for (const name of ['staff', 'staff-list', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
+              void qc.invalidateQueries({ queryKey: [name] });
+            }
           }} />
       )}
     </div>

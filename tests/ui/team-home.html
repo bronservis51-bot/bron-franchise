@@ -11,6 +11,7 @@ const params = new URLSearchParams(location.search);
 const paused = params.get('scenario') === 'paused';
 const historical = params.get('scenario') === 'historical';
 const testOffline = params.get('scenario') === 'offline';
+const firstOfMonth = params.get('scenario') === 'payday';
 frame.width = String(Number(params.get('width')) || 390);
 frame.src = `/tests/ui/responsive-app.html?role=team&text=${params.get('text') === '200' ? '200' : '100'}#/kb`;
 const previousMonth = '2026-10-01';
@@ -18,7 +19,7 @@ const currentMonth = '2026-11-01';
 const points = ['Торговый центр с длинным названием', 'Вторая назначенная точка с ещё более длинным названием'].map((name, i) => ({
   opened_on: '2026-08-01', missing_count: i === 1 ? 1 : 0,
   missing_periods: i === 1 ? [{ from: '2026-09-15', until: '2026-09-15' }] : [],
-  location_id: `qa-team-point-${i + 1}`, location_name: name, currency: 'RUB', today: '2026-11-20', my_today: null,
+  location_id: `qa-team-point-${i + 1}`, location_name: name, currency: 'RUB', today: firstOfMonth ? '2026-11-01' : '2026-11-20', my_today: null,
 }));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 async function until(read, message) {
@@ -48,10 +49,13 @@ try {
         requested.pay.push(month);
         const earned = month === currentMonth ? 123000 : 456000;
         return Promise.resolve(app.Response.json({
-          month, currency: 'RUB', partner_name: 'Вымышленный франчайзи', rate_bp: 500, shift_fee_minor: 0, pay_policy: { mode: 'legacy', fee_minor: 123400, rate_bp: 250 },
+          month, today: firstOfMonth ? '2026-11-01' : '2026-11-20', currency: 'RUB', partner_name: 'Вымышленный франчайзи', rate_bp: 500, shift_fee_minor: 0, pay_policy: { mode: 'legacy', fee_minor: 123400, rate_bp: 250 },
           open_shift: null, locations: points.map(point => ({ ...point, my_today: closedShift?.location_id === point.location_id ? closedShift : null })), month_earned_minor: earned,
           month_revenue_minor: 1230000, month_shifts: 0,
-          shifts: [{ id: 'qa-prior-shift', counts_as_exit: false, day: `${month.slice(0, 7)}-11`, location_name: points[0].location_name, earned_minor: earned, total_minor: 1230000 }],
+          shifts: [
+            { id: 'qa-prior-shift', counts_as_exit: false, day: `${month.slice(0, 7)}-11`, location_name: points[0].location_name, earned_minor: earned - 23000, total_minor: 1000000 },
+            { id: 'qa-second-half', counts_as_exit: false, day: `${month.slice(0, 7)}-16`, location_name: points[1].location_name, earned_minor: 23000, total_minor: 230000 },
+          ],
         }));
       }
       if (name === 'team_revenue_month') {
@@ -75,8 +79,16 @@ try {
   const doc = app.document;
   const button = label => [...doc.querySelectorAll('main button')].find(item => item.textContent.trim() === label);
   const compact = text => text.replace(/\s/g, '');
+  if (firstOfMonth) {
+    await until(() => compact(doc.querySelector('main').textContent).includes('4560₽'), 'Первого числа не открыты начисления за предыдущий месяц');
+    assert(doc.querySelector('.payroll-schedule-period:nth-child(2) time')?.dateTime === '2026-11-01', 'Не показана дата сегодняшней выплаты');
+    doc.querySelector('main .month-nav button:last-child').click();
+  }
   await until(() => compact(doc.querySelector('main').textContent).includes('101000₽'), 'Не появилась выручка назначенной точки');
   await until(() => compact(doc.querySelector('main').textContent).includes('1230₽'), 'Нет личных начислений');
+  const cards = [...doc.querySelectorAll('.payroll-schedule-period')];
+  assert(cards.length === 2 && compact(cards[0].textContent).includes('1000₽') && compact(cards[1].textContent).includes('230₽'), 'Начисления не разбиты по половинам месяца');
+  assert(cards[0].querySelector('time').dateTime === '2026-11-16' && cards[1].querySelector('time').dateTime === '2026-12-01', 'Неверный график выплат');
   assert(compact(doc.querySelector('.monthly-details')?.textContent ?? '').includes('1234₽завыход'), 'Показаны будущие условия оплаты вместо действующих');
   const navigation = doc.querySelector('main .month-nav');
   assert(doc.querySelectorAll('main .month-nav').length === 1, 'В главной два переключателя месяца');
@@ -98,6 +110,7 @@ try {
   navigation.querySelector('button').click();
   await until(() => requested.pay.includes(previousMonth) && requested.revenue.includes(previousMonth), 'Выручка и начисления запрашивают разные месяцы');
   await until(() => compact(doc.querySelector('main').textContent).includes('202000₽') && compact(doc.querySelector('main').textContent).includes('4560₽'), 'Нет итогов выбранного месяца');
+  assert(doc.querySelector('.payroll-schedule-period:nth-child(2) time').dateTime === '2026-11-01', 'При выборе месяца не изменилась дата выплаты');
   assert(payDetails.textContent.includes('Дополнительная точка') && payDetails.textContent.includes('выручка смен'), 'Дополнительная точка скрыта при нуле основных выходов');
   const close = button('Закрыть смену');
   if (paused) {

@@ -41,7 +41,8 @@ function submission(day: string, cash: number, card: number) { return [point, da
 it('uses the point day at midnight, posts yesterday into January, accepts a late sale as one revised total and stops edits at exactly five minutes', async () => {
   const params = submission('2027-01-31', 10000, 20000);
   at('2027-01-31T10:00:20Z'); // 1 February 00:00:20 at the east point; 30 January 23:00:20 at the west point.
-  const [home] = await db.as<{ data: { locations: { location_id: string; today: string }[] } }>(email, 'select staff_home() data');
+  const [home] = await db.as<{ data: { today: string; month: string; locations: { location_id: string; today: string }[] } }>(email, 'select staff_home() data');
+  expect(home.data).toMatchObject({ today: '2027-02-01', month: '2027-02-01' });
   expect(home.data.locations).toEqual(expect.arrayContaining([
     expect.objectContaining({ location_id: point, today: '2027-02-01' }), expect.objectContaining({ location_id: west, today: '2027-01-30' }),
   ]));

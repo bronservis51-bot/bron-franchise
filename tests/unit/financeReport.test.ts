@@ -43,6 +43,19 @@ describe('monthly operating statement', () => {
     expect(rows.at(-1)?.minor).toBe(-535n);
   });
 
+  it('shows the two payment periods in December without counting payroll twice', () => {
+    const totals = { month: '2026-12-01', revenue_minor: 12000, payroll_minor: 5000, payroll_halves: [1800, 3200] as const,
+      royalty_minor: 0, expenses_minor: 0, net_minor: 7000 };
+    const rows = financeReportRows(totals, []);
+    expect(rows.slice(2, 5).map(({ label, minor, indent }) => [label, minor, indent])).toEqual([
+      ['Начисленная зарплата', -5000n, 1],
+      [expect.stringMatching(/1.*15.*дек.*16.*дек/i), -1800n, 2],
+      [expect.stringMatching(/16.*31.*дек.*1.*янв/i), -3200n, 2],
+    ]);
+    expect(rows[1].minor).toBe(-5000n);
+    expect(rows.at(-1)?.minor).toBe(7000n);
+  });
+
   it('shows retail returns among sales figures and keeps royalty and payroll amounts intact', () => {
     const rows = financeReportRows({ revenue_minor: 10000, return_minor: 12000, payroll_minor: 1000,
       royalty_minor: 700, expenses_minor: 0, net_minor: -3700 }, []);

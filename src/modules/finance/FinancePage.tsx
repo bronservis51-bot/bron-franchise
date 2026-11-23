@@ -10,13 +10,15 @@ import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../u
 import { revenueMonth } from '../revenue/api';
 import { MonthNav } from '../revenue/components';
 import { revenueMonthSheet } from '../revenue/monthReport';
+import { PayrollSchedule } from '../staff/PayrollSchedule';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceEditor } from './FinanceEditor';
-import { downloadFinanceFile, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows } from './financeReport';
+import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, payrollAccrualLabels } from './financeReport';
 
 interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
-  payroll_minor: number; shifts: number; rate_bp: number; royalty_minor: number; expenses_minor: number; return_minor?: number; net_minor: number; is_open: boolean }
+  payroll_minor: number; payroll_halves?: readonly [MinorInput, MinorInput]; shifts: number; rate_bp: number; royalty_minor: number;
+  expenses_minor: number; return_minor?: number; net_minor: number; is_open: boolean }
 interface Ledger { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean;
   correction_minor?: number; past_debt_minor?: number }
 interface Royalty { debt_minor: number; months: Ledger[]; payments: { month: string; amount_minor: number; paid_on: string; note: string | null }[] }
@@ -26,7 +28,8 @@ interface Finance {
   locations: { id: string; name: string; status: string }[];
   current: Fin; months: Fin[];
   by_location: (Fin & { location_id: string; location_name: string })[] | null;
-  by_staff: { user_id: string; full_name: string; shifts: number; revenue_minor: number; earned_minor: number }[];
+  by_staff: { user_id: string; full_name: string; shifts: number; revenue_minor: number; earned_minor: number;
+    payroll_halves?: readonly [MinorInput, MinorInput] }[];
   expenses: Expense[]; expense_categories: string[]; prev_expenses_count: number;
   royalty: Royalty | null;
 }
@@ -83,12 +86,13 @@ async function financeWorkbook(f: Finance, reportOnly: boolean) {
   const money = (v: MinorInput) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
   const scope = financeScope(f);
-  const statement = { sheet: 'Доходы и расходы', columns: [{ width: 45 }, { width: 21 }], data: [
+  const statement = { sheet: 'Доходы и расходы', columns: [{ width: 50 }, { width: 21 }], data: [
     [head(`${f.partner_name} · ${monthLabel(f.month)} · ${scope}`)],
     [{ value: FINANCE_REPORT_NOTE }],
+    ...(f.current.payroll_halves ? [[{ value: FINANCE_PAYROLL_NOTE, wrap: true }]] : []),
     [head('Статья'), head(`Сумма, ${f.currency}`)],
     ...financeReportRows(f.current, f.expenses).map((entry) => [
-      { value: entry.label, indent: entry.indent, fontWeight: entry.total ? 'bold' as const : undefined },
+      { value: entry.label, indent: entry.indent, wrap: true, fontWeight: entry.total ? 'bold' as const : undefined },
       { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
     ]),
   ] };
@@ -111,14 +115,18 @@ async function financeWorkbook(f: Finance, reportOnly: boolean) {
     m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
   const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? '']);
   if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push(['Роялти по ставке', scope, money(f.current.royalty_minor), '']);
+  const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month) : [];
   const sheets = [
     statement,
     { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(cols.length - 1).fill({ width: 14 })],
       data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
     ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(cols.length - 1).fill({ width: 14 })],
       data: [[head('Точка'), ...cols.slice(1)], ...f.by_location.map((l) => row(l.location_name, l))] }] : []),
-    ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 16 }],
-      data: [['Сотрудник', 'Смен', 'Выручка смен', 'Заработок'].map(head), ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor)])] }] : []),
+    ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 20 },
+      ...payrollLabels.map(() => ({ width: 38 }))],
+      data: [['Сотрудник', 'Смен', 'Выручка смен', 'Начислено за месяц', ...payrollLabels].map(head),
+        ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor),
+          ...payrollLabels.map((_label, index) => s.payroll_halves ? money(s.payroll_halves[index]) : null)])] }] : []),
     ...(expenseRows.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
       data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...expenseRows] }] : []),
     ...(dailyRevenue.length ? [revenueMonthSheet(dailyRevenue)] : []),
@@ -154,6 +162,7 @@ function FinanceStatement({ finance }: { finance: Finance }) {
         ))}
       </dl>
       <p className="faint">{FINANCE_REPORT_NOTE}</p>
+      {month.payroll_halves && <p className="faint">{FINANCE_PAYROLL_NOTE}</p>}
       <p className="faint">
         {month.is_open && 'Текущий месяц ещё идёт. '}
         {month.plan_minor ? `План ${formatMoneyShort(month.plan_minor, finance.currency)}${month.pct === null ? '' : ` · выполнено ${n(month.pct).toLocaleString('ru-RU')} %`}` : 'План не поставлен'}
@@ -284,9 +293,12 @@ export function FinancePage() {
               {f.by_staff.length > 0 && (
                 <Card title="Зарплата сотрудников">
                   {f.by_staff.map((s) => (
-                    <div key={s.user_id} className="row between access-row">
-                      <span><strong>{s.full_name}</strong><span className="faint" style={{ display: 'block' }}>{s.shifts} смен · выручка {formatMoneyShort(s.revenue_minor, f.currency)}</span></span>
-                      <Money minor={s.earned_minor} currency={f.currency} strong />
+                    <div key={s.user_id} className="access-row">
+                      <div className="row between">
+                        <span><strong>{s.full_name}</strong><span className="faint" style={{ display: 'block' }}>{s.shifts} смен · выручка {formatMoneyShort(s.revenue_minor, f.currency)}</span></span>
+                        <Money minor={s.earned_minor} currency={f.currency} strong />
+                      </div>
+                      {s.payroll_halves && <PayrollSchedule month={f.month} amounts={s.payroll_halves} currency={f.currency} />}
                     </div>
                   ))}
                 </Card>

@@ -1,6 +1,8 @@
 import { toBigInt, type MinorInput } from '../../platform/money';
+import { payrollDateLabel, payrollPeriodLabel, payrollPeriods } from '../staff/payrollPeriods';
 
 export const FINANCE_REPORT_NOTE = 'Отчёт составлен по внесённым данным. Если выручка или расходы внесены не полностью, итог изменится после их добавления.';
+export const FINANCE_PAYROLL_NOTE = 'Зарплата начислена по закрытым сменам. Даты выплат указаны по графику.';
 
 export async function downloadFinanceFile(makeFile: () => Promise<File>, signal: AbortSignal) {
   const file = await makeFile();
@@ -14,12 +16,18 @@ export async function downloadFinanceFile(makeFile: () => Promise<File>, signal:
 }
 
 interface ReportTotals {
+  month?: string;
   revenue_minor: MinorInput;
   return_minor?: MinorInput;
   payroll_minor: MinorInput;
+  payroll_halves?: readonly [MinorInput, MinorInput];
   royalty_minor: MinorInput;
   expenses_minor: MinorInput;
   net_minor: MinorInput;
+}
+
+export function payrollAccrualLabels(month: string) {
+  return payrollPeriods(month).map(period => `${payrollPeriodLabel(period)} · выплата ${payrollDateLabel(period.payOn)}`);
 }
 
 export function financeExpensesMinor(totals: Pick<ReportTotals, 'expenses_minor' | 'royalty_minor'>) {
@@ -36,6 +44,10 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly { cat
   const recordedExpenses = toBigInt(totals.expenses_minor);
   const sales = toBigInt(totals.revenue_minor);
   const returns = toBigInt(totals.return_minor ?? 0);
+  const halves = totals.payroll_halves;
+  const payrollRows = totals.month && halves ? payrollAccrualLabels(totals.month).map((label, index) => ({
+    label, minor: -toBigInt(halves[index]), indent: 2, total: false,
+  })) : [];
   return [
     { label: 'Выручка', minor: sales, indent: 0, total: true },
     ...(returns > 0n ? [
@@ -44,6 +56,7 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly { cat
     ] : []),
     { label: 'Всего расходов', minor: -(payroll + financeExpensesMinor(totals)), indent: 0, total: true },
     { label: 'Начисленная зарплата', minor: -payroll, indent: 1, total: false },
+    ...payrollRows,
     { label: 'Роялти по ставке', minor: -royalties, indent: 1, total: false },
     { label: 'Внесённые расходы', minor: -recordedExpenses, indent: 1, total: false },
     ...[...categories].sort(([a], [b]) => a.localeCompare(b, 'ru')).map(([label, amount]) => ({ label, minor: -amount, indent: 2, total: false })),
