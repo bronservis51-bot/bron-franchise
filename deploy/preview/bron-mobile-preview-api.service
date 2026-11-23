@@ -8,8 +8,8 @@ Group=bron-preview
 Environment=PORT=54982
 Environment=BRON_STAGING_REQUIRED=1
 EnvironmentFile=/etc/bron-mobile-preview/api.env
-WorkingDirectory=/opt/bron/mobile-preview/current/backend
-ExecStart=/opt/bron/node-v22.23.5-linux-x64/bin/node scripts/local-backend.mjs
+WorkingDirectory=/opt/bron-mobile-preview/current/backend
+ExecStart=/opt/bron-mobile-preview/runtime/node scripts/local-backend.mjs
 Restart=on-failure
 RestartSec=3
 UMask=0077
@@ -17,6 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+InaccessiblePaths=/opt/bron
 ReadWritePaths=/var/lib/bron-mobile-preview
 IPAddressDeny=any
 IPAddressAllow=localhost

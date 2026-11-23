@@ -8,7 +8,7 @@ if [[ $(id -u) != 0 || $# != 2 || ! "$1" = /* || ! "$2" =~ ^[0-9a-f]{64}$ ]]; th
 fi
 printf '%s  %s\n' "$2" "$1" | sha256sum --check --strict --status
 
-root=/opt/bron/mobile-preview
+root=/opt/bron-mobile-preview
 private=/etc/bron-mobile-preview
 state=/var/lib/bron-mobile-preview
 web=/opt/bron/supabase/docker/bron/site
@@ -16,7 +16,7 @@ caddy=/opt/bron/supabase/docker/bron/Caddyfile
 front=supabase-web-1
 public_origin=https://preview.152-228-115-115.sslip.io
 
-install -d -m 0755 "$root" "$root/releases" "$web/.mobile-preview-releases"
+install -d -m 0755 "$root" "$root/releases" "$root/runtime" "$web/.mobile-preview-releases"
 install -d -m 0700 "$private" "$state"
 if ! id -u bron-preview >/dev/null 2>&1; then
   useradd --system --no-create-home --shell /usr/sbin/nologin bron-preview
@@ -24,6 +24,9 @@ fi
 chown bron-preview:bron-preview "$state"
 exec 9>"$private/install.lock"
 flock -n 9
+if [[ ! -x "$root/runtime/node" ]]; then
+  install -m 0755 /opt/bron/node-v22.23.5-linux-x64/bin/node "$root/runtime/node"
+fi
 
 temporary=$(mktemp -d "$root/releases/.incoming.XXXXXX")
 cleanup() { rm -rf -- "$temporary"; }
