@@ -29,6 +29,7 @@ export function startAppUpdates() {
   if (!('serviceWorker' in navigator)) return;
   let registration: ServiceWorkerRegistration | undefined; let checking = false; let lastCheck = 0; let reloading = false;
   let applying: Promise<void> | null = null;
+  let workerNeedsReconciliation = false;
   const base = import.meta.env.BASE_URL;
   const checkRelease = async (): Promise<string | null> => {
     let build: unknown;
@@ -55,29 +56,47 @@ export function startAppUpdates() {
       worker.addEventListener('statechange', changed); changed();
     });
   };
-  const applyUpdate = async () => {
-    if (reloading) return;
-    const target = await checkRelease();
-    if (!target) return;
-    if (!(await safeToReload())) throw new Error(updateBlockedMessage);
+  const updateWorker = async () => {
     try { await registration?.update(); }
     catch { throw new Error(updateCheckFailedMessage); }
     await waitForInstall();
-    if (await checkRelease() !== target) return;
+  };
+  const reconcileWorker = async () => {
+    if (!workerNeedsReconciliation) return;
+    // The worker can advance independently of the open page. Restore it after a confirmed rollback.
+    try {
+      await updateWorker();
+      workerNeedsReconciliation = (await checkRelease()) !== null;
+    } catch { /* Retry on the next successful online check. */ }
+  };
+  const applyUpdate = async () => {
+    if (reloading) return;
+    const target = await checkRelease();
+    if (!target) return reconcileWorker();
+    if (!(await safeToReload())) throw new Error(updateBlockedMessage);
+    workerNeedsReconciliation = true;
+    await updateWorker();
+    const latest = await checkRelease();
+    if (!latest) return reconcileWorker();
+    if (latest !== target) return;
     if (!(await safeToReload())) throw new Error(updateBlockedMessage);
     reloading = true;
     try { sessionStorage.setItem('bron.update-attempt', JSON.stringify({ target, at: Date.now() })); } catch { /* no storage needed */ }
     location.reload();
   };
-  const apply = () => applying ??= applyUpdate().finally(() => { applying = null; });
+  const runUpdate = (task: () => Promise<void>) => applying ??= task().finally(() => { applying = null; });
+  const apply = () => runUpdate(applyUpdate);
   const check = async () => {
-    if (checking || !navigator.onLine || document.visibilityState !== 'visible' || Date.now() - lastCheck < 30_000) return;
+    if (checking || applying || reloading || !navigator.onLine || document.visibilityState !== 'visible' || Date.now() - lastCheck < 30_000) return;
     checking = true; lastCheck = Date.now();
     try {
       registration ??= await navigator.serviceWorker.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' });
       // Also prompts a legacy waiting worker to activate. Activation never clears durable records or forces a reload.
       const target = await checkRelease();
-      if (!target) return;
+      if (!target) {
+        if (workerNeedsReconciliation) await runUpdate(reconcileWorker);
+        return;
+      }
       let recent = false;
       try { const previous = JSON.parse(sessionStorage.getItem('bron.update-attempt') ?? '{}'); recent = previous.target === target && Date.now() - previous.at < 60_000; } catch { /* first attempt */ }
       if (!recent && await safeToReload()) await apply();

@@ -99,7 +99,7 @@ async function rollbackDevice() {
  await vi.advanceTimersByTimeAsync(0);
  return {
    get apply() { return apply; }, browser, reload, update, attempt,
-   rollback() { release = current; }, unblock() { pending = false; },
+   rollback() { release = current; }, unblock() { pending = false; }, block() { pending = true; },
    stop() { stop(); checkPending.mockReset(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); },
  };
 }
@@ -132,14 +132,38 @@ it('does not update a worker or reload when the advertised build was rolled back
  } finally { device.stop(); }
 });
 
-it('checks the manifest again after the worker update before recording an attempt or reloading', async () => {
+it('restores the worker when the applied update is rolled back during installation', async () => {
  const device = await rollbackDevice();
  try {
-   device.update.mockImplementationOnce(async () => { device.rollback(); });
+   let activeWorker = 'current';
+   device.update.mockImplementationOnce(async () => {
+     activeWorker = 'new';
+     device.rollback();
+     device.block();
+   }).mockImplementationOnce(async () => { activeWorker = 'current'; });
    device.unblock();
    await device.apply!();
-   expect(device.update).toHaveBeenCalledOnce();
+   expect(device.update).toHaveBeenCalledTimes(2);
+   expect(activeWorker).toBe('current');
    expect(device.apply).toBeNull();
+   expect(device.attempt).not.toHaveBeenCalled();
+   expect(device.reload).not.toHaveBeenCalled();
+ } finally { device.stop(); }
+});
+
+it('retries failed worker reconciliation on the next online check without reloading', async () => {
+ const device = await rollbackDevice();
+ try {
+   device.update.mockImplementationOnce(async () => { device.rollback(); })
+     .mockRejectedValueOnce(new Error('network disconnected'));
+   device.unblock();
+   await device.apply!();
+   expect(device.update).toHaveBeenCalledTimes(2);
+   device.block();
+   await vi.advanceTimersByTimeAsync(30_000);
+   device.browser.dispatchEvent(new Event('online'));
+   await vi.advanceTimersByTimeAsync(0);
+   expect(device.update).toHaveBeenCalledTimes(3);
    expect(device.attempt).not.toHaveBeenCalled();
    expect(device.reload).not.toHaveBeenCalled();
  } finally { device.stop(); }
