@@ -150,6 +150,10 @@ it('allows an all-admin known layout without adding unnecessary grants to postgr
 it('preserves the finance, learning and CRM call paths across a native split-owner upgrade', async () => {
  const migrated = await fixture();
  try {
+  // An index expression runs as the owner of the populated legacy table.
+  await migrated.exec(`insert into public.franchise_lead
+    (name,phone,phone_digits,contact_via,city,budget,timing,manage,experience,place,score,tier)
+    values ('Заявка до выпуска','8 900 100-20-30','89001002030','call','Город','full','month','self','some','has',12,'hot')`);
   await migrated.exec('alter default privileges revoke execute on functions from public');
   for (const file of migrationFiles().filter((path: string) => path.split('/').pop()! >= '20261116040000_staff_helper_execute.sql')) {
    await migrated.exec(readFileSync(file, 'utf8'));
