@@ -10,6 +10,7 @@ import { AppUpdateBanner } from './AppUpdateBanner';
 import { loginEmail } from '../platform/login';
 import { managerRecoveryAvailable } from '../platform/managerRecovery';
 import { InstallButton } from './InstallApp';
+import { config } from '../platform/config';
 
 export function LoginPage() {
   const { status, signIn } = useSession();
@@ -54,6 +55,7 @@ export function LoginPage() {
       <main className="login-panel">
         <div className="inner">
           <AppUpdateBanner />
+          {config.appEnv === 'staging' && <p className="alert tone-info">Тестовая версия · учебные профили и данные</p>}
           <ServerStatus s={server} onRetry={recheck} />
           <div className="card"><div className="card-body">{form()}</div></div>
           <div style={{ marginTop: 12 }}><InstallButton /></div>

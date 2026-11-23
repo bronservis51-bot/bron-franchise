@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
+import { config } from '../platform/config';
 import { phoneLoginDigits } from '../platform/login';
 import { changeManagerPhoneLogin } from '../platform/managerLogin';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOperationState, queuedOps } from '../platform/outbox';
@@ -297,7 +298,7 @@ export function Shell() {
           <span className="mobile-mark"><LogoMark height={28} /></span>
           <div className="grow topbar-account">
             <span className="topbar-title">{me?.user.full_name}</span>
-            <span className="topbar-role">{workspaceTitle[role]}</span>
+            <span className="topbar-role">{workspaceTitle[role]}{config.appEnv === 'staging' && ' · Тест'}</span>
           </div>
           {access.order && <OrderTopButton />}
           <UserMenu key={`${me?.user.id}:${role}`} role={role} pending={outbox.ops.length} onLocalWork={() => setQueueOpen(true)}

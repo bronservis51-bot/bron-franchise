@@ -9,6 +9,9 @@ import { dirname, join } from 'node:path';
 import { createDb, readContract, root } from './db-lib.mjs';
 
 const PORT = Number(process.env.PORT ?? 54321);
+const stagingPassword = process.env.BRON_STAGING_ACCOUNT_PASSWORD;
+if (process.env.BRON_STAGING_REQUIRED === '1' && !stagingPassword) throw new Error('The staging account password is required');
+if (stagingPassword && stagingPassword.length < 16) throw new Error('The staging account password must have at least 16 characters');
 const LOCAL = join(root, 'local');
 const DATA = join(LOCAL, 'pgdata');
 const FILES = join(LOCAL, 'files');
@@ -24,10 +27,14 @@ const db = fresh
   ? await createDb({
       dataDir: DATA,
       onUser: async (d, u, id) => {
-        // Общий пароль быстрого входа (как на демо-стенде), иначе — случайный для каждого пользователя
-        const pw = process.env.VITE_DEMO_QUICK_PASSWORD || `Demo-${randomBytes(3).toString('hex')}-${randomBytes(3).toString('hex')}`;
         await d.exec('create schema if not exists local_dev');
         await d.exec('create table if not exists local_dev.password(email text primary key, user_id uuid not null, password text not null)');
+        if (stagingPassword) {
+          await d.query('update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt(\'bf\')) where id = $1', [id, stagingPassword]);
+          return;
+        }
+        // Общий пароль быстрого входа (как на демо-стенде), иначе — случайный для каждого пользователя
+        const pw = process.env.VITE_DEMO_QUICK_PASSWORD || `Demo-${randomBytes(3).toString('hex')}-${randomBytes(3).toString('hex')}`;
         await d.query('insert into local_dev.password values ($1, $2, $3)', [u.email, id, pw]);
         passwords.push({ ...u, password: pw });
       },
@@ -38,7 +45,33 @@ const db = fresh
       const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
       return new PGlite(DATA, { extensions: { pg_trgm, pgcrypto } });
     })();
-if (fresh) {
+if (fresh && stagingPassword) {
+  await db.exec(`
+    update public.app_user set full_name = case
+      when email = 'fm@demo.example.com' then 'Тестовый менеджер сети'
+      when email = 'alpha.owner@demo.example.com' then 'Тестовый франчайзи'
+      when email = '79000000011@staff.bron.local' then 'Тестовый продавец'
+      else 'Учебный профиль' end;
+    update public.partner set name = 'Учебный франчайзи · ' || code,
+      contact_name = null, contact_phone = null, contact_email = null;
+    update public.location set name = 'Учебная точка · ' || code, address = null;
+  `);
+  await db.transaction(async tx => {
+    const [owner] = (await tx.query("select id from public.app_user where email = 'alpha.owner@demo.example.com'")).rows;
+    const points = (await tx.query("select id,partner_id from public.location where code in ('ALPHA-1','ALPHA-2') order by code")).rows;
+    await tx.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: owner.id, role: 'authenticated' })]);
+    await tx.exec('set local role authenticated');
+    for (const [phone, name, position] of [
+      ['79000000012', 'Тестовый управляющий', 'manager'],
+      ['79000000013', 'Тестовый стажёр', 'trainee'],
+    ]) {
+      const manager = position === 'manager';
+      const settings = { position, learning_enabled: true, access: { view_staff: manager, create_staff: false, procurement: false, manage_pay: manager } };
+      await tx.query('select public.staff_profile_save_phone(null,$1,$2,$3,$4,$5::uuid[],0,0,true,$6::jsonb)',
+        [points[0].partner_id, name, phone, stagingPassword, points.map(point => point.id), JSON.stringify(settings)]);
+    }
+  });
+} else if (fresh) {
   const md = ['# Локальные демо-пользователи (не коммитить)', '', '| Роль | Email | Пароль |', '| --- | --- | --- |',
     ...passwords.map((p) => `| ${p.name} | ${p.email} | ${p.password} |`)].join('\n');
   writeFileSync(join(LOCAL, 'demo-users.local.md'), md + '\n');
@@ -295,7 +328,7 @@ const server = http.createServer(async (req, res) => {
       if (!claims) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       return send(res, 200, { id: claims.sub, aud: 'authenticated', role: 'authenticated', email: claims.email, app_metadata: {}, user_metadata: {} });
     }
-    if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: 'GoTrue (локальная эмуляция)' });
+    if (p === '/auth/v1/health') return send(res, 200, { version: 'local', name: stagingPassword ? 'GoTrue' : 'GoTrue (локальная эмуляция)' });
     if (p === '/auth/v1/logout') return send(res, 204);
     if (p.startsWith('/auth/v1/signup')) return send(res, 422, { code: 422, error_code: 'signup_disabled', msg: 'Signups not allowed for this instance' });
 
@@ -355,7 +388,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, stagingPassword ? '127.0.0.1' : undefined, () => {
   console.log(`Локальный бэкенд разработки: http://localhost:${PORT}  (НЕ демо-стенд и не production)`);
   console.log('Клиент: VITE_SUPABASE_URL=http://localhost:' + PORT + ' VITE_SUPABASE_PUBLISHABLE_KEY=local-dev-publishable-key-0000 npm run dev');
 });

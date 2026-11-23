@@ -1,0 +1,38 @@
+# BEGIN BRON MOBILE PREVIEW
+preview.152-228-115-115.sslip.io {
+	header {
+		Cache-Control "no-store"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		Referrer-Policy no-referrer
+	}
+
+	route {
+		handle /_preview/access {
+			request_body {
+				max_size 2KB
+			}
+			reverse_proxy 172.19.0.1:54981
+		}
+
+		forward_auth 172.19.0.1:54981 {
+			uri /_preview/check
+		}
+
+		@api path /auth/v1/* /rest/v1/* /storage/v1/*
+		handle @api {
+			request_body {
+				max_size 24MB
+			}
+			reverse_proxy 172.19.0.1:54981
+		}
+
+		handle {
+			root * /srv/mobile-preview
+			encode zstd gzip
+			file_server
+		}
+	}
+}
+# END BRON MOBILE PREVIEW

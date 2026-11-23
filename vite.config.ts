@@ -37,6 +37,7 @@ function cspPlugin(supabaseUrl: string, driveEnabled: boolean): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   const base = env.VITE_BASE_PATH || '/';
+  const staging = env.VITE_APP_ENV === 'staging';
   const buildTime = new Date().toISOString();
   return {
     base,
@@ -50,8 +51,8 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ['icons/*.svg', 'icons/*.png'],
         manifest: {
-          name: 'Бронь Сервис — кабинет франчайзи',
-          short_name: 'Бронь Сервис',
+            name: staging ? 'Бронь Сервис — тестовая версия' : 'Бронь Сервис — кабинет франчайзи',
+            short_name: staging ? 'Бронь — тест' : 'Бронь Сервис',
           description: 'Кабинет франчайзи: база знаний, выручка за день и план на месяц',
           lang: 'ru',
           start_url: base,
