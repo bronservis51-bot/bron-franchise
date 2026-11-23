@@ -1,6 +1,5 @@
 .pay-settings .pay-layout,
 .pay-settings .pay-fields,
-.pay-settings .pay-trainee,
 .pay-settings .pay-example {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -17,41 +16,48 @@
 .pay-settings .pay-help,
 .pay-settings small,
 .pay-settings .pay-current span { color: var(--text-2); font-size: var(--fs-s); }
-.pay-settings .pay-current,
-.pay-settings .pay-example,
-.pay-settings .pay-trainee {
+.pay-settings .pay-example {
   padding: var(--space-3);
   background: var(--surface-2);
   border-radius: var(--radius);
 }
-.pay-settings .pay-current { display: grid; gap: var(--space-1); overflow-wrap: anywhere; }
-.pay-settings .pay-trainee { border-inline-start: 3px solid var(--border-strong); }
 .dialog-body .pay-settings > .pay-layout { margin-top: var(--space-3); }
-.pay-settings .pay-choices { padding: 0; margin: 0; border: 0; min-width: 0; }
-.pay-settings legend { padding: 0; overflow-wrap: anywhere; }
-.pay-settings .pay-choice {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-  min-height: var(--touch);
-  margin-top: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-s);
-  cursor: pointer;
+.pay-settings .pay-explanation { border-top: 1px solid var(--border); }
+.pay-settings .pay-explanation summary { cursor: pointer; padding-block: var(--space-2); color: var(--text-2); }
+.pay-settings .pay-explanation[open] > * + * { margin-top: var(--space-2); }
+.pay-settings .pay-tier-wrap { container-type: inline-size; min-width: 0; }
+.pay-settings .pay-tier-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  text-align: left;
 }
-.pay-settings .pay-choice:has(input:checked) { background: var(--primary-weak); border-color: var(--primary); }
-.pay-settings .pay-choice input { margin: .25em 0 0; flex: none; accent-color: var(--primary); }
-.pay-settings .pay-choice small, .pay-settings .pay-result small { display: block; }
-.pay-settings .pay-tier {
-  min-inline-size: 0;
-  margin: 0;
-  border: 1px solid var(--border);
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
+.pay-tier-grid th, .pay-tier-grid td {
+  padding: var(--space-1);
+  vertical-align: top;
+  overflow-wrap: anywhere;
 }
-.pay-settings .pay-tier legend { padding: 0 var(--space-1); }
-.pay-settings .pay-tier > .btn { margin-top: var(--space-2); }
+.pay-tier-grid th { color: var(--text-2); font-size: var(--fs-s); font-weight: 600; }
+.pay-tier-grid thead tr { border-bottom: 1px solid var(--border); }
+.pay-tier-grid tbody tr + tr { border-top: 1px solid var(--border); }
+.pay-tier-grid :is(th, td):last-child { width: var(--touch); padding-inline: 0; text-align: right; }
+.pay-tier-grid .input { width: 100%; min-width: 0; padding-inline: var(--space-2); }
+.pay-tier-grid .btn { min-width: var(--touch); padding-inline: 0; }
+.pay-tier-grid .field > label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.pay-tier-grid .pay-from-zero { display: inline-flex; align-items: center; min-height: var(--touch); padding-inline: var(--space-2); }
+@container (max-width: 16em) {
+  .pay-tier-grid, .pay-tier-grid tbody { display: block; }
+  .pay-tier-grid thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+  .pay-tier-grid tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-block: var(--space-2); }
+  .pay-tier-grid td { display: block; }
+  .pay-tier-grid td:first-child { grid-column: 1 / -1; }
+  .pay-tier-grid td:last-child { grid-column: 1 / -1; justify-self: end; }
+  .pay-tier-grid .field > label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; white-space: normal; }
+  .pay-tier-grid .pay-from-zero .sr-only { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; }
+}
 .pay-settings .pay-field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr));

@@ -35,17 +35,35 @@ function updatePermissions(permissions) {
 }
 
 try {
+  const fixtureUser = '00000000-0000-4000-8000-000000000001';
+  localStorage.setItem(`bron.first-run:${fixtureUser}:manager`, 'seen');
+  localStorage.removeItem(`bron.first-run-v2:${fixtureUser}:manager`);
   const loaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
   frame.src = '/tests/ui/responsive-app.html?role=manager&guide=show&access-refresh=1#/rating';
   await loaded;
   const guide = await until(() => read('dialog.first-run-dialog[open]'), 'Первые шаги не открылись');
-  const viewport = frame.contentWindow.visualViewport;
-  const rect = guide.getBoundingClientRect();
-  assert(Math.abs((rect.top + rect.bottom) / 2 - (viewport.offsetTop + viewport.height / 2)) < 2,
-    'Вводное обучение не по центру видимой области');
+  const spotlight = await until(() => read('.guide-spotlight[data-target="nav-home"]'), 'Подсветка главной не появилась');
+  const target = read('.bottom-nav [data-tour-target="nav-home"]');
+  const targetRect = target.getBoundingClientRect();
+  const light = spotlight.getBoundingClientRect();
+  assert(light.left <= targetRect.left && light.right >= targetRect.right, 'Подсветка не совпала с кнопкой в мобильной навигации');
+  const hit = frame.contentDocument.elementFromPoint(targetRect.left + targetRect.width / 2, targetRect.top + targetRect.height / 2);
+  assert(guide.contains(hit), 'Подсвеченная кнопка принимает нажатие под туром');
+  button('Далее').click();
+  await until(() => heading() === 'Заявки' && read('dialog[open] .guide-spotlight[data-target="nav-leads"]'), 'Подсказка не открыла заявки');
+  button('Назад').click();
+  await until(() => heading() === 'Франчайзи' && read('dialog[open] .guide-spotlight[data-target="nav-home"]'), 'Возврат по шагам не работает');
   button('Пропустить').click();
 
   await until(() => heading() === 'Рейтинг франчайзи', 'Рейтинг недоступен при выданном праве');
+  read('[data-tour-target="profile"]').click();
+  (await until(() => button('Первые шаги'), 'Из профиля нельзя открыть тур повторно')).click();
+  (await until(() => button('Далее'), 'Повторный тур не открылся')).click();
+  await until(() => heading() === 'Заявки', 'Повторный тур не открыл заявки');
+  const preview = frame.contentWindow;
+  read('dialog.first-run-dialog[open]').dispatchEvent(new preview.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  await until(() => heading() === 'Рейтинг франчайзи' && !read('dialog.first-run-dialog[open]'), 'Escape не вернул исходный раздел');
+
   updatePermissions(networkPermissions);
   await until(() => heading() === 'Франчайзи' && read('.access-notice'), 'После отзыва права раздел не закрылся');
   assert(!read('.bottom-nav a[href="#/rating"]'), 'Рейтинг остался в меню после отзыва');
@@ -57,6 +75,10 @@ try {
   addLead.click();
   const field = await until(() => read('dialog[open] .lead-editor input'), 'Не открылась форма заявки');
   const app = frame.contentWindow;
+  const formRect = field.closest('dialog').getBoundingClientRect();
+  const viewport = app.visualViewport;
+  assert(Math.abs((formRect.top + formRect.bottom) / 2 - (viewport.offsetTop + viewport.height / 2)) < 2,
+    'Форма заявки не по центру видимой области');
   Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(field, 'Черновик заявки');
   field.dispatchEvent(new app.Event('input', { bubbles: true }));
   await until(() => read('.lead-editor[data-unsaved=true]'), 'Черновик не зафиксирован');
@@ -80,7 +102,7 @@ try {
   await until(() => read('main')?.textContent.includes('Статья не найдена'), 'Снятие прав не закрыло неопубликованный материал');
   assert(!read('main')?.textContent.includes('Вымышленный черновик'), 'Старое название черновика осталось на экране');
 
-  result.textContent = 'PASS. Окно центрируется. Меню обновляется. Черновик в другом разделе сохранён. Закрытый материал скрыт. Профиль без назначений видит состояние ожидания.';
+  result.textContent = 'PASS. Тур подсвечивает реальные кнопки и открывает разделы. Меню обновляется. Черновик в другом разделе сохранён. Закрытый материал скрыт. Профиль без назначений видит состояние ожидания.';
 } catch (error) {
   result.textContent = `FAIL. ${error.message}`;
   throw error;

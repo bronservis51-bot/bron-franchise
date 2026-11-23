@@ -1,0 +1,105 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Редактор оплаты</title>
+<output id="result">Проверка…</output><iframe id="app" height="950" title="Кабинет на вымышленных данных"></iframe>
+<script type="module">
+const frame = document.querySelector('#app'), result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+const manager = params.get('role') === 'manager';
+const conflict = params.has('conflict');
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = '/tests/ui/responsive-app.html?access-refresh&role=' + (manager ? 'team&staff-view=allow' : 'franchisee') +
+  '&text=' + (params.get('text') === '200' ? '200' : '100') + '#/';
+async function until(read, message) {
+  const deadline = performance.now() + 12000;
+  while (performance.now() < deadline) {
+    const value = read(); if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error(message);
+}
+function check(value, message) { if (!value) throw new Error(message); }
+try {
+  await until(() => frame.contentDocument.querySelector('main button, main a'), 'Кабинет не открылся');
+  const app = frame.contentWindow, doc = app.document, original = app.fetch;
+  const button = (text, scope = doc) => [...scope.querySelectorAll('button')].find(el => el.textContent.trim() === text && el.getClientRects().length);
+  const field = (prefix, scope) => [...scope.querySelectorAll('label')].find(el => el.textContent.startsWith(prefix))?.control;
+  function fill(input, value) {
+    const type = input.tagName === 'SELECT' ? app.HTMLSelectElement : app.HTMLInputElement;
+    Object.getOwnPropertyDescriptor(type.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+  }
+  const payWrites = [];
+  app.fetch = async (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/staff_pay_save')) {
+      payWrites.push(JSON.parse(init.body));
+      if (conflict) return app.Response.json({ message: 'version-conflict', details: 'Схема уже изменена' }, { status: 400 });
+      return app.Response.json({ ok: true });
+    }
+    const response = await original(request, init);
+    if (!url.pathname.endsWith('/rpc/staff_list')) return response;
+    const [sample] = await response.json();
+    const employee = { ...sample, can_manage: !manager, can_edit_pay: true, pay_revision: conflict && payWrites.length ? 8 : 7,
+      pay_effective_from: '2026-11-01', employee_kind: 'employee' };
+    return app.Response.json([employee, { ...sample, user_id: 'other-user', full_name: 'Вне полномочий',
+      can_manage: false, can_edit_pay: false, pay_revision: 0 }]);
+  };
+  if (manager) app.dispatchEvent(new app.CustomEvent('qa:access', { detail: ['kb.read', 'shift.work', 'staff.pay_edit'] }));
+  app.location.hash = '#/staff';
+  (await until(() => button('Оплата'), 'Нет раздела оплаты')).click();
+  if (!manager) {
+    (await until(() => button('Изменить общую схему'), 'Нет общей схемы')).click();
+    const table = await until(() => doc.querySelector('table[aria-label="Ступени оплаты"]'), 'Нет таблицы общей схемы');
+    check(table.tBodies[0].rows.length === 7, 'Часть ступеней потеряна');
+    check(!doc.querySelector('.pay-explanation[open]'), 'Пример развёрнут при входе');
+    check(table.scrollWidth <= table.parentElement.clientWidth + 2, 'Таблица шире отведённого места');
+    button('Отмена', table.closest('.card')).click();
+  } else {
+    check(!button('Изменить общую схему') && !button('Открыть карточку'), 'Открыт несогласованный доступ');
+  }
+  (await until(() => button('Изменить'), 'Нет личных условий')).click();
+  const dialog = await until(() => doc.querySelector('dialog[open]'), 'Нет редактора');
+  check(!button('Основное', dialog) && !button('Вход', dialog), 'В редакторе оплаты видны посторонние разделы');
+  const mode = field('Схема оплаты', dialog), date = field('Новые условия действуют с', dialog);
+  const save = button('Сохранить', dialog);
+  check(mode && date && save.disabled, 'Неверное начальное состояние');
+  fill(mode, 'custom');
+  await until(() => dialog.querySelector('table')?.getClientRects().length, 'Нет личных ступеней');
+  fill(field('Название схемы', dialog), 'Личная');
+  button('Добавить ступень', dialog).click();
+  await until(() => dialog.innerText.includes('Порог должен быть выше предыдущего'), 'Не показана ошибка порога');
+  check(save.disabled, 'Некорректные ступени можно сохранить');
+  fill(field('Ступень 2. Выручка от', dialog), '1000');
+  fill(field('Ступень 2. Доля выручки', dialog), '7,25');
+  fill(date, '2026-12-01');
+  await until(() => !save.disabled, 'Не сохраняются корректные изменения');
+  await doc.fonts.ready;
+  check(dialog.scrollWidth <= dialog.clientWidth + 2 && doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 2, 'Редактор шире экрана');
+  save.click();
+  if (conflict) {
+    await until(() => dialog.querySelector('[role="alert"]'), 'Не показан конфликт версии');
+    check(date.value === '2026-12-01' && field('Ступень 2. Доля выручки', dialog).value === '7,25', 'Потерян черновик при конфликте');
+    (await until(() => button('Закрыть', dialog), 'Нет кнопки закрытия')).click();
+    (await until(() => button('Продолжить ввод', dialog), 'Нет защиты черновика')).click();
+    check(field('Название схемы', dialog).value === 'Личная', 'Потерян черновик после возврата');
+    (await until(() => button('Закрыть', dialog), 'Нет кнопки закрытия')).click();
+    (await until(() => button('Отбросить изменения', dialog), 'Нельзя закрыть черновик')).click();
+  }
+  await until(() => payWrites.length === 1 && !doc.querySelector('dialog[open]'), 'Изменения не обработаны');
+  const sent = payWrites[0];
+  check(sent.p_expected_pay_revision === 7 && sent.p_pay_effective_from === '2026-12-01' &&
+    sent.p_custom_pay.tiers[1].rate_bp === 725 && sent.p_custom_pay.tiers[1].from_minor === 100000, 'Не совпадают версия, дата или сумма');
+  app.location.hash = '#/staff?month=2026-11-01&employee=qa-worker-edit';
+  await until(() => !app.location.hash.includes('employee='), 'Ссылка не обработана в карточке сотрудника');
+  check(app.location.hash.includes('month=2026-11-01'), 'Потеряны прочие параметры ссылки');
+  if (manager) check(!doc.querySelector('dialog[open]'), 'Открылась недоступная карточка сотрудника');
+  else {
+    const profile = await until(() => doc.querySelector('dialog[open]'), 'Не открылась карточка для повышения');
+    const position = field('Статус сотрудника', profile);
+    check(position?.getClientRects().length, 'Не видна должность для повышения');
+    fill(position, 'manager');
+    button('Вход', profile).click();
+    await until(() => field('Редактировать оплату сотрудников', profile)?.getClientRects().length, 'Нет разрешения управляющего на оплату');
+  }
+  result.textContent = 'PASS';
+} catch (error) { result.textContent = 'FAIL ' + error.message; }
+</script></html>

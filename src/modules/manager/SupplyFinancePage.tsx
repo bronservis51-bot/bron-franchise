@@ -9,6 +9,7 @@ import { formatMoneyShort } from '../../platform/money';
 import { ActionError, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, PageHeader, Select } from '../../ui';
 import { payrollAccrualLabels } from '../finance/financeReport';
 import { MonthNav } from '../revenue/components';
+import './supply-finance.css';
 import { revenueOverview } from '../revenue/api';
 import { royaltySummary } from './api';
 import { RoyaltyPage } from './RoyaltyPage';
@@ -61,7 +62,7 @@ function FranchiseOverview() {
   const bind = useMutation({ mutationFn: (counterparty: string) => command('manager_supply_map', { counterparty, partner: mapping[counterparty] }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['supply'] }); } });
   return <>
-    <PageHeader title="Экономика франшизы" sub="Выручка партнёров, роялти и поставки за выбранный месяц."
+    <PageHeader title="Экономика"
       actions={<Button onClick={() => { void q.refetch(); void economy.refetch(); if (showRevenue) void rev.refetch(); if (showRoyalty) void royalty.refetch(); }} loading={q.isFetching || economy.isFetching || rev.isFetching || royalty.isFetching}><RefreshCw size={16} aria-hidden />Обновить сводку</Button>} />
     <MonthNav month={month} onChange={setMonth} max={monthStart()} />
     <ActionError error={economy.error ?? (showRevenue ? rev.error : null) ?? (showRoyalty ? royalty.error : null) ?? bind.error} />
@@ -76,21 +77,29 @@ function FranchiseOverview() {
       return <div className="stack">
         {s.fetched_at && <p className="faint">Снимок поставок от {new Date(s.fetched_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} МСК. Период по {s.period_to?.slice(0, 10).split('-').reverse().join('.')}. Кнопка обновляет сводку из последнего загруженного снимка.</p>}
         <Card title="Сводка сети за месяц">
-          <div className="kpis">
-            <div className="kpi"><span className="l">Розничная выручка</span>
+          <div className="kpis economy-kpis">
+            <div className="kpi">
               {Object.entries(retailByCurrency).length ? Object.entries(retailByCurrency).map(([currency, value]) => <span className="v" key={currency}>{money(value, currency)}</span>) : <span className="v">—</span>}
-              <span className="l">Продажи франчайзи своим клиентам</span>
-            </div>
-            <div className="kpi"><span className="l">Роялти: начислено / оплачено</span>
-              {royaltyData?.totals.length ? royaltyData.totals.map(row => <span className="v" key={row.currency}>{money(row.accrued_minor, row.currency)} / {money(row.paid_minor, row.currency)}</span>) : <span className="v">—</span>}
-              <span className="l">По валютам, без пересчёта в одну</span>
+              <span className="l">Розничная выручка франчайзи</span>
             </div>
             <div className={`kpi${missingDays ? ' warn' : ''}`}><span className="v">{missingDays === undefined ? '—' : missingDays}</span><span className="l">Не заполнено прошедших дней</span></div>
             <div className="kpi"><span className="v">{hasMappedSupply ? money(total.sales) : '—'}</span><span className="l">Поставки: наши продажи, ₽</span></div>
             <div className="kpi"><span className="v">{hasMappedSupply ? money(total.cost) : '—'}</span><span className="l">Себестоимость отгрузок, ₽</span></div>
             <div className="kpi"><span className="v">{hasMappedSupply ? money(total.profit) : '—'}</span><span className="l">Валовая прибыль поставок, ₽</span></div>
           </div>
-          <p className="faint">Эти данные показывают выручку франчайзи, роялти и поставки. Для расчёта чистой прибыли сети нужны и другие данные.</p>
+          {showRoyalty && <section className="economy-royalty-totals">
+            <h3 id="economy-royalty-heading">Роялти по валютам</h3>
+            {royaltyData?.totals.length ? <div className="table-wrap" role="region" aria-labelledby="economy-royalty-heading" tabIndex={0}>
+              <table className="table">
+                <thead><tr><th scope="col" className="r">Начислено</th><th scope="col" className="r">Оплачено</th></tr></thead>
+                <tbody>{royaltyData.totals.map(row => <tr key={row.currency}>
+                  <td className="r num">{money(row.accrued_minor, row.currency)}</td>
+                  <td className="r num">{money(row.paid_minor, row.currency)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div> : !royalty.isError && <p className="faint">{royalty.isFetching ? 'Загружаем начисления…' : 'Нет данных за этот месяц'}</p>}
+          </section>}
+          <p className="faint">Для расчёта чистой прибыли сети нужны дополнительные данные.</p>
         </Card>
         <DataState query={economy} skeleton={3}>{e => <>
           <CompanyExpenses month={month} expenses={e.company_expenses} totals={e.company_expense_totals} />

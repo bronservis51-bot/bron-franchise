@@ -28,11 +28,20 @@ function assert(condition, message) {
 }
 
 frame.width = String(Number(params.get('width')) || 390);
-frame.src = `/tests/ui/responsive-app.html?role=staff&shift=open&text=${params.get('text') === '200' ? '200' : '100'}#/`;
+frame.src = `/tests/ui/responsive-app.html?role=staff&shift=open&gaps=1&text=${params.get('text') === '200' ? '200' : '100'}#/`;
 try {
   const liveButton = await until(() => [...frame.contentDocument.querySelectorAll('.shift-card button')].find(b => b.textContent.trim() === closeLabel && !b.disabled), 'Не появилась открытая смена', 15000);
   const app = frame.contentWindow;
   const doc = app.document;
+  const gaps = await until(() => doc.querySelector('.shift-gaps'), 'Не показаны пропущенные дни');
+  const summary = gaps.querySelector('summary');
+  summary.click();
+  const headingBounds = summary.getBoundingClientRect();
+  const dates = gaps.querySelector('ul');
+  assert(dates.getBoundingClientRect().top >= headingBounds.bottom &&
+    Math.abs(gaps.getBoundingClientRect().width - headingBounds.width) < 4, 'Даты должны быть под заголовком точки');
+  assert(!dates.querySelector('button'), 'Открытая смена не блокирует ввод за пропущенные даты');
+  summary.click();
   const fetchFixture = app.fetch;
   const monthRequests = [];
   const closed = { id: 'qa-october', revision: 1, location_id: 'qa-location', location_name: 'Вымышленная архивная точка', day: '2026-10-23', status: 'closed', opened_at: '2026-10-23T08:00:00Z', closed_at: '2026-10-23T18:00:00Z', cash_minor: 490000, card_minor: 180000, total_minor: 670000, earned_minor: 240000, rate_bp: null, shift_fee_minor: null, comment: null };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
@@ -16,7 +16,7 @@ import { HelpTip } from '../ui/HelpTip';
 import { useToast } from '../ui/toast';
 import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
-import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen } from './FirstRunGuide';
+import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunPreview } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
 import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
@@ -153,6 +153,8 @@ function ManagerLoginDialog({ onClose }: { onClose: () => void }) {
 
 function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: number; onLocalWork: () => void; showTeamAccess: boolean; role: WorkspaceRole }) {
   const { me, isManager, signOut } = useSession();
+  const navigate = useNavigate();
+  const preview = useLocation().state as FirstRunPreview | null;
   const [view, setView] = useState<'profile' | 'password' | 'login' | 'recovery' | 'install' | 'guide' | null>(null);
   const [guideSeen, setGuideSeen] = useState(() => role === 'pending' || Boolean(me?.user.id && hasSeenFirstRunGuide(me.user.id, role)));
   const installState = useInstallState();
@@ -160,6 +162,11 @@ function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: num
   const restoreProfileFocus = useRef(false);
   const guideOpen = role !== 'pending' && (!guideSeen || view === 'guide');
   const close = () => setView(null);
+  useEffect(() => {
+    if (guideOpen || !preview?.firstRunPreview || !preview.firstRunOrigin) return;
+    const { pathname, search, hash, state } = preview.firstRunOrigin;
+    void navigate({ pathname, search, hash }, { replace: true, state });
+  }, [guideOpen, navigate, preview]);
   useEffect(() => {
     if (view || guideOpen || !restoreProfileFocus.current) return;
     restoreProfileFocus.current = false;
@@ -179,7 +186,7 @@ function UserMenu({ pending, onLocalWork, showTeamAccess, role }: { pending: num
   };
   return (
     <>
-      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="dialog" onClick={() => {
+      <button ref={profileButton} className="user-btn" aria-label="Профиль" aria-haspopup="dialog" data-tour-target="profile" onClick={() => {
         restoreProfileFocus.current = true;
         setView('profile');
       }}>
@@ -264,7 +271,8 @@ export function Shell() {
   }, [loc.pathname]);
 
   const link = (n: NavItem, mobile = false) => (
-    <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
+    <NavLink key={n.to} to={n.to} end={n.to === '/'} data-tour-target={n.to === '/' ? 'nav-home' : 'nav-' + n.to.slice(1)}
+      className={({ isActive }) => (isActive ? 'active' : undefined)}>
       <n.icon size={mobile ? 22 : 18} aria-hidden />{mobile ? <span className="nav-label">{n.label}</span> : n.label}
       {n.badge === 'learning' && learning.data?.new_day && <span className="learning-dot" aria-label="Загляните в обучение сегодня" />}
       {n.badge === 'kb' && kbCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={`новых: ${kbCount}`}>{mobile ? '' : kbCount}</span>}
@@ -328,7 +336,7 @@ export function Shell() {
           ) : <Outlet key={scopeRevision} />}
         </main>
       </div>
-      {nav.length > 0 && <nav className="bottom-nav" aria-label="Навигация" style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}>
+      {nav.length > 0 && <nav className="bottom-nav" aria-label="Навигация">
         {nav.map((n) => link(n, true))}
       </nav>}
     </div>

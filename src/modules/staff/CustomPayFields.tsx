@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { formatMoneyShort } from '../../platform/money';
+import { X } from 'lucide-react';
 import { Button, Field, Input, MoneyInput } from '../../ui';
 import type { CustomShiftPay } from './api';
 import type { PayPolicy } from './Motivation';
@@ -85,25 +85,29 @@ export function CustomPayFields({ currency, draft, setDraft, named = true }: {
       }} />}</Field>}
     <PolicyMoney label={`Гарантия за смену, ${unit}`} value={draft.floor} currency={currency}
       onChange={floor => setDraft(current => ({ ...current, floor }))} />
-    <p className="pay-help">Порог определяет процент от всей выручки смены. Сотрудник получит большую из двух сумм — гарантию или процент. Премия прибавится сверху.</p>
-    {draft.tiers.map((tier, index) => {
-      const fromError = index > 0 && Number(tier.from.minor) <= Number(draft.tiers[index - 1].from.minor)
-        ? 'Порог должен быть выше предыдущего' : undefined;
-      const rateError = percentToBp(tier.rate) === null ? 'Введите число от 0 до 100 с точностью до сотых' : undefined;
-      return <fieldset className="pay-tier" key={tier.id}>
-        <legend>Ступень {index + 1}{index === 0 && ` · от ${formatMoneyShort(0, currency)}`}</legend>
-        <div className="pay-field-grid">
-          {index > 0 && <PolicyMoney label={`Выручка от, ${unit}`} value={tier.from} currency={currency} error={fromError}
-            onChange={from => updateTier(tier.id, { from })} />}
-          <Field label="Доля выручки, %" error={rateError}>{(id, describedBy) => <Input id={id} inputMode="decimal" value={tier.rate}
-            aria-describedby={describedBy} aria-invalid={Boolean(rateError) || undefined} onChange={e => updateTier(tier.id, { rate: e.target.value })} />}</Field>
-          <PolicyMoney label={`Премия, ${unit}`} value={tier.bonus} currency={currency} onChange={bonus => updateTier(tier.id, { bonus })} />
-        </div>
-        {index > 0 && <Button size="sm" variant="ghost" aria-label={`Убрать ступень ${index + 1}`} onClick={() => setDraft(current => ({ ...current,
-          tiers: current.tiers.filter(item => item.id !== tier.id),
-        }))}>Убрать ступень</Button>}
-      </fieldset>;
-    })}
+    <div className="pay-tier-wrap"><table className="pay-tier-grid" aria-label="Ступени оплаты">
+      <thead><tr><th scope="col">Выручка от, {unit}</th><th scope="col">Доля, %</th><th scope="col">Премия, {unit}</th>
+        <th scope="col"><span className="sr-only">Действие</span></th></tr></thead>
+      <tbody>{draft.tiers.map((tier, index) => {
+        const fromError = index > 0 && Number(tier.from.minor) <= Number(draft.tiers[index - 1].from.minor)
+          ? 'Порог должен быть выше предыдущего' : undefined;
+        const rateError = percentToBp(tier.rate) === null ? 'Введите число от 0 до 100 с точностью до сотых' : undefined;
+        const row = `Ступень ${index + 1}`;
+        return <tr key={tier.id}>
+          <td>{index === 0 ? <span className="pay-from-zero"><span className="sr-only">{row}. Выручка от, {unit}: </span>0</span>
+            : <PolicyMoney label={`${row}. Выручка от, ${unit}`} value={tier.from} currency={currency} error={fromError}
+              onChange={from => updateTier(tier.id, { from })} />}</td>
+          <td><Field label={`${row}. Доля выручки, %`} error={rateError}>{(id, describedBy) =>
+            <Input id={id} inputMode="decimal" value={tier.rate} aria-describedby={describedBy}
+              aria-invalid={Boolean(rateError) || undefined} onChange={e => updateTier(tier.id, { rate: e.target.value })} />}</Field></td>
+          <td><PolicyMoney label={`${row}. Премия, ${unit}`} value={tier.bonus} currency={currency}
+            onChange={bonus => updateTier(tier.id, { bonus })} /></td>
+          <td>{index > 0 && <Button size="sm" variant="ghost" aria-label={`Убрать ступень ${index + 1}`}
+            onClick={() => setDraft(current => ({ ...current, tiers: current.tiers.filter(item => item.id !== tier.id) }))}>
+            <X size={16} aria-hidden /></Button>}</td>
+        </tr>;
+      })}</tbody>
+    </table></div>
     {draft.tiers.length < maxTiers && <Button size="sm" onClick={() => {
       const next = newTier(crypto.randomUUID());
       setDraft(current => ({ ...current, tiers: [...current.tiers, next] }));

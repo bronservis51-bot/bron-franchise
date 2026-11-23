@@ -19,6 +19,19 @@ it('keeps every tier and a conflicting threshold visible for correction', () => 
   expect(customPayPolicy(draft)).toBeNull();
 });
 
+it('edits all thresholds in one table, with a locked zero threshold and named controls for every editable cell', () => {
+  const draft = customPayDraft(policy);
+  const html = renderToStaticMarkup(<CustomPayFields currency="KZT" draft={draft} setDraft={() => {}} />);
+  expect(html).toContain('<table');
+  expect(html).toContain('aria-label="Ступени оплаты"');
+  expect(html.match(/<tr>/g)).toHaveLength(3);
+  expect(html).toContain('Выручка от, ₸');
+  expect(html).toContain('Доля, %');
+  expect(html).toContain('Премия, ₸');
+  expect(html).toContain('Убрать ступень 2');
+  expect(html).not.toContain('Убрать ступень 1');
+});
+
 it('previews the selected tier including its bonus and uses the partner currency', () => {
   const html = renderToStaticMarkup(<PayExample currency="KZT" policy={policy} />).replace(/\s/g, '');
   expect(html).toContain('1450₸');

@@ -1,0 +1,33 @@
+.economy-overview .economy-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr));
+}
+
+.economy-overview .economy-kpis .v {
+  font-size: var(--fs-l);
+  overflow-wrap: normal;
+}
+
+.economy-royalty-totals {
+  margin-block: var(--space-4);
+}
+
+.economy-royalty-totals h3 {
+  margin-bottom: var(--space-2);
+}
+
+.economy-royalty-totals .table {
+  width: auto;
+  min-width: min(100%, 24rem);
+}
+
+@media (max-width: 560px) {
+  .economy-overview .economy-kpis .kpi:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 360px) {
+  .economy-overview .page-header h1 {
+    font-size: var(--fs-xl);
+  }
+}

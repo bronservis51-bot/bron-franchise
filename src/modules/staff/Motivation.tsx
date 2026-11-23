@@ -85,9 +85,12 @@ function TeamPayEditor({ partner, saved, initialDate, onClose }: { partner: stri
   });
   return <div className="pay-layout" data-unsaved="true">
     <Field label="Действует с" hint="Дата смены по местному времени точки.">{id => <Input id={id} type="date" readOnly={Boolean(initialDate)} value={date} onChange={e => setDate(e.target.value)} />}</Field>
-    <PayExample currency={saved.currency} policy={policy} />
     <CustomPayFields named={false} currency={saved.currency} draft={draft} setDraft={setDraft} />
-    <p className="pay-help">{payTiming}</p>
+    <details className="pay-explanation"><summary>Как считается оплата</summary>
+      <p className="pay-help">Сотрудник получает большую из двух сумм — гарантию или процент от всей выручки смены. Премия прибавляется сверху.</p>
+      <PayExample currency={saved.currency} policy={policy} />
+      <p className="pay-help">{payTiming}</p>
+    </details>
     <ActionError error={m.error} />
     <div className="row"><Button disabled={m.isPending} onClick={onClose}>Отмена</Button>
       <Button variant="primary" loading={m.isPending} disabled={!policy} onClick={() => policy && m.mutate(policy)}>Сохранить схему</Button></div>

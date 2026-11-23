@@ -6,9 +6,10 @@ import { formatDateTime } from '../../platform/dates';
 import { ActionError, Button, Checkbox, ConfirmDialog, DataState, Field, Input, KV, PageHeader, Select, Textarea } from '../../ui';
 import { useToast } from '../../ui/toast';
 import { ANSWERS, leadList, leadMove, leadPendingRecontacts, leadSave, leadTrashList, leadSetDeleted, type Lead } from './api';
-import { COLUMNS, columnFor, groupLeads, readiness, type Readiness } from './pipeline';
+import { COLUMNS, columnFor, groupLeads, readiness, readinessKey, type Readiness } from './pipeline';
 import { canonicalLeadPhone, parseLeadContact } from './contact';
 import { LeadPartnerDialog } from './LeadPartnerDialog';
+import './leads.css';
 
 const FACTORS = [{ key: 'money', title: 'Деньги', icon: Banknote }, { key: 'place', title: 'Помещение', icon: Building2 }, { key: 'now', title: 'Сейчас', icon: Clock3 }] as const;
 const digits = canonicalLeadPhone;
@@ -17,7 +18,6 @@ function Factors({ value }: { value: Readiness }) {
     <f.icon size={13} aria-hidden />{f.title}{value[f.key] && <Check size={11} aria-hidden />}<span className="sr-only">: {value[f.key] ? 'да' : 'не подтверждено'}</span>
   </span>)}</div>;
 }
-function shownFactors(l: Lead): Readiness { return COLUMNS.find(c => c.id === l.pipeline_column)?.factors ?? readiness(l); }
 function StageOptions({ auto = false }: { auto?: boolean }) { return <>
   {auto && <option value="auto">По анкете — автоматически</option>}
   {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
@@ -118,11 +118,17 @@ export function LeadsPage() {
           </div>{column.factors && <Factors value={column.factors} />}</header>
           <div className="pipeline-cards">{groups.get(column.id)!.map(l => {
             const pending = moved.isPending && moved.variables.lead.id === l.id;
+            const observed = readiness(l);
+            const matchesStage = column.factors && readinessKey(observed) === column.id;
+            const hasAnswers = Boolean(l.budget || l.place || l.timing);
             return <article key={l.id} className={`lead-tile${pending ? ' pending' : ''}`} draggable={!moved.isPending} aria-busy={pending}
               onDragStart={e => { e.dataTransfer.setData('text/plain', l.id); e.dataTransfer.effectAllowed = 'move'; setDragId(l.id); moved.reset(); }} onDragEnd={() => { setDragId(null); setOver(null); }}>
               <div className="lead-tile-top"><span>{l.city}</span><GripVertical className="lead-grip" size={15} aria-hidden /></div>
               <button className="lead-open" onClick={() => setEditor({ lead: l, column: stageValue(l) })} disabled={pending}><strong>{l.name}</strong><ArrowRight size={16} aria-hidden /></button>
-              <Factors value={shownFactors(l)} />
+              {!matchesStage && hasAnswers && <div className="lead-evidence">
+                <span>По анкете</span><Factors value={observed} />
+              </div>}
+              {!matchesStage && !hasAnswers && column.factors && <p className="lead-evidence">Условия пока не подтверждены</p>}
               <div className="lead-tile-foot">
                 {l.instagram && <a href={`https://www.instagram.com/${l.instagram}/`} target="_blank" rel="noopener noreferrer" aria-label={`Открыть Instagram ${l.instagram}`}><AtSign size={14} aria-hidden />Открыть профиль</a>}
                 {l.phone && <a href={`tel:+${digits(l.phone)}`}><Phone size={13} aria-hidden />{l.phone}</a>}
