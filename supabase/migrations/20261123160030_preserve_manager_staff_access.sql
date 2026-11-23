@@ -2,9 +2,14 @@
 -- from the three optional permissions. Explicitly limited accounts stay limited.
 alter table public.staff_member add column legacy_staff_management boolean not null default false;
 
-update public.staff_member
-set legacy_staff_management = true
-where manager_enabled and checked_access is null;
+create function app_private.staff_initialize_legacy_management() returns void
+language sql set search_path = pg_catalog, pg_temp as $$
+  update public.staff_member
+  set legacy_staff_management = true
+  where manager_enabled and checked_access is null
+$$;
+select app_private.staff_initialize_legacy_management();
+drop function app_private.staff_initialize_legacy_management();
 
 -- The existing legacy account and role commands retain their defaults. The
 -- explicit profile command below continues to create and promote limited users.
