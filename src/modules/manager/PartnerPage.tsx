@@ -129,7 +129,6 @@ function LocationMonthBlock({ l, month }: { l: Location; month: string }) {
           {mayPlan && <Button onClick={() => setPlan(true)}><Target size={16} aria-hidden />{m.plan_minor ? 'Изменить план' : 'Поставить план'}</Button>}
           <section>
             <h2 className="section-title">Выручка по дням</h2>
-            {mayEnter && <p className="faint">Можно внести или исправить выручку за предыдущие рабочие дни.</p>}
             <DayList m={m} readOnly={!mayEnter} onPick={(day, row) => setEdit({ day, row })} />
           </section>
           {plan && mayPlan && <PlanDialog location={l} month={month} currency={l.currency} current={m.plan_minor} onClose={() => setPlan(false)} />}

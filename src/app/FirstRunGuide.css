@@ -11,13 +11,16 @@ dialog.first-run-dialog {
   background: transparent;
   color: var(--text);
   overflow: hidden;
-  overscroll-behavior: contain;
+  overflow: clip;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   --guide-scrim: rgb(8 13 27 / 76%);
   --guide-ring: #85a4ff;
 }
 
 dialog.first-run-dialog::backdrop {
   background: transparent;
+  touch-action: none;
 }
 
 .first-run-dialog[data-targeted="false"]::before {
@@ -76,8 +79,8 @@ dialog.first-run-dialog::backdrop {
   width: min(386px, 100% - 24px);
   max-height: calc(100% - 24px);
   padding: clamp(12px, 3.5vw, 18px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden auto;
+  overscroll-behavior: none;
   overflow-wrap: anywhere;
   background: var(--surface);
   border: 1px solid var(--border-strong);

@@ -1,0 +1,19 @@
+.language-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.language-select select {
+  max-width: 100%;
+  min-height: var(--touch);
+  padding-inline: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}

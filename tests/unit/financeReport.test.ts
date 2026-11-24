@@ -19,6 +19,16 @@ it('не начинает скачивание, если отчёт заверш
 });
 
 describe('monthly operating statement', () => {
+  it('keeps a compact on-screen statement, leaving the payment schedule and category detail to their sections', () => {
+    const rows = financeReportRows({ month: '2026-11-01', revenue_minor: 20000, return_minor: 1000,
+      payroll_minor: 4000, payroll_halves: [1000, 3000], royalty_minor: 1400, expenses_minor: 4500, net_minor: 9100 },
+    [{ category: 'Аренда', amount_minor: 4500 }], { compact: true });
+    expect(rows.map(({ label, minor }) => [label, minor])).toEqual([
+      ['Выручка', 20000n], ['Возвраты покупателям', -1000n],
+      ['Начисленная зарплата', -4000n], ['Роялти по ставке', -1400n],
+      ['Внесённые расходы', -4500n], ['Остаток по внесённым данным', 9100n],
+    ]);
+  });
   it('groups recorded expense categories without counting them twice in total expenses', () => {
     const rows = financeReportRows({ revenue_minor: 20000, payroll_minor: 4000, royalty_minor: 1400, expenses_minor: 4500, net_minor: 10100 }, [
       { category: 'Реклама', amount_minor: 1500 },

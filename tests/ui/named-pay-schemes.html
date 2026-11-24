@@ -1,0 +1,94 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Именованные схемы оплаты</title>
+<output id="result">Проверка…</output><iframe id="app" height="950" title="Кабинет на вымышленных данных"></iframe>
+<script type="module">
+const frame = document.querySelector('#app'), result = document.querySelector('#result');
+const params = new URLSearchParams(location.search);
+const manager = params.get('role') === 'manager';
+
+frame.width = String(Number(params.get('width')) || 390);
+frame.src = '/tests/ui/responsive-app.html?access-refresh&role=' + (manager ? 'team&staff-view=allow' : 'franchisee') +
+  '&text=' + (params.get('text') === '200' ? '200' : '100') + '#/';
+async function until(read, message) {
+  const deadline = performance.now() + 12000;
+  while (performance.now() < deadline) {
+    const value = read(); if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error(message);
+}
+function check(value, message) { if (!value) throw new Error(message); }
+try {
+  await until(() => frame.contentDocument.querySelector('main button, main a'), 'Кабинет не открылся');
+  const app = frame.contentWindow, doc = app.document, original = app.fetch;
+  const button = (text, scope = doc) => [...scope.querySelectorAll('button')].find(el => el.textContent.trim() === text && el.getClientRects().length);
+  const field = (prefix, scope) => [...scope.querySelectorAll('label')].find(el => el.textContent.startsWith(prefix))?.control;
+  function fill(input, value) {
+    const type = input.tagName === 'SELECT' ? app.HTMLSelectElement : app.HTMLInputElement;
+    Object.getOwnPropertyDescriptor(type.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+  }
+  const id='cda6441e-b1dc-4794-bfcb-b933168e3929';
+  let schemes=manager?[{id,version:1,active:true,policy:{name:'Дежурная смена',mode:'legacy',fee_minor:12300,rate_bp:750}}]:[];
+  let commonPolicy, personalPolicy;
+  const assignments=[];
+  app.fetch=async(request,init)=>{
+    const url=new URL(request instanceof app.Request?request.url:request,app.location.href);
+    const rpc=url.pathname.split('/').at(-1);
+    if(rpc==='pay_scheme_list')return app.Response.json(schemes);
+    if(rpc==='pay_scheme_save'){
+      const body=JSON.parse(init.body);
+      schemes=[{id,version:1,active:body.p_active,policy:body.p_policy}];
+      return app.Response.json(id);
+    }
+    if(rpc==='pay_scheme_apply'){
+      const body=JSON.parse(init.body);assignments.push(body);
+      if(body.p_user)personalPolicy=schemes[0].policy;
+      else commonPolicy=schemes[0].policy;
+      return app.Response.json(null);
+    }
+    const response=await original(request,init);
+    if(rpc==='staff_list'){
+      const [sample]=await response.json();
+      return app.Response.json([{...sample,can_manage:!manager,can_edit_pay:true,employee_kind:'employee',pay_revision:7,
+        ...(personalPolicy?{custom_pay:personalPolicy,use_partner_motivation:false,rate_bp:750,shift_fee_minor:12300}:{})}]);
+    }
+    if(rpc==='motivation_get' && commonPolicy){
+      const data=await response.json();return app.Response.json({...data,policy:commonPolicy,version:data.version+1});
+    }
+    return response;
+  };
+  if(manager)app.dispatchEvent(new app.CustomEvent('qa:access',{detail:['kb.read','shift.work','staff.pay_edit']}));
+  app.location.hash='#/staff';
+  (await until(()=>button('Оплата'),'Нет списка оплаты')).click();
+  if(!manager){
+    (await until(()=>button('Создать схему'),'Нет каталога')).click();
+    const dialog=await until(()=>doc.querySelector('dialog[open]'),'Нет редактора каталога');
+    fill(field('Название схемы',dialog),'Дежурная смена');
+    fill(field('Способ расчёта',dialog),'fixed');
+    await until(()=>field('Ставка за выход',dialog),'Нет фиксированной ставки');
+    fill(field('Ставка за выход',dialog),'123');
+    fill(field('Доля выручки',dialog),'7,5');
+    check(dialog.scrollWidth<=dialog.clientWidth+2,'Редактор шире экрана');
+    button('Сохранить схему',dialog).click();
+    await until(()=>!doc.querySelector('dialog[open]'),'Схема не сохранилась');
+    check(schemes[0].policy.fee_minor===12300 && schemes[0].policy.rate_bp===750,'Изменилась сумма или точность процента');
+    (await until(()=>button('Назначить по умолчанию'),'Нельзя назначить общую схему')).click();
+    const confirm=await until(()=>doc.querySelector('dialog[open]'),'Нет даты выбора');
+    fill(field('Действует с',confirm),'2026-12-02');
+    button('Назначить',confirm).click();
+    await until(()=>!doc.querySelector('dialog[open]'),'Не подтверждена общая схема');
+    check(assignments[0].p_user===null && assignments[0].p_effective_from==='2026-12-02','Потеряна дата общей схемы');
+  }else check(!button('Создать схему'),'Для управляющего открыт редактор каталога');
+  (await until(()=>button('Изменить'),'Нет редактирования личной оплаты')).click();
+  const dialog=await until(()=>doc.querySelector('dialog[open]'),'Нет карточки');
+  const select=await until(()=>{const el=field('Схема оплаты',dialog);return el?.querySelector('optgroup option')&&el},'Нет сохранённых схем');
+  fill(select,id);
+  fill(field('Новые условия действуют с',dialog),'2026-12-03');
+  button('Сохранить',dialog).click();
+  await until(()=>!doc.querySelector('dialog[open]'),'Не назначена личная схема');
+  const sent=assignments.at(-1);
+  check(sent.p_user && sent.p_scheme===id && sent.p_scheme_version===1 && sent.p_expected_version===7 && sent.p_effective_from==='2026-12-03','Потеряны сотрудник, дата или версия');
+  check(doc.documentElement.scrollWidth<=doc.documentElement.clientWidth+2,'Страница шире экрана');
+  result.textContent='PASS';
+}catch(error){result.textContent='FAIL '+error.message;}
+</script></html>

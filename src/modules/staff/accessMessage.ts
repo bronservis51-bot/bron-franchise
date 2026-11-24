@@ -1,5 +1,7 @@
-export function accessMessage(site: string, password: string) {
-  return `${site}\nТвой логин — твой номер телефона\n${password}`;
+import { localized, type Language } from '../../platform/locale';
+
+export function accessMessage(site: string, password: string, language: Language = 'ru') {
+  return `${site}\n${localized(language, 'Твой логин — твой номер телефона', 'Giriş numaran telefon numaran.')}\n${password}`;
 }
 
 export function accessMessengerLinks(phone: string) {

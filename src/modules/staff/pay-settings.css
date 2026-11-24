@@ -48,7 +48,10 @@
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 .pay-tier-grid .pay-from-zero { display: inline-flex; align-items: center; min-height: var(--touch); padding-inline: var(--space-2); }
+.pay-tier-mobile-help { display: none; }
 @container (max-width: 16em) {
+  .pay-tier-mobile-help { display: flex; align-items: center; }
+  .pay-tier-grid thead .help-tip { display: none; }
   .pay-tier-grid, .pay-tier-grid tbody { display: block; }
   .pay-tier-grid thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
   .pay-tier-grid tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-block: var(--space-2); }
@@ -69,3 +72,8 @@
 .pay-settings .pay-result small { flex-basis: 100%; }
 .pay-settings .pay-table { min-width: 0; }
 .pay-settings .pay-table summary { min-height: var(--touch); padding: var(--space-2) 0; cursor: pointer; }
+
+.pay-scheme-item { display: grid; gap: var(--space-2); padding-block: var(--space-3); overflow-wrap: anywhere; }
+.pay-scheme-item + .pay-scheme-item { border-top: 1px solid var(--border); }
+.pay-scheme-item .row { flex-wrap: wrap; }
+.pay-tier-grid .help-tip-trigger { min-width: 0; }

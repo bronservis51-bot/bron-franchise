@@ -1,65 +1,159 @@
-.finance-page .fin-chart {
-  position: relative;
-  container-type: inline-size;
-}
-
-.finance-page .fin-plot {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: var(--space-1) var(--space-1) calc(var(--fs-xs) * 1.5 + var(--space-2));
-}
-
-.finance-page .fin-bars {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  min-width: calc(var(--fs-xs) * 2.6 * 6 + var(--space-2) * 5);
-  gap: var(--space-2);
-}
-
-.finance-page .fin-col:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.finance-page .fin-month {
-  top: calc(100% + var(--space-1));
-  bottom: auto;
-  white-space: nowrap;
-}
-
-.finance-page .fin-tip {
-  inset: 0 0 auto;
-  width: max-content;
+.finance-page {
+  width: 100%;
+  max-width: 56rem;
   min-width: 0;
-  max-width: 100%;
-  margin-inline: auto;
-  transform: none;
-  overflow-wrap: normal;
 }
 
-.finance-page .fin-tip-row {
+.finance-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.finance-filters .month-nav,
+.finance-filters .field {
+  margin: 0;
+}
+
+.finance-filters .month-nav {
+  min-width: 0;
+}
+
+.finance-filters .month-nav-label {
+  text-align: center;
+}
+
+.finance-statement-meta {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--space-3);
+  gap: var(--space-2) var(--space-4);
+  color: var(--text-2);
+  font-size: var(--fs-s);
+  padding-bottom: var(--space-2);
 }
 
-.finance-page .fin-tip-row b {
-  padding-inline-start: 0;
-  white-space: nowrap;
+.finance-lines {
+  margin: 0;
 }
 
-.finance-page .fin-chart figcaption {
-  margin-top: var(--space-1);
+.finance-lines > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
 }
 
-@container (max-width: 28rem) {
-  .finance-page .fin-tip {
-    position: static;
-    margin: var(--space-2) 0;
-    box-shadow: none;
+.finance-lines > div + div {
+  border-top: 1px solid var(--border);
+}
+
+.finance-lines dd {
+  margin: 0;
+  text-align: right;
+}
+
+.finance-lines .finance-result {
+  padding: var(--space-3);
+  margin: var(--space-2) calc(var(--space-2) * -1) 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-weight: 650;
+}
+
+.finance-payroll-list, .finance-day-groups, .finance-day-points {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.finance-payroll-list > li + li,
+.finance-day-groups > li + li {
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.finance-payroll-list details,
+.finance-page .finance-details {
+  margin-top: var(--space-3);
+}
+
+.finance-details .table-wrap {
+  margin-top: var(--space-2);
+}
+
+.finance-page .finance-royalty-history > summary {
+  color: var(--text-2);
+}
+
+.finance-royalty-payments {
+  margin-top: var(--space-4);
+}
+
+.finance-royalty-payments h3 {
+  font-size: var(--fs);
+}
+
+.finance-details summary,
+.finance-payroll-list summary {
+  cursor: pointer;
+  color: var(--link);
+  padding-block: var(--space-1);
+}
+
+.finance-payment-date {
+  display: block;
+}
+
+.finance-day-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  font-weight: 650;
+  margin-bottom: var(--space-1);
+}
+
+.finance-day-group-title time {
+  margin-inline-end: auto;
+}
+
+.finance-day-group-title[aria-current] {
+  color: var(--link);
+}
+
+.finance-day-point {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  width: 100%;
+  column-gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+
+.finance-day-point:hover {
+  background: var(--surface-2);
+}
+
+.finance-day-warning {
+  grid-column: 1 / -1;
+  color: var(--danger);
+}
+
+@media (max-width: 34rem) {
+  .finance-filters {
+    grid-template-columns: minmax(0, 1fr);
   }
-}
-
-.finance-points-table :is(th, td):first-child {
-  min-width: max(10rem, 14ch);
 }

@@ -42,9 +42,9 @@ export function monthStart(offsetMonths = 0, from = new Date()): string {
 }
 
 /** «октябрь 2026» для подписи месяца; v — 'YYYY-MM-DD' (любой день месяца). */
-export function monthLabel(v: string, withYear = true): string {
+export function monthLabel(v: string, withYear = true, locale = 'ru-RU'): string {
   const d = new Date(`${v.slice(0, 7)}-15T12:00:00Z`);
-  return d.toLocaleDateString('ru-RU', { month: 'long', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' }).replace(' г.', '');
+  return d.toLocaleDateString(locale, { month: 'long', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' }).replace(' г.', '');
 }
 
 /** Сдвиг месяца: '2026-10-01' + 1 → '2026-11-01'. */
@@ -55,6 +55,6 @@ export function shiftMonth(v: string, delta: number): string {
 }
 
 /** День недели и число: «пт, 17 окт.». */
-export function dayLabel(v: string): string {
-  return new Date(`${v}T12:00:00Z`).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+export function dayLabel(v: string, locale = 'ru-RU'): string {
+  return new Date(`${v}T12:00:00Z`).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 }

@@ -27,11 +27,12 @@ export async function checkConnection(url: string, key: string, signal?: AbortSi
   const [auth,data] = await Promise.all([probe(url,key,'auth',signal),probe(url,key,'data',signal)]);
   return {checkedAt:new Date().toISOString(),auth,data};
 }
-export function connectionSummary(c: Connection): string {
-  if(c.auth.ok && c.data.ok) return 'С этого устройства сервер входа и база данных отвечают.';
-  if(c.auth.ok) return 'Сервер входа отвечает, но проверка базы данных не прошла.';
-  if(c.data.ok) return 'База данных отвечает, но проверка сервера входа не прошла.';
-  return 'Проверка связи с сервером не прошла. Причиной могут быть задержка, сеть или сбой сервиса.';
+export function connectionSummary(c: Connection, t: (ru: string, tr: string) => string = ru => ru): string {
+  if(c.auth.ok && c.data.ok) return t('С этого устройства сервер входа и база данных отвечают.', 'Bu cihaz giriş sunucusuna ve veri tabanına ulaşabiliyor.');
+  if(c.auth.ok) return t('Сервер входа отвечает, но проверка базы данных не прошла.', 'Giriş sunucusuna ulaşıldı, ancak veri tabanı kontrolü başarısız oldu.');
+  if(c.data.ok) return t('База данных отвечает, но проверка сервера входа не прошла.', 'Veri tabanına ulaşıldı, ancak giriş sunucusu kontrolü başarısız oldu.');
+  return t('Проверка связи с сервером не прошла. Причиной могут быть задержка, сеть или сбой сервиса.',
+    'Sunucu bağlantısı doğrulanamadı. Gecikme, ağ sorunu veya hizmet kesintisi olabilir.');
 }
 export function diagnosticText(c: Connection | null, online: boolean, version: string): string {
   // Allowlisted fields only: no login, password, URL query, token, customer data or storage.

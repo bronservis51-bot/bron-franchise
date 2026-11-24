@@ -36,6 +36,11 @@ try {
   let open = await until(() => button(frame.contentDocument, 'Внести выручку за сегодня'));
   const app = frame.contentWindow;
   assert(!button(app.document.querySelector('main'), 'Отчёт за месяц'), 'На главной осталась кнопка скачивания отчёта');
+  assert(!app.document.querySelector('main .day-list2'), 'Детализация по дням осталась на главной');
+  const history = app.document.querySelector('.home-finance-link');
+  assert(history?.hash.startsWith('#/finance?section=days&month=2026-11-01&location='), 'Детализация не сохраняет выбранный период и точку');
+  const missingDay = [...app.document.querySelectorAll('.home-missing-dates a')].find(link => link.textContent === '03.11');
+  assert(missingDay?.hash.endsWith('&day=2026-11-03'), 'Пропущенный день нельзя открыть из напоминания');
   const fetchFixture = app.fetch;
   const saves = [];
   const daysOff = new Set();
@@ -88,8 +93,8 @@ try {
   button(offDialog, 'Сохранить').click();
   const todayOff = await until(() => button(app.document, 'Сегодня выходной'));
   assert(dayOffWrites.length === 1 && dayOffWrites[0].p_day_off === true && saves.length === 0, 'выходной отправлен как выручка');
-  assert(app.document.querySelector('.day-list2').textContent.includes('Выходной'), 'в списке нет отметки о выходном');
-  assert(app.document.querySelector('.alert')?.textContent.includes('Не внесена выручка'), 'исчезло напоминание за остальные дни');
+  assert(app.document.querySelector('.home-missing')?.textContent.includes('Не внесена выручка'), 'исчезло напоминание за остальные дни');
+  assert(![...app.document.querySelectorAll('.home-missing-dates a')].some(link => link.textContent === '04.11'), 'выходной остался в пропусках');
   todayOff.click();
   const undoDialog = await until(() => app.document.querySelector('dialog[open]'));
   button(undoDialog, 'Отменить выходной').click();

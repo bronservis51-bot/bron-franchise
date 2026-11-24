@@ -1,32 +1,52 @@
-// Финансы франчайзи: выручка, зарплата, расходы и остаток по всем точкам или по одной.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Download, Pencil } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { AppError, captureSession, command } from '../../platform/backend';
-import { formatDate, monthLabel, monthStart } from '../../platform/dates';
+import { formatDate, monthLabel } from '../../platform/dates';
+import { localized, useLocale, type Language } from '../../platform/locale';
 import { formatMoneyShort, minorToDecimal, toBigInt, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Button, Card, DataState, Money, PageHeader } from '../../ui';
+import { ActionError, Button, Card, Chips, DataState, Field, Money, PageHeader, Select, Skeleton } from '../../ui';
 import type { RoyaltyPayment, UndatedRoyalty } from '../manager/api';
-import { revenueMonth } from '../revenue/api';
+import { revenueMonth, revenueOverview } from '../revenue/api';
 import { MonthNav } from '../revenue/components';
 import { revenueMonthSheet } from '../revenue/monthReport';
 import { PayrollSchedule } from '../staff/PayrollSchedule';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
-import { FinanceEditor } from './FinanceEditor';
+import { FinanceDays } from './FinanceEditor';
+import { financeMonthLimit, financeOfficeMonth, financeSelection, type FinanceSection } from './financeNavigation';
 import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, payrollAccrualLabels } from './financeReport';
 import './finance.css';
 
-interface Fin { month: string; revenue_minor: number; cash_minor: number; card_minor: number; plan_minor: number | null; pct: number | null;
-  payroll_minor: number; payroll_halves?: readonly [MinorInput, MinorInput]; shifts: number; rate_bp: number; royalty_minor: number;
-  expenses_minor: number; return_minor?: number; net_minor: number; is_open: boolean }
-interface Ledger { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number; paid_minor: number; debt_minor: number; is_open: boolean;
-  correction_minor?: number; past_debt_minor?: number }
-interface Royalty { debt_minor: number; months: Ledger[]; payments: RoyaltyPayment[]; undated?: UndatedRoyalty | null; undated_payments?: RoyaltyPayment[] }
+interface Fin {
+  month: string;
+  revenue_minor: number;
+  cash_minor: number;
+  card_minor: number;
+  plan_minor: number | null;
+  pct: number | null;
+  payroll_minor: number;
+  payroll_halves?: readonly [MinorInput, MinorInput];
+  shifts: number;
+  rate_bp: number;
+  royalty_minor: number;
+  expenses_minor: number;
+  return_minor?: number;
+  net_minor: number;
+  is_open: boolean;
+}
+interface Ledger {
+  month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number;
+  paid_minor: number; debt_minor: number; is_open: boolean; correction_minor?: number; past_debt_minor?: number;
+}
+interface Royalty {
+  debt_minor: number; months: Ledger[]; payments: RoyaltyPayment[];
+  undated?: UndatedRoyalty | null; undated_payments?: RoyaltyPayment[];
+}
 interface Finance {
-  partner_name: string; currency: string; month: string; location_id: string | null;
-  partner_status?: string;
+  partner_name: string; currency: string; month: string; location_id: string | null; partner_status?: string;
   locations: { id: string; name: string; status: string }[];
   current: Fin; months: Fin[];
   by_location: (Fin & { location_id: string; location_name: string })[] | null;
@@ -36,69 +56,23 @@ interface Finance {
   royalty: Royalty | null;
 }
 
-const pct = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
-const n = (v: number | string) => Number(v);
-
-/** Помесячное распределение выручки. */
-function MonthsChart({ months, currency }: { months: Fin[]; currency: string }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(1, ...months.map((m) => n(m.revenue_minor)));
-  const hasReturns = months.some(m => Boolean(m.return_minor));
-  const parts = (m: Fin) => [
-    { key: 'net', label: 'Остаётся', v: Math.max(0, n(m.net_minor)) },
-    { key: 'payroll', label: 'Зарплата', v: n(m.payroll_minor) },
-    { key: 'expenses', label: 'Расходы', v: Number(financeExpensesMinor(m)) },
-    ...(hasReturns ? [{ key: 'returns', label: 'Возвраты', v: n(m.return_minor ?? 0) }] : []),
-  ];
-  const selected = hover === null ? null : months[hover];
-  return (
-    <figure className="fin-chart viz-root" aria-label="Выручка по месяцам">
-      <div className="fin-legend" aria-hidden>
-        <span><i className="sw net" />Остаётся</span><span><i className="sw payroll" />Зарплата сотрудников</span><span><i className="sw expenses" />Расходы</span>
-        {hasReturns && <span><i className="sw returns" />Возвраты</span>}
-      </div>
-      <div className="fin-plot" onMouseLeave={event => { if (!event.currentTarget.contains(document.activeElement)) setHover(null); }}
-        onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHover(null); }}
-        onKeyDown={event => { if (event.key === 'Escape') setHover(null); }}>
-        <div className="fin-bars">
-          {months.map((m, i) => (
-            <div key={m.month} className="fin-col" onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={0}
-              aria-label={`${monthLabel(m.month)}: выручка ${formatMoneyShort(m.revenue_minor, currency)}`}>
-              <div className="fin-stack" style={{ height: `${(n(m.revenue_minor) / max) * 100}%` }}>
-                {parts(m).map((p) => p.v > 0 && <span key={p.key} className={`seg ${p.key}`} style={{ flexGrow: p.v }} />)}
-              </div>
-              <span className="fin-month">{monthLabel(m.month, false).slice(0, 3)}{m.is_open ? '*' : ''}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      {selected && <div className="fin-tip" role="tooltip">
-        <strong>{monthLabel(selected.month)}{selected.is_open ? ' (идёт)' : ''}</strong>
-        <div className="fin-tip-row">Выручка <b>{formatMoneyShort(selected.revenue_minor, currency)}</b></div>
-        {parts(selected).map(p => <div className="fin-tip-row" key={p.key}>
-          <span><i className={`sw ${p.key}`} />{p.label}</span><b>{formatMoneyShort(p.v, currency)}</b>
-        </div>)}
-      </div>}
-      <figcaption className="faint">* текущий месяц — данные на сегодня</figcaption>
-    </figure>
-  );
+function financeScope(f: Finance, language: Language) {
+  return f.location_id ? f.locations.find((location) => location.id === f.location_id)?.name ?? localized(language, 'Точка', 'Satış noktası') : localized(language, 'Все точки', 'Tüm noktalar');
 }
 
-function financeScope(f: Finance) {
-  return f.location_id ? f.locations.find((location) => location.id === f.location_id)?.name ?? 'Точка' : 'Все точки';
-}
-
-async function financeWorkbook(f: Finance, reportOnly: boolean) {
+async function financeWorkbook(f: Finance, reportOnly: boolean, language: Language) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const money = (v: MinorInput) => ({ value: Number(minorToDecimal(v, f.currency)), type: Number, format: '#,##0.00' });
   const head = (value: string) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E9E9EC' });
-  const scope = financeScope(f);
-  const statement = { sheet: 'Доходы и расходы', columns: [{ width: 50 }, { width: 21 }], data: [
-    [head(`${f.partner_name} · ${monthLabel(f.month)} · ${scope}`)],
-    [{ value: FINANCE_REPORT_NOTE }],
-    ...(f.current.payroll_halves ? [[{ value: FINANCE_PAYROLL_NOTE, wrap: true }]] : []),
-    [head('Статья'), head(`Сумма, ${f.currency}`)],
-    ...financeReportRows(f.current, f.expenses).map((entry) => [
+  const t = (ru: string, tr: string) => localized(language, ru, tr);
+  const locale = language === 'tr' ? 'tr-TR' : 'ru-RU';
+  const scope = financeScope(f, language);
+  const statement = { sheet: t('Отчёт о прибылях и убытках', 'Kâr ve zarar tablosu'), columns: [{ width: 50 }, { width: 21 }], data: [
+    [head(`${f.partner_name} · ${monthLabel(f.month, true, locale)} · ${scope}`)],
+    [{ value: t(FINANCE_REPORT_NOTE, 'Rapor girilen kayıtlara dayanır. Eksik gelir ve giderler eklendiğinde sonuç değişir.') }],
+    ...(f.current.payroll_halves ? [[{ value: t(FINANCE_PAYROLL_NOTE, 'Maaşlar kapanan vardiyalara göre tahakkuk eder. Ödeme tarihleri planlanandır.'), wrap: true }]] : []),
+    [head(t('Статья', 'Kalem')), head(t('Сумма, ', 'Tutar, ') + f.currency)],
+    ...financeReportRows(f.current, f.expenses, { language }).map((entry) => [
       { value: entry.label, indent: entry.indent, wrap: true, fontWeight: entry.total ? 'bold' as const : undefined },
       { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
     ]),
@@ -116,34 +90,38 @@ async function financeWorkbook(f: Finance, reportOnly: boolean) {
       && toBigInt(detail.card_minor) === toBigInt(total.card_minor)
       && toBigInt(detail.return_minor ?? 0) === toBigInt(total.return_minor ?? 0);
   });
-  if (!match) throw new AppError('version-conflict', 'Выручка изменилась. Скачайте отчёт ещё раз.', '', '');
-  const cols = ['Месяц', 'Выручка', 'Наличные', 'Карта', 'Без разбивки', 'План', 'Выполнение', 'Зарплата', 'Расходы', 'Остаётся', 'Возвраты'].map(head);
+  if (!match) throw new AppError('version-conflict', t('Выручка изменилась. Скачайте отчёт ещё раз.', 'Satış geliri değişti. Raporu yeniden indirin.'), '', '');
+  const cols = [t('Месяц', 'Ay'), t('Выручка', 'Satış geliri'), t('Наличные', 'Nakit'), t('Карта', 'Kart'),
+    t('Без разбивки', 'Belirtilmemiş'), t('План', 'Hedef'), t('Выполнение', 'Gerçekleşen'), t('Зарплата', 'Maaş'),
+    t('Расходы', 'Giderler'), t('Остаётся', 'Kalan'), t('Возвраты', 'İadeler')].map(head);
   const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), money(Number(m.revenue_minor)-Number(m.cash_minor)-Number(m.card_minor)), m.plan_minor ? money(m.plan_minor) : null,
     m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
-  const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? 'все точки', money(e.amount_minor), e.note ?? '']);
-  if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push(['Роялти по ставке', scope, money(f.current.royalty_minor), '']);
-  const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month) : [];
+  const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? t('все точки', 'tüm noktalar'), money(e.amount_minor), e.note ?? '']);
+  if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
+  const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month, language) : [];
   const sheets = [
     statement,
-    { sheet: 'По месяцам', columns: [{ width: 16 }, ...Array(cols.length - 1).fill({ width: 14 })],
-      data: [[{ value: `${f.partner_name} — финансы (${scope})`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols, ...f.months.map((m) => row(monthLabel(m.month), m))] },
-    ...(f.by_location ? [{ sheet: 'По точкам', columns: [{ width: 26 }, ...Array(cols.length - 1).fill({ width: 14 })],
-      data: [[head('Точка'), ...cols.slice(1)], ...f.by_location.map((l) => row(l.location_name, l))] }] : []),
-    ...(f.by_staff.length ? [{ sheet: 'Зарплата', columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 20 },
+    { sheet: t('По месяцам', 'Aylara göre'), columns: [{ width: 16 }, ...Array(cols.length - 1).fill({ width: 14 })],
+      data: [[{ value: `${f.partner_name} · ${scope}`, fontWeight: 'bold' as const, fontSize: 14 }], [], cols,
+        ...f.months.map(m => row(monthLabel(m.month, true, locale), m))] },
+    ...(f.by_location ? [{ sheet: t('По точкам', 'Noktalara göre'), columns: [{ width: 26 }, ...Array(cols.length - 1).fill({ width: 14 })],
+      data: [[head(t('Точка', 'Satış noktası')), ...cols.slice(1)], ...f.by_location.map(l => row(l.location_name, l))] }] : []),
+    ...(f.by_staff.length ? [{ sheet: t('Зарплата', 'Maaşlar'), columns: [{ width: 26 }, { width: 10 }, { width: 16 }, { width: 20 },
       ...payrollLabels.map(() => ({ width: 38 }))],
-      data: [['Сотрудник', 'Смен', 'Выручка смен', 'Начислено за месяц', ...payrollLabels].map(head),
+      data: [[t('Сотрудник', 'Çalışan'), t('Смен', 'Vardiya'), t('Выручка смен', 'Vardiya geliri'),
+        t('Начислено за месяц', 'Aylık tahakkuk'), ...payrollLabels].map(head),
         ...f.by_staff.map((s) => [s.full_name, { value: s.shifts, type: Number }, money(s.revenue_minor), money(s.earned_minor),
           ...payrollLabels.map((_label, index) => s.payroll_halves ? money(s.payroll_halves[index]) : null)])] }] : []),
-    ...(expenseRows.length ? [{ sheet: 'Расходы', columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
-      data: [['Категория', 'Точка', 'Сумма', 'Комментарий'].map(head), ...expenseRows] }] : []),
-    ...(dailyRevenue.length ? [revenueMonthSheet(dailyRevenue)] : []),
+    ...(expenseRows.length ? [{ sheet: t('Расходы', 'Giderler'), columns: [{ width: 26 }, { width: 24 }, { width: 16 }, { width: 30 }],
+      data: [[t('Категория', 'Kategori'), t('Точка', 'Satış noktası'), t('Сумма', 'Tutar'), t('Комментарий', 'Açıklama')].map(head), ...expenseRows] }] : []),
+    ...(dailyRevenue.length ? [revenueMonthSheet(dailyRevenue, language)] : []),
   ];
   return writeXlsxFile(sheets);
 }
 
-async function makeFinanceReportFile(f: Finance, userId: string, reportOnly: boolean) {
+async function makeFinanceReportFile(f: Finance, userId: string, reportOnly: boolean, language: Language) {
   await captureSession(userId);
-  const blob = await (await financeWorkbook(f, reportOnly)).toBlob();
+  const blob = await (await financeWorkbook(f, reportOnly, language)).toBlob();
   const session = await captureSession(userId);
   const scope = await command<Finance>('finance_my', { month: f.month, location: f.location_id }, { accessToken: session.access_token });
   if (scope.partner_name !== f.partner_name || scope.location_id !== f.location_id ||
@@ -155,42 +133,58 @@ async function makeFinanceReportFile(f: Finance, userId: string, reportOnly: boo
 }
 
 function FinanceStatement({ finance }: { finance: Finance }) {
-  const month = finance.current;
-  return (
-    <Card title={`Доходы и расходы — ${monthLabel(finance.month)}`} actions={<span className="faint">{finance.currency}</span>}>
-      <dl style={{ margin: 0 }}>
-        {financeReportRows(month, finance.expenses).map((row, i) => (
-          <div className="row between access-row" key={i}>
-            <dt className={row.indent === 2 ? 'faint' : undefined} style={row.indent ? { paddingInlineStart: row.indent * 12 } : undefined}>
-              {row.total ? <strong>{row.label}</strong> : row.label}
-            </dt>
-            <dd style={{ margin: 0 }}><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
-          </div>
-        ))}
-      </dl>
-      <p className="faint">{FINANCE_REPORT_NOTE}</p>
-      {month.payroll_halves && <p className="faint">{FINANCE_PAYROLL_NOTE}</p>}
-      <p className="faint">
-        {month.is_open && 'Текущий месяц ещё идёт. '}
-        {month.plan_minor ? `План ${formatMoneyShort(month.plan_minor, finance.currency)}${month.pct === null ? '' : ` · выполнено ${n(month.pct).toLocaleString('ru-RU')} %`}` : 'План не поставлен'}
-        {month.shifts > 0 && ` · закрытых смен: ${month.shifts}`}
-      </p>
-    </Card>
-  );
+  const { t, locale, language } = useLocale();
+  const totals = finance.current;
+  return <Card className="finance-statement">
+    {totals.plan_minor != null && <div className="finance-statement-meta">
+      <span>{t('План', 'Hedef')}: <Money minor={totals.plan_minor} currency={finance.currency} short /></span>
+      {totals.pct != null && <span>{t('Выполнено', 'Gerçekleşen')}: {Number(totals.pct).toLocaleString(locale)}%</span>}
+    </div>}
+    <dl className="finance-lines" aria-label={t('Данные отчёта', 'Rapor verileri')}>
+      {financeReportRows(totals, [], { compact: true, language }).map((row, index, rows) => (
+        <div key={row.label} className={index === rows.length - 1 ? 'finance-result' : undefined}>
+          <dt>{row.label}</dt>
+          <dd><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
+        </div>
+      ))}
+    </dl>
+  </Card>;
 }
 
 export function FinancePage() {
   const { me, can } = useSession();
+  const { t, language, locale } = useLocale();
   const qc = useQueryClient();
-  const [month, setMonth] = useState(monthStart());
-  const [loc, setLoc] = useState<string | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const pendingSearch = useRef(search);
+  useLayoutEffect(() => { pendingSearch.current = search; }, [search]);
+  const officeMonth = financeOfficeMonth();
+  const requestedScope = financeSelection(search, officeMonth).location;
+  const requestedMonth = search.get('month');
+  const calendar = useQuery({ queryKey: ['revenue', 'overview', officeMonth], enabled: can('revenue.read'),
+    queryFn: () => revenueOverview(officeMonth), refetchInterval: 120_000 });
+  const currentMonth = financeMonthLimit(officeMonth, calendar.data?.rows ?? [], requestedScope);
+  const checkingPeriod = Boolean(calendar.isLoading && requestedMonth && requestedMonth > officeMonth);
+  const { section, month, location, day } = financeSelection(search, currentMonth);
+  const navigate = (changes: Record<string, string | null>, replace = false) => {
+    const next = new URLSearchParams(pendingSearch.current);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    pendingSearch.current = next;
+    setSearch(next, { replace });
+  };
   const userId = me?.user.id;
   const exportRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => { exportRequest.current?.abort(); exportRequest.current = null; }, [userId]);
-  const q = useQuery({ queryKey: ['finance', month, loc], queryFn: () => command<Finance>('finance_my', { month, location: loc }), refetchInterval: 120_000 });
+  useEffect(() => () => { exportRequest.current?.abort(); exportRequest.current = null; }, [userId, month, location]);
+  const q = useQuery({ queryKey: ['finance', month, location], enabled: !checkingPeriod,
+    queryFn: () => command<Finance>('finance_my', { month, location }),
+    refetchInterval: 120_000 });
   const exp = useMutation({
-    mutationFn: ({ report, userId, request }: { report: Finance; userId: string; request: AbortController }) =>
-      downloadFinanceFile(() => makeFinanceReportFile(report, userId, false), request.signal),
+    mutationFn: ({ report, userId, request, language }: {
+      report: Finance; userId: string; request: AbortController; language: Language;
+    }) => downloadFinanceFile(() => makeFinanceReportFile(report, userId, false, language), request.signal),
     networkMode: 'always',
     onError: (error, { report, request }) => {
       if (!request.signal.aborted && error instanceof AppError && error.code === 'version-conflict') {
@@ -199,165 +193,143 @@ export function FinancePage() {
     },
     onSettled: (_data, _error, { request }) => { if (exportRequest.current === request) exportRequest.current = null; },
   });
-  const [editing, setEditing] = useState(false);
   const [drive, setDrive] = useState<{ finance: Finance; userId: string } | null>(null);
-  const availableFinance = !q.error && q.data;
+  useEffect(() => setDrive(previous => previous && previous.userId === userId && previous.finance.month === month
+    && previous.finance.location_id === location ? previous : null), [userId, month, location]);
+  const availableFinance = !checkingPeriod && !q.error && q.data;
   const readOnly = !can('revenue.enter') || Boolean(q.data?.partner_status && q.data.partner_status !== 'active');
-  const showEditor = editing && !readOnly;
+  const scopeOptions = q.data?.locations ?? [];
+  const allPoints = t('Все точки', 'Tüm noktalar');
 
-  return (
-    <div className="home finance-page" style={{ maxWidth: 980 }}>
-      <PageHeader title="Финансы"
-        actions={<>
-          {!readOnly && <Button variant={showEditor ? 'primary' : 'secondary'} aria-pressed={showEditor} disabled={!q.data} onClick={() => setEditing((v) => !v)}>
-            {showEditor ? <><Check size={16} aria-hidden />Готово</> : <><Pencil size={16} aria-hidden />Редактировать</>}
-          </Button>}
-          <Button disabled={!availableFinance || !userId} loading={exp.isPending} onClick={() => {
-            if (!availableFinance || !userId || exportRequest.current) return;
-            const request = new AbortController();
-            exportRequest.current = request;
-            exp.mutate({ report: availableFinance, userId, request });
-          }}><Download size={16} aria-hidden />Excel</Button>
-          <Button disabled={!availableFinance || !me} onClick={() => { if (availableFinance && me) setDrive({ finance: availableFinance, userId: me.user.id }); }}>Google Drive</Button>
-        </>} />
-      <ActionError error={exp.error} />
-      {availableFinance && drive && drive.userId === me?.user.id && drive.finance.month === month && drive.finance.location_id === loc && (
-        <FinanceDriveDialog period={monthLabel(drive.finance.month)} scope={financeScope(drive.finance)}
-          makeFile={() => makeFinanceReportFile(drive.finance, drive.userId, true)} onClose={() => setDrive(null)} />
-      )}
-      {q.data && q.data.locations.length > 0 && (
-        <div className="chips point-chips" role="group" aria-label="Точки">
-          <button type="button" className="chip" aria-pressed={loc === null} onClick={() => setLoc(null)}>Все точки</button>
-          {q.data.locations.map((l) => <button key={l.id} type="button" className="chip" aria-pressed={loc === l.id} onClick={() => setLoc(l.id)}>{l.name}</button>)}
-        </div>
-      )}
-      <MonthNav month={month} onChange={setMonth} max={monthStart()} />
-      <DataState query={q} skeleton={6}>
-        {(f) => {
-          const c = f.current;
-          const active = f.locations.filter((l) => l.status === 'active');
-          return (
-            <div className="stack">
-              {showEditor && (
-                <FinanceEditor key={`${f.location_id}:${f.month}`} month={f.month} currency={f.currency} location={f.location_id} locations={f.locations}
-                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} royalty={c.royalty_minor}
-                  total={financeExpensesMinor(c)} />
-              )}
-              <FinanceStatement finance={f} />
-
-              {!showEditor && (
-                <ExpensesCard month={f.month} currency={f.currency} location={f.location_id} locations={active}
-                  expenses={f.expenses} own={f.expense_categories} prevCount={n(f.prev_expenses_count)} royalty={c.royalty_minor}
-                  readOnly={readOnly}
-                  total={financeExpensesMinor(c)}
-                  royaltyHistory={f.royalty && (f.royalty.months.length > 0 || f.royalty.payments.length > 0) && (
-                    <RoyaltyHistory r={f.royalty} currency={f.currency} />
-                  )} />
-              )}
-
-              <Card title="За полгода">
-                <MonthsChart months={f.months} currency={f.currency} />
-                <details className="finance-details">
-                  <summary>Таблица по месяцам</summary>
-                  <div className="table-wrap" role="region" aria-label="Финансы по месяцам" tabIndex={0} style={{ marginTop: 12 }}>
-                    <table className="table">
-                      <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
-                      <tbody>{[...f.months].reverse().map((m) => (
-                        <tr key={m.month}><td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">Текущий месяц</div>}</td>
-                          <td className="r num">{formatMoneyShort(m.revenue_minor, f.currency)}
-                            {m.return_minor ? <div className="faint">Возвраты {formatMoneyShort(m.return_minor, f.currency)}</div> : null}</td>
-                          <td className="r">{m.pct !== null ? `${n(m.pct).toLocaleString('ru-RU')} %` : '—'}</td>
-                          <td className="r num">{formatMoneyShort(m.payroll_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(financeExpensesMinor(m), f.currency)}</td>
-                          <td className="r num"><strong>{formatMoneyShort(m.net_minor, f.currency)}</strong></td></tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </details>
-              </Card>
-
-              {f.by_location && f.by_location.length > 1 && (
-                <Card title={`По точкам — ${monthLabel(f.month)}`} bodyless>
-                  <div className="table-wrap finance-points-table" role="region" aria-label="Финансы по точкам" tabIndex={0}>
-                    <table className="table">
-                      <thead><tr><th>Точка</th><th className="r">Выручка</th><th className="r">План, %</th><th className="r">Зарплата</th><th className="r">Расходы</th><th className="r">Остаётся</th></tr></thead>
-                      <tbody>{f.by_location.map((l) => (
-                        <tr key={l.location_id} className="clickable" onClick={() => setLoc(l.location_id)}>
-                          <td><strong>{l.location_name}</strong></td>
-                          <td className="r num">{formatMoneyShort(l.revenue_minor, f.currency)}
-                            {l.return_minor ? <div className="faint">Возвраты {formatMoneyShort(l.return_minor, f.currency)}</div> : null}</td>
-                          <td className="r">{l.pct !== null ? `${n(l.pct).toLocaleString('ru-RU')} %` : '—'}</td>
-                          <td className="r num">{formatMoneyShort(l.payroll_minor, f.currency)}</td>
-                          <td className="r num">{formatMoneyShort(financeExpensesMinor(l), f.currency)}</td>
-                          <td className="r num"><strong>{formatMoneyShort(l.net_minor, f.currency)}</strong></td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
-
-              {f.by_staff.length > 0 && (
-                <Card title="Зарплата сотрудников">
-                  {f.by_staff.map((s) => (
-                    <div key={s.user_id} className="access-row">
-                      <div className="row between">
-                        <span><strong>{s.full_name}</strong><span className="faint" style={{ display: 'block' }}>{s.shifts} смен · выручка {formatMoneyShort(s.revenue_minor, f.currency)}</span></span>
-                        <Money minor={s.earned_minor} currency={f.currency} strong />
-                      </div>
-                      {s.payroll_halves && <PayrollSchedule month={f.month} amounts={s.payroll_halves} currency={f.currency} />}
-                    </div>
-                  ))}
-                </Card>
-              )}
-            </div>
-          );
-        }}
-      </DataState>
+  return <div className="home finance-page">
+    <PageHeader title={t('Отчёт о прибылях и убытках', 'Kâr ve zarar tablosu')} actions={<>
+      <Button disabled={!availableFinance || !userId} loading={exp.isPending} onClick={() => {
+        if (!availableFinance || !userId || exportRequest.current) return;
+        const request = new AbortController();
+        exportRequest.current = request;
+        exp.mutate({ report: availableFinance, userId, request, language });
+      }}><Download size={16} aria-hidden />Excel</Button>
+      <Button disabled={!availableFinance || !userId} onClick={() => {
+        if (availableFinance && userId) setDrive({ finance: availableFinance, userId });
+      }}>Google Drive</Button>
+    </>} />
+    <ActionError error={exp.error} />
+    {availableFinance && drive && drive.userId === userId && drive.finance.month === month && drive.finance.location_id === location &&
+      <FinanceDriveDialog period={monthLabel(month, true, locale)} scope={financeScope(drive.finance, language)}
+        makeFile={() => makeFinanceReportFile(drive.finance, drive.userId, true, language)} onClose={() => setDrive(null)} />}
+    <div className="finance-filters">
+      <MonthNav month={month} onChange={value => navigate({ month: value, day: null })} max={currentMonth} />
+      {(scopeOptions.length > 0 || location) && <Field label={t('Точка', 'Satış noktası')}>
+        {id => <Select id={id} value={location ?? ''} onChange={event => navigate({ location: event.target.value || null, day: null })}>
+          <option value="">{allPoints}</option>
+          {location && !scopeOptions.some(point => point.id === location) &&
+            <option value={location}>{t('Выбранная точка', 'Seçilen nokta')}</option>}
+          {scopeOptions.map(point => <option value={point.id} key={point.id}>{point.name}</option>)}
+        </Select>}
+      </Field>}
     </div>
-  );
+    <Chips<FinanceSection> label={t('Раздел отчёта', 'Rapor bölümü')} value={section}
+      onChange={value => navigate({ section: value === 'report' ? null : value, day: null })} options={[
+        { id: 'report', label: t('Отчёт', 'Rapor') }, { id: 'days', label: t('По дням', 'Günlük') },
+        { id: 'expenses', label: t('Расходы', 'Giderler') }, { id: 'payroll', label: t('Зарплата', 'Maaşlar') },
+      ]} />
+    {checkingPeriod ? <Skeleton lines={4} /> : <DataState query={q} skeleton={4}>
+      {f => {
+        if (section === 'days') return <FinanceDays key={f.month + (f.location_id ?? '')} month={f.month}
+          location={f.location_id} locations={f.locations} requestedDay={day} readOnly={readOnly}
+          clearRequestedDay={() => navigate({ day: null }, true)} />;
+        if (section === 'expenses') return <ExpensesCard key={f.month + (f.location_id ?? '')} month={f.month}
+          currency={f.currency} location={f.location_id} locations={f.locations}
+          expenses={f.expenses} own={f.expense_categories} prevCount={Number(f.prev_expenses_count)}
+          royaltyMinor={f.current.royalty_minor}
+          royaltyHistory={!f.location_id && f.royalty ? <RoyaltyHistory r={f.royalty} currency={f.currency} /> : undefined}
+          readOnly={readOnly || month > officeMonth} />;
+        if (section === 'payroll') return <PayrollDetails finance={f} canOpenTeam={can('staff.manage') || can('staff.view')} />;
+        return <FinanceStatement finance={f} />;
+      }}
+    </DataState>}
+  </div>;
+}
+
+function PayrollDetails({ finance: f, canOpenTeam }: { finance: Finance; canOpenTeam: boolean }) {
+  const { t } = useLocale();
+  return <div className="stack">
+    <Card title={t('Начисленная зарплата', 'Tahakkuk eden maaş')}
+      actions={<Money minor={f.current.payroll_minor} currency={f.currency} short strong />}>
+      {f.current.payroll_halves && <PayrollSchedule month={f.month} amounts={f.current.payroll_halves} currency={f.currency} />}
+      {f.by_staff.length === 0 && <p>{t('Начислений сотрудникам за этот месяц нет.', 'Bu ay çalışanlara maaş tahakkuku yok.')}</p>}
+    </Card>
+    {f.by_staff.length > 0 && <Card title={t('По сотрудникам', 'Çalışanlara göre')}
+      actions={canOpenTeam ? <Link to="/staff" className="link-btn">{t('Сотрудники', 'Çalışanlar')}</Link> : undefined}>
+      <ul className="finance-payroll-list">
+        {f.by_staff.map(staff => <li key={staff.user_id}>
+          <div className="row between">
+            <div><strong>{staff.full_name}</strong>
+              <div className="faint">{t('Смен', 'Vardiya')}: {staff.shifts} · {t('Выручка', 'Gelir')}: <Money minor={staff.revenue_minor} currency={f.currency} short /></div>
+            </div>
+            <Money minor={staff.earned_minor} currency={f.currency} short strong />
+          </div>
+          {staff.payroll_halves && <details><summary>{t('График выплат', 'Ödeme takvimi')}</summary>
+            <PayrollSchedule month={f.month} amounts={staff.payroll_halves} currency={f.currency} />
+          </details>}
+        </li>)}
+      </ul>
+    </Card>}
+  </div>;
 }
 
 function RoyaltyHistory({ r, currency }: { r: Royalty; currency: string }) {
+  const { t, locale } = useLocale();
   const payments = [...r.payments, ...(r.undated_payments ?? [])];
-  return (
-    <details className="finance-details">
-      <summary>Начисления и оплаты роялти</summary>
-      <div className="row between access-row">
-        <span>Долг по роялти</span>
-        <Money minor={r.debt_minor} currency={currency} short strong />
-      </div>
-      <div className="table-wrap" role="region" aria-label="Роялти по месяцам" tabIndex={0}>
+  const monthLabelFor = (month: string) => monthLabel(month, true, locale);
+  const money = (value: MinorInput) => formatMoneyShort(value, currency, locale);
+  const ledgerName = t('Начисления и оплаты по месяцам', 'Aylık tahakkuk ve ödemeler');
+  if (!r.months.length && !payments.length && !r.undated && !r.debt_minor) return null;
+
+  return <details className="finance-details finance-royalty-history">
+    <summary>{t('История роялти', 'Royalty geçmişi')}</summary>
+    <dl className="finance-lines">
+      <div><dt>{t('Долг по роялти', 'Royalty borcu')}</dt><dd><Money minor={r.debt_minor} currency={currency} short strong /></dd></div>
+      {r.undated && <div><dt>{t('Прошлый долг без периода', 'Dönemi belirtilmeyen geçmiş borç')}</dt>
+        <dd><Money minor={r.undated.debt_minor} currency={currency} short strong /></dd></div>}
+    </dl>
+    {r.months.length > 0 && <>
+      <div className="table-wrap" role="region" aria-label={ledgerName} tabIndex={0}>
         <table className="table">
-          <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">Долг</th></tr></thead>
-          <tbody>{r.months.map((m) => (
-            <tr key={m.month}>
-              <td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
-              <td className="r num">{formatMoneyShort(m.revenue_minor, currency)}</td>
-              <td className="r">{pct(m.rate_bp)}</td>
-              <td className="r num">{formatMoneyShort(m.accrued_minor, currency)}</td>
-              <td className="r num">{(m.correction_minor ?? m.manual_minor) ? formatMoneyShort(m.correction_minor ?? m.manual_minor, currency) : '—'}</td>
-              <td className="r num">{m.past_debt_minor ? formatMoneyShort(m.past_debt_minor, currency) : '—'}</td>
-              <td className="r num">{formatMoneyShort(m.paid_minor, currency)}</td>
-              <td className={`r num${n(m.debt_minor) > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={currency} short strong />}</td>
-            </tr>
-          ))}</tbody>
+          <thead><tr>
+            <th scope="col">{t('Месяц', 'Ay')}</th><th className="r" scope="col">{t('Выручка', 'Gelir')}</th>
+            <th className="r" scope="col">{t('Ставка', 'Oran')}</th><th className="r" scope="col">{t('Начислено', 'Tahakkuk')}</th>
+            <th className="r" scope="col">{t('Корректировки', 'Düzeltmeler')}</th><th className="r" scope="col">{t('Прошлый долг', 'Geçmiş borç')}</th>
+            <th className="r" scope="col">{t('Оплачено', 'Ödendi')}</th><th className="r" scope="col">{t('Долг', 'Borç')}</th>
+          </tr></thead>
+          <tbody>{r.months.map(month => <tr key={month.month}>
+            <th scope="row" className="table-month">{monthLabelFor(month.month)}
+              {month.is_open && <div className="faint">{t('начисляется', 'tahakkuk ediyor')}</div>}
+            </th>
+            <td className="r num">{money(month.revenue_minor)}</td>
+            <td className="r">{(month.rate_bp / 100).toLocaleString(locale)}%</td>
+            <td className="r num">{money(month.accrued_minor)}</td>
+            <td className="r num">{(month.correction_minor ?? month.manual_minor) ? money(month.correction_minor ?? month.manual_minor) : '—'}</td>
+            <td className="r num">{month.past_debt_minor ? money(month.past_debt_minor) : '—'}</td>
+            <td className="r num">{money(month.paid_minor)}</td>
+            <td className={'r num' + (Number(month.debt_minor) > 0 && !month.is_open ? ' danger-text' : '')}>
+              {month.is_open ? '—' : <Money minor={month.debt_minor} currency={currency} short strong />}
+            </td>
+          </tr>)}</tbody>
         </table>
       </div>
-      {r.undated && <div className="row between access-row">
-        <span>Прошлый долг без периода</span><Money minor={r.undated.debt_minor} currency={currency} strong />
-      </div>}
-      {payments.length > 0 && (
-        <>
-          <h3 className="section-title" style={{ marginTop: 16 }}>Оплаты</h3>
-          {payments.map((p, i) => (
-            <div key={i} className="row between access-row">
-              <span>{p.month ? monthLabel(p.month) : 'Без периода'}<span className="faint" style={{ display: 'block' }}>{p.paid_on ? formatDate(p.paid_on) : 'Дата оплаты не указана'}{p.note ? ` · ${p.note}` : ''}</span></span>
-              <Money minor={p.amount_minor} currency={currency} strong />
-            </div>
-          ))}
-        </>
-      )}
-    </details>
-  );
+    </>}
+    {payments.length > 0 && <section className="finance-royalty-payments" aria-label={t('История оплат', 'Ödeme geçmişi')}>
+      <h3>{t('История оплат', 'Ödeme geçmişi')}</h3>
+      {payments.map((payment, i) => <div key={i} className="row between access-row">
+        <span>{payment.month ? monthLabelFor(payment.month) : t('Без периода', 'Dönem belirtilmemiş')}
+          <span className="finance-payment-date faint">
+            {payment.paid_on ? formatDate(payment.paid_on, locale) : t('Дата оплаты не указана', 'Ödeme tarihi belirtilmemiş')}
+            {payment.note && ' · ' + payment.note}
+          </span>
+        </span>
+        <Money minor={payment.amount_minor} currency={currency} strong />
+      </div>)}
+    </section>}
+  </details>;
 }

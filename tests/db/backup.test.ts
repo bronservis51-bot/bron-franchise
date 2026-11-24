@@ -66,6 +66,8 @@ describe('резервная копия и восстановление', () => 
         from app_private.employee_pay_version v join public.app_user u on u.id=v.employee_id),
       'exits',(select jsonb_agg(to_jsonb(v)-'employee_id'||jsonb_build_object('email',u.email) order by u.email,day)
         from app_private.employee_daily_exit v join public.app_user u on u.id=v.employee_id)) as facts`)).rows[0].facts;
+    const catalogue = { name: 'Шаблон из архива', mode: 'legacy', fee_minor: 29000, rate_bp: 725 };
+    await src.query("insert into app_private.pay_scheme(partner_id,policy,version,active) select id,$1,3,false from partner where code='ALPHA'", [JSON.stringify(catalogue)]);
     const dump = await exportData(src);
     // Older private-table backups must receive defaults for columns added later.
     for (const key of ['for_trainees','for_franchisees','stage','position','pass_percent','quiz_size']) delete dump.private_tables.learning_config[0][key];
@@ -91,6 +93,8 @@ describe('резервная копия и восстановление', () => 
     await seedRecovery(dst);
     await expect(restoreData(dst, dump)).rejects.toThrow(/confirm-wipe/);
     await restoreData(dst, dump, { wipe: true });
+    expect((await dst.query('select active,version,policy from app_private.pay_scheme')).rows)
+      .toEqual([{ active:false, version:3, policy:catalogue }]);
     expect((await dst.query('select id from app_private.manager_recovery_job')).rows).toEqual([]);
     expect((await dst.query('select enabled,reset_enabled,verified_at from app_private.manager_recovery_account')).rows)
       .toEqual([{ enabled: false, reset_enabled: false, verified_at: null }]);
@@ -141,9 +145,10 @@ describe('резервная копия и восстановление', () => 
     await dst.exec('reset role');
 
     const historical = structuredClone(dump);
-    for (const name of ['team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact']) delete historical.private_tables[name];
+    for (const name of ['team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact','pay_scheme']) delete historical.private_tables[name];
     for (const shift of historical.tables.work_shift) delete shift.counts_as_exit;
     await restoreData(dst, historical, { wipe: true });
+    expect((await dst.query('select id from app_private.pay_scheme')).rows).toEqual([]);
     expect((await dst.query(`select effective_from::text,policy from app_private.team_pay_version`)).rows)
       .toEqual([{ effective_from: '-infinity', policy: historical.private_tables.motivation_scheme[0].policy }]);
     expect((await dst.query(`select count(*)::int n from public.staff_member s left join app_private.employee_pay_version v

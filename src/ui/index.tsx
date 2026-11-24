@@ -1,9 +1,11 @@
 // Компоненты дизайн-системы. Состояния экранов: загрузка, пусто, нет результатов, ошибка, нет прав, офлайн, конфликт.
-import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { AlertTriangle, ArrowLeft, Ban, CheckCircle2, CircleDashed, Clock, FlaskConical, Inbox, Info, Lock, RefreshCw, SearchX, WifiOff } from 'lucide-react';
+import { useLocale, type Language } from '../platform/locale';
 import { AppError, toAppError } from '../platform/backend';
 import { formatMoney, formatMoneyShort, minorToDecimal, parseMoney, type MinorInput } from '../platform/money';
+import { HelpTip } from './HelpTip';
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'demo';
 
@@ -95,38 +97,60 @@ const ERROR_TEXT: Record<string, string> = {
   'idempotency-conflict': 'Эта операция уже выполнялась с другими данными.',
 };
 
-export function errorText(e: unknown): string {
+const TURKISH_ERRORS: Record<string, string> = {
+  forbidden: 'Bu işlemi yapmak veya bu bölümü açmak için yetkiniz yok.',
+  'not-found': 'Kayıt bulunamadı veya erişiminiz yok.',
+  'version-conflict': 'Kayıt değişti. Güncel bilgileri kontrol edip yeniden deneyin.',
+  'transition-not-allowed': 'Bu işlem şu an yapılamıyor.',
+  offline: 'Sunucuyla bağlantı yok. Veriler gönderilmedi.',
+  unauthenticated: 'Oturumunuz sona erdi. Yeniden giriş yapın.',
+  'external-unavailable': 'Sunucuya ulaşılamıyor. Daha sonra yeniden deneyin.',
+  'idempotency-conflict': 'Bu işlem daha önce farklı bilgilerle yapıldı.',
+  'period-locked': 'Bu dönem değişikliklere kapalı.',
+  validation: 'Girdiğiniz bilgileri kontrol edin.',
+  'policy-split-required': 'Bu işlem için kalemleri ayrı ayrı kaydedin.',
+  'integration-pending': 'İşlem hâlâ sürüyor. Biraz sonra yeniden kontrol edin.',
+  maintenance: 'Geçici bakım yapılıyor. Daha sonra yeniden deneyin.',
+};
+
+export function errorText(e: unknown, language: Language = 'ru'): string {
   const err = toAppError(e);
+  if (language === 'tr') {
+    return err.detail && !/\p{Script=Cyrillic}/u.test(err.detail) ? err.detail
+      : TURKISH_ERRORS[err.code] ?? 'İşlem tamamlanamadı.';
+  }
   // Сервер возвращает понятное объяснение в detail; общий текст — только если его нет
   const base = err.code === 'unknown' ? err.detail : err.detail || ERROR_TEXT[err.code];
   return base || 'Не удалось выполнить действие';
 }
 
 export function ErrorState({ error, onRetry, compact }: { error: unknown; onRetry?: () => void; compact?: boolean }) {
+  const { t, language } = useLocale();
   const err = toAppError(error);
   const icon = err.code === 'offline' ? <WifiOff size={22} aria-hidden /> : err.code === 'forbidden' ? <Lock size={22} aria-hidden /> : <Ban size={22} aria-hidden />;
   return (
     <div className={`state${compact ? ' compact' : ''}`} role="alert">
       <div className="icon">{icon}</div>
-      <h3>{err.code === 'forbidden' ? 'Нет доступа' : err.code === 'not-found' ? 'Не найдено' : 'Не удалось загрузить'}</h3>
-      <div>{errorText(err)}</div>
-      {err.requestId && err.code !== 'forbidden' && err.code !== 'not-found' && <div className="faint">{'Код запроса'}: <span className="mono">{err.requestId.slice(0, 8)}</span></div>}
-      {onRetry && <Button size="sm" onClick={onRetry}><RefreshCw size={15} aria-hidden />Повторить</Button>}
+      <h3>{err.code === 'forbidden' ? t('Нет доступа', 'Erişim yok') : err.code === 'not-found' ? t('Не найдено', 'Bulunamadı') : t('Не удалось загрузить', 'Yüklenemedi')}</h3>
+      <div>{errorText(err, language)}</div>
+      {err.requestId && err.code !== 'forbidden' && err.code !== 'not-found' && <div className="faint">{t('Код запроса', 'İstek kodu')}: <span className="mono">{err.requestId.slice(0, 8)}</span></div>}
+      {onRetry && <Button size="sm" onClick={onRetry}><RefreshCw size={15} aria-hidden />{t('Повторить', 'Yeniden dene')}</Button>}
     </div>
   );
 }
 
 /** Ошибка действия рядом с кнопкой; детали валидации показываются у полей самой формой. */
 export function ActionError({ error }: { error: unknown }) {
+  const { t, language } = useLocale();
   if (!error) return null;
   const err = error instanceof AppError ? error : toAppError(error);
   return (
     <div className="alert tone-danger" role="alert" style={{ marginTop: 12 }}>
       <AlertTriangle size={18} aria-hidden />
       <div className="alert-body">
-        <div>{errorText(err)}</div>
-        {err.hint && err.code === 'transition-not-allowed' && err.hint.length < 600 && <div className="faint" style={{ marginTop: 4 }}>{err.hint}</div>}
-        {err.code === 'version-conflict' && <div className="faint">Ваши изменения не потеряны: обновите и повторите.</div>}
+        <div>{errorText(err, language)}</div>
+        {err.hint && err.code === 'transition-not-allowed' && err.hint.length < 600 && (language === 'ru' || !/\p{Script=Cyrillic}/u.test(err.hint)) && <div className="faint" style={{ marginTop: 4 }}>{err.hint}</div>}
+        {err.code === 'version-conflict' && <div className="faint">{t('Ваши изменения не потеряны: обновите и повторите.', 'Değişiklikleriniz duruyor. Kaydı yenileyip tekrar deneyin.')}</div>}
       </div>
     </div>
   );
@@ -146,8 +170,9 @@ export function Alert({ tone = 'info', title, children, action }: { tone?: Tone;
 }
 
 export function Skeleton({ lines = 3 }: { lines?: number }) {
+  const { t } = useLocale();
   return (
-    <div aria-busy="true" aria-label="Загрузка" style={{ padding: 20 }}>
+    <div aria-busy="true" aria-label={t('Загрузка', 'Yükleniyor')} style={{ padding: 20 }}>
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className="skeleton" style={{ height: 14, width: `${90 - i * 12}%`, marginBottom: 12 }} />
       ))}
@@ -162,22 +187,27 @@ export function DataState<T>({ query, empty, children, skeleton = 3 }: {
   children: (data: T) => ReactNode;
   skeleton?: number;
 }) {
+  const { t, language } = useLocale();
   if (query.isLoading) return <Skeleton lines={skeleton} />;
   if (query.error && (query.data === undefined || ['unauthenticated', 'forbidden'].includes(toAppError(query.error).code))) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (query.data === undefined) return null;
   const e = empty?.(query.data);
   if (e) return <>{e}</>;
-  return <>{query.error && <Alert tone="warning" title="Не удалось обновить данные" action={<Button size="sm" onClick={() => void query.refetch()}>Повторить</Button>}>Показаны последние загруженные данные. {errorText(query.error)}</Alert>}{children(query.data)}</>;
+  return <>{query.error && <Alert tone="warning" title={t('Не удалось обновить данные', 'Veriler güncellenemedi')} action={<Button size="sm" onClick={() => void query.refetch()}>{t('Повторить', 'Yeniden dene')}</Button>}>{t('Показаны последние загруженные данные.', 'Son yüklenen veriler gösteriliyor.')} {errorText(query.error, language)}</Alert>}{children(query.data)}</>;
 }
 
-export function Field({ label, hint, error, required, children, id }: { label: string; hint?: ReactNode; error?: string | null; required?: boolean; children: (id: string, describedBy?: string) => ReactNode; id?: string }) {
+export function Field({ label, hint, error, required, help, helpLabel, children, id }: {
+  label: string; hint?: ReactNode; error?: string | null; required?: boolean; help?: ReactNode; helpLabel?: string;
+  children: (id: string, describedBy?: string) => ReactNode; id?: string;
+}) {
   const auto = useId();
   const fid = id ?? auto;
   const hintId = hint ? `${fid}-hint` : undefined;
   const errId = error ? `${fid}-err` : undefined;
+  const labelElement = <label htmlFor={fid}>{label}{required && <span className="req" aria-hidden>*</span>}</label>;
   return (
     <div className="field">
-      <label htmlFor={fid}>{label}{required && <span className="req" aria-hidden>*</span>}</label>
+      {help ? <div className="field-heading">{labelElement}<HelpTip label={helpLabel ?? label}>{help}</HelpTip></div> : labelElement}
       {children(fid, [hintId, errId].filter(Boolean).join(' ') || undefined)}
       {hint && <div className="hint" id={hintId}>{hint}</div>}
       {error && <div className="error" id={errId}><AlertTriangle size={14} aria-hidden />{error}</div>}
@@ -219,30 +249,37 @@ export function Chips<T extends string>({ options, value, onChange, label }: { o
 }
 
 export function Money({ minor, currency, strong, short }: { minor: MinorInput; currency: string; strong?: boolean; short?: boolean }) {
-  const s = (short ? formatMoneyShort : formatMoney)(minor, currency, 'ru-RU');
+  const { locale } = useLocale();
+  const s = (short ? formatMoneyShort : formatMoney)(minor, currency, locale);
   return strong ? <strong className="num">{s}</strong> : <span className="num">{s}</span>;
 }
 
 /** Ввод суммы в рублях/тенге/лирах с запятой; наружу — минорные единицы строкой (без float). */
-export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, enterKeyHint = 'done', onValidityChange, describedBy, requireExplicitValue = false, disabled }: {
+export function MoneyInput({ id, value, onChange, currency, invalid, placeholder, inputRef, onEnter, enterKeyHint = 'done', onValidityChange, describedBy, requireExplicitValue = false, preserveBlank = false, disabled }: {
   id: string; value: string; onChange: (minor: string) => void; currency: string; invalid?: boolean; placeholder?: string;
   inputRef?: (el: HTMLInputElement | null) => void; onEnter?: () => void; enterKeyHint?: ComponentProps<'input'>['enterKeyHint'];
-  onValidityChange?: (valid:boolean) => void; describedBy?: string; requireExplicitValue?:boolean; disabled?: boolean;
+  onValidityChange?: (valid:boolean) => void; describedBy?: string; requireExplicitValue?:boolean; preserveBlank?: boolean; disabled?: boolean;
 }) {
-  const show = (v: string) => (v && (v !== '0' || requireExplicitValue) ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
+  const show = (v: string) => (v && (v !== '0' || requireExplicitValue || preserveBlank) ? minorToDecimal(v, currency).replace('.', ',').replace(/,00$/, '') : '');
   const [text, setText] = useState(() => show(value));
   const [bad, setBad] = useState(false);
   // Значение изменили снаружи (например, «Заполнить из смен») — показать его, не трогая ввод, который уже ему равен
   useEffect(() => {
-    const cur = text.trim() === '' ? 0n : parseMoney(text, currency);
-    if (cur === null || cur.toString() !== (value || '0')) { setText(show(value)); setBad(false); }
+    const cur = text.trim() === '' && (requireExplicitValue || preserveBlank) ? '' :
+      (text.trim() === '' ? 0n : parseMoney(text, currency))?.toString();
+    if (cur !== (requireExplicitValue || preserveBlank ? value : value || '0')) { setText(show(value)); setBad(false); }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Input id={id} ref={inputRef} inputMode="decimal" enterKeyHint={onEnter ? enterKeyHint : undefined} placeholder={placeholder} value={text} disabled={disabled} aria-invalid={bad || invalid || undefined} aria-describedby={describedBy}
       onKeyDown={onEnter ? (e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onEnter(); } } : undefined}
       onChange={(e) => {
         setText(e.target.value);
-        if(requireExplicitValue&&e.target.value.trim()===''){setBad(false);onValidityChange?.(false);onChange('');return;}
+        if ((requireExplicitValue || preserveBlank) && e.target.value.trim() === '') {
+          setBad(false);
+          onValidityChange?.(!requireExplicitValue);
+          onChange('');
+          return;
+        }
         const v = e.target.value.trim() === '' ? 0n : parseMoney(e.target.value, currency);
         setBad(v === null); onValidityChange?.(v !== null);
         if (v !== null) onChange(v.toString());
@@ -261,71 +298,97 @@ export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
 }
 
 /** Подтверждение необратимого/финансового действия с итогом операции (UX-06). */
-export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel = 'Отмена', danger, onConfirm, onClose, onBack, children, busy, error, disabled, dirty, className = '' }: {
+export function ConfirmDialog({ open, title, summary, confirmLabel, cancelLabel, danger, onConfirm, onClose, onBack, children, busy, error, disabled, dirty, className = '' }: {
   open: boolean; title: string; summary?: [string, ReactNode][]; confirmLabel?: string; cancelLabel?: string; danger?: boolean;
   onConfirm?: () => void; onClose: () => void; onBack?: () => void; children?: ReactNode; busy?: boolean; error?: unknown; disabled?: boolean;
   className?: string; dirty?: boolean;
 }) {
+  const { t } = useLocale();
   const ref = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const lastField = useRef<HTMLElement | null>(null);
-  const restoreFocus = useRef(false);
+  const beforeDiscard = useRef<{ frame: number; body: number } | null>(null);
   const titleId = useId();
   const [discard, setDiscard] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) {
-      const scroll = document.querySelector('.content');
-      const y = scroll?.scrollTop;
-      d.showModal();
-      d.querySelector<HTMLElement>('.dialog-head')?.focus({preventScroll:true});
-      if (scroll && y !== undefined) scroll.scrollTop=y;
-    }
-    if (!open) {
-      if (d.open) d.close();
+    if (!open || !d) {
+      beforeDiscard.current = null;
       setDiscard(false);
+      return;
     }
+    const opener = document.activeElement;
+    const shell = d.closest('.content') ?? document.querySelector('.content');
+    const page = document.scrollingElement;
+    const shellTop = shell?.scrollTop ?? 0;
+    const pageTop = page?.scrollTop ?? 0;
+    const restoreScroll = () => {
+      if (shell) shell.scrollTop = shellTop;
+      if (page) page.scrollTop = pageTop;
+    };
+    d.showModal();
+    heading.current?.focus({ preventScroll: true });
+    restoreScroll();
+    return () => {
+      if (d.open) d.close();
+      if (opener instanceof HTMLElement && opener.isConnected && document.activeElement === document.body) {
+        opener.focus({ preventScroll: true });
+      }
+      restoreScroll();
+    };
   }, [open]);
-  useEffect(() => {
-    if (discard) ref.current?.querySelector<HTMLElement>('.dialog-head')?.focus({ preventScroll: true });
-    else if (restoreFocus.current) {
-      restoreFocus.current = false;
-      if (lastField.current?.isConnected) lastField.current.focus();
-      else ref.current?.querySelector<HTMLElement>('.dialog-head')?.focus({ preventScroll: true });
+  useLayoutEffect(() => {
+    if (discard) {
+      if (frame.current) frame.current.scrollTop = 0;
+      heading.current?.focus({ preventScroll: true });
+    } else if (beforeDiscard.current) {
+      const position = beforeDiscard.current;
+      beforeDiscard.current = null;
+      if (frame.current) frame.current.scrollTop = position.frame;
+      if (body.current) body.current.scrollTop = position.body;
+      (lastField.current?.isConnected ? lastField.current : heading.current)?.focus({ preventScroll: true });
     }
   }, [discard]);
-  const resume = () => {
-    restoreFocus.current = true;
-    setDiscard(false);
-  };
+  const resume = () => setDiscard(false);
   const requestClose = () => {
     if (busy) return;
     if (discard) resume();
-    else if (dirty) setDiscard(true);
+    else if (dirty) {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && body.current?.contains(active)) lastField.current = active;
+      beforeDiscard.current = { frame: frame.current?.scrollTop ?? 0, body: body.current?.scrollTop ?? 0 };
+      setDiscard(true);
+    }
     else onClose();
   };
   return (
-    <dialog ref={ref} className={`dialog ${className}`} onClose={onClose} onCancel={(e) => { e.preventDefault(); requestClose(); }} aria-labelledby={titleId}>
-      <div className="dialog-head" tabIndex={-1} autoFocus><h2 id={titleId}>{discard ? 'Отбросить изменения?' : title}</h2></div>
-      <div className="dialog-body" onFocusCapture={e => { if (e.target instanceof HTMLElement) lastField.current = e.target; }}>
-        <div hidden={discard}>
-          {summary && (
-            <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>
-          )}
-          {children && <div style={{ marginTop: summary ? 16 : 0 }}>{children}</div>}
-          <ActionError error={error} />
+    <dialog ref={ref} className={`dialog ${className}`} aria-labelledby={titleId}
+      onClose={event => { if (open && event.target === event.currentTarget && !event.currentTarget.open) onClose(); }}
+      onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); requestClose(); } }}>
+      <div className="dialog-frame" ref={frame}>
+        <div className="dialog-head" ref={heading} tabIndex={-1} autoFocus><h2 id={titleId}>{discard ? t('Отбросить изменения?', 'Değişiklikler silinsin mi?') : title}</h2></div>
+        <div className="dialog-body" ref={body} onFocusCapture={e => { if (e.target instanceof HTMLElement) lastField.current = e.target; }}>
+          <div hidden={discard}>
+            {summary && (
+              <div className="summary"><dl>{summary.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>
+            )}
+            {children && <div style={{ marginTop: summary ? 16 : 0 }}>{children}</div>}
+            <ActionError error={error} />
+          </div>
+          {discard && <p>{t('Введённые данные ещё не сохранены.', 'Girdiğiniz bilgiler henüz kaydedilmedi.')}</p>}
         </div>
-        {discard && <p>Введённые данные ещё не сохранены.</p>}
-      </div>
-      <div className="dialog-foot">
-        {discard ? <>
-          <Button onClick={resume}>Продолжить ввод</Button>
-          <Button variant="danger" onClick={onClose}>Отбросить изменения</Button>
-        </> : <>
-          <Button onClick={requestClose} disabled={busy}>{cancelLabel}</Button>
-          {onBack && <Button variant="ghost" onClick={onBack} disabled={busy}>Назад</Button>}
-          {confirmLabel && onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>}
-        </>}
+        <div className="dialog-foot">
+          {discard ? <>
+            <Button onClick={resume}>{t('Продолжить ввод', 'Düzenlemeye dön')}</Button>
+            <Button variant="danger" onClick={onClose}>{t('Отбросить изменения', 'Değişiklikleri sil')}</Button>
+          </> : <>
+            <Button onClick={requestClose} disabled={busy}>{cancelLabel ?? t('Отмена', 'İptal')}</Button>
+            {onBack && <Button variant="ghost" onClick={onBack} disabled={busy}>{t('Назад', 'Geri')}</Button>}
+            {confirmLabel && onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy} disabled={disabled}>{confirmLabel}</Button>}
+          </>}
+        </div>
       </div>
     </dialog>
   );

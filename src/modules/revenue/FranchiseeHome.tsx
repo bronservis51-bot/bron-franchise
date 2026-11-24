@@ -1,30 +1,67 @@
-// Главная франчайзи: план по точкам, выручка и статус дней месяца.
+// Главная франчайзи: выручка за сегодня, план и пропущенные дни.
 import { useEffect, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { CalendarX, Check, Plus } from 'lucide-react';
-import { dayLabel, formatDate, monthStart } from '../../platform/dates';
+import { ArrowUpRight, CalendarX, Check, Plus } from 'lucide-react';
+import { Link } from 'react-router';
+import { formatDate, monthStart } from '../../platform/dates';
+import { useLocale } from '../../platform/locale';
 import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { Alert, Button, DataState, EmptyState, ErrorState, Money, PageHeader, Skeleton } from '../../ui';
-import { DayList, MonthNav, PlanCard } from './components';
+import { Alert, Button, DataState, EmptyState, ErrorState, PageHeader, Skeleton } from '../../ui';
+import { MonthNav, PlanCard } from './components';
 import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
 import { canEditRevenueDay, revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards, isPartnerReadOnly, usePartnerLifecycle } from './partnerLifecycle';
-import { hasRevenueDiscrepancy, RevenueDialog } from './RevenueDialog';
+import { RevenueDialog } from './RevenueDialog';
+import './franchisee-home.css';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
 const monthOf = (day: string) => `${day.slice(0, 7)}-01`;
 
-/** «Все точки»: общий план и факт, каждая точка отдельной строкой, дни месяца — сумма по точкам. */
+function financeDays(month: string, location?: string, day?: string) {
+  const params = new URLSearchParams({ section: 'days', month });
+  if (location) params.set('location', location);
+  if (day) params.set('day', day);
+  return `/finance?${params}`;
+}
+
+function MissingRevenue({ points, month, showLocation }: {
+  points: Pick<LocationMonth, 'location_id' | 'location_name' | 'missing_days'>[];
+  month: string;
+  showLocation: boolean;
+}) {
+  const { t, locale } = useLocale();
+  const missing = points.filter(point => point.missing_days.length > 0);
+  if (!missing.length) return null;
+  return <section className="home-missing" aria-labelledby="home-missing-title">
+    <h2 id="home-missing-title"><CalendarX size={18} aria-hidden />{t('Не внесена выручка', 'Geliri girilmeyen günler')}</h2>
+    {missing.map(point => <div className="home-missing-point" key={point.location_id}>
+      {showLocation && <strong>{point.location_name}</strong>}
+      <ul className="home-missing-dates">
+        {point.missing_days.slice(-5).reverse().map(day => <li key={day}>
+          <Link to={financeDays(month, point.location_id, day)}>{formatDate(day, locale).slice(0, 5)}</Link>
+        </li>)}
+        {point.missing_days.length > 5 && <li><Link to={financeDays(month, point.location_id)}>
+          {t(`Ещё ${point.missing_days.length - 5}`, `${point.missing_days.length - 5} gün daha`)}
+        </Link></li>}
+      </ul>
+    </div>)}
+  </section>;
+}
+
 function AllPoints({ points, month, readOnly, onPick, onEnter }: {
   points: LocationMonth[]; month: string; readOnly: boolean; onPick: (id: string) => void;
   onEnter: (point: LocationMonth, detail: MonthDetail, day: string, row?: DayRow) => void;
 }) {
-  const details = useQueries({ queries: points.map((p) => ({ queryKey: ['revenue', 'month', p.location_id, month], queryFn: () => revenueMonth(p.location_id, month) })) });
+  const { t, locale } = useLocale();
+  const details = useQueries({ queries: points.map((p) => ({
+    queryKey: ['revenue', 'month', p.location_id, month],
+    queryFn: () => revenueMonth(p.location_id, month),
+    enabled: !readOnly && p.status === 'active' && monthOf(p.today) === month,
+  })) });
   const sameCurrency = points.every((p) => p.currency === points[0].currency);
   const sameDay = points.every((p) => p.today === points[0].today);
-  const currency = points[0].currency;
   const sum = (f: (p: LocationMonth) => number | null) => points.reduce((a, p) => a + Number(f(p) ?? 0), 0);
   const plan = points.every((p) => p.plan_minor !== null) ? sum((p) => p.plan_minor) : null;
   const fact = sum((p) => p.fact_minor);
@@ -32,104 +69,42 @@ function AllPoints({ points, month, readOnly, onPick, onEnter }: {
     ...points[0], month, today: points.find(p => monthOf(p.today) === month)?.today ?? points[0].today,
     fact_minor: fact, plan_minor: plan, pct: plan ? Math.round((fact * 1000) / plan) / 10 : null,
     need_per_day_minor: sameDay && plan && points[0].days_left > 0 ? Math.ceil(Math.max(0, plan - fact) / points[0].days_left) : null,
-  } as unknown as MonthDetail;
-  const ready = details.every((q) => q.data);
-  const failed = details.flatMap((query, i) => query.isError ? [{ query, name: points[i].location_name }] : []);
-  const loading = details.some(query => !query.data && !query.isError);
-  // Дни месяца: сумма по точкам и кто сколько; день с пропуском хоть одной точки подсвечен
-  type DaySummary = {
-    total: number; parts: string[]; missing: string[]; daysOff: string[];
-    discrepancies: { point: LocationMonth; detail: MonthDetail; row: DayRow }[];
   };
-  const days = new Map<string, DaySummary>();
-  const daySummary = (day: string) => {
-    const existing = days.get(day);
-    if (existing) return existing;
-    const result: DaySummary = { total: 0, parts: [], missing: [], daysOff: [], discrepancies: [] };
-    days.set(day, result);
-    return result;
-  };
-  details.forEach((q, i) => {
-    if (!q.data) return;
-    const d = q.data; const point = points[i];
-    for (const r of d.days) {
-      const x = daySummary(r.day);
-      x.total += Number(r.total_minor); x.parts.push(`${point.location_name} ${formatMoneyShort(r.total_minor, d.currency)}`);
-      if (hasRevenueDiscrepancy(r)) x.discrepancies.push({ point, detail: d, row: r });
-    }
-    if (!readOnly) for (const m of d.missing_days) daySummary(m).missing.push(point.location_name);
-    for (const day of d.days_off ?? []) daySummary(day).daysOff.push(point.location_name);
-  });
-  const list = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   return (
     <>
       {sameCurrency && <PlanCard m={total} />}
-      <section aria-label="Точки">
+      <section aria-label={t('Точки', 'Şubeler')}>
         <ul className="point-list">
-          {points.map((p, i) => {
-            const d = details[i].data;
-            const today = d?.days.find((x) => x.day === d.today);
-            const todayOff = d?.days_off?.includes(d.today);
-            const pct = Number(p.pct ?? 0);
+          {points.map((point, index) => {
+            const detail = details[index].data;
+            const today = detail?.days.find((row) => row.day === detail.today);
+            const todayOff = detail?.days_off?.includes(detail.today);
+            const pct = Number(point.pct ?? 0);
             return (
-              <li key={p.location_id} className="point-row">
-                <button type="button" className="point-main" onClick={() => onPick(p.location_id)}>
-                  <span className="point-name">{p.location_name}{!readOnly && p.missing_days.length > 0 && <span className="chip-dot" aria-label="есть пропущенные дни" />}</span>
-                  <span className="point-nums"><strong className="num">{formatMoneyShort(p.fact_minor, p.currency)}</strong>
-                    <span className="faint">{p.plan_minor ? ` из ${formatMoneyShort(p.plan_minor, p.currency)} · ${pct.toLocaleString('ru-RU')} %` : ' · без плана'}</span></span>
-                  {p.plan_minor ? <span className="point-bar" aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span> : null}
-                  {!readOnly && p.missing_days.length > 0 && <span className="point-miss"><CalendarX size={13} aria-hidden /> не внесено дней: {p.missing_days.length}</span>}
+              <li key={point.location_id} className="point-row">
+                <button type="button" className="point-main" onClick={() => onPick(point.location_id)}>
+                  <span className="point-name">{point.location_name}</span>
+                  <span className="point-nums"><strong className="num">{formatMoneyShort(point.fact_minor, point.currency, locale)}</strong>
+                    <span className="faint">{point.plan_minor ? ` / ${formatMoneyShort(point.plan_minor, point.currency, locale)} · ${pct.toLocaleString(locale)} %` : ''}</span></span>
+                  {point.plan_minor ? <span className="point-bar" aria-hidden><span style={{ width: `${Math.min(100, pct)}%` }} /></span> : null}
                 </button>
-                {!readOnly && p.status === 'active' && d && canEditRevenueDay(d, d.today) && monthOf(d.today) === month && (today
-                  ? <button type="button" className="point-today ok" onClick={() => onEnter(p, d, d.today, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, p.currency)}</button>
-                  : todayOff ? <Button size="sm" onClick={() => onEnter(p, d, d.today)}>Выходной</Button>
-                  : <Button size="sm" variant="primary" onClick={() => onEnter(p, d, d.today)}><Plus size={15} aria-hidden />Внести</Button>)}
+                {!readOnly && point.status === 'active' && detail && canEditRevenueDay(detail, detail.today) && monthOf(detail.today) === month && (today
+                  ? <button type="button" className="point-today ok" onClick={() => onEnter(point, detail, detail.today, today)}><Check size={15} aria-hidden />{formatMoneyShort(today.total_minor, point.currency, locale)}</button>
+                  : todayOff ? <Button size="sm" onClick={() => onEnter(point, detail, detail.today)}>{t('Выходной', 'Kapalı gün')}</Button>
+                  : <Button size="sm" variant="primary" onClick={() => onEnter(point, detail, detail.today)}><Plus size={15} aria-hidden />{t('Внести', 'Gelir gir')}</Button>)}
               </li>
             );
           })}
         </ul>
       </section>
-      <section>
-        <h2 className="section-title">Дни месяца по всем точкам</h2>
-        {failed.length > 0 && <Alert tone="warning" title="Не удалось обновить данные по точкам"
-          action={<Button size="sm" onClick={() => void Promise.all(failed.map(({ query }) => query.refetch()))}>Повторить</Button>}>
-          {failed.map(({ name }) => name).join(', ')}. Показаны загруженные данные.
-        </Alert>}
-        {loading && <p className="faint" role="status">Загружаем дни по точкам…</p>}
-        {ready && !list.length && <EmptyState title="В этом месяце записей нет" />}
-        {list.length > 0 && (
-          <ul className="day-list2">
-            {list.map(([day, x]) => (
-              <li key={day}>
-                <div className={`day-row2${x.missing.length ? ' missing' : ''}`}>
-                  <span className="day-date2">{dayLabel(day)}</span>
-                  <span className="day-sum2">
-                    {ready && sameCurrency && x.parts.length > 0 && <Money minor={x.total} currency={currency} short />}
-                    {x.parts.length > 0 && <span className="day-split">{x.parts.join(' · ')}</span>}
-                    {x.daysOff.length > 0 && <span className="day-split">Выходной · {x.daysOff.join(', ')}</span>}
-                    {x.missing.length > 0 && <span className="day-split"><CalendarX size={13} aria-hidden /> не внесено: {x.missing.join(', ')}</span>}
-                    {x.discrepancies.map(({ point, detail, row }) => (
-                      <button key={point.location_id} type="button" className="link-btn" style={{ textAlign: 'left', overflowWrap: 'anywhere' }}
-                        onClick={() => onEnter(point, detail, day, row)}>
-                        Сумма смен больше итога · {point.location_name}
-                      </button>
-                    ))}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="faint" style={{ marginTop: 8 }}>
-          {readOnly ? 'Для просмотра записи откройте нужную точку.' : 'Чтобы поправить день, откройте нужную точку.'}
-        </p>
-      </section>
+      {!readOnly && <MissingRevenue points={points} month={month} showLocation />}
     </>
   );
 }
 
 export function FranchiseeHome() {
   const { me, can } = useSession();
+  const { t, locale } = useLocale();
   const ownedPartners = franchiseePartnerCards(me);
   const partner = ownedPartners.length === 1 ? ownedPartners[0] : undefined;
   const launch = usePartnerLaunch(partner);
@@ -173,44 +148,44 @@ export function FranchiseeHome() {
     }
     if (launch.isLoading) return <div className="home"><Skeleton lines={4} /></div>;
     if (launch.isError && overview.isSuccess && !points.length) return <div className="home">
-      <PageHeader title="Главная" /><ErrorState error={launch.error} onRetry={() => void launch.refetch()} />
+      <PageHeader title={t('Главная', 'Ana sayfa')} /><ErrorState error={launch.error} onRetry={() => void launch.refetch()} />
     </div>;
   }
 
   if (!canReadRevenue) return <div className="home">
-    <PageHeader title="Главная" />
-    <EmptyState title="Выручка недоступна с вашими текущими правами" />
-    {inLaunchHistory && <Button onClick={() => { setHistoryCycle(null); setEdit(null); setEnter(null); }}>К подготовке открытия</Button>}
+    <PageHeader title={t('Главная', 'Ana sayfa')} />
+    <EmptyState title={t('Нет доступа к выручке', 'Gelir verilerine erişim yok')} />
+    {inLaunchHistory && <Button onClick={() => { setHistoryCycle(null); setEdit(null); setEnter(null); }}>{t('К подготовке открытия', 'Açılış hazırlığına dön')}</Button>}
   </div>;
 
   return (
     <div className="home">
       <header className="home-head">
-        {headerDay && <div className="home-date">{new Date(`${headerDay}T12:00:00Z`).toLocaleDateString('ru-RU',
+        {headerDay && <div className="home-date">{new Date(`${headerDay}T12:00:00Z`).toLocaleDateString(locale,
           { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}</div>}
-        <h1>Выручка</h1>
+        <h1>{t('Выручка', 'Satış geliri')}</h1>
         {points.length === 1 && <p className="faint">{points[0].location_name}</p>}
       </header>
 
-      {partnerPaused && <Alert tone="warning" title={status === 'terminated' ? 'Сотрудничество завершено' : 'Работа франчайзи приостановлена'}>
-        История и отчёты доступны для просмотра.
+      {partnerPaused && <Alert tone="warning" title={status === 'terminated'
+        ? t('Сотрудничество завершено', 'İş birliği sona erdi')
+        : t('Работа франчайзи приостановлена', 'Bayinin faaliyetleri askıya alındı')} />}
+      {ownedPartners.length > 1 && <Alert title={t('Уточните доступ к карточке франчайзи', 'Bayi erişimini kontrol edin')}>
+        {t(FRANCHISEE_CARD_AMBIGUITY, 'Birden fazla bayi atanmış. Franchise yöneticinize başvurun.')}
       </Alert>}
-      {ownedPartners.length > 1 && <Alert title="Уточните доступ к карточке франчайзи">{FRANCHISEE_CARD_AMBIGUITY}</Alert>}
-      {!partnerPaused && readOnly && <Alert title="Выручка доступна для просмотра">Внести или изменить выручку может пользователь с правом редактирования.</Alert>}
-      {!partnerPaused && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>К подготовке открытия</Button>}
-      {!partnerPaused && noActivePoints && !inLaunchHistory && <Alert title="Нет действующих точек">
-        История и отчёты доступны.
-      </Alert>}
+      {!partnerPaused && readOnly && <Alert title={t('Только просмотр', 'Salt okunur')} />}
+      {!partnerPaused && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>{t('К подготовке открытия', 'Açılış hazırlığına dön')}</Button>}
+      {!partnerPaused && noActivePoints && !inLaunchHistory && <Alert title={t('Нет действующих точек', 'Aktif şube yok')} />}
       <MonthNav month={month} onChange={(next) => setPeriod({ month: next, followCurrent: next === currentMonth })} max={currentMonth} />
-      <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title="В этом месяце записей нет" />)}>
+      <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title={t('В этом месяце записей нет', 'Bu ay kayıt yok')} />)}>
         {() => (
           <div className="home-body">
             {points.length > 1 && (
-              <div className="chips point-chips" role="group" aria-label="Точка">
-                <button type="button" className="chip" aria-pressed={all} onClick={() => pick(ALL)}>Все точки</button>
+              <div className="chips point-chips" role="group" aria-label={t('Точка', 'Şube')}>
+                <button type="button" className="chip" aria-pressed={all} onClick={() => pick(ALL)}>{t('Все точки', 'Tüm şubeler')}</button>
                 {points.map((p) => (
                   <button key={p.location_id} type="button" className="chip" aria-pressed={!all && p.location_id === current?.location_id} onClick={() => pick(p.location_id)}>
-                    {p.location_name}{!readOnly && p.missing_days.length > 0 && <span className="chip-dot" aria-label="есть пропущенные дни" />}
+                    {p.location_name}
                   </button>
                 ))}
               </div>
@@ -224,26 +199,20 @@ export function FranchiseeHome() {
                     todayRow
                       ? <button type="button" className="today-entered" onClick={() => setEdit({ day: d.today, row: todayRow })}>
                           <span className="ok-icon"><Check size={18} aria-hidden /></span>
-                          <span>Сегодня внесено: <strong><Money minor={todayRow.total_minor} currency={d.currency} short /></strong></span>
-                          <span className="faint">изменить</span>
+                          <span>{t('Сегодня внесено', 'Bugün kaydedildi')} <strong>{formatMoneyShort(todayRow.total_minor, d.currency, locale)}</strong></span>
+                          <span className="faint">{t('Изменить', 'Düzenle')}</span>
                         </button>
-                      : todayOff ? <Button block className="btn-lg" onClick={() => setEdit({ day: d.today, dayOff: true })}>Сегодня выходной</Button>
-                      : <Button variant="primary" block className="btn-lg" data-tour-target="revenue-entry" onClick={() => setEdit({ day: d.today })}><Plus size={20} aria-hidden />Внести выручку за сегодня</Button>
+                      : todayOff ? <Button block className="btn-lg" onClick={() => setEdit({ day: d.today, dayOff: true })}>{t('Сегодня выходной', 'Bugün kapalı')}</Button>
+                      : <Button variant="primary" block className="btn-lg" data-tour-target="revenue-entry" onClick={() => setEdit({ day: d.today })}><Plus size={20} aria-hidden />{t('Внести выручку за сегодня', 'Bugünün gelirini gir')}</Button>
                   )}
-                  {!readOnly && d.missing_days.length > 0 && (
-                    <div className="alert tone-warning" role="status">
-                      <CalendarX size={18} aria-hidden />
-                      <div className="alert-body">Не внесена выручка: {d.missing_days.slice(-5).map((x) => formatDate(x).slice(0, 5)).join(', ')}{d.missing_days.length > 5 ? ` и ещё ${d.missing_days.length - 5}` : ''}. Откройте день, чтобы внести выручку или отметить выходной.</div>
-                    </div>
-                  )}
-                  <section>
-                    <h2 className="section-title">Дни месяца</h2>
-                    <DayList m={d} readOnly={readOnly} onPick={(day, row) => setEdit({ day, row, dayOff: d.days_off?.includes(day) })} />
-                  </section>
+                  {!readOnly && current && <MissingRevenue points={[{ ...current, missing_days: d.missing_days }]} month={month} showLocation={false} />}
                 </>
               )}
             </DataState>
             )}
+            <Link className="home-finance-link" to={financeDays(month, current?.location_id)}>
+              {t('Выручка по дням', 'Günlük satış geliri')}<ArrowUpRight size={16} aria-hidden />
+            </Link>
           </div>
         )}
       </DataState>

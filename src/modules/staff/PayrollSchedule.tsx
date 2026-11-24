@@ -1,4 +1,5 @@
 import type { MinorInput } from '../../platform/money';
+import { useLocale } from '../../platform/locale';
 import { Money } from '../../ui';
 import { payrollDateLabel, payrollPeriodLabel, payrollPeriods } from './payrollPeriods';
 import './payroll-periods.css';
@@ -8,12 +9,13 @@ export function PayrollSchedule({ month, amounts, currency }: {
   amounts: readonly [MinorInput, MinorInput];
   currency: string;
 }) {
-  return <dl className="payroll-schedule" aria-label="Начисления по графику выплат">
+  const { t, locale } = useLocale();
+  return <dl className="payroll-schedule" aria-label={t('Начисления по графику выплат', 'Ödeme takvimine göre kazanç')}>
     {payrollPeriods(month).map((period, index) => (
       <div key={period.from} className="payroll-schedule-period">
         <dt>
-          <strong>{payrollPeriodLabel(period)}</strong>
-          <span className="faint">По графику <time dateTime={period.payOn}>{payrollDateLabel(period.payOn)}</time></span>
+          <strong>{payrollPeriodLabel(period, locale)}</strong>
+          <span className="faint">{t('По графику', 'Ödeme tarihi')} <time dateTime={period.payOn}>{payrollDateLabel(period.payOn, locale)}</time></span>
         </dt>
         <dd><Money minor={amounts[index]} currency={currency} short strong /></dd>
       </div>

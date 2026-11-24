@@ -40,3 +40,92 @@
 .shift-gaps-content button:hover { color: var(--text); }
 .shift-gaps-content button:disabled { opacity: .55; cursor: not-allowed; }
 .shift-gaps-content button svg { flex: none; }
+.staff-home .home-body { gap: var(--space-5); }
+
+.staff-home .shift-card {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+
+.staff-home .shift-card p { margin: 0; }
+
+.staff-open-details,
+.shift-receipt-identity,
+.shift-receipt-pay,
+.staff-history-details {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.staff-open-details,
+.shift-receipt-identity > :not(strong),
+.shift-receipt-pay > span:first-child,
+.staff-history-details > span {
+  color: var(--text-2);
+  font-size: var(--fs-s);
+}
+
+.staff-calendar,
+.staff-history {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.staff-calendar .section-title,
+.staff-history .section-title,
+.staff-history .month-nav { margin: 0; }
+
+.staff-history .month-nav-label { text-align: center; }
+
+.shift-receipt,
+.staff-month-summary,
+.staff-history-fold {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.shift-receipt[data-state='queued'] { border-color: var(--info); }
+.shift-receipt .btn { justify-self: start; }
+.shift-receipt p { width: 100%; margin: 0; }
+
+.shift-receipt-summary,
+.staff-month-total,
+.staff-history-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.shift-receipt-identity { flex: 1 1 12rem; }
+.shift-receipt-identity strong { display: flex; align-items: center; gap: var(--space-2); }
+.shift-receipt-identity svg { flex: none; color: var(--success); }
+.shift-receipt-pay { justify-items: start; }
+.shift-receipt-pay > .num, .staff-month-total > .num { font-size: var(--fs-xl); }
+.staff-month-summary .faint { font-size: var(--fs-s); }
+
+.staff-history-fold summary { cursor: pointer; min-height: var(--touch); padding-block: var(--space-2); font-weight: 650; }
+.staff-history-list { list-style: none; padding: 0; margin: 0; }
+.staff-history-row { padding-block: var(--space-3); border-top: 1px solid var(--border); }
+.staff-history-details { flex: 1 1 12rem; }
+.staff-history-details .num { color: var(--text); }
+
+.staff-close-dialog .staff-payment-hint { margin-block: var(--space-3) var(--space-2); }
+.staff-payments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--fs) * 8)), 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+.staff-payments .field { margin: 0; }
+.staff-close-dialog :is(.day-total-line, .earn-line) { flex-wrap: wrap; gap: var(--space-2); }

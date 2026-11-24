@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { onAvailableUpdate, updateBlockedMessage } from '../platform/update';
+import { useLocale } from '../platform/locale';
 import { Button } from '../ui';
 
 export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boolean }) {
+  const { t, language } = useLocale();
+  const blocked = t(updateBlockedMessage, 'Güncellemeden önce kayıtları tamamlayıp gönderin.');
   const [update, setUpdate] = useState<(() => Promise<void>) | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
@@ -14,7 +17,7 @@ export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boo
 
   async function start(apply: () => Promise<void>) {
     if (hasQueuedWork) {
-      setError(updateBlockedMessage);
+      setError(blocked);
       return;
     }
     setError('');
@@ -22,7 +25,9 @@ export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boo
     try {
       await apply();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось обновить приложение. Повторите попытку.');
+      setError(err instanceof Error && err.message === updateBlockedMessage ? blocked
+        : err instanceof Error && language === 'ru' ? err.message
+        : t('Не удалось обновить приложение. Повторите попытку.', 'Uygulama güncellenemedi. Yeniden deneyin.'));
     } finally {
       setUpdating(false);
     }
@@ -31,10 +36,10 @@ export function AppUpdateBanner({ hasQueuedWork = false }: { hasQueuedWork?: boo
   return (
     <div className="alert tone-info app-update">
       <div className="alert-body">
-        <div role="status">{updating ? 'Загружаем новую версию…' : 'Доступна новая версия приложения.'}</div>
+        <div role="status">{updating ? t('Загружаем новую версию…', 'Yeni sürüm yükleniyor…') : t('Доступна новая версия приложения.', 'Uygulamanın yeni sürümü hazır.')}</div>
         {error && <div role="alert">{error}</div>}
       </div>
-      <Button size="sm" loading={updating} onClick={() => void start(update)}>Обновить</Button>
+      <Button size="sm" loading={updating} onClick={() => void start(update)}>{t('Обновить', 'Güncelle')}</Button>
     </div>
   );
 }

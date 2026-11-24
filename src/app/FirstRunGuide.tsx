@@ -3,53 +3,56 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { ArrowLeft, ArrowRight, BookOpen, ClipboardCheck, Clock3, GraduationCap, Inbox, ShoppingCart, Store, User, Users, Wallet } from 'lucide-react';
 import { Button } from '../ui';
+import { useLocale } from '../platform/locale';
 import { useSession } from '../platform/session';
 import { useOwnPartnerLifecycle } from '../modules/revenue/partnerLifecycle';
-import { workspaceAccess, workspaceTitle, type WorkspaceRole } from './nav';
+import { workspaceAccess, workspaceTitleFor, type WorkspaceRole } from './nav';
 import './FirstRunGuide.css';
 
 type FirstRunRole = Exclude<WorkspaceRole, 'pending'>;
 export type FirstRunPreview = { firstRunPreview: true; firstRunOrigin: Location };
 
+type GuideCopy = [russian: string, turkish: string];
+
 type Step = {
   id: string;
-  title: string;
-  text: string;
+  title: GuideCopy;
+  text: GuideCopy;
   icon: typeof Store;
   target: string;
   fallback?: string;
-  fallbackText?: string;
+  fallbackText?: GuideCopy;
   route?: string;
 };
 
 const knowledge: Step = {
-  id: 'knowledge', title: 'Найдите инструкцию', text: 'Введите вопрос или тему в поиск.',
+  id: 'knowledge', title: ['Найдите инструкцию', 'Kılavuzu bulun'], text: ['Введите вопрос или тему в поиск.', 'Arama kutusuna bir soru veya konu yazın.'],
   icon: BookOpen, target: 'nav-kb', route: '/kb',
 };
 const profile: Step = {
-  id: 'profile', title: 'Откройте профиль', text: 'Здесь можно сменить пароль.',
+  id: 'profile', title: ['Откройте профиль', 'Profili açın'], text: ['Здесь можно сменить пароль.', 'Buradan parolanızı değiştirebilirsiniz.'],
   icon: User, target: 'profile',
 };
 const shift: Step = {
-  id: 'shift', title: 'Закройте смену', text: 'Укажите выручку наличными и картой.',
-  fallbackText: 'Кнопка появится на главной, когда смену можно закрыть.',
+  id: 'shift', title: ['Закройте смену', 'Vardiyayı kapatın'], text: ['Укажите выручку наличными и картой.', 'Nakit ve kart cirosunu girin.'],
+  fallbackText: ['Кнопка появится на главной, когда смену можно закрыть.', 'Vardiyayı kapatabileceğiniz zaman düğme ana sayfada görünür.'],
   icon: ClipboardCheck, target: 'shift-close', fallback: 'nav-home', route: '/',
 };
 const earnings: Step = {
-  id: 'earnings', title: 'Посмотрите начисления', text: 'Выберите месяц и проверьте заработок.',
+  id: 'earnings', title: ['Посмотрите начисления', 'Kazancınızı görün'], text: ['Выберите месяц и проверьте заработок.', 'Bir ay seçip kazancınızı kontrol edin.'],
   icon: Clock3, target: 'payroll-history', fallback: 'nav-home', route: '/',
 };
 const lessons: Step = {
-  id: 'lessons', title: 'Пройдите урок', text: 'Откройте назначенный урок.',
-  fallbackText: 'Здесь появятся назначенные уроки.',
+  id: 'lessons', title: ['Пройдите урок', 'Dersi tamamlayın'], text: ['Откройте назначенный урок.', 'Size atanan dersi açın.'],
+  fallbackText: ['Здесь появятся назначенные уроки.', 'Size atanan dersler burada görünür.'],
   icon: GraduationCap, target: 'first-lesson', fallback: 'nav-learning', route: '/learning',
 };
 const directory: Step = {
-  id: 'directory', title: 'Откройте сотрудников', text: 'Найдите сотрудника по имени.',
+  id: 'directory', title: ['Откройте сотрудников', 'Çalışanlar bölümünü açın'], text: ['Найдите сотрудника по имени.', 'Çalışanı adıyla arayın.'],
   icon: Users, target: 'nav-staff', route: '/staff',
 };
 const order: Step = {
-  id: 'order', title: 'Закажите материалы', text: 'Здесь можно открыть заказ или предзаказ.',
+  id: 'order', title: ['Закажите материалы', 'Malzeme sipariş edin'], text: ['Здесь можно открыть заказ или предзаказ.', 'Buradan sipariş verebilir veya ön sipariş talebi oluşturabilirsiniz.'],
   icon: ShoppingCart, target: 'order', route: '/order',
 };
 
@@ -58,26 +61,26 @@ function guideSteps(role: FirstRunRole, can: (permission: string) => boolean, re
   const steps: Step[] = [];
   if (role === 'manager') {
     if (access.network) steps.push(
-      { id: 'network', title: 'Найдите франчайзи', text: 'Откройте его карточку из списка.', icon: Store, target: 'nav-home', route: '/' },
-      { id: 'leads', title: 'Откройте заявки', text: 'Здесь появляются обращения с сайта.', icon: Inbox, target: 'nav-leads', route: '/leads' },
+      { id: 'network', title: ['Найдите франчайзи', 'Franchise işletmecisini bulun'], text: ['Откройте его карточку из списка.', 'Listeden işletmecinin kartını açın.'], icon: Store, target: 'nav-home', route: '/' },
+      { id: 'leads', title: ['Откройте заявки', 'Başvuruları açın'], text: ['Здесь появляются обращения с сайта.', 'Siteden gelen başvurular burada görünür.'], icon: Inbox, target: 'nav-leads', route: '/leads' },
     );
     if (access.finance) steps.push({
-      id: 'finance', title: access.network ? 'Откройте экономику' : 'Откройте роялти',
-      text: access.network ? 'Выберите месяц для просмотра сводки.' : 'Выберите период для сверки оплат.',
+      id: 'finance', title: access.network ? ['Откройте экономику', 'Finans bölümünü açın'] : ['Откройте роялти', 'Royalti bölümünü açın'],
+      text: access.network ? ['Выберите месяц для просмотра сводки.', 'Özeti görmek için bir ay seçin.'] : ['Выберите период для сверки оплат.', 'Ödemeleri kontrol etmek için dönem seçin.'],
       icon: Wallet, target: 'nav-finance', route: '/finance',
     });
   } else if (role === 'franchisee') {
     if (can('revenue.read')) {
       const mayEnterRevenue = !readOnly && can('revenue.enter');
       steps.push({
-        id: 'revenue', title: mayEnterRevenue ? 'Найдите ввод выручки' : 'Посмотрите историю выручки',
-        text: mayEnterRevenue ? 'Откройте форму выручки за сегодня.' : 'Выберите точку и месяц.',
-        fallbackText: 'На главной можно выбрать точку и день.',
+        id: 'revenue', title: mayEnterRevenue ? ['Найдите ввод выручки', 'Ciro girişini bulun'] : ['Посмотрите историю выручки', 'Ciro geçmişini açın'],
+        text: mayEnterRevenue ? ['Откройте форму выручки за сегодня.', 'Bugünkü ciro giriş formunu açın.'] : ['Выберите точку и месяц.', 'Mağaza ve ay seçin.'],
+        fallbackText: ['На главной можно выбрать точку и день.', 'Ana sayfadan mağaza ve gün seçebilirsiniz.'],
         icon: Store, target: mayEnterRevenue ? 'revenue-entry' : 'nav-home', fallback: 'nav-home', route: '/',
       });
     }
     if (access.finance) steps.push({
-      id: 'finance', title: 'Проверьте финансы', text: 'Выберите месяц для просмотра отчёта.',
+      id: 'finance', title: ['Проверьте финансы', 'Finans raporunu kontrol edin'], text: ['Выберите месяц для просмотра отчёта.', 'Raporu görmek için bir ay seçin.'],
       icon: Wallet, target: 'nav-finance', route: '/finance',
     });
     if (access.staffDirectory) steps.push(directory);
@@ -86,14 +89,14 @@ function guideSteps(role: FirstRunRole, can: (permission: string) => boolean, re
     if (can('shift.work') && !readOnly) steps.push(shift);
     else if (role === 'staff' || can('shift.work')) steps.push(earnings);
     else steps.push({
-      id: 'team-revenue', title: 'Проверьте выручку точек', text: 'Выберите месяц на главной.',
+      id: 'team-revenue', title: ['Проверьте выручку точек', 'Mağaza cirolarını kontrol edin'], text: ['Выберите месяц на главной.', 'Ana sayfadan ay seçin.'],
       icon: Store, target: 'nav-home', route: '/',
     });
     steps.push(lessons);
     if (access.staffDirectory) steps.push(directory);
   } else if (role === 'support') {
     if (can('kb.edit')) steps.push({
-      id: 'questions', title: 'Откройте вопросы', text: 'На главной видны вопросы для поддержки.',
+      id: 'questions', title: ['Откройте вопросы', 'Soruları açın'], text: ['На главной видны вопросы для поддержки.', 'Destek soruları ana sayfada görünür.'],
       icon: Inbox, target: 'nav-home', route: '/',
     });
     if (can('kb.read') || can('kb.edit')) steps.push(knowledge);
@@ -181,6 +184,7 @@ function placeCard(viewport: Rect, target: FocusedRect | undefined, contentHeigh
 }
 
 export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; replay: boolean; onClose: (navigating?: boolean) => void }) {
+  const { t, language } = useLocale();
   const { can } = useSession();
   const { readOnly } = useOwnPartnerLifecycle();
   const location = useLocation();
@@ -319,27 +323,27 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
       data-targeted={Boolean(target)} aria-labelledby={titleId} aria-describedby={progressId + ' ' + textId}
       onCancel={event => { event.preventDefault(); finish(); }} onKeyDown={keyboard}>
       {target && (canOpenTarget ? <button type="button" className="guide-spotlight guide-spotlight-action"
-        data-target={target.name} style={targetStyle} aria-label={active.title} onClick={() => {
+        data-target={target.name} style={targetStyle} aria-label={t(...active.title)} onClick={() => {
           if (location.pathname !== active.route) previewRoute(active.route);
           else if (last) finish();
           else go(steps[index + 1]);
         }} /> : <div className="guide-spotlight" data-target={target.name} style={targetStyle} aria-hidden />)}
       {placement?.arrow && <span className="guide-arrow" style={placement.arrow} aria-hidden />}
       <div ref={panel} className="guide-card" style={placement?.panel}>
-        <div className="guide-meta"><span>{workspaceTitle[role]}</span><span id={progressId}>Шаг {index + 1} из {steps.length}</span></div>
+        <div className="guide-meta"><span>{workspaceTitleFor(role, language)}</span><span id={progressId}>{t(`Шаг ${index + 1} из ${steps.length}`, `Adım ${index + 1}/${steps.length}`)}</span></div>
         <div className="guide-progress" aria-hidden>
           {steps.map((step, i) => <span key={step.id} data-current={i <= index} />)}
         </div>
         <div className="guide-content">
           <span className="guide-icon"><active.icon size={23} aria-hidden /></span>
-          <h2 id={titleId} ref={heading} tabIndex={-1}>{active.title}</h2>
-          <p id={textId}>{target?.name === active.target ? active.text : active.fallbackText ?? active.text}</p>
+          <h2 id={titleId} ref={heading} tabIndex={-1}>{t(...active.title)}</h2>
+          <p id={textId}>{t(...(target?.name === active.target ? active.text : active.fallbackText ?? active.text))}</p>
         </div>
         <div className="guide-actions">
-          <Button variant="ghost" onClick={finish}>{replay ? 'Закрыть' : 'Пропустить'}</Button>
-          {index > 0 && <Button variant="ghost" aria-label="Назад" onClick={() => go(steps[index - 1])}><ArrowLeft size={16} aria-hidden />Назад</Button>}
+          <Button variant="ghost" onClick={finish}>{replay ? t('Закрыть', 'Kapat') : t('Пропустить', 'Atla')}</Button>
+          {index > 0 && <Button variant="ghost" aria-label={t('Назад', 'Geri')} onClick={() => go(steps[index - 1])}><ArrowLeft size={16} aria-hidden />{t('Назад', 'Geri')}</Button>}
           <Button variant="primary" onClick={last ? finish : () => go(steps[index + 1])}>
-            {last ? 'Готово' : 'Далее'}{!last && <ArrowRight size={16} aria-hidden />}
+            {last ? t('Готово', 'Bitti') : t('Далее', 'İleri')}{!last && <ArrowRight size={16} aria-hidden />}
           </Button>
         </div>
       </div>

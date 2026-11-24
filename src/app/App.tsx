@@ -3,6 +3,7 @@ import { createHashRouter, Navigate, RouterProvider, useRouteError } from 'react
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isConfigured } from '../platform/config';
 import { SessionProvider, useSession } from '../platform/session';
+import { LocaleProvider, useLocale } from '../platform/locale';
 import { toAppError } from '../platform/backend';
 import { ToastProvider } from '../ui/toast';
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '../ui';
@@ -64,7 +65,8 @@ function RouteError() {
 }
 
 function NotFound() {
-  return <ErrorState error={{ message: 'not-found', details: 'Страница не найдена' }} />;
+  const { t } = useLocale();
+  return <ErrorState error={{ message: 'not-found', details: t('Страница не найдена', 'Sayfa bulunamadı') }} />;
 }
 
 const router = createHashRouter([
@@ -85,7 +87,7 @@ const router = createHashRouter([
       { path: 'order', element: <WorkspaceRoute feature="order"><OrderPage /></WorkspaceRoute> },
       { path: 'partners/:id', element: <WorkspaceRoute feature="network"><PartnerPage /></WorkspaceRoute> },
       { path: 'leads', element: <WorkspaceRoute feature="network"><LeadsPage /></WorkspaceRoute> },
-      { path: 'royalty', element: <Navigate to="/finance" replace /> },
+      { path: 'royalty', element: <LegacyRoyaltyEntry /> },
       { path: 'finance', element: <WorkspaceRoute feature="finance"><FinanceEntry /></WorkspaceRoute> },
       { path: 'staff', element: <WorkspaceRoute feature="staffDirectory"><StaffPage /></WorkspaceRoute> },
       { path: 'team-access', element: <TeamAccessEntry /> },
@@ -102,11 +104,12 @@ const router = createHashRouter([
 ]);
 
 function BootScreen() {
+  const { t } = useLocale();
   return (
-    <div className="boot-screen" role="status" aria-label="Загрузка">
+    <div className="boot-screen" role="status" aria-label={t('Загрузка', 'Yükleniyor')}>
       <img src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" />
       <div className="boot-bar"><span /></div>
-      <a href={`${import.meta.env.BASE_URL}help.html`} style={{color:'#8798cf',fontSize:14}}>Помощь при сбое</a>
+      <a href={`${import.meta.env.BASE_URL}help.html`} style={{color:'#8798cf',fontSize:14}}>{t('Помощь при сбое', 'Sorun giderme yardımı')}</a>
     </div>
   );
 }
@@ -117,7 +120,7 @@ function Home() {
   const network = workspaceAccess(role, session.can).network;
   const pages = { manager: network ? <NetworkPage /> : <>
     <PageHeader title="Главная" />
-    <EmptyState title="Откройте нужный раздел" text="В меню показаны доступные вам разделы кабинета." />
+    <EmptyState title="Откройте нужный раздел" />
   </>, support: <QuestionsPage home />, staff: <StaffHome />,
     team: <TeamHome />, franchisee: <FranchiseeHome />, pending: null };
   return pages[role];
@@ -143,6 +146,11 @@ function FinanceEntry() {
   return workspaceRole(useSession()) === 'manager' ? <SupplyFinancePage /> : <FinancePage />;
 }
 
+function LegacyRoyaltyEntry() {
+  const role = workspaceRole(useSession());
+  return <Navigate to={role === 'franchisee' ? '/finance?section=expenses' : '/finance'} replace />;
+}
+
 function TeamAccessEntry() {
   const session = useSession();
   const owner = workspaceRole(session) === 'franchisee';
@@ -162,9 +170,11 @@ export function App() {
   return (
     <QueryClientProvider client={qc}>
       <SessionProvider>
-        <ToastProvider>
-          <RouterProvider router={router} />
-        </ToastProvider>
+        <LocaleProvider>
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
+        </LocaleProvider>
       </SessionProvider>
     </QueryClientProvider>
   );
