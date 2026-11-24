@@ -80,6 +80,9 @@ try {
   const doc = app.document;
   const button = label => [...doc.querySelectorAll('main button')].find(item => item.textContent.trim() === label);
   const compact = text => text.replace(/\s/g, '');
+  const period = await until(() => doc.querySelector('details.staff-period'), 'Не появились итоги месяца');
+  assert(!period.open, 'Итоги месяца открыты при входе');
+  period.querySelector('summary').click();
   if (firstOfMonth) {
     await until(() => compact(doc.querySelector('main').textContent).includes('4560₽'), 'Первого числа не открыты начисления за предыдущий месяц');
     assert(doc.querySelector('.payroll-schedule-period:nth-child(2) time')?.dateTime === '2026-11-01', 'Не показана дата сегодняшней выплаты');
@@ -94,7 +97,7 @@ try {
   const navigation = doc.querySelector('main .month-nav');
   assert(doc.querySelectorAll('main .month-nav').length === 1, 'В главной два переключателя месяца');
   assert(link === doc.querySelector('.bottom-nav a') && link.textContent.trim() === 'Главная', 'Главная расположена после другого раздела');
-  assert(!doc.querySelector('main details[open]'), 'Помесячные подробности открыты при входе');
+  assert(!period.querySelector('details[open]'), 'Помесячные подробности открыты при входе');
   const payDetails = [...doc.querySelectorAll('main details')].find(details => details.querySelector('summary').textContent.includes('Мои начисления'));
   const revenueDetails = [...doc.querySelectorAll('main details')].find(details => details.querySelector('summary').textContent.includes(points[0].location_name));
   const firstLabel = revenueDetails?.querySelector('summary span span')?.firstChild;
@@ -115,12 +118,12 @@ try {
   assert(payDetails.textContent.includes('Дополнительная точка') && payDetails.textContent.includes('выручка смен'), 'Дополнительная точка скрыта при нуле основных выходов');
   const close = button('Закрыть смену');
   if (paused) {
-    assert(!close && !doc.querySelector('.shift-gaps button'), 'На паузе доступна сдача выручки');
+    assert(!close && !doc.querySelector('.home-missing button'), 'На паузе доступна сдача выручки');
     assert(payDetails.querySelector('li'), 'На паузе исчезла история смен');
   } else {
   assert(close && !button('Открыть смену'), 'Нужно одно действие для сдачи смены');
   if (historical) {
-    const reminder = doc.querySelector('details.shift-gaps');
+    const reminder = doc.querySelector('details.home-missing');
     assert(reminder, 'Не виден пропуск назначенной точки в другой месяц');
     reminder.open = true;
     (await until(() => reminder.querySelector('button:not(:disabled)'), 'Дата пропуска недоступна')).click();

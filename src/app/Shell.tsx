@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
@@ -7,10 +7,10 @@ import { useSession } from '../platform/session';
 import { useLocale } from '../platform/locale';
 import { LanguageSelect } from '../ui/LanguageSelect';
 import { config } from '../platform/config';
-import { phoneLoginDigits } from '../platform/login';
+import { displayLogin, phoneLoginDigits } from '../platform/login';
 import { changeManagerPhoneLogin } from '../platform/managerLogin';
 import { dropOp, flushOutbox, notifyOutboxChange, onOutboxChange, queuedOperationState, queuedOps } from '../platform/outbox';
-import { navFor, workspaceAccess, workspaceRole, workspaceTitleFor, type NavItem, type WorkspaceRole } from './nav';
+import { activeNavFor, navFor, workspaceAccess, workspaceRole, workspaceTitleFor, type NavItem, type WorkspaceRole } from './nav';
 import { OrderTopButton } from '../modules/orders/OrderLink';
 import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
@@ -207,7 +207,7 @@ function UserMenu({ pending, queueIssue, onLocalWork, showTeamAccess, role }: {
             <div className="profile-name">
               <strong>{me?.user.full_name}</strong>
               <span>{workspaceTitleFor(role, language)}</span>
-              <span>{me?.user.email?.endsWith('@staff.bron.local') ? `+${me.user.email.split('@')[0]}` : me?.user.email}</span>
+              <span>{displayLogin(me?.user.email)}</span>
             </div>
           </div>
           <LanguageSelect automatic />
@@ -262,8 +262,10 @@ export function Shell() {
   const loc = useLocation();
   const role = workspaceRole(session);
   const nav = navFor(role, can, language);
+  const activeNav = activeNavFor(loc.pathname, nav);
   const access = workspaceAccess(role, can);
   const mainRef = useRef<HTMLElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
   const outbox = useOutbox(me?.user.id, online);
   const queueIssue = outbox.readError != null || outbox.sendError != null;
   const [queueOpen, setQueueOpen] = useState(false);
@@ -282,14 +284,34 @@ export function Shell() {
     main.focus({ preventScroll: true });
   }, [loc.pathname]);
 
+  useLayoutEffect(() => {
+    const bar = mobileNavRef.current;
+    const active = bar?.querySelector<HTMLAnchorElement>('a[aria-current]');
+    if (!bar || !active) return;
+    const showActive = () => {
+      if (!bar.clientWidth) return;
+      const left = bar.getBoundingClientRect().left + bar.clientLeft;
+      const right = left + bar.clientWidth;
+      const link = active.getBoundingClientRect();
+      const delta = Math.min(0, link.left - left) || Math.max(0, link.right - right);
+      if (delta) bar.scrollLeft += delta;
+    };
+    showActive();
+    const resize = new ResizeObserver(showActive);
+    resize.observe(bar);
+    for (const item of bar.querySelectorAll('a')) resize.observe(item);
+    return () => resize.disconnect();
+  }, [activeNav, language, nav.length, role]);
+
   const link = (n: NavItem, mobile = false) => (
-    <NavLink key={n.to} to={n.to} end={n.to === '/'} data-tour-target={n.to === '/' ? 'nav-home' : 'nav-' + n.to.slice(1)}
-      className={({ isActive }) => (isActive ? 'active' : undefined)}>
+    <Link key={n.to} to={n.to} data-tour-target={n.to === '/' ? 'nav-home' : 'nav-' + n.to.slice(1)}
+      className={activeNav === n.to ? 'active' : undefined}
+      aria-current={activeNav === n.to ? (loc.pathname === n.to ? 'page' : 'location') : undefined}>
       <n.icon size={mobile ? 22 : 18} aria-hidden />{mobile ? <span className="nav-label">{n.label}</span> : n.label}
       {n.badge === 'learning' && learning.data?.new_day && <span className="learning-dot" aria-label={t('Загляните в обучение сегодня', 'Bugünkü eğitimi inceleyin')} />}
       {n.badge === 'kb' && kbCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={t(`новых: ${kbCount}`, `Yeni: ${kbCount}`)}>{mobile ? '' : kbCount}</span>}
       {n.badge === 'leads' && leadCount > 0 && <span className={mobile ? 'dot' : 'count'} aria-label={t(`новых заявок: ${leadCount}`, `Yeni başvuru: ${leadCount}`)}>{mobile ? '' : leadCount}</span>}
-    </NavLink>
+    </Link>
   );
 
   return (
@@ -348,7 +370,7 @@ export function Shell() {
           ) : <Outlet key={scopeRevision} />}
         </main>
       </div>
-      {nav.length > 0 && <nav className="bottom-nav" aria-label={t('Навигация', 'Gezinme')}>
+      {nav.length > 0 && <nav ref={mobileNavRef} className="bottom-nav" aria-label={t('Навигация', 'Gezinme')}>
         {nav.map((n) => link(n, true))}
       </nav>}
     </div>

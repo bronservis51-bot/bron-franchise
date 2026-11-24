@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canOrderMaterials, navFor, workspaceAccess } from '../../src/app/nav';
+import { activeNavFor, canOrderMaterials, navFor, workspaceAccess } from '../../src/app/nav';
 
 describe('home navigation', () => {
   it.each(['manager', 'franchisee', 'staff', 'team', 'support'] as const)('puts Home first for %s', role => {
@@ -13,6 +13,19 @@ describe('home navigation', () => {
     }
     expect(canOrderMaterials(code => code === 'staff.view')).toBe(false);
     expect(canOrderMaterials(code => code === 'procurement.order')).toBe(true);
+  });
+
+  it('keeps detail pages with their parent section and requires that section to exist', () => {
+    const manager = navFor('manager', code => ['org.manage', 'royalty.manage'].includes(code));
+    const franchisee = navFor('franchisee', code => code === 'staff.view');
+    expect(activeNavFor('/partners/partner-id', manager)).toBe('/');
+    expect(activeNavFor('/royalty/partner-id', manager)).toBe('/finance');
+    expect(activeNavFor('/team-access', franchisee)).toBe('/staff');
+    expect(activeNavFor('/team-access', navFor('franchisee'))).toBeUndefined();
+    expect(activeNavFor('/royalty/partner-id', navFor('manager'))).toBeUndefined();
+    expect(activeNavFor('/learning/lesson/lesson-id', navFor('staff'))).toBe('/learning');
+    expect(activeNavFor('/kb/articles/article-id', manager)).toBe('/kb');
+    expect(activeNavFor('/order', franchisee)).toBeUndefined();
   });
 });
 

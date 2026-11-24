@@ -17,7 +17,7 @@ import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
 import { FinanceDays } from './FinanceEditor';
 import { financeMonthLimit, financeOfficeMonth, financeSelection, type FinanceSection } from './financeNavigation';
-import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, payrollAccrualLabels } from './financeReport';
+import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, financeRevenueMethods, payrollAccrualLabels } from './financeReport';
 import './finance.css';
 
 interface Fin {
@@ -73,7 +73,8 @@ async function financeWorkbook(f: Finance, reportOnly: boolean, language: Langua
     ...(f.current.payroll_halves ? [[{ value: t(FINANCE_PAYROLL_NOTE, 'Maaşlar kapanan vardiyalara göre tahakkuk eder. Ödeme tarihleri planlanandır.'), wrap: true }]] : []),
     [head(t('Статья', 'Kalem')), head(t('Сумма, ', 'Tutar, ') + f.currency)],
     ...financeReportRows(f.current, f.expenses, { language }).map((entry) => [
-      { value: entry.label, indent: entry.indent, wrap: true, fontWeight: entry.total ? 'bold' as const : undefined },
+      { value: entry.detail ? entry.label + ' · ' + entry.detail : entry.label,
+        indent: entry.indent, wrap: true, fontWeight: entry.total ? 'bold' as const : undefined },
       { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
     ]),
   ] };
@@ -94,8 +95,12 @@ async function financeWorkbook(f: Finance, reportOnly: boolean, language: Langua
   const cols = [t('Месяц', 'Ay'), t('Выручка', 'Satış geliri'), t('Наличные', 'Nakit'), t('Карта', 'Kart'),
     t('Без разбивки', 'Belirtilmemiş'), t('План', 'Hedef'), t('Выполнение', 'Gerçekleşen'), t('Зарплата', 'Maaş'),
     t('Расходы', 'Giderler'), t('Остаётся', 'Kalan'), t('Возвраты', 'İadeler')].map(head);
-  const row = (label: string, m: Fin) => [label, money(m.revenue_minor), money(m.cash_minor), money(m.card_minor), money(Number(m.revenue_minor)-Number(m.cash_minor)-Number(m.card_minor)), m.plan_minor ? money(m.plan_minor) : null,
-    m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null, money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
+  const row = (label: string, m: Fin) => {
+    const { cash, card, unspecified } = financeRevenueMethods(m);
+    return [label, money(m.revenue_minor), money(cash), money(card), money(unspecified), m.plan_minor ? money(m.plan_minor) : null,
+      m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null,
+      money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
+  };
   const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? t('все точки', 'tüm noktalar'), money(e.amount_minor), e.note ?? '']);
   if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
   const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month, language) : [];
@@ -141,9 +146,10 @@ function FinanceStatement({ finance }: { finance: Finance }) {
       {totals.pct != null && <span>{t('Выполнено', 'Gerçekleşen')}: {Number(totals.pct).toLocaleString(locale)}%</span>}
     </div>}
     <dl className="finance-lines" aria-label={t('Данные отчёта', 'Rapor verileri')}>
-      {financeReportRows(totals, [], { compact: true, language }).map((row, index, rows) => (
-        <div key={row.label} className={index === rows.length - 1 ? 'finance-result' : undefined}>
-          <dt>{row.label}</dt>
+      {financeReportRows(totals, finance.expenses, { language }).map(row => (
+        <div key={row.id} data-row={row.id} data-indent={row.indent} className={
+          row.id === 'result' ? 'finance-result' : row.id === 'revenue' || row.id === 'expenses' ? 'finance-group' : undefined}>
+          <dt><span>{row.label}</span>{row.detail && <small className="finance-line-detail">{row.detail}</small>}</dt>
           <dd><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
         </div>
       ))}

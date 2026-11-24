@@ -34,13 +34,14 @@ try {
   const outlet = { id: 'cb952096-9771-40c8-a182-0cdca77d759c', name: 'Торговый центр с очень длинным названием', status: 'active' };
   const locations = [outlet];
   if (params.get('locations') === '2') locations.push({ id: 'b2c78fff-5142-4c81-8f4e-6b50410b97de', name: 'Вторая торговая точка', status: 'active' });
-  const commonExpense = { id: 'qa-expense', category: 'Бухгалтерия', location_id: null, location_name: null, amount_minor: 2500, note: null };
+  const commonExpense = { id: 'qa-expense', category: 'Бухгалтерия', location_id: null, location_name: null,
+    amount_minor: 2500, note: null, recurring: true };
   app.fetch = (request, init) => {
     const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
     if (url.pathname.endsWith('/rpc/finance_my')) {
       const { p_month: month, p_location: scope } = JSON.parse(init.body);
       scopes.push(scope);
-      const current = { month, revenue_minor: 15000, cash_minor: 0, card_minor: 0, plan_minor: null, pct: null, payroll_minor: 0,
+      const current = { month, revenue_minor: 15000, cash_minor: 5000, card_minor: 4000, plan_minor: null, pct: null, payroll_minor: 0,
         shifts: 0, rate_bp: 700, royalty_minor: 1050, expenses_minor: scope ? 0 : 2500, net_minor: scope ? 13950 : 11450, is_open: true };
       const closedMonth = new Date(month);
       closedMonth.setUTCMonth(closedMonth.getUTCMonth() - 1);
@@ -111,13 +112,15 @@ try {
   };
   await until(() => doc.querySelector('.finance-statement'));
 
-  await check('компактный отчёт по всем точкам', async () => {
+  await check('отчёт с детализацией по всем точкам', async () => {
     assert(scopes[0] === null, 'по умолчанию запрошена отдельная точка');
     assert(doc.querySelector('main h1')?.textContent === 'Отчёт о прибылях и убытках', 'не показан заголовок ОПиУ');
     const report = doc.querySelector('.finance-statement');
-    const lines = [...report.querySelectorAll('dt')].map(node => node.textContent);
+    const lines = [...report.querySelectorAll('dt > span')].map(node => node.textContent);
     assert(lines.includes('Остаток по внесённым данным') && lines.includes('Роялти по ставке'), 'нет результата или расчётного роялти');
-    assert(!lines.includes('Бухгалтерия') && !lines.includes('Всего расходов'), 'на экране дублируется расшифровка расходов');
+    assert(lines.includes('Бухгалтерия') && lines.includes('Всего расходов'), 'исчезла фактическая статья или итог расходов');
+    assert(['Наличные', 'Карта', 'Способ оплаты не указан'].every(method => lines.includes(method)), 'нет расшифровки выручки');
+    assert(report.querySelector('[data-row="article:Бухгалтерия"] small')?.textContent === 'Регулярные', 'потерялся признак регулярного расхода');
     assert(!doc.querySelector('.fin-chart') && !report.textContent.includes('Отчёт составлен по'), 'остался график или пояснение под отчётом');
     assert(doc.querySelector('.finance-filters select').value === '', 'не выбран общий отчёт');
   });

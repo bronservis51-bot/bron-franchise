@@ -1,13 +1,14 @@
 // Главная франчайзи: выручка за сегодня, план и пропущенные дни.
 import { useEffect, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, CalendarX, Check, Plus } from 'lucide-react';
+import { ArrowUpRight, Check, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 import { formatDate, monthStart } from '../../platform/dates';
 import { useLocale } from '../../platform/locale';
 import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
 import { Alert, Button, DataState, EmptyState, ErrorState, PageHeader, Skeleton } from '../../ui';
+import { MissingRevenue } from '../../ui/MissingRevenue';
 import { MonthNav, PlanCard } from './components';
 import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
 import { canEditRevenueDay, revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
@@ -26,28 +27,20 @@ function financeDays(month: string, location?: string, day?: string) {
   return `/finance?${params}`;
 }
 
-function MissingRevenue({ points, month, showLocation }: {
+function RevenueReminders({ points, month, showLocation }: {
   points: Pick<LocationMonth, 'location_id' | 'location_name' | 'missing_days'>[];
   month: string;
   showLocation: boolean;
 }) {
   const { t, locale } = useLocale();
-  const missing = points.filter(point => point.missing_days.length > 0);
-  if (!missing.length) return null;
-  return <section className="home-missing" aria-labelledby="home-missing-title">
-    <h2 id="home-missing-title"><CalendarX size={18} aria-hidden />{t('Не внесена выручка', 'Geliri girilmeyen günler')}</h2>
-    {missing.map(point => <div className="home-missing-point" key={point.location_id}>
-      {showLocation && <strong>{point.location_name}</strong>}
-      <ul className="home-missing-dates">
-        {point.missing_days.slice(-5).reverse().map(day => <li key={day}>
-          <Link to={financeDays(month, point.location_id, day)}>{formatDate(day, locale).slice(0, 5)}</Link>
-        </li>)}
-        {point.missing_days.length > 5 && <li><Link to={financeDays(month, point.location_id)}>
-          {t(`Ещё ${point.missing_days.length - 5}`, `${point.missing_days.length - 5} gün daha`)}
-        </Link></li>}
-      </ul>
-    </div>)}
-  </section>;
+  return <MissingRevenue points={points.map(point => {
+    const count = point.missing_days.length;
+    const dates = point.missing_days.slice(-5).reverse().map(day => ({
+      label: formatDate(day, locale).slice(0, 5), to: financeDays(month, point.location_id, day),
+    }));
+    if (count > 5) dates.push({ label: t(`Ещё ${count - 5}`, `${count - 5} gün daha`), to: financeDays(month, point.location_id) });
+    return { id: point.location_id, name: showLocation ? point.location_name : undefined, count, dates };
+  })} />;
 }
 
 function AllPoints({ points, month, readOnly, onPick, onEnter }: {
@@ -97,7 +90,7 @@ function AllPoints({ points, month, readOnly, onPick, onEnter }: {
           })}
         </ul>
       </section>
-      {!readOnly && <MissingRevenue points={points} month={month} showLocation />}
+      {!readOnly && <RevenueReminders points={points} month={month} showLocation />}
     </>
   );
 }
@@ -205,7 +198,7 @@ export function FranchiseeHome() {
                       : todayOff ? <Button block className="btn-lg" onClick={() => setEdit({ day: d.today, dayOff: true })}>{t('Сегодня выходной', 'Bugün kapalı')}</Button>
                       : <Button variant="primary" block className="btn-lg" data-tour-target="revenue-entry" onClick={() => setEdit({ day: d.today })}><Plus size={20} aria-hidden />{t('Внести выручку за сегодня', 'Bugünün gelirini gir')}</Button>
                   )}
-                  {!readOnly && current && <MissingRevenue points={[{ ...current, missing_days: d.missing_days }]} month={month} showLocation={false} />}
+                  {!readOnly && current && <RevenueReminders points={[{ ...current, missing_days: d.missing_days }]} month={month} showLocation={false} />}
                 </>
               )}
             </DataState>

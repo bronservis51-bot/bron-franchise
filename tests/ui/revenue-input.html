@@ -39,8 +39,12 @@ try {
   assert(!app.document.querySelector('main .day-list2'), 'Детализация по дням осталась на главной');
   const history = app.document.querySelector('.home-finance-link');
   assert(history?.hash.startsWith('#/finance?section=days&month=2026-11-01&location='), 'Детализация не сохраняет выбранный период и точку');
-  const missingDay = [...app.document.querySelectorAll('.home-missing-dates a')].find(link => link.textContent === '03.11');
+  const reminder = app.document.querySelector('details.home-missing');
+  assert(reminder && !reminder.open, 'Напоминание о пропущенных днях раскрыто при входе');
+  reminder.querySelector('summary').click();
+  const missingDay = [...reminder.querySelectorAll('.home-missing-dates a')].find(link => link.textContent === '03.11' && link.getClientRects().length);
   assert(missingDay?.hash.endsWith('&day=2026-11-03'), 'Пропущенный день нельзя открыть из напоминания');
+  reminder.querySelector('summary').click();
   const fetchFixture = app.fetch;
   const saves = [];
   const daysOff = new Set();

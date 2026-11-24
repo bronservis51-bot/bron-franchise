@@ -58,6 +58,10 @@ try {
   button('Пропустить').click();
 
   await until(() => heading() === 'Франчайзи' && !read('dialog.first-run-dialog[open]'), 'Пропуск не вернул на главную');
+  frame.contentWindow.location.hash = '#/partners/qa-partner';
+  await until(() => read('.bottom-nav a[href="#/"][aria-current="location"]'), 'Карточка франчайзи потеряла активную «Главную»');
+  frame.contentWindow.location.hash = '#/royalty/qa-partner';
+  await until(() => read('.bottom-nav a[href="#/finance"][aria-current="location"]'), 'Карточка роялти потеряла активную «Экономику»');
   read('.bottom-nav a[href="#/finance"]').click();
   await until(() => frame.contentWindow.location.hash === '#/finance' && heading(), 'Не открылась экономика');
   read('[data-tour-target="profile"]').click();
@@ -107,14 +111,25 @@ try {
   assert(!read('main')?.textContent.includes('Вымышленный черновик'), 'Старое название черновика осталось на экране');
 
   const profileLoaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
-  frame.src = '/tests/ui/responsive-app.html?role=team&qa-profile=dual#/';
+  frame.src = '/tests/ui/responsive-app.html?role=team&qa-profile=dual&qa-legacy-login=1#/';
   await profileLoaded;
   (await until(() => read('[data-tour-target="profile"]'), 'Нет кнопки профиля')).click();
   const profile = await until(() => read('dialog.profile-dialog[open]'), 'Профиль не открылся');
   assert(profile.querySelector('.profile-name strong')?.textContent === 'Вымышленный сотрудник профиля', 'Профиль показал чужое имя');
   assert(!/Вымышленный франчайзи профиля|Менеджер продаж/.test(profile.textContent), 'Профиль показал сырой список назначений');
   assert(profile.querySelector('.profile-name span')?.textContent === 'Управляющий', 'Профиль не показал текущую роль');
+  assert(profile.querySelector('.profile-name span:last-child')?.textContent === 'test.owner', 'Профиль не показал логин для входа');
   assert(profile.querySelector('[data-local-work]')?.textContent.includes('Копия и восстановление'), 'Не видно восстановления записей');
+
+  frame.width = 320;
+  const narrowLoaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
+  frame.src = '/tests/ui/responsive-app.html?role=team&text=200&knowledge=1#/kb';
+  await narrowLoaded;
+  const active = await until(() => read('.bottom-nav a[href="#/kb"][aria-current="page"]'), 'Прямая ссылка не выделила «Знания»');
+  const bar = read('.bottom-nav');
+  await until(() => active.getBoundingClientRect().right <= bar.getBoundingClientRect().right + 1, 'Активная вкладка недоступна при тексте 200%');
+  assert(frame.contentDocument.documentElement.scrollWidth <= frame.contentDocument.documentElement.clientWidth + 1,
+    'Нижняя навигация расширила страницу');
 
   result.textContent = 'PASS. Тур подсвечивает реальные кнопки и открывает разделы. Меню обновляется. Черновик в другом разделе сохранён. Закрытый материал скрыт. Профиль без назначений видит состояние ожидания.';
 } catch (error) {
