@@ -10,8 +10,9 @@ import { createDb, readContract, root } from './db-lib.mjs';
 
 const PORT = Number(process.env.PORT ?? 54321);
 const stagingPassword = process.env.BRON_STAGING_ACCOUNT_PASSWORD;
+const rotateStagingLogins = process.argv[2] === '--rotate-staging-logins';
 if (process.env.BRON_STAGING_REQUIRED === '1' && !stagingPassword) throw new Error('The staging account password is required');
-if (stagingPassword && stagingPassword.length < 12) throw new Error('The staging account password must have at least 12 characters');
+if (stagingPassword && stagingPassword.length < 8) throw new Error('The staging account password must have at least 8 characters');
 const LOCAL = join(root, 'local');
 const DATA = join(LOCAL, 'pgdata');
 const FILES = join(LOCAL, 'files');
@@ -21,6 +22,9 @@ if (!existsSync(secretFile)) writeFileSync(secretFile, randomBytes(32).toString(
 const SECRET = readFileSync(secretFile, 'utf8');
 
 const fresh = !existsSync(DATA);
+if (rotateStagingLogins && (!stagingPassword || process.env.BRON_STAGING_REQUIRED !== '1' || fresh)) {
+  throw new Error('Only an existing, isolated staging database can rotate its seeded accounts');
+}
 const passwords = [];
 console.log(fresh ? 'Создаю локальную БД (миграции + seed)…' : 'Открываю локальную БД…');
 const db = fresh
@@ -45,6 +49,23 @@ const db = fresh
       const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
       return new PGlite(DATA, { extensions: { pg_trgm, pgcrypto } });
     })();
+if (rotateStagingLogins) {
+  const accounts = ['fm@demo.example.com', 'alpha.owner@demo.example.com', '79000000011@staff.bron.local',
+    '79000000012@staff.bron.local', '79000000013@staff.bron.local'];
+  try {
+    await db.transaction(async tx => {
+      const updated = await tx.query(`update auth.users
+        set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf'))
+        where email = any($1::text[]) returning id`, [accounts, stagingPassword]);
+      if (updated.rows.length !== accounts.length) throw new Error('One or more staging accounts are missing');
+      await tx.query('delete from local_dev.password where email = any($1::text[])', [accounts]);
+    });
+    console.log('Updated passwords for five staging profiles');
+  } finally {
+    await db.close();
+  }
+  process.exit(0);
+}
 if (fresh && stagingPassword) {
   await db.exec(`
     update public.app_user set full_name = case
@@ -289,13 +310,19 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('access-control-expose-headers', 'content-range, x-supabase-api-version');
   if (req.method === 'OPTIONS') return send(res, 204);
   const url = new URL(req.url, `http://localhost:${PORT}`);
+  const p = url.pathname;
+  const presented = verify((req.headers.authorization ?? '').replace(/^Bearer /i, ''));
+  const claims = stagingPassword && presented?.typ !== 'access' ? null : presented;
+  if (stagingPassword && !claims) {
+    const allowed = (req.method === 'POST' && (p === '/auth/v1/token' || p === '/rest/v1/rpc/ping')) ||
+      (req.method === 'GET' && (p === '/auth/v1/health' || p.startsWith('/storage/v1/object/sign/private-files/')));
+    if (!allowed) return send(res, 401, { code: 'login_required', message: 'Sign in to the preview' });
+  }
   const chunks = [];
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks);
   const json = () => { try { return raw.length ? JSON.parse(raw.toString()) : {}; } catch { return {}; } };
-  const claims = verify((req.headers.authorization ?? '').replace(/^Bearer /i, ''));
   const headers = { 'x-request-id': req.headers['x-request-id'] ?? null };
-  const p = url.pathname;
   try {
     // Auth
     if (p === '/auth/v1/token' && req.method === 'POST') {

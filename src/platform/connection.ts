@@ -1,18 +1,15 @@
 // Read-only probes. A timeout describes the observation, never its unproven cause.
-import { config } from './config';
-
 export type Probe = { ok: boolean; code: string; ms: number };
 export type Connection = { checkedAt: string; auth: Probe; data: Probe };
 export async function probe(url: string, key: string, service: 'auth' | 'data', signal?: AbortSignal, timeoutMs = 20_000): Promise<Probe> {
   const start = performance.now(); const ctrl = new AbortController();
   const abort = () => ctrl.abort(); signal?.addEventListener('abort', abort, {once:true});
   const timer = setTimeout(abort, timeoutMs);
-  const staging = config.appEnv === 'staging' && typeof location !== 'undefined' && url === location.origin;
   try {
     if (signal?.aborted) ctrl.abort();
     const r = await fetch(`${url}${service === 'auth' ? '/auth/v1/health' : '/rest/v1/rpc/ping'}`, {
       method: service === 'auth' ? 'GET' : 'POST', headers: {apikey:key,'Content-Type':'application/json'},
-      ...(service === 'data' ? {body:'{}'} : {}), signal:ctrl.signal, cache:'no-store', credentials:staging ? 'same-origin' : 'omit',
+      ...(service === 'data' ? {body:'{}'} : {}), signal:ctrl.signal, cache:'no-store', credentials:'omit',
     });
     if (!r.ok) return {ok:false,code:`${service.toUpperCase()}-HTTP-${r.status}`,ms:Math.round(performance.now()-start)};
     let body: unknown;

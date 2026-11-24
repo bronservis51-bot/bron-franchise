@@ -9,15 +9,12 @@ preview.152-228-115-115.sslip.io {
 	}
 
 	route {
-		handle /_preview/access {
+		redir /_preview/access / 303
+		handle /auth/v1/token {
 			request_body {
-				max_size 2KB
+				max_size 8KB
 			}
 			reverse_proxy 172.19.0.1:54981
-		}
-
-		forward_auth 172.19.0.1:54981 {
-			uri /_preview/check
 		}
 
 		@api path /auth/v1/* /rest/v1/* /storage/v1/*

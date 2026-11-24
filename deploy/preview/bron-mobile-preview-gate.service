@@ -1,5 +1,5 @@
 [Unit]
-Description=Bron Service mobile preview sign-in gate
+Description=Bron Service mobile preview API proxy
 After=docker.service bron-mobile-preview-api.service
 Requires=docker.service
 

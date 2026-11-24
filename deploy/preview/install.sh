@@ -59,14 +59,60 @@ def write_once(name, text):
     if not path.exists():
         with path.open('x', encoding='ascii') as f:
             f.write(text)
-write_once('gate.env', 'BRON_PREVIEW_ORIGIN=' + sys.argv[2] +
-           '\nBRON_PREVIEW_CODE=' + token_urlsafe(18) +
-           '\nBRON_PREVIEW_COOKIE_SECRET=' + token_urlsafe(32) + '\n')
+write_once('gate.env', 'BRON_PREVIEW_ORIGIN=' + sys.argv[2] + '\n')
 write_once('api.env', 'BRON_STAGING_ACCOUNT_PASSWORD=' + token_urlsafe(18) + '\n')
 PY
 
 prior_source=$(readlink "$root/current" || true)
 prior_site=$(readlink "$web/mobile-preview" || true)
+
+# Replace only the managed preview block and keep the bind-mounted file inode.
+backup=$(mktemp "$private/caddy-before.XXXXXX")
+candidate=$(mktemp "$private/caddy-candidate.XXXXXX")
+cat "$caddy" > "$backup"
+python3 - "$backup" "$release/ops/Caddyfile" "$candidate" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+previous, preview, output = map(Path, sys.argv[1:])
+active = previous.read_bytes()
+updated = preview.read_bytes()
+block = re.compile(rb'^# BEGIN BRON MOBILE PREVIEW\n.*?^# END BRON MOBILE PREVIEW\n?', re.MULTILINE | re.DOTALL)
+if not block.fullmatch(updated):
+    raise SystemExit('Invalid managed preview block')
+if active.count(b'# BEGIN BRON MOBILE PREVIEW') == active.count(b'# END BRON MOBILE PREVIEW') == 0:
+    output.write_bytes(active + b'\n' + updated)
+elif active.count(b'# BEGIN BRON MOBILE PREVIEW') == active.count(b'# END BRON MOBILE PREVIEW') == 1:
+    result, count = block.subn(lambda _: updated, active)
+    if count != 1:
+        raise SystemExit('Could not replace the managed preview block')
+    output.write_bytes(result)
+else:
+    raise SystemExit('Ambiguous managed preview block')
+PY
+if ! cmp -s "$backup" "$candidate"; then
+  docker cp "$candidate" "$front:/tmp/bron-mobile-preview.Caddyfile"
+  docker exec "$front" caddy validate --config /tmp/bron-mobile-preview.Caddyfile --adapter caddyfile
+fi
+
+if [[ ${BRON_PREVIEW_PRESERVE_DATA:-0} == 1 ]]; then
+  [[ "$prior_source" == "$root/releases/"* && "${prior_source##*/}" =~ ^[0-9a-f]{40}$ ]]
+  prior_data=$(readlink -e "$prior_source/backend/local")
+  [[ "$prior_data" == "$state/"* && "${prior_data##*/}" =~ ^[0-9a-f]{40}$ ]]
+  diff -qr "$prior_source/backend/supabase/migrations" "$release/backend/supabase/migrations"
+  systemctl stop bron-mobile-preview-api.service
+  if ! cp -a --reflink=auto "$prior_data/." "$state/$version/" ||
+     ! systemd-run --wait --collect --pipe --quiet --uid=bron-preview --gid=bron-preview \
+        --property=EnvironmentFile="$private/api.env" --setenv=BRON_STAGING_REQUIRED=1 \
+        --property=WorkingDirectory="$release/backend" --property=InaccessiblePaths=/opt/bron \
+        "$root/runtime/node" scripts/local-backend.mjs --rotate-staging-logins; then
+    systemctl start bron-mobile-preview-api.service
+    printf 'Could not prepare the preserved preview data.\n' >&2
+    exit 1
+  fi
+fi
+
 switch_link() {
   local target=$1 name=$2
   ln -s -- "$target" "$name.next"
@@ -89,26 +135,17 @@ restore() {
 }
 install -m 0644 "$release"/ops/*.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl restart bron-mobile-preview-api.service bron-mobile-preview-gate.service
-if ! curl -fsS --retry 15 --retry-connrefused --retry-delay 2 --max-time 3 http://127.0.0.1:54982/auth/v1/health >/dev/null ||
-   [[ "$(docker exec "$front" curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://172.19.0.1:54981/_preview/check)" != 401 ]]; then
+if ! systemctl restart bron-mobile-preview-api.service bron-mobile-preview-gate.service ||
+   ! curl -fsS --retry 15 --retry-connrefused --retry-delay 2 --max-time 3 http://127.0.0.1:54982/auth/v1/health >/dev/null ||
+   ! docker exec "$front" curl -fsS --max-time 3 http://172.19.0.1:54981/auth/v1/health >/dev/null ||
+   [[ "$(docker exec "$front" curl -sS -o /dev/null -w '%{http_code}' --max-time 3 -X POST http://172.19.0.1:54981/rest/v1/rpc/me)" != 401 ]]; then
   restore
   printf 'Preview services did not become ready.\n' >&2
   exit 1
 fi
 switch_link ".mobile-preview-releases/$version" "$web/mobile-preview"
 
-if ! grep -qx '# BEGIN BRON MOBILE PREVIEW' "$caddy"; then
-  # The running Caddy keeps the last valid config. Preserve the bind-mounted inode.
-  backup=$(mktemp "$private/caddy-before.XXXXXX")
-  candidate=$(mktemp "$private/caddy-candidate.XXXXXX")
-  cat "$caddy" > "$backup"
-  { cat "$backup"; printf '\n'; cat "$release/ops/Caddyfile"; } > "$candidate"
-  docker cp "$candidate" "$front:/tmp/bron-mobile-preview.Caddyfile"
-  if ! docker exec "$front" caddy validate --config /tmp/bron-mobile-preview.Caddyfile --adapter caddyfile; then
-    restore
-    exit 1
-  fi
+if ! cmp -s "$backup" "$candidate"; then
   cat "$candidate" > "$caddy"
   if ! docker exec "$front" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
     cat "$backup" > "$caddy"
