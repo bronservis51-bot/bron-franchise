@@ -28,7 +28,7 @@ try {
   frame.src = '/tests/ui/responsive-app.html?role=staff&shift=open&text=200#/';
   const open = await until(() => {
     const card = read('.shift-card');
-    const action = card && button(card, 'Закрыть смену и внести выручку');
+    const action = card && button(card, 'Закрыть смену');
     return action && !action.disabled && action;
   }, 'Открытая смена не найдена', 20000);
   const app = frame.contentWindow;

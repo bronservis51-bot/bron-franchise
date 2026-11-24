@@ -1,43 +1,10 @@
-.home-missing {
-  display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-}
-.home-missing h2 {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  font-size: var(--fs);
-  color: var(--warning);
-}
-.home-missing h2 svg { flex: none; }
-.home-missing-point { display: grid; gap: 6px; min-width: 0; }
-.home-missing-point strong { overflow-wrap: anywhere; }
-.home-missing-dates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.home-missing-dates a, .home-finance-link {
+.home-finance-link {
   display: inline-flex;
   align-items: center;
+  justify-self: start;
+  gap: 8px;
   min-height: 44px;
   color: var(--link);
   font-weight: 600;
 }
-.home-missing-dates a {
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: var(--surface-2);
-  text-decoration: none;
-}
-.home-missing-dates a:hover { text-decoration: underline; }
-.home-finance-link { justify-self: start; gap: 8px; }
 .home-finance-link svg { flex: none; }

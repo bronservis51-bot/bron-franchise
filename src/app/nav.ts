@@ -11,6 +11,14 @@ export interface NavItem {
   badge?: 'kb' | 'leads' | 'learning';
 }
 
+export function activeNavFor(pathname: string, items: readonly NavItem[]) {
+  const path = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  const section = /^\/partners\/[^/]+$/.test(path) ? '/'
+    : /^\/royalty(?:\/[^/]+)?$/.test(path) ? '/finance'
+    : path === '/team-access' ? '/staff' : path;
+  return items.find(item => item.to === section || (item.to !== '/' && section.startsWith(item.to + '/')))?.to;
+}
+
 const training: NavItem = {to:'/learning',label:'Обучение',icon:GraduationCap,badge:'learning'};
 const home: NavItem = { to: '/', label: 'Главная', icon: Home };
 const staff: NavItem = { to: '/staff', label: 'Сотрудники', icon: Users };

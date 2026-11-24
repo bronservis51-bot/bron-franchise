@@ -1,5 +1,6 @@
 /** Public login identifiers are not credentials. Passwords are sent only to Auth. */
 export const LOGIN_DOMAIN = 'access.bron.local';
+const PHONE_LOGIN_DOMAIN = 'staff.bron.local';
 
 /** Phone login for explicit account management; never guesses a phone from a name. */
 export function phoneLoginDigits(value: string): string | null {
@@ -16,6 +17,19 @@ export function phoneLoginInitial(value?: string | null): string {
   return phoneLoginDigits((value ?? '').replace(/@(?:staff|access)\.bron\.local$/i, '')) ?? '';
 }
 
+export function displayLogin(identity?: string | null): string {
+  if (!identity) return '';
+  const at = identity.lastIndexOf('@');
+  if (at < 0) return identity;
+  const domain = identity.slice(at + 1).toLowerCase();
+  if (domain === LOGIN_DOMAIN) return identity.slice(0, at);
+  if (domain === PHONE_LOGIN_DOMAIN) {
+    const phone = phoneLoginInitial(identity);
+    if (phone) return `+${phone}`;
+  }
+  return identity;
+}
+
 export function loginEmail(value: string): string {
   const login = value.trim().toLowerCase();
   if (login.includes('@')) return login;
@@ -24,7 +38,7 @@ export function loginEmail(value: string): string {
     if (/^8\d{10}$/.test(digits)) digits = `7${digits.slice(1)}`;
     if (/^9\d{9}$/.test(digits)) digits = `7${digits}`;
     if (digits.length < 10 || digits.length > 15) throw new Error('Неверный логин');
-    return `${digits}@staff.bron.local`;
+    return `${digits}@${PHONE_LOGIN_DOMAIN}`;
   }
   if (!/^[a-z][a-z0-9._-]{1,39}$/.test(login)) throw new Error('Неверный логин');
   return `${login}@${LOGIN_DOMAIN}`;

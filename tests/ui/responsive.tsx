@@ -66,7 +66,8 @@ if (qaParams.get('role') === 'franchisee') {
 const originalFetch = window.fetch;
 if(qaParams.get('role')==='staff' || qaParams.get('role')==='team') {
  const team=qaParams.get('role')==='team';
- const permissions = ['kb.read', 'shift.work'];
+ const permissions = ['kb.read'];
+ if (qaParams.get('shift-work') !== 'deny') permissions.push('shift.work');
  if (team && !['staff-view', 'staff-create', 'procurement-order'].some(flag => qaParams.has(flag))) permissions.push('staff.manage');
  if (qaParams.get('staff-view') === 'allow' || (team && qaParams.get('staff-view') !== 'deny')) permissions.push('staff.view');
  if (qaParams.get('staff-create') === 'allow' || (team && qaParams.get('staff-create') !== 'deny')) permissions.push('staff.create');
@@ -80,6 +81,7 @@ if (qaParams.get('qa-profile') === 'dual') {
     { ...me.assignments[0], id: 'qa-sales', role: 'franchisee_staff', role_name: 'Менеджер продаж', scope_name: 'Вымышленный франчайзи профиля' },
   ];
 }
+if (qaParams.has('qa-legacy-login')) me.user.email = 'test.owner@access.bron.local';
 if(qaParams.get('role')==='support') me.assignments=[{id:'qa-tech',role:'technical_specialist',role_name:'Технический специалист',scope_type:'company',scope_id:null,scope_name:'Техническая поддержка',permissions:['kb.read','kb.edit']}];
 if (qaParams.get('role') === 'pending') me.assignments = [];
 if (qaParams.has('access-refresh')) {
@@ -224,7 +226,7 @@ if(qaParams.get('scene')){
   },50);setTimeout(()=>clearInterval(timer),10_000);
  }else{
  const resolving=qaParams.get('scene')==='resolve';
- const desired=qaParams.get('scene')==='close'?'Закрыть смену и внести выручку':'Разобрать';
+ const desired=qaParams.get('scene')==='close'?'Закрыть смену':'Разобрать';
  const timer=setInterval(()=>{
   const buttons=[...document.querySelectorAll('button')];
   const section=resolving&&buttons.find(b=>b.textContent?.trim()==='Смены и начисления'&&b.getAttribute('aria-pressed')==='false');

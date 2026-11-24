@@ -1,13 +1,14 @@
 // Экран сотрудника: закрытие смены с выручкой и личные начисления.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { calculatePay, type ShiftPolicy } from './Motivation';
 import { addDays, dayLabel, formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { localized, useLocale, type Language, type UiLocale } from '../../platform/locale';
 import { formatMoneyShort, sumMinor, type MinorInput } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { ActionError, Alert, Button, Card, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox, Select } from '../../ui';
+import { ActionError, Alert, Button, ConfirmDialog, DataState, EmptyState, Field, Input, Money, MoneyInput, Checkbox, Select } from '../../ui';
+import { MissingRevenue } from '../../ui/MissingRevenue';
 import {onOutboxChange,queuedOps} from '../../platform/outbox';
 import { shiftCancel, shiftClose, shiftSubmit, staffHome, type CloseResult, type Shift, type StaffHomeData } from './api';
 import { MonthNav } from '../revenue/components';
@@ -238,22 +239,24 @@ function ShiftHistory({ userId, current, pointRevenue }: { userId: string; curre
     queryFn: () => staffHome(month),
     refetchInterval: 120_000,
   });
+  const visibleMonth = currentView ? current : history.data;
   const compact = Boolean(pointRevenue);
-  const content = (
-    <>
+  return <details className="home-disclosure staff-period">
+    <summary data-tour-target="payroll-history">
+      <span className="staff-disclosure-label">
+        <strong>{compact ? t('Итоги месяца', 'Ay özeti') : t('Смены и начисления', 'Vardiya ve kazanç')}</strong>
+        {visibleMonth && <span className="staff-period-preview"><Money minor={visibleMonth.month_earned_minor} currency={visibleMonth.currency} short /></span>}
+      </span>
+      <ChevronDown size={18} aria-hidden />
+    </summary>
+    <div className="home-disclosure-body">
       <MonthNav month={month} max={currentMonth} onChange={setSelectedMonth} />
       {currentView ? current && <ShiftMonth data={current} current compact={compact} /> : history.isPaused && !history.data
         ? <p className="faint" role="status">{t('Для загрузки этого месяца нужна связь.', 'Bu ayı yüklemek için internet bağlantısı gerekiyor.')}</p>
         : <DataState query={history}>{(data) => <ShiftMonth data={data} compact={compact} />}</DataState>}
       {pointRevenue?.(month)}
-    </>
-  );
-  return compact ? <Card title={<h2 className="card-title" data-tour-target="payroll-history">{t('Итоги месяца', 'Ay özeti')}</h2>} className="team-monthly">{content}</Card> : (
-    <section className="staff-history">
-      <h2 className="section-title" data-tour-target="payroll-history">{t('Мои смены и начисления', 'Vardiyalarım ve kazancım')}</h2>
-      {content}
-    </section>
-  );
+    </div>
+  </details>;
 }
 
 export function MonthlyDetails({ label, total, currency, children }: {
@@ -272,7 +275,7 @@ function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; curren
   const { t, locale } = useLocale();
   const shiftCount = `${d.month_shifts} ${d.month_shifts % 10 === 1 && d.month_shifts % 100 !== 11 ? 'смена' : [2, 3, 4].includes(d.month_shifts % 10) && ![12, 13, 14].includes(d.month_shifts % 100) ? 'смены' : 'смен'}`;
   const revenue = formatMoneyShort(d.month_revenue_minor, d.currency, locale);
-  const activity = t(`${shiftCount} · выручка смен ${revenue}`, `${d.month_shifts} vardiya · ciro ${revenue}`);
+  const activity = t(`${shiftCount}, выручка смен ${revenue}`, `${d.month_shifts} vardiya, ciro ${revenue}`);
   const fixed = d.pay_policy && 'mode' in d.pay_policy ? d.pay_policy : { fee_minor: d.shift_fee_minor, rate_bp: d.rate_bp };
   const terms = current && (d.pay_policy && !('mode' in d.pay_policy)
     ? t('По ступеням кассы: минимум или процент, плюс премия', 'Ciro kademesine göre: asgari tutar veya ciro yüzdesi, artı bonus')
@@ -359,7 +362,7 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
   return (
     <div className="home staff-home">
       <header className="home-head">
-        <div className="home-date">{new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div className="home-date">{new Date(q.data?.today ? `${q.data.today}T12:00:00Z` : Date.now()).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', ...(q.data?.today ? { timeZone: 'UTC' } : {}) })}</div>
         <h1>{t('Смена', 'Vardiya')}</h1>
       </header>
 
@@ -369,24 +372,33 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
             const openShift = d.open_shift?.id === saved?.shift.id ? null : d.open_shift;
             const receipts = closedReceipts(d, saved);
             const queuedConfirmed = shownQueued && receipts.some(({ shift }) => shownQueued.key === shift.id || shownQueued.key === targetKey(shift.location_id, shift.day));
-            const gaps = d.locations.filter(point => point.missing_periods?.length);
+            const queuedReceipt = queuedConfirmed ? undefined : shownQueued;
+            const primaryReceipt = queuedReceipt ? undefined : receipts.find(({ shift }) => shift.id === saved?.shift.id) ?? receipts[0];
+            const otherReceipts = receipts.filter(receipt => receipt !== primaryReceipt);
+            const renderReceipt = ({ shift, currency, pointName }: SavedShift) => (
+              <ShiftReceipt key={shift.id} day={shift.day} pointName={pointName} amount={shift.earned_minor}
+                currency={currency} announce={saved?.shift.id === shift.id}>
+                {canCorrect(shift) && <Button size="sm" disabled={shiftBlocked(shift.id) || shiftBlocked(targetKey(shift.location_id, shift.day))}
+                  onClick={() => setClosing({ shift: { ...shift, location_name: pointName } })}>{t('Исправить смену', 'Vardiyayı düzelt')}</Button>}
+              </ShiftReceipt>
+            );
             return (
               <>
                 {readOnly ? <div className="alert tone-info" role="status">
                   <div className="alert-body">{mayCloseShifts
                     ? t('Кабинет доступен для просмотра. Отправка смен приостановлена.', 'Hesap görüntülemeye açık. Vardiya gönderimi durduruldu.')
                     : t('Вы можете смотреть свои начисления. Для закрытия смен обратитесь к франчайзи.', 'Kazancınızı görüntüleyebilirsiniz. Vardiyayı kapatmak için işletme sahibinizle görüşün.')}
-                  {openShift && <p>{t('Незакрытая смена', 'Açık vardiya')} · {openShift.location_name} · {formatDate(openShift.day, locale)}</p>}
+                  {openShift && <p>{t('Открытая смена', 'Açık vardiya')}, {formatDate(openShift.day, locale)}. {openShift.location_name}</p>}
                   </div>
                 </div> : openShift ? (
                   <section className="shift-card" aria-label={t('Открытая смена', 'Açık vardiya')}>
                     <div className="shift-label">{t('Незакрытая смена', 'Açık vardiya')}</div>
                     <div className="staff-open-details"><span>{dayLabel(openShift.day, locale)}</span><span>{openShift.location_name}</span></div>
-                    {d.locations.find(l => l.location_id === openShift.location_id)?.today !== openShift.day && <p className="danger-text">{t('Укажите выручку за дату открытой смены. Если открыли её по ошибке, отмените открытие.', 'Açık vardiyanın tarihine ait ciroyu girin. Vardiyayı yanlışlıkla açtıysanız iptal edin.')}</p>}
+                    {d.locations.find(l => l.location_id === openShift.location_id)?.today !== openShift.day && <p className="danger-text">{t('Сдайте выручку за указанную дату.', 'Belirtilen tarihin cirosunu girin.')}</p>}
                     <Button variant="primary" block className="btn-lg" data-tour-target="shift-close" disabled={shiftBlocked(openShift.id)} onClick={() => setClosing({ shift: openShift })}>
-                      {t('Закрыть смену и внести выручку', 'Vardiyayı kapat ve ciroyu gir')}
+                      {t('Закрыть смену', 'Vardiyayı kapat')}
                     </Button>
-                    <button type="button" className="link-btn" disabled={shiftBlocked(openShift.id)} onClick={() => setCancelling(openShift)}>{t('Открыл по ошибке — отменить', 'Yanlış açılan vardiyayı iptal et')}</button>
+                    <button type="button" className="link-btn" disabled={shiftBlocked(openShift.id)} onClick={() => setCancelling(openShift)}>{t('Отменить открытие', 'Vardiyayı iptal et')}</button>
                   </section>
                 ) : d.locations.length ? (
                   <section className="stack" aria-label={t('Смены сегодня', 'Bugünkü vardiyalar')}>
@@ -399,42 +411,25 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                   </section>
                 ) : <EmptyState title={t('Вам пока не назначены точки', 'Henüz atanmış mağazanız yok')} text={t('Попросите франчайзи добавить вас на точку.', 'İşletme sahibinizden sizi bir mağazaya atamasını isteyin.')} />}
 
-                {shownQueued && !queuedConfirmed && <ShiftReceipt day={shownQueued.day} pointName={shownQueued.pointName}
-                  amount={shownQueued.earned} currency={shownQueued.currency} queued announce />}
-                {!readOnly && !openShift && receipts.map(({ shift, currency, pointName }) => (
-                  <ShiftReceipt key={shift.id} day={shift.day} pointName={pointName} amount={shift.earned_minor}
-                    currency={currency} announce={saved?.shift.id === shift.id}>
-                    {canCorrect(shift) && <Button size="sm" disabled={shiftBlocked(shift.id) || shiftBlocked(targetKey(shift.location_id, shift.day))}
-                      onClick={() => setClosing({ shift: { ...shift, location_name: pointName } })}>{t('Исправить смену', 'Vardiyayı düzelt')}</Button>}
-                  </ShiftReceipt>
-                ))}
+                {queuedReceipt && <ShiftReceipt day={queuedReceipt.day} pointName={queuedReceipt.pointName}
+                  amount={queuedReceipt.earned} currency={queuedReceipt.currency} queued announce />}
+                {!readOnly && !openShift && <>
+                  {primaryReceipt && renderReceipt(primaryReceipt)}
+                  {otherReceipts.length > 0 && <details className="home-disclosure">
+                    <summary><strong>{t('Другие закрытые смены', 'Diğer kapanan vardiyalar')}</strong><ChevronDown size={18} aria-hidden /></summary>
+                    <div className="home-disclosure-body">{otherReceipts.map(renderReceipt)}</div>
+                  </details>}
+                </>}
 
-                {!readOnly && gaps.length > 0 && <section className="staff-calendar" aria-label={t('Дни без выручки', 'Ciro kaydı eksik günler')}>
-                  <h2 className="section-title">{t('Дни без выручки', 'Ciro kaydı eksik günler')}</h2>
-                  {gaps.map(point => (
-                    <details className="shift-gaps" key={point.location_id}>
-                      <summary>
-                        <span className="shift-gaps-icon"><CalendarDays size={19} aria-hidden /></span>
-                        <span className="shift-gaps-title"><strong>{point.location_name}</strong>
-                          <span>{point.missing_count ? t(`Нет выручки за ${point.missing_count} дн.`, `${point.missing_count} günün ciro kaydı eksik`) : t('Пропущенные дни', 'Eksik günler')}</span></span>
-                        <ChevronDown className="shift-gaps-chevron" size={18} aria-hidden />
-                      </summary>
-                      <div className="shift-gaps-content">
-                        <p>{openShift ? t('Сначала закройте открытую смену.', 'Önce açık vardiyayı kapatın.') : t('Если вы работали в эти дни, выберите дату своей смены.', 'Bu günlerde çalıştıysanız vardiya tarihinizi seçin.')}</p>
-                        <ul>
-                          {point.missing_periods!.map(period => {
-                            const label = formatDate(period.from, locale) + (period.until === period.from ? '' : ` — ${formatDate(period.until, locale)}`);
-                            return <li key={period.from}>{openShift ? <span>{label}</span> :
-                              <button type="button" disabled={!pending.isSuccess}
-                                onClick={() => setClosing({ locationId: point.location_id, day: period.from })}>
-                                {label}<ChevronRight size={16} aria-hidden />
-                              </button>}</li>;
-                          })}
-                        </ul>
-                      </div>
-                    </details>
-                  ))}
-                </section>}
+                {!readOnly && <MissingRevenue hint={openShift ? t('Сначала закройте открытую смену.', 'Önce açık vardiyayı kapatın.')
+                  : t('Выберите дату, если вы работали в этот день.', 'Çalıştığınız günü seçin.')}
+                  points={d.locations.map(point => ({ id: point.location_id, name: point.location_name, count: point.missing_count,
+                    dates: (point.missing_periods ?? []).map(({ from, until }) => {
+                      const label = formatDate(from, locale) + (until === from ? '' : ` – ${formatDate(until, locale)}`);
+                      if (openShift || !available.some(item => item.location_id === point.location_id)) return { label };
+                      return { label, disabled: !pending.isSuccess, onSelect: () => setClosing({ locationId: point.location_id, day: from }) };
+                    }),
+                  }))} />}
 
                 <ActionError error={cancel.error} />
                 {pending.isError && <Alert tone="danger" title={t('Не удалось проверить очередь смен', 'Vardiya kuyruğu kontrol edilemedi')}

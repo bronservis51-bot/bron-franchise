@@ -10,7 +10,7 @@ const frame = document.querySelector('#app');
 const result = document.querySelector('#result');
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario');
-const closeLabel = 'Закрыть смену и внести выручку';
+const closeLabel = 'Закрыть смену';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function until(read, failure, timeout = 6000) {
@@ -33,7 +33,7 @@ try {
   const liveButton = await until(() => [...frame.contentDocument.querySelectorAll('.shift-card button')].find(b => b.textContent.trim() === closeLabel && !b.disabled), 'Не появилась открытая смена', 15000);
   const app = frame.contentWindow;
   const doc = app.document;
-  const gaps = await until(() => doc.querySelector('.shift-gaps'), 'Не показаны пропущенные дни');
+  const gaps = await until(() => doc.querySelector('.home-missing'), 'Не показаны пропущенные дни');
   const summary = gaps.querySelector('summary');
   summary.click();
   const headingBounds = summary.getBoundingClientRect();
@@ -72,6 +72,10 @@ try {
   };
 
   if (scenario === 'history') {
+    const period = doc.querySelector('details.staff-period');
+    assert(period && !period.open, 'При входе видны подробности прошлых смен');
+    await until(() => period.querySelector('.staff-period-preview'), 'Нет краткой суммы начислений');
+    period.querySelector('summary').click();
     const monthButton = label => doc.querySelector(`button[aria-label="${label}"]`);
     const previous = await until(() => monthButton('Предыдущий месяц'), 'В «Моих сменах» нельзя выбрать прошлый месяц');
     assert(monthButton('Следующий месяц').disabled, 'Кабинет позволяет выбрать будущий месяц');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loginEmail, stagingLoginEmail } from '../../src/platform/login';
+import { displayLogin, loginEmail, stagingLoginEmail } from '../../src/platform/login';
 
 describe('personal login identifiers', () => {
   it('accepts short logins, trims whitespace and ignores case', () => {
@@ -7,6 +7,15 @@ describe('personal login identifiers', () => {
   });
   it('keeps email sign-in available', () => {
     expect(loginEmail('  Person@Example.COM ')).toBe('person@example.com');
+  });
+  it.each([
+    ['owner.one@access.bron.local', 'owner.one'],
+    ['79001234567@staff.bron.local', '+79001234567'],
+    ['905551234567@staff.bron.local', '+905551234567'],
+    ['uprav@example.org', 'uprav@example.org'],
+  ])('shows the usable login for %s', (identity, label) => {
+    expect(displayLogin(identity)).toBe(label);
+    expect(loginEmail(label)).toBe(identity);
   });
   it('maps readable test aliases separately from ordinary production logins', () => {
     expect(stagingLoginEmail('  SET  ')).toBe('fm@demo.example.com');
