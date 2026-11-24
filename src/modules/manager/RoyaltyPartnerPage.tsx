@@ -23,10 +23,9 @@ function RateDialog({ partner, current, onClose }: { partner: string; current: n
   return (
     <ConfirmDialog open title="Ставка роялти" confirmLabel="Сохранить ставку" busy={m.isPending} error={m.error}
       disabled={!Number.isFinite(bp) || bp < 0 || bp > 10000} onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">По умолчанию 7 %. Новая ставка действует с выбранного месяца; более ранние месяцы считаются по прежней.</p>
       <div className="grid grid-2" style={{ gap: 12 }}>
         <Field label="Ставка, %">{(id) => <Input id={id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} />}</Field>
-        <Field label="Действует с">{(id) => (
+        <Field label="Действует с" help="Выбранный месяц уже считается по новой ставке." helpLabel="Когда применяется ставка">{(id) => (
           <Select id={id} value={from} onChange={(e) => setFrom(e.target.value)}>
             {monthOptions(24).map((x) => <option key={x} value={x}>{monthLabel(x)}</option>)}
           </Select>

@@ -4,10 +4,14 @@
   vertical-align: middle;
 }
 
-.help-tip-trigger {
+.help-tip-trigger.icon-btn {
   width: var(--touch);
   height: var(--touch);
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
 }
+.help-tip-trigger.icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .help-tip-popover {
   position: fixed;
@@ -16,7 +20,9 @@
   width: max-content;
   margin: 0;
   padding: var(--space-3);
-  overflow: auto;
+  overflow: hidden auto;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   overflow-wrap: anywhere;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -30,4 +36,5 @@
   white-space: normal;
 }
 
+.help-tip-popover[data-dialog-fallback] { position: absolute; }
 .help-tip-popover[hidden] { display: none; }

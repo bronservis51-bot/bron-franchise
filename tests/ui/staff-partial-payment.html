@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Оплата при закрытии смены</title>
+<output id="result" role="status">Проверка…</output>
+<iframe id="app" title="Кабинет с вымышленной сменой" width="320" height="568"></iframe>
+<script type="module">
+const frame = document.querySelector('#app');
+const result = document.querySelector('#result');
+const read = selector => frame.contentDocument.querySelector(selector);
+const button = (root, label) => [...root.querySelectorAll('button')].find(item => item.textContent.trim() === label);
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function until(readState, failure, timeout = 12000) {
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {
+    const state = readState();
+    if (state) return state;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error(failure);
+}
+
+try {
+  frame.src = '/tests/ui/responsive-app.html?role=staff&shift=open&text=200#/';
+  const open = await until(() => {
+    const card = read('.shift-card');
+    const action = card && button(card, 'Закрыть смену и внести выручку');
+    return action && !action.disabled && action;
+  }, 'Открытая смена не найдена', 20000);
+  const app = frame.contentWindow;
+  const fetchFixture = app.fetch;
+  const calls = [];
+  app.fetch = async (request, init) => {
+    const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
+    if (url.pathname.endsWith('/rpc/shift_close_versioned')) calls.push(JSON.parse(init.body));
+    const response = await fetchFixture(request, init);
+    if (url.pathname.endsWith('/rpc/staff_home') && calls.length) {
+      const data = await response.json();
+      data.locations = data.locations.map(point => ({ ...point, recent_corrections: point.my_today ? [point.my_today] : [] }));
+      return app.Response.json(data);
+    }
+    return response;
+  };
+  function fill(input, value) {
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event('input', { bubbles: true }));
+  }
+
+  open.click();
+  const dialog = await until(() => read('dialog[open]'), 'Форма закрытия не открылась');
+  const [cash, card] = dialog.querySelectorAll('.staff-payments input');
+  const save = button(dialog, 'Закрыть смену');
+  assert(save.disabled, 'Форма позволяет отправить две пустые суммы');
+  fill(cash, '123,50');
+  await until(() => !save.disabled, 'Одна заполненная сумма не принята');
+  fill(card, 'ошибка');
+  await until(() => save.disabled, 'Некорректный ввод по карте принят за ноль');
+  fill(card, '');
+  await until(() => !save.disabled, 'Очищенное поле по карте не принято');
+  save.click();
+  const receipt = await until(() => read('.shift-receipt[data-state="closed"]'), 'Не показано подтверждение');
+  await until(() => read('.staff-month-total')?.textContent.replace(/\s/g, '').includes('1000₽'), 'Состояние смен не обновилось после сохранения');
+  assert(frame.contentDocument.querySelectorAll('.shift-receipt[data-state="closed"]').length === 1, 'Подтверждение задвоилось');
+  assert(calls[0]?.p_cash === '12350' && calls[0]?.p_card === '0', 'Пустая оплата картой не передана как ноль');
+
+  button(receipt, 'Исправить смену').click();
+  const correction = await until(() => read('dialog[open]'), 'Поправка закрытой смены недоступна');
+  const [correctionCash, correctionCard] = correction.querySelectorAll('.staff-payments input');
+  const update = button(correction, 'Сохранить');
+  fill(correctionCash, '');
+  fill(correctionCard, '');
+  await until(() => update.disabled, 'Две пустые суммы приняты в поправке');
+  fill(correctionCard, '0');
+  const confirmZero = await until(() => correction.querySelector('input[type="checkbox"]'), 'Нулевые продажи не требуют подтверждения');
+  assert(update.disabled, 'Ноль отправляется без подтверждения');
+  confirmZero.click();
+  await until(() => !update.disabled, 'Подтверждённый ноль не принят');
+  update.click();
+  await until(() => calls.length === 2 && !read('dialog[open]'), 'Поправка не сохранена');
+  assert(calls[1].p_cash === '0' && calls[1].p_card === '0', 'Явный ноль или пустое поле переданы неверно');
+  assert(calls[1].p_shift === calls[0].p_shift && calls[1].p_expected_revision === 1, 'Поправка не сохраняет идентификатор и версию смены');
+  result.textContent = 'PASS. Одна сумма принята, пустое поле передано как ноль, поправка использует версию смены, подтверждение одно.';
+} catch (error) {
+  result.textContent = `FAIL. ${error.message}`;
+  throw error;
+}
+</script>
+</html>

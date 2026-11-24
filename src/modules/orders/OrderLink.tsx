@@ -5,6 +5,7 @@ import { NavLink } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ExternalLink, Lock, ShoppingCart } from 'lucide-react';
 import { captureSession, command, toAppError } from '../../platform/backend';
+import { useLocale } from '../../platform/locale';
 import { useSession } from '../../platform/session';
 import { Alert, Button, ConfirmDialog, ErrorState, PageHeader } from '../../ui';
 import { HelpTip } from '../../ui/HelpTip';
@@ -49,6 +50,7 @@ function StoreLinkAction({ compact }: { compact?: boolean }) {
 }
 
 function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?: boolean }) {
+  const { t } = useLocale();
   const { reload } = useSession();
   const query = useQuery({ queryKey: ['order-link', userId], staleTime: 5 * 60_000, queryFn: () => readStoreLink(userId) });
   const [prompt, setPrompt] = useState<{ link: StoreLink; changed: boolean } | null>(null);
@@ -66,7 +68,7 @@ function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?:
     const tab = confirmedLink || acked(ackKey(userId, query.data)) ? window.open('', '_blank') : null;
     if (tab) {
       tab.opener = null;
-      tab.document.title = 'Проверяем ссылку магазина';
+      tab.document.title = t('Проверяем ссылку магазина', 'Mağaza bağlantısı kontrol ediliyor');
     }
     const attempt = { tab };
     request.current = attempt;
@@ -114,25 +116,26 @@ function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?:
     {problem ? <ErrorState error={problem} onRetry={() => {
       setError(null);
       void query.refetch();
-    }} compact /> : query.isPending ? <p role="status">Загружаем вашу ссылку…</p> : query.data?.url ? (
+    }} compact /> : query.isPending ? <p role="status">{t('Загружаем вашу ссылку…', 'Bağlantınız yükleniyor…')}</p> : query.data?.url ? (
       <>
         <Button variant={compact ? 'ghost' : 'primary'} className={compact ? 'procurement-native-link' : undefined}
           loading={checking && !prompt} disabled={checking} onClick={() => void open()}>
           {compact && <ShoppingCart size={17} aria-hidden />}
-          {compact ? 'Ваш магазин МойСклад' : 'Открыть заказ'}<ExternalLink size={16} aria-hidden />
+          {compact ? t('Ваш магазин МойСклад', 'MoySklad mağazanız') : t('Открыть заказ', 'Sipariş ekranını aç')}<ExternalLink size={16} aria-hidden />
         </Button>
-        {!compact && <span className="order-private"><Lock size={12} aria-hidden />Персональная ссылка — не пересылайте её</span>}
+        {!compact && <span className="order-private"><Lock size={12} aria-hidden />{t('Персональная ссылка — не пересылайте её', 'Bu bağlantı size özel. Paylaşmayın.')}</span>}
       </>
-    ) : <p className="faint">Персональная ссылка ещё не добавлена. Обратитесь к менеджеру по франшизе.</p>}
-    {prompt && <ConfirmDialog open title="Ваша персональная ссылка" confirmLabel="Понятно, перейти к заказу" cancelLabel="Отмена"
+    ) : <p className="faint">{t('Персональная ссылка ещё не добавлена. Обратитесь к менеджеру по франшизе.', 'Size özel bağlantı henüz eklenmedi. Franchise yöneticinizle görüşün.')}</p>}
+    {prompt && <ConfirmDialog open title={t('Ваша персональная ссылка', 'Size özel bağlantı')} confirmLabel={t('Понятно, перейти к заказу', 'Anladım, siparişe geç')} cancelLabel={t('Отмена', 'İptal')}
       busy={checking} onClose={() => setPrompt(null)} onConfirm={() => void open(true)}>
-      {prompt.changed && <p role="status">Ссылка изменилась. Подтвердите переход по новой ссылке.</p>}
+      {prompt.changed && <p role="status">{t('Ссылка изменилась. Подтвердите переход по новой ссылке.', 'Bağlantı değişti. Yeni bağlantıyı açmayı onaylayın.')}</p>}
       <div className="order-warn">
         <Lock size={20} aria-hidden />
         <div>
-          <p>Эта ссылка открывает МойСклад от имени <strong>вашей компании</strong>: всё, что по ней заказано, оформляется на вас.</p>
-          <p><strong>Не пересылайте её никому</strong> — ни знакомым, ни другим франчайзи, не публикуйте в чатах и соцсетях.</p>
-          <p className="faint">Если ссылка попала к посторонним, сразу сообщите менеджеру по франшизе.</p>
+          <p>{t('Эта ссылка открывает МойСклад от имени ', 'Bu bağlantı MoySklad mağazasını ')}<strong>{t('вашей компании', 'şirketiniz adına')}</strong>
+            {t(': всё, что по ней заказано, оформляется на вас.', ' açar. Verilen tüm siparişler şirketiniz adına kaydedilir.')}</p>
+          <p><strong>{t('Не пересылайте её никому', 'Bağlantıyı kimseyle paylaşmayın')}</strong>{t(' — ни знакомым, ни другим франчайзи, не публикуйте в чатах и соцсетях.', '. Tanıdıklarınıza veya başka franchise işletmecilerine göndermeyin. Sohbetlerde ya da sosyal medyada yayımlamayın.')}</p>
+          <p className="faint">{t('Если ссылка попала к посторонним, сразу сообщите менеджеру по франшизе.', 'Bağlantı başkasının eline geçtiyse franchise yöneticinize hemen bildirin.')}</p>
         </div>
       </div>
     </ConfirmDialog>}
@@ -141,11 +144,12 @@ function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?:
 
 /** Кнопка в шапке — оба способа закупки с любого экрана франчайзи. */
 export function OrderTopButton() {
+  const { t } = useLocale();
   const { readOnly } = useOwnPartnerLifecycle();
   if (readOnly) return null;
   return (
-      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label="Заказать материалы" title="Заказ и предзаказ материалов" data-tour-target="order">
-        <ShoppingCart size={16} aria-hidden /><span className="order-top-label">Заказать</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
+      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label={t('Заказать материалы', 'Malzeme sipariş et')} title={t('Заказ и предзаказ материалов', 'Malzeme siparişi ve ön sipariş')} data-tour-target="order">
+        <ShoppingCart size={16} aria-hidden /><span className="order-top-label">{t('Заказать', 'Sipariş ver')}</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
       </NavLink>
   );
 }
@@ -157,29 +161,33 @@ export function PersonalStoreLink() {
   return <div className="procurement-native-store"><StoreLinkAction compact /></div>;
 }
 
-export function OrderPage() { return <><PageHeader title="Заказать" /><OrderFallback /></>; }
+export function OrderPage() {
+  const { t } = useLocale();
+  return <><PageHeader title={t('Заказать', 'Sipariş ver')} /><OrderFallback /></>;
+}
 
 export function OrderFallback() {
+  const { t } = useLocale();
   const { isManager } = useSession();
   const { readOnly } = useOwnPartnerLifecycle();
-  if (!isManager && readOnly) return <Alert title="Заказы приостановлены">История и отчёты доступны для просмотра.</Alert>;
+  if (!isManager && readOnly) return <Alert title={t('Заказы приостановлены', 'Siparişler duraklatıldı')}>{t('История и отчёты доступны для просмотра.', 'Geçmiş kayıtları ve raporları görüntüleyebilirsiniz.')}</Alert>;
   return (
     <div>
       <div className="order-options">
         <section className="card order-option" aria-labelledby="order-stock-title">
-          <div className="row order-option-title"><h2 id="order-stock-title">Заказ</h2></div>
-          <p>Материалы в наличии можно заказать в персональном магазине МойСклад.</p>
-          {isManager ? <p className="faint">Персональные ссылки доступны в карточках франчайзи.</p> : <StoreLinkAction />}
+          <div className="row order-option-title"><h2 id="order-stock-title">{t('Заказ', 'Sipariş')}</h2></div>
+          <p>{t('Материалы в наличии можно заказать в персональном магазине МойСклад.', 'Stoktaki malzemeleri size özel MoySklad mağazasından sipariş edebilirsiniz.')}</p>
+          {isManager ? <p className="faint">{t('Персональные ссылки доступны в карточках франчайзи.', 'Kişiye özel bağlantılar franchise işletmecilerinin kartlarında bulunur.')}</p> : <StoreLinkAction />}
         </section>
         <section className="card order-option" aria-labelledby="order-preorder-title">
           <div className="row order-option-title">
-            <h2 id="order-preorder-title">Предзаказ</h2>
-            <HelpTip label="Как работает предзаказ">Уточните у менеджера возможность поставки, срок и итоговую цену.</HelpTip>
+            <h2 id="order-preorder-title">{t('Предзаказ', 'Ön sipariş')}</h2>
+            <HelpTip label={t('Как работает предзаказ', 'Ön sipariş nasıl çalışır?')}>{t('Уточните у менеджера возможность поставки, срок и итоговую цену.', 'Tedarik durumunu, teslim süresini ve toplam fiyatı yöneticinizle teyit edin.')}</HelpTip>
           </div>
-          <p>Заявка на плёнки, которых нет в наличии, — через bronserviceshop.</p>
-          <p className="faint">Наличие на сайте и на складе может отличаться.</p>
+          <p>{t('Заявка на плёнки, которых нет в наличии, — через bronserviceshop.', 'Stokta bulunmayan filmler için bronserviceshop üzerinden talep oluşturun.')}</p>
+          <p className="faint">{t('Наличие на сайте и на складе может отличаться.', 'Sitede görünen stok, depodaki stoktan farklı olabilir.')}</p>
           <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
-            Открыть каталог<ExternalLink size={16} aria-hidden />
+            {t('Открыть каталог', 'Kataloğu aç')}<ExternalLink size={16} aria-hidden />
           </a>
         </section>
       </div>

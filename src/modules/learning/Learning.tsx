@@ -128,9 +128,8 @@ function Policy({partner}:{partner:string|null}) {
  const [enabled,setEnabled]=useState<boolean|null>(null);const [perfect,setPerfect]=useState<string|null>(null);const [passed,setPassed]=useState<string|null>(null);
  const m=useMutation({mutationFn:()=>{const settings={enabled:enabled??q.data!.policy.enabled,perfect:(perfect??q.data!.policy.perfect.join(', ')).split(',').map(x=>Number(x.trim())),passed:(passed??q.data!.policy.passed.join(', ')).split(',').map(x=>Number(x.trim()))};return command('learning_policy_save',{partner,expected_version:q.data!.version,settings});},onSuccess:async()=>{await qc.invalidateQueries({queryKey:['learning']});setEnabled(null);setPerfect(null);setPassed(null);}});
  return <Card title="Режим обучения"><DataState query={q}>{d=><div data-unsaved={enabled!==null||perfect!==null||passed!==null?'true':undefined}><Checkbox label="Обучение включено" checked={enabled??d.policy.enabled} onChange={setEnabled}/>
- <Field label="Повтор при результате 100% — дни через запятую">{id=><Input id={id} value={perfect??d.policy.perfect.join(', ')} onChange={e=>setPerfect(e.target.value)}/>}</Field>
- <Field label="Повтор при зачёте с ошибками — дни через запятую">{id=><Input id={id} value={passed??d.policy.passed.join(', ')} onChange={e=>setPassed(e.target.value)}/>}</Field>
- <p className="faint">Первое число — после первого зачёта, следующие — после успешных повторов. Последний интервал повторяется. Незачёт сбрасывает последовательность и предлагает перечитать материал сразу. Новые уроки доступны без ожидания. Результат теста не заменяет практическую проверку навыков.</p>
+ <Field label="Повтор после 100%" hint="Дни через запятую" helpLabel="Интервалы повторения" help="Интервалы идут по порядку после зачёта. Последний используется дальше. Незачёт начинает отсчёт заново.">{id=><Input id={id} value={perfect??d.policy.perfect.join(', ')} onChange={e=>setPerfect(e.target.value)}/>}</Field>
+ <Field label="Повтор после зачёта с ошибками" hint="Дни через запятую">{id=><Input id={id} value={passed??d.policy.passed.join(', ')} onChange={e=>setPassed(e.target.value)}/>}</Field>
  <Button variant="primary" loading={m.isPending} onClick={()=>m.mutate()}>Сохранить настройки</Button><ActionError error={m.error}/>{m.isSuccess&&<p role="status">Настройки сохранены</p>}</div>}</DataState></Card>;
 }
 

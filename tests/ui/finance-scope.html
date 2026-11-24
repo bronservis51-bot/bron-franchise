@@ -31,9 +31,9 @@ try {
   const scopes = [];
   const saves = [];
   const repeats = [];
-  const outlet = { id: 'qa-location', name: 'Торговый центр с очень длинным названием', status: 'active' };
+  const outlet = { id: 'cb952096-9771-40c8-a182-0cdca77d759c', name: 'Торговый центр с очень длинным названием', status: 'active' };
   const locations = [outlet];
-  if (params.get('locations') === '2') locations.push({ id: 'qa-outlet-two', name: 'Вторая торговая точка', status: 'active' });
+  if (params.get('locations') === '2') locations.push({ id: 'b2c78fff-5142-4c81-8f4e-6b50410b97de', name: 'Вторая торговая точка', status: 'active' });
   const commonExpense = { id: 'qa-expense', category: 'Бухгалтерия', location_id: null, location_name: null, amount_minor: 2500, note: null };
   app.fetch = (request, init) => {
     const url = new URL(request instanceof app.Request ? request.url : request, app.location.href);
@@ -54,22 +54,36 @@ try {
         locations, current, months: [current], by_location: byLocation, by_staff: [], expenses: scope ? [] : [{ ...commonExpense, month }],
         expense_categories: [], prev_expenses_count: 1, royalty: scope ? null : royalty }));
     }
-    if (url.pathname.endsWith('/rpc/expense_repeat')) {
-      repeats.push(JSON.parse(init.body));
-      return Promise.resolve(app.Response.json(1));
+    if (url.pathname.endsWith('/rpc/revenue_month')) {
+      const { p_month: month, p_location: scope } = JSON.parse(init.body);
+      const point = locations.find(location => location.id === scope);
+      const day = month.slice(0, 7) + '-02';
+      const missed = month.slice(0, 7) + '-03';
+      const row = { day, total_minor: 15000, cash_minor: 10000, card_minor: 5000, reported_total_minor: 12000,
+        entries: [{ employee_id: 'test', employee_name: 'Тестовый сотрудник', total_minor: 15000 }] };
+      return Promise.resolve(app.Response.json({ month, location_id: scope, location_name: point.name, status: 'active', currency: 'RUB',
+        today: month.slice(0, 7) + '-20', days_in_month: 30, days: [row], days_off: [], missing_days: [missed], editable_days: [missed] }));
+    }
+    if (url.pathname.endsWith('/rpc/expense_repeat_preview')) {
+      return Promise.resolve(app.Response.json([{ id: commonExpense.id, category: 'Аренда', location_name: null,
+        amount_minor: '10000', updated_at: '2026-11-01T13:00:00Z' }]));
     }
     if (url.pathname.endsWith('/rpc/financial_operation')) {
       const { p_command: command, p_args: args } = JSON.parse(init.body);
-      if (command === 'expense_save') {
+      if (command === 'expense_save_with_recurring') {
         saves.push(args);
         return Promise.resolve(app.Response.json(commonExpense.id));
+      }
+      if (command === 'expense_repeat_checked') {
+        repeats.push(args);
+        return Promise.resolve(app.Response.json(1));
       }
     }
     return fetchFixture(request, init);
   };
   link.click();
   const doc = app.document;
-  const repeatLabel = 'Повторить расходы прошлого месяца';
+  const repeatLabel = 'Перенести регулярные расходы';
   const failures = [];
   async function check(name, run) {
     try { await run(); }
@@ -77,129 +91,114 @@ try {
     finally {
       const dialog = doc.querySelector('dialog[open]');
       if (dialog) {
-        button(dialog, 'Закрыть')?.click();
+        (button(dialog, 'Закрыть') ?? button(dialog, 'Отмена'))?.click();
         await wait(0);
         button(dialog, 'Отбросить изменения')?.click();
       }
     }
   }
-  await until(() => button(doc, 'Аренда'));
-  const royaltyHistory = () => [...doc.querySelectorAll('summary')].find(item => item.textContent === 'Начисления и оплаты роялти');
-  await check('роялти внутри расходов', async () => {
-    assert(![...doc.querySelectorAll('h2')].some(title => title.textContent === 'Роялти'), 'роялти показано отдельным блоком');
-    const history = royaltyHistory();
-    assert(history?.closest('section')?.querySelector('h2')?.textContent.startsWith('Расходы'), 'история роялти не входит в расходы');
-    assert(!history.parentElement.open, 'история роялти открыта при загрузке');
-    const expenses = history.closest('section');
-    const labels = [...expenses.querySelectorAll('li')];
-    const royalty = labels.find(item => item.textContent.trim().startsWith('Роялти'));
-    const money = (text) => text.replace(/\s/g, '');
-    assert(royalty && !royalty.querySelector('button') && money(royalty.textContent).includes('10,50₽'), 'начисление должно быть отдельной строкой расхода без редактирования');
-    assert(money(expenses.querySelector('.card-header').textContent).includes('35,50₽'), 'итог расходов должен включать начисление один раз');
-    history.click();
-    try {
-      assert(history.parentElement.open && history.parentElement.textContent.includes('Оплата подтверждена'), 'оплаты недоступны в истории расходов');
-    } finally { history.parentElement.open = false; }
-    for (const table of doc.querySelectorAll('[aria-label^="Финансы по "] table')) {
-      const headers = [...table.querySelectorAll('th')].map(th => th.textContent);
-      assert(!headers.includes('Роялти'), 'в сводной таблице осталась колонка роялти');
-      const data = table.querySelector('tbody tr').children[headers.indexOf('Расходы')];
-      assert(money(data.textContent) === '35,50₽', 'сводная таблица потеряла начисление в расходах');
-    }
-    assert(!doc.querySelector('.fin-legend').textContent.includes('Роялти'), 'у роялти остался отдельный ряд на графике');
-  });
-  await check('читаемые таблицы финансов', async () => {
-    const monthly = doc.querySelector('[aria-label="Финансы по месяцам"]').closest('details');
-    monthly.open = true;
-    const history = royaltyHistory()?.parentElement;
-    if (history) history.open = true;
-    await doc.fonts.ready;
-    try {
-      const regions = [...doc.querySelectorAll('.table-wrap')];
-      assert(regions.length === (locations.length > 1 ? 3 : 2), 'нет одной из таблиц финансов');
-      const debt = doc.querySelector('.table td.danger-text');
-      assert(debt && app.getComputedStyle(debt).display === 'table-cell', 'долг вышел из своей колонки');
-      for (const region of regions) {
-        const cells = region.querySelectorAll('th, td.r');
-        assert(cells.length > 0, 'нет ячеек таблицы');
-        for (const cell of cells) {
-          const range = doc.createRange();
-          range.selectNodeContents(cell);
-          const lines = new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top)));
-          assert(lines.size === 1, 'разорван заголовок или сумма: ' + cell.textContent);
-        }
-        if (region.scrollWidth > region.clientWidth + 1) {
-          assert(app.getComputedStyle(region).overflowX === 'auto' && region.tabIndex === 0, 'широкая таблица недоступна для прокрутки');
-        }
-      }
-      assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1, 'таблица расширила страницу');
-    } finally {
-      monthly.open = false;
-      if (history) history.open = false;
-    }
-  });
-  await check('отчёт по внесённым данным', async () => {
-    const title = [...doc.querySelectorAll('h2')].find(node => node.textContent.startsWith('Доходы и расходы —'));
-    assert(title, 'отчёт о доходах и расходах не показан');
-    const report = title.closest('section');
+  const selectValue = (select, value) => {
+    select.value = value;
+    select.dispatchEvent(new app.Event('change', { bubbles: true }));
+  };
+  const fieldValue = (input, value) => {
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new app.Event('input', { bubbles: true }));
+  };
+  const openSection = async (name, selector) => {
+    button(doc, name).click();
+    return until(() => doc.querySelector(selector));
+  };
+  await until(() => doc.querySelector('.finance-statement'));
+
+  await check('компактный отчёт по всем точкам', async () => {
+    assert(scopes[0] === null, 'по умолчанию запрошена отдельная точка');
+    assert(doc.querySelector('main h1')?.textContent === 'Отчёт о прибылях и убытках', 'не показан заголовок ОПиУ');
+    const report = doc.querySelector('.finance-statement');
     const lines = [...report.querySelectorAll('dt')].map(node => node.textContent);
-    assert(lines.includes('Бухгалтерия'), 'в отчёте нет внесённой категории расходов');
-    assert(lines.includes('Остаток по внесённым данным'), 'не показан финансовый результат');
-    assert(report.textContent.includes('Отчёт составлен по внесённым данным'), 'не обозначен источник сумм');
+    assert(lines.includes('Остаток по внесённым данным') && lines.includes('Роялти по ставке'), 'нет результата или расчётного роялти');
+    assert(!lines.includes('Бухгалтерия') && !lines.includes('Всего расходов'), 'на экране дублируется расшифровка расходов');
+    assert(!doc.querySelector('.fin-chart') && !report.textContent.includes('Отчёт составлен по'), 'остался график или пояснение под отчётом');
+    assert(doc.querySelector('.finance-filters select').value === '', 'не выбран общий отчёт');
   });
-  await check('общий экран по умолчанию', async () => {
-    assert(scopes[0] === null, 'запрошена отдельная точка');
-    assert(button(doc, 'Все точки')?.getAttribute('aria-pressed') === 'true', 'нет выбранной кнопки «Все точки»');
-    assert(button(doc, outlet.name), 'нет кнопки отдельной точки');
-    assert(doc.querySelector('.expense-row').textContent.includes('все точки'), 'в общем списке потерялось назначение расхода');
+  await check('выручка по дням и история', async () => {
+    const daily = await openSection('По дням', '.finance-days');
+    const discrepancy = await until(() => [...daily.querySelectorAll('button')].find(node => node.textContent.includes('Сумма смен больше')));
+    discrepancy.click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    assert(dialog.textContent.includes('Наличные') && dialog.textContent.includes('Карта'), 'в старом дне нет платежей');
+    assert(!button(dialog, 'Сохранить'), 'редактируется день вне разрешённого периода');
+    button(dialog, 'Закрыть').click();
+    const missing = await until(() => [...daily.querySelectorAll('button')].find(node => node.textContent.includes('Пропущено')));
+    missing.click();
+    assert(missing.getAttribute('aria-pressed') === 'true' || await until(() => missing.getAttribute('aria-pressed') === 'true'), 'не включился фильтр пропусков');
   });
-  await check('повтор общих расходов', async () => {
+  await check('перенос регулярных расходов', async () => {
+    await openSection('Расходы', '.expense-list');
+    assert(doc.querySelector('.expense-row').textContent.includes('все точки'), 'в списке потерялось назначение расхода');
     button(doc, repeatLabel).click();
-    await until(() => repeats[0]?.p_month);
-    assert(!('p_location' in repeats[0]), 'команда повтора больше не действует на весь кабинет');
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    const confirm = await until(() => {
+      const item = button(dialog, 'Перенести расходы');
+      return item && !item.disabled && item;
+    });
+    confirm.click();
+    const request = await until(() => repeats[0]);
+    assert(!('p_location' in request) && request.p_rows.length === 1, 'неверная область переноса');
+    await until(() => !dialog.isConnected);
   });
   await check('выбор назначения и сохранение общего расхода', async () => {
-    button(doc, 'Аренда').click();
+    button(doc, 'Добавить расход').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
     const select = dialog.querySelector('select');
-    assert(select, 'нет выбора между общим расходом и расходом точки');
-    assert(select.value === (locations.length === 1 ? outlet.id : ''), 'изменилось начальное назначение расхода');
+    assert(select?.value === (locations.length === 1 ? outlet.id : ''), 'изменилось начальное назначение расхода');
     assert([...select.options].some(option => option.value === '' && option.textContent === 'Общий — на все точки'), 'нет общего назначения');
-    assert([...select.options].some(option => option.value === outlet.id && option.textContent === outlet.name), 'нет назначения отдельной точке');
-    select.value = '';
-    select.dispatchEvent(new app.Event('change', { bubbles: true }));
-    const amount = dialog.querySelector('input[inputmode=decimal]');
-    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(amount, '25,50');
-    amount.dispatchEvent(new app.Event('input', { bubbles: true }));
+    selectValue(select, '');
+    fieldValue(dialog.querySelector('input[list]'), 'Аренда');
+    fieldValue(dialog.querySelector('input[inputmode=decimal]'), '25,50');
     assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
     await wait(0);
     button(dialog, 'Добавить расход').click();
     const save = await until(() => saves[0]);
-    assert(save.p_location === null && save.p_amount === '2550' && save.p_note === null, 'общий расход отправлен с неверной суммой или точкой');
+    assert(save.p_location === null && save.p_amount === '2550' && save.p_note === null, 'неверная сумма или область общего расхода');
     await until(() => !dialog.isConnected);
   });
   await check('неверная сумма в существующем расходе', async () => {
     const count = saves.length;
     doc.querySelector('.expense-row').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
-    const amount = dialog.querySelector('input[inputmode=decimal]');
-    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(amount, '25x');
-    amount.dispatchEvent(new app.Event('input', { bubbles: true }));
+    fieldValue(dialog.querySelector('input[inputmode=decimal]'), '25x');
     await wait(0);
     button(dialog, 'Сохранить').click();
     await wait(50);
     assert(saves.length === count, 'неверный ввод отправил предыдущую сумму');
   });
+  await check('роялти одной строкой внутри расходов', async () => {
+    const report = await until(() => doc.querySelector('.finance-royalty-history'));
+    assert(!button(doc, 'Роялти'), 'роялти занимает отдельную вкладку');
+    const royalty = doc.querySelector('.finance-royalty-row');
+    assert(royalty?.textContent.includes('Роялти по ставке') && !royalty.querySelector('button'), 'строка роялти исчезла или редактируется');
+    assert(!report.open, 'история открыта при загрузке');
+    report.querySelector('summary').click();
+    const debt = report.querySelector('.table td.danger-text');
+    assert(debt && app.getComputedStyle(debt).display === 'table-cell', 'долг вышел из своей колонки');
+    const region = report.querySelector('.table-wrap');
+    assert(region.tabIndex === 0 && app.getComputedStyle(region).overflowX === 'auto', 'широкая таблица недоступна для прокрутки');
+    const payments = report.querySelector('.finance-royalty-payments');
+    assert(payments.textContent.includes('Оплата подтверждена'), 'оплаты скрыты');
+  });
   await check('экран отдельной точки', async () => {
-    const chip = button(doc, outlet.name);
-    assert(chip, 'переключатель точки недоступен');
-    chip.click();
-    await until(() => scopes.at(-1) === outlet.id && button(doc, 'Аренда'));
-    assert(!button(doc, repeatLabel), 'отдельная точка предлагает повторить расходы всего кабинета');
-    assert(!doc.body.textContent.includes('потом переносить кнопкой'), 'подсказка ссылается на недоступную кнопку');
-    assert(!royaltyHistory(), 'у точки открылась общая история начислений и оплат');
-    assert([...doc.querySelectorAll('.expense-list li')].some(item => item.textContent.trim().startsWith('Роялти')), 'начисление точки исчезло из расходов');
-    button(doc, 'Аренда').click();
+    selectValue(doc.querySelector('.finance-filters select'), outlet.id);
+    await until(() => scopes.at(-1) === outlet.id && doc.querySelector('.finance-royalty-row') && !doc.querySelector('.finance-royalty-history'));
+    selectValue(doc.querySelector('.finance-filters select'), '');
+    await until(() => !app.location.hash.includes('location=') && doc.querySelector('.finance-details'));
+    selectValue(doc.querySelector('.finance-filters select'), outlet.id);
+    button(doc, 'Расходы').click();
+    await until(() => app.location.hash.includes(outlet.id)
+      && doc.querySelector('.finance-filters select')?.value === outlet.id
+      && button(doc, 'Добавить расход') && !doc.querySelector('.finance-royalty-history'));
+    assert(!button(doc, repeatLabel), 'отдельная точка предлагает перенести расходы всего кабинета');
+    button(doc, 'Добавить расход').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
     assert(dialog.querySelector('select')?.value === outlet.id, 'выбранная точка не подставилась в расход');
   });

@@ -17,14 +17,12 @@ export function payrollPeriods(month: string): [PayrollPeriod, PayrollPeriod] {
   ];
 }
 
-const dayAndMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' });
-
-export function payrollDateLabel(day: string) {
-  return dayAndMonth.format(new Date(`${day}T12:00:00Z`));
+export function payrollDateLabel(day: string, locale = 'ru-RU') {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString(locale, { day: 'numeric', month: 'long', timeZone: 'UTC' });
 }
 
-export function payrollPeriodLabel(period: PayrollPeriod) {
-  return `${Number(period.from.slice(-2))}–${payrollDateLabel(period.through)}`;
+export function payrollPeriodLabel(period: PayrollPeriod, locale = 'ru-RU') {
+  return `${Number(period.from.slice(-2))}–${payrollDateLabel(period.through, locale)}`;
 }
 
 export function splitPayroll(month: string, shifts: readonly { day: string; earned_minor: MinorInput | null; status?: 'open' | 'closed' }[]) {

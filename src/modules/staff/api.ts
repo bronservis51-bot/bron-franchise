@@ -1,3 +1,4 @@
+import type { NamedPay } from './PaySchemes';
 import type { PayPolicy, ShiftPolicy } from './Motivation';
 import { captureSession, command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
@@ -29,11 +30,12 @@ export interface PayrollShift {
 
 export interface StaffRow {
   pay_revision?: number; pay_effective_from?: string | null;
-  pay_scheduled?: { effective_from: string; label: string }[]; pay_policy?: ShiftPolicy | null;
+  pay_current_common?: boolean; pay_current_trainee_floor?: number | null;
+  pay_scheduled?: { effective_from: string; label: string; name?:string|null; common?:boolean }[]; pay_policy?: ShiftPolicy | null;
   can_manage?: boolean; can_edit_pay?: boolean; is_manager?: boolean;
   position?: StaffPosition;
   access?: StaffAccess & { legacy_staff_management?: boolean };
-  custom_pay?: CustomShiftPay | null;
+  custom_pay?: NamedPay | null;
   employee_kind?: 'employee'|'trainee'; internship_from?:string|null; internship_until?:string|null; internship_floor_minor?:number; learning_enabled?:boolean;
   internship_completed?: boolean | null;
   user_id: string; full_name: string; phone: string; active: boolean; use_partner_motivation?: boolean; location_ids: string[]; location_names: string[];
@@ -70,7 +72,7 @@ export const shiftCancel = (shift: string) => command('shift_cancel', { shift })
 
 export const staffList = (partner: string, month: string) => command<StaffRow[]>('staff_list', { partner, month });
 export const staffPaySave = (a: { partner: string; user: string; rate_bp: number; shift_fee: number | string;
-  use_partner: boolean; custom_pay: CustomShiftPay | null; pay_effective_from: string | null;
+  use_partner: boolean; custom_pay: NamedPay | null; pay_effective_from: string | null;
   expected_pay_revision: number; internship_floor_minor: number | string | null }) =>
   command('staff_pay_save', a);
 export const staffCreate = (a: { partner: string; full_name: string; phone: string; password: string; locations: string[]; rate_bp: number; shift_fee: string }) =>

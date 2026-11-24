@@ -4,17 +4,19 @@ import { command, toAppError } from '../../platform/backend';
 import { formatDate } from '../../platform/dates';
 import { formatMoneyShort, parseMoney } from '../../platform/money';
 import { ActionError, Button, Card, DataState, Field, Input, MoneyInput } from '../../ui';
-import { CustomPayFields, currencySymbol, customPayDraft, tierPolicy } from './CustomPayFields';
+import { currencySymbol } from './CustomPayFields';
 import { pctBp } from './api';
+import { PayCatalogue, PayDraftFields, usePayDraft } from './PaySchemes';
+import { useLocale } from '../../platform/locale';
 import './pay-settings.css';
 
 export type PayPolicy = { floor_minor: number; tiers: { from_minor: number; rate_bp: number; bonus_minor: number }[] };
-export type ShiftPolicy = (PayPolicy | { mode: 'legacy'; rate_bp: number; fee_minor: number }) & { additional_point?: boolean };
-type DatedPolicy = { effective_from: string; policy: PayPolicy };
-type Motivation = { version: number; policy: PayPolicy; currency: string; today?: string;
-  baseline?: PayPolicy; history?: DatedPolicy[]; scheduled?: DatedPolicy[] };
+export type ShiftPolicy = (PayPolicy | { mode: 'legacy'; rate_bp: number; fee_minor: number }) & { additional_point?: boolean; name?:string };
+type DatedPolicy<P = ShiftPolicy> = { effective_from: string; policy: P };
+type Motivation = { version: number; policy: ShiftPolicy; currency: string; today?: string;
+  baseline?: ShiftPolicy; history?: DatedPolicy[]; scheduled?: DatedPolicy[] };
 
-export function teamPolicyForDate(terms: Pick<Motivation, 'policy' | 'baseline' | 'history' | 'scheduled'>, date: string) {
+export function teamPolicyForDate<P extends ShiftPolicy>(terms: {policy:P;baseline?:P;history?:DatedPolicy<P>[];scheduled?:DatedPolicy<P>[]}, date: string) {
   if (!date) return terms.policy;
   const versions = [...(terms.history ?? []), ...(terms.scheduled ?? [])];
   return versions.reverse().find(v => v.effective_from <= date)?.policy ?? terms.baseline ?? terms.policy;
@@ -38,29 +40,31 @@ export function useMotivation(partner: string, enabled = true) {
 }
 
 function ExampleResult({ policy, total, currency, label }: { policy: ShiftPolicy; total: bigint; currency: string; label: string }) {
+  const {t,locale}=useLocale();
   const tier = 'tiers' in policy ? reachedTier(policy, total) : null;
   const terms = 'mode' in policy
-    ? `${formatMoneyShort(policy.fee_minor, currency)} за выход + ${pctBp(policy.rate_bp)} от выручки`
-    : tier && `${pctBp(tier.rate_bp)} от выручки, гарантия ${formatMoneyShort(policy.floor_minor, currency)}, премия ${formatMoneyShort(tier.bonus_minor, currency)}`;
+    ? `${formatMoneyShort(policy.fee_minor, currency,locale)} ${t('за выход','vardiya ücreti')} + ${pctBp(policy.rate_bp)} ${t('от выручки','ciro payı')}`
+    : tier && `${pctBp(tier.rate_bp)} ${t('от выручки, гарантия','ciro payı, garanti')} ${formatMoneyShort(policy.floor_minor, currency,locale)}, ${t('премия','prim')} ${formatMoneyShort(tier.bonus_minor, currency,locale)}`;
   return <div className="pay-result">
     <span>{label}</span>
-    <strong className="num">{formatMoneyShort(calculatePay(total, 0, 0, policy), currency)}</strong>
+    <strong className="num">{formatMoneyShort(calculatePay(total, 0, 0, policy), currency,locale)}</strong>
     <small>{terms}</small>
   </div>;
 }
 
-export function PayExample({ currency, policy, traineePolicy }: { currency: string; policy: ShiftPolicy | null; traineePolicy?: PayPolicy | null }) {
+export function PayExample({ currency, policy, traineePolicy }: { currency: string; policy: ShiftPolicy | null; traineePolicy?: ShiftPolicy | null }) {
+  const {t}=useLocale();
   const [revenue, setRevenue] = useState(() => String(parseMoney('10000', currency)));
   const [valid, setValid] = useState(true);
-  return <section className="pay-example" aria-label="Пример расчёта">
-    <h4>Пример расчёта</h4>
-    <Field label={`Выручка за смену, ${currencySymbol(currency)}`} error={!valid ? 'Введите сумму выручки' : undefined}>{(id, describedBy) =>
+  return <section className="pay-example" aria-label={t('Пример расчёта','Hesaplama örneği')}>
+    <h4>{t('Пример расчёта','Hesaplama örneği')}</h4>
+    <Field label={t('Выручка за смену','Vardiya cirosu')+', '+currencySymbol(currency)} error={!valid ? t('Введите сумму выручки','Ciro tutarını girin') : undefined}>{(id, describedBy) =>
       <MoneyInput id={id} value={revenue} currency={currency} describedBy={describedBy} placeholder="0"
         onChange={setRevenue} onValidityChange={setValid} />}</Field>
     <div aria-live="polite">
-      {valid && !policy && !traineePolicy && <p className="pay-help">Для расчёта проверьте поля схемы.</p>}
-      {valid && traineePolicy && <ExampleResult label="На стажировке" currency={currency} total={BigInt(revenue || '0')} policy={traineePolicy} />}
-      {valid && policy && <ExampleResult label={traineePolicy !== undefined ? 'После стажировки' : 'Сотрудник получит'} currency={currency} total={BigInt(revenue || '0')} policy={policy} />}
+      {valid && !policy && !traineePolicy && <p className="pay-help">{t('Для расчёта проверьте поля схемы.','Hesaplama için plan alanlarını kontrol edin.')}</p>}
+      {valid && traineePolicy && <ExampleResult label={t('На стажировке','Staj sırasında')} currency={currency} total={BigInt(revenue || '0')} policy={traineePolicy} />}
+      {valid && policy && <ExampleResult label={traineePolicy !== undefined ? t('После стажировки','Stajdan sonra') : t('Сотрудник получит','Çalışanın kazancı')} currency={currency} total={BigInt(revenue || '0')} policy={policy} />}
     </div>
   </section>;
 }
@@ -68,13 +72,14 @@ export function PayExample({ currency, policy, traineePolicy }: { currency: stri
 export const payTiming = 'При сдаче выручки применяются условия, действовавшие в день смены. Принятые и ранее открытые смены сохраняют свои условия.';
 
 function TeamPayEditor({ partner, saved, initialDate, onClose }: { partner: string; saved: Motivation; initialDate: string; onClose: () => void }) {
+  const {t}=useLocale();
   const qc = useQueryClient();
   const [version] = useState(saved.version);
   const [date, setDate] = useState(initialDate || saved.today || '');
-  const [draft, setDraft] = useState(() => customPayDraft(saved.scheduled?.find(v => v.effective_from === initialDate)?.policy ?? saved.policy));
-  const policy = tierPolicy(draft);
+  const draft=usePayDraft(saved.scheduled?.find(v=>v.effective_from===initialDate)?.policy ?? saved.policy);
+  const policy=draft.policy;
   const m = useMutation({
-    mutationFn: (next: PayPolicy) => command('motivation_set', { partner, policy: { ...next, ...(date ? { effective_from: date } : {}) }, expected_version: version }),
+    mutationFn: (next: ShiftPolicy) => command('motivation_set', { partner, policy: { ...next, ...(date ? { effective_from: date } : {}) }, expected_version: version }),
     onError: error => {
       if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['motivation', partner] });
     },
@@ -84,35 +89,39 @@ function TeamPayEditor({ partner, saved, initialDate, onClose }: { partner: stri
     },
   });
   return <div className="pay-layout" data-unsaved="true">
-    <Field label="Действует с" hint="Дата смены по местному времени точки.">{id => <Input id={id} type="date" readOnly={Boolean(initialDate)} value={date} onChange={e => setDate(e.target.value)} />}</Field>
-    <CustomPayFields named={false} currency={saved.currency} draft={draft} setDraft={setDraft} />
-    <details className="pay-explanation"><summary>Как считается оплата</summary>
-      <p className="pay-help">Сотрудник получает большую из двух сумм — гарантию или процент от всей выручки смены. Премия прибавляется сверху.</p>
+    <Field label={t('Действует с','Başlangıç tarihi')} help={t('Дата смены по местному времени точки.','Şubenin yerel saatine göre vardiya tarihi.')}>{id => <Input id={id} type="date" readOnly={Boolean(initialDate)} value={date} onChange={e => setDate(e.target.value)} />}</Field>
+    <PayDraftFields currency={saved.currency} draft={draft} />
+    <details className="pay-explanation"><summary>{t('Как считается оплата','Ücret nasıl hesaplanır')}</summary>
+      <p className="pay-help">{draft.mode==='fixed'?t('Сотрудник получает ставку за выход и процент от выручки смены.','Çalışan vardiya ücreti ve vardiya cirosundan pay alır.'):t('Сотрудник получает большую из двух сумм — гарантию или процент от всей выручки смены. Премия прибавляется сверху.','Garanti ile vardiya cirosundan alınan payın yüksek olanına prim eklenir.')}</p>
       <PayExample currency={saved.currency} policy={policy} />
-      <p className="pay-help">{payTiming}</p>
+      <p className="pay-help">{t(payTiming,'Vardiya tarihindeki koşullar uygulanır. Kaydedilmiş ve daha önce açılmış vardiyaların koşulları korunur.')}</p>
     </details>
     <ActionError error={m.error} />
-    <div className="row"><Button disabled={m.isPending} onClick={onClose}>Отмена</Button>
-      <Button variant="primary" loading={m.isPending} disabled={!policy} onClick={() => policy && m.mutate(policy)}>Сохранить схему</Button></div>
+    <div className="row"><Button disabled={m.isPending} onClick={onClose}>{t('Отмена','İptal')}</Button>
+      <Button variant="primary" loading={m.isPending} disabled={!policy} onClick={() => policy && m.mutate(policy)}>{t('Сохранить схему','Planı kaydet')}</Button></div>
   </div>;
 }
 
 export function MotivationPanel({ partner, canEdit }: { partner: string; canEdit: boolean }) {
+  const {t,locale}=useLocale();
   const q = useMotivation(partner);
   const [edit, setEdit] = useState<string | null>(null);
-  return <Card title="Общая схема" className="pay-settings"><DataState query={q}>{d =>
+  return <><Card title={t("Общая схема","Ortak ücret planı")} className="pay-settings"><DataState query={q}>{d =>
     edit !== null && canEdit ? <TeamPayEditor partner={partner} saved={d} initialDate={edit} onClose={() => setEdit(null)} /> : <div className="pay-layout">
-      <p>Гарантия за смену <strong className="num">{formatMoneyShort(d.policy.floor_minor, d.currency)}</strong></p>
-      <p className="pay-help">Для сотрудников на общей схеме процент и премия зависят от выручки смены. У стажёра своя гарантия.</p>
-      <details className="pay-table"><summary>Ступени по выручке ({d.policy.tiers.length})</summary>
-        <div className="table-wrap"><table className="table"><thead><tr><th>Выручка от</th><th>Доля</th><th>Премия</th></tr></thead>
-          <tbody>{d.policy.tiers.map(t => <tr key={t.from_minor}><td>{formatMoneyShort(t.from_minor, d.currency)}</td><td>{pctBp(t.rate_bp)}</td><td>{formatMoneyShort(t.bonus_minor, d.currency)}</td></tr>)}</tbody></table></div>
-      </details>
-      {canEdit && <Button onClick={() => setEdit('')}>Изменить общую схему</Button>}
+      {d.policy.name && <strong>{d.policy.name}</strong>}
+      {'mode' in d.policy ? <p>{t('Ставка за выход','Vardiya ücreti')} {formatMoneyShort(d.policy.fee_minor,d.currency,locale)} + {pctBp(d.policy.rate_bp)}</p> :
+      <><p>{t('Гарантия за смену','Vardiya garantisi')} <strong className="num">{formatMoneyShort(d.policy.floor_minor, d.currency,locale)}</strong></p>
+      <p className="pay-help">{t('Для сотрудников на общей схеме процент и премия зависят от выручки смены. У стажёра своя гарантия.','Ortak planda yüzde ve prim vardiya cirosuna bağlıdır. Stajyerin garantisi ayrıdır.')}</p>
+      <details className="pay-table"><summary>{t('Ступени по выручке','Ciro kademeleri')} ({d.policy.tiers.length})</summary>
+        <div className="table-wrap"><table className="table"><thead><tr><th>{t('Выручка от','Ciro eşiği')}</th><th>{t('Доля','Pay')}</th><th>{t('Премия','Prim')}</th></tr></thead>
+          <tbody>{d.policy.tiers.map(t => <tr key={t.from_minor}><td>{formatMoneyShort(t.from_minor, d.currency,locale)}</td><td>{pctBp(t.rate_bp)}</td><td>{formatMoneyShort(t.bonus_minor, d.currency,locale)}</td></tr>)}</tbody></table></div>
+      </details></>}
+      {canEdit && <Button onClick={() => setEdit('')}>{t('Изменить общую схему','Ortak planı düzenle')}</Button>}
       {d.scheduled?.map(v => <div className="row between" key={v.effective_from}>
-        <span>С {formatDate(v.effective_from)} · гарантия {formatMoneyShort(v.policy.floor_minor, d.currency)}</span>
-        {canEdit && <Button size="sm" onClick={() => setEdit(v.effective_from)}>Изменить условия с {formatDate(v.effective_from)}</Button>}
+        <span>{t('С','Başlangıç')} {formatDate(v.effective_from,locale)} · {v.policy.name ?? ('mode' in v.policy ? formatMoneyShort(v.policy.fee_minor,d.currency,locale)+' + '+pctBp(v.policy.rate_bp) : t('Гарантия','Garanti')+' '+formatMoneyShort(v.policy.floor_minor, d.currency,locale))}</span>
+        {canEdit && <Button size="sm" onClick={() => setEdit(v.effective_from)}>{t('Изменить условия с','Koşulları düzenle')} {formatDate(v.effective_from,locale)}</Button>}
       </div>)}
     </div>}
-  </DataState></Card>;
+  </DataState></Card>
+  {canEdit && q.data && <PayCatalogue partner={partner} currency={q.data.currency} version={q.data.version} today={q.data.today} policy={q.data.policy}/>}</>;
 }

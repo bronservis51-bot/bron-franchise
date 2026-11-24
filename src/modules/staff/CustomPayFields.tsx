@@ -1,4 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { HelpTip } from '../../ui/HelpTip';
+import { useLocale } from '../../platform/locale';
 import { X } from 'lucide-react';
 import { Button, Field, Input, MoneyInput } from '../../ui';
 import type { CustomShiftPay } from './api';
@@ -57,11 +59,12 @@ export function currencySymbol(currency: string) {
     .formatToParts(0).find(part => part.type === 'currency')?.value ?? currency;
 }
 
-function PolicyMoney({ label, value, currency, onChange, error }: {
-  label: string; value: Money; currency: string; onChange: (value: Money) => void; error?: string;
+function PolicyMoney({ label, value, currency, onChange, error, help }: {
+  label: string; value: Money; currency: string; onChange: (value: Money) => void; error?: string; help?:string;
 }) {
-  const message = error ?? (validPolicyMoney(value) ? undefined : 'Проверьте сумму');
-  return <Field label={label} error={message}>
+  const {t}=useLocale();
+  const message = error ?? (validPolicyMoney(value) ? undefined : t('Проверьте сумму','Tutarı kontrol edin'));
+  return <Field label={label} error={message} help={help}>
     {(id, describedBy) => <MoneyInput id={id} describedBy={describedBy} invalid={Boolean(message)}
       value={value.minor} currency={currency} placeholder="0"
       onChange={minor => onChange({ minor, valid: true })}
@@ -72,35 +75,41 @@ function PolicyMoney({ label, value, currency, onChange, error }: {
 export function CustomPayFields({ currency, draft, setDraft, named = true }: {
   currency: string; draft: CustomPayDraft; setDraft: Dispatch<SetStateAction<CustomPayDraft>>; named?: boolean;
 }) {
+  const {t}=useLocale();
   const unit = currencySymbol(currency);
   const updateTier = (id: string, next: Partial<Tier>) => setDraft(current => ({ ...current,
     tiers: current.tiers.map(tier => tier.id === id ? { ...tier, ...next } : tier),
   }));
   return <div className="pay-fields">
-    {named && <Field label="Название схемы" required hint={!draft.name.trim() ? 'Введите название для сохранения условий.' : undefined}>{(id, describedBy) =>
+    {named && <Field label={t('Название схемы','Plan adı')} help={t('Так условия будут подписаны в карточке сотрудника.','Bu ad çalışanın kartında gösterilir.')} required hint={!draft.name.trim() ? 'Введите название для сохранения условий.' : undefined}>{(id, describedBy) =>
       <Input id={id} aria-describedby={describedBy} value={draft.name} maxLength={nameLimit}
       placeholder="Например, старший продавец" onChange={e => {
         const name = e.target.value;
         setDraft(current => ({ ...current, name }));
       }} />}</Field>}
-    <PolicyMoney label={`Гарантия за смену, ${unit}`} value={draft.floor} currency={currency}
+    <PolicyMoney label={t('Гарантия за смену','Vardiya garantisi')+', '+unit} help={t('Минимум за смену до начисления премии.','Prim eklenmeden önceki asgari vardiya ücreti.')} value={draft.floor} currency={currency}
       onChange={floor => setDraft(current => ({ ...current, floor }))} />
-    <div className="pay-tier-wrap"><table className="pay-tier-grid" aria-label="Ступени оплаты">
-      <thead><tr><th scope="col">Выручка от, {unit}</th><th scope="col">Доля, %</th><th scope="col">Премия, {unit}</th>
+    <div className="pay-tier-wrap">
+      <div className="pay-tier-mobile-help">{t('Ступени оплаты','Ücret kademeleri')}
+        <HelpTip label={t('Как читать ступени','Kademeler nasıl okunur')}>{t('Достигнутый порог определяет процент от всей выручки и премию за смену.', 'Ulaşılan eşik tüm cironun yüzdesini ve vardiya primini belirler.')}</HelpTip></div>
+      <table className="pay-tier-grid" aria-label={t('Ступени оплаты','Ücret kademeleri')}>
+      <thead><tr><th scope="col">{t('Выручка от','Ciro eşiği')}, {unit}<HelpTip label={t('Порог выручки','Ciro eşiği')}>{t('При этой выручке начинает действовать строка.','Bu cirodan itibaren satırdaki koşullar uygulanır.')}</HelpTip></th>
+        <th scope="col">{t('Доля, %','Pay, %')}<HelpTip label={t('Доля выручки','Ciro payı')}>{t('Процент применяется ко всей выручке смены.','Yüzde vardiyanın tüm cirosuna uygulanır.')}</HelpTip></th>
+        <th scope="col">{t('Премия','Prim')}, {unit}<HelpTip label={t('Премия за смену','Vardiya primi')}>{t('Прибавляется к гарантии или проценту достигнутой ступени.','Ulaşılan kademenin garantisine veya yüzde tutarına eklenir.')}</HelpTip></th>
         <th scope="col"><span className="sr-only">Действие</span></th></tr></thead>
       <tbody>{draft.tiers.map((tier, index) => {
         const fromError = index > 0 && Number(tier.from.minor) <= Number(draft.tiers[index - 1].from.minor)
           ? 'Порог должен быть выше предыдущего' : undefined;
         const rateError = percentToBp(tier.rate) === null ? 'Введите число от 0 до 100 с точностью до сотых' : undefined;
-        const row = `Ступень ${index + 1}`;
+        const row = t('Ступень','Kademe')+' '+(index+1);
         return <tr key={tier.id}>
           <td>{index === 0 ? <span className="pay-from-zero"><span className="sr-only">{row}. Выручка от, {unit}: </span>0</span>
-            : <PolicyMoney label={`${row}. Выручка от, ${unit}`} value={tier.from} currency={currency} error={fromError}
+            : <PolicyMoney label={row+'. '+t('Выручка от','Ciro eşiği')+', '+unit} value={tier.from} currency={currency} error={fromError}
               onChange={from => updateTier(tier.id, { from })} />}</td>
-          <td><Field label={`${row}. Доля выручки, %`} error={rateError}>{(id, describedBy) =>
+          <td><Field label={row+'. '+t('Доля выручки, %','Ciro payı, %')} error={rateError}>{(id, describedBy) =>
             <Input id={id} inputMode="decimal" value={tier.rate} aria-describedby={describedBy}
               aria-invalid={Boolean(rateError) || undefined} onChange={e => updateTier(tier.id, { rate: e.target.value })} />}</Field></td>
-          <td><PolicyMoney label={`${row}. Премия, ${unit}`} value={tier.bonus} currency={currency}
+          <td><PolicyMoney label={row+'. '+t('Премия','Prim')+', '+unit} value={tier.bonus} currency={currency}
             onChange={bonus => updateTier(tier.id, { bonus })} /></td>
           <td>{index > 0 && <Button size="sm" variant="ghost" aria-label={`Убрать ступень ${index + 1}`}
             onClick={() => setDraft(current => ({ ...current, tiers: current.tiers.filter(item => item.id !== tier.id) }))}>
@@ -111,6 +120,6 @@ export function CustomPayFields({ currency, draft, setDraft, named = true }: {
     {draft.tiers.length < maxTiers && <Button size="sm" onClick={() => {
       const next = newTier(crypto.randomUUID());
       setDraft(current => ({ ...current, tiers: [...current.tiers, next] }));
-    }}>Добавить ступень</Button>}
+    }}>{t('Добавить ступень','Kademe ekle')}</Button>}
   </div>;
 }

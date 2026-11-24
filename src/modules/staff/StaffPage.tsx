@@ -12,6 +12,8 @@ import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, maxPolicyMinor, percentToBp, tierPolicy, validPolicyMoney } from './CustomPayFields';
 import { MotivationPanel, PayExample, payTiming, teamPolicyForDate, useMotivation, type ShiftPolicy } from './Motivation';
+import { localized, useLocale, type Language } from '../../platform/locale';
+import { SchemeEditor, usePaySchemes, type PayScheme } from './PaySchemes';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
 import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
@@ -27,23 +29,28 @@ interface Loc { id: string; name: string; currency: string; status: string }
 const locationsOf = (partner: string) => rows<Loc>(from('location').select('id, name, currency, status').eq('partner_id', partner).order('name'));
 
 const cardSections = [
-  { id: 'profile', label: 'Основное' },
-  { id: 'pay', label: 'Оплата' },
-  { id: 'login', label: 'Вход' },
+  { id: 'profile', label: 'Основное', tr: 'Genel' },
+  { id: 'pay', label: 'Оплата', tr: 'Ücret' },
+  { id: 'login', label: 'Вход', tr: 'Giriş' },
 ] as const;
 type CardSection = (typeof cardSections)[number]['id'];
 type PayMode = 'partner' | 'fixed' | 'custom';
 
 const payChoices = [
-  { id: 'partner', title: 'Общая схема', hint: 'Гарантия, процент и премии по ступеням франчайзи.' },
-  { id: 'fixed', title: 'Фикс + процент', hint: 'За каждый выход — ставка плюс доля выручки смены.' },
-  { id: 'custom', title: 'Свои ступени', hint: 'Своя гарантия, пороги выручки, проценты и премии.' },
+  { id: 'partner', title: 'Общая схема', hint: 'Действуют общие условия франчайзи на дату смены.', tr: 'Vardiya tarihindeki ortak ücret koşulları uygulanır.' },
+  { id: 'fixed', title: 'Фикс + процент', hint: 'За каждый выход — ставка плюс доля выручки смены.', tr: 'Vardiya ücretine vardiya cirosundan alınan pay eklenir.' },
+  { id: 'custom', title: 'Свои ступени', hint: 'Своя гарантия, пороги выручки, проценты и премии.', tr: 'Kişisel garanti, ciro eşikleri, yüzdeler ve primler.' },
 ] as const;
 
 const positionLabels: Record<StaffPosition, string> = { sales_manager: 'Менеджер продаж', trainee: 'Стажёр', manager: 'Управляющий' };
 const accessLabels: Record<keyof StaffAccess, string> = { view_staff: 'Видеть сотрудников', create_staff: 'Добавлять сотрудников', procurement: 'Закупки', manage_pay: 'Редактировать оплату сотрудников' };
 const defaultAccess = { view_staff: false, create_staff: false, procurement: false };
 const legacyManagerAccess = { view_staff: true, create_staff: true, procurement: true };
+const turkishPositions: Record<StaffPosition, string> = { sales_manager: 'Satış danışmanı', trainee: 'Stajyer', manager: 'Mağaza yöneticisi' };
+const turkishAccess: Record<keyof StaffAccess, string> = {
+  view_staff: 'Çalışanları görüntüle', create_staff: 'Çalışan ekle', procurement: 'Sipariş ver', manage_pay: 'Çalışanların ücretini düzenle',
+};
+const positionLabel = (staff: StaffRow, language: Language) => localized(language, positionLabels[positionOf(staff)], turkishPositions[positionOf(staff)]);
 const accessKeys = Object.keys(accessLabels) as (keyof StaffAccess)[];
 
 function positionOf(staff?: StaffRow): StaffPosition {
@@ -52,14 +59,33 @@ function positionOf(staff?: StaffRow): StaffPosition {
 
 function payModeOf(staff?: StaffRow): PayMode {
   if (staff?.use_partner_motivation !== false) return 'partner';
-  return staff.custom_pay ? 'custom' : 'fixed';
+  return staff.custom_pay && !('mode' in staff.custom_pay) ? 'custom' : 'fixed';
 }
 
-function payTerms(staff: StaffRow, currency: string) {
-  if (payModeOf(staff) === 'partner') return 'Общая схема франчайзи';
-  if (staff.custom_pay) return `Свои ступени · ${staff.custom_pay.name}`;
-  return [staff.shift_fee_minor && `${formatMoneyShort(staff.shift_fee_minor, currency)} за смену`,
-    staff.rate_bp && `${pctBp(staff.rate_bp)} от выручки`].filter(Boolean).join(' + ') || 'Фикс и процент равны нулю';
+function payTerms(staff: StaffRow, currency: string, language: Language) {
+  const locale = language === 'tr' ? 'tr-TR' : 'ru-RU';
+  const t = (ru: string, tr: string) => localized(language, ru, tr);
+  const current = staff.pay_current_common !== undefined ? staff.pay_policy : null;
+  if (staff.pay_current_common ?? (payModeOf(staff) === 'partner')) return staff.pay_policy?.name
+    ? t('Общая схема', 'Ortak ücret planı') + ' · ' + staff.pay_policy.name
+    : t('Общая схема франчайзи', 'Ortak ücret planı');
+  if (current?.name) return current.name;
+  if (!current && staff.custom_pay) return staff.custom_pay.name;
+  const native = current && 'mode' in current ? current : {fee_minor:staff.shift_fee_minor,rate_bp:staff.rate_bp};
+  const fee = formatMoneyShort(native.fee_minor, currency, locale);
+  const percent = (native.rate_bp / 100).toLocaleString(locale);
+  return [native.fee_minor && t(`${fee} за смену`, `Vardiya başına ${fee}`),
+    native.rate_bp && t(`${pctBp(native.rate_bp)} от выручки`, `Cironun %${percent}’i`)]
+    .filter(Boolean).join(' + ') || t('Фикс и процент равны нулю', 'Sabit ücret ve komisyon sıfır');
+}
+
+function ScheduledPay({staff}:{staff:StaffRow}) {
+  const {t,locale}=useLocale();
+  return <>{staff.pay_scheduled?.map(v=>{
+    const mode = v.common===undefined ? v.label : v.common ? t('Общая схема','Ortak plan') : t('Фикс + процент','Sabit ücret + yüzde');
+    const label = v.name ? (v.common ? mode+' · '+v.name : v.name) : mode;
+    return <div key={v.effective_from} className="faint">{t('С','Başlangıç')} {formatDate(v.effective_from,locale)} · {label}</div>;
+  })}</>;
 }
 
 function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPay, initialSection = 'profile', onClose, onChangeAccess }: {
@@ -69,8 +95,12 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const qc = useQueryClient();
   const toast = useToast();
   const [section, setSection] = useState(initialSection);
+  const { t, locale, language } = useLocale();
   const payOnly = Boolean(staff && initialSection === 'pay');
   const [loginAction, setLoginAction] = useState<'phone' | 'password' | null>(null);
+  const catalogue=usePaySchemes(partnerId,canSetCustomPay && section==='pay');
+  const [chosen,setChosen]=useState<PayScheme|null|undefined>();
+  const [copyToCatalogue,setCopyToCatalogue]=useState<ShiftPolicy|null>(null);
   const common = useMotivation(partnerId, canSetCustomPay && section === 'pay');
   const currency = common.data?.currency ?? locations.data?.[0]?.currency ?? 'RUB';
   const unit = currencySymbol(currency);
@@ -87,9 +117,10 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const [initialPassword] = useState(randomPassword);
   const [name, setName] = useState(staff?.full_name ?? '');
   const [payMode, setPayMode] = useState<PayMode>(initialPayMode);
+  const choice=payChoices.find(option=>option.id===payMode)!;
   const [position, setPosition] = useState(initialPosition);
   const [access, setAccess] = useState(initialAccess);
-  const [formula, setFormula] = useState(() => customPayDraft(initialCustomPay));
+  const [formula, setFormula] = useState(() => customPayDraft(initialCustomPay && 'tiers' in initialCustomPay ? initialCustomPay : undefined));
   const [start, setStart] = useState(staff?.internship_from ?? '');
   const [until, setUntil] = useState(staff?.internship_until ?? '');
   const [traineeFee, setTraineeFee] = useState(String(staff?.internship_floor_minor ?? 50000));
@@ -109,7 +140,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const commonTerms = canSetCustomPay && !common.error ? common.data : undefined;
   const teamPolicy = commonTerms && teamPolicyForDate(commonTerms, payStart);
   const previewForDate = !payStart || payStart === commonTerms?.today || Boolean(commonTerms?.history && commonTerms.baseline);
-  const payPreview: ShiftPolicy | null = payMode === 'partner' ? previewForDate && teamPolicy || null
+  const storedScheme = initialPayMode !== 'partner' && initialCustomPay ? catalogue.data?.find(s=>s.active && sameJson(s.policy,initialCustomPay)) : undefined;
+  const picked = chosen === undefined ? storedScheme : chosen;
+  const payPreview: ShiftPolicy | null = picked ? picked.policy : payMode === 'partner' ? previewForDate && teamPolicy || null
     : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
     : validFee && bp !== null && Number.isSafeInteger(Number(fee)) ? { mode: 'legacy', rate_bp: bp, fee_minor: Number(fee) } : null;
   const formulaChanged = payMode === 'custom' && (!customPolicy || !sameJson(customPolicy, initialCustomPay));
@@ -122,7 +155,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const validProfile = Boolean(locations.data && !locations.error && name.trim() && selectedLocations.length && (staff || (digits && password.length >= 6))
     && (kind !== 'trainee' || validDates));
   const currencyReady = Boolean(common.data?.currency || locations.data?.[0]?.currency);
-  const validPay = (payMode !== 'fixed' || (validFee && bp !== null)) && (payMode !== 'custom' || Boolean(customPolicy))
+  const validPay = (Boolean(picked) || ((payMode !== 'fixed' || (validFee && bp !== null)) && (payMode !== 'custom' || Boolean(customPolicy))))
     && (kind !== 'trainee' || validTraineeFee);
   const dirty = name !== (staff?.full_name ?? '') || phone !== '' || password !== initialPassword
     || sel.length !== initialLocations.length || sel.some((id) => !initialLocations.includes(id))
@@ -130,17 +163,25 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
     || (kind === 'trainee' && (start !== (staff?.internship_from ?? '') || until !== (staff?.internship_until ?? '')
       || traineeFee !== String(staff?.internship_floor_minor ?? 50000) || !validTraineeFee))
     || payStart !== initialPayStart || payMode !== initialPayMode
-    || formulaChanged
+    || Boolean(chosen===null && initialCustomPay && 'mode' in initialCustomPay && payMode==='fixed')
+    || Boolean(chosen && (initialPayMode === 'partner' || !sameJson(chosen.policy,initialCustomPay)))
+    || (!picked && formulaChanged)
     || (payMode === 'fixed' && (bp !== (staff?.rate_bp ?? 0) || Number(fee) !== (staff?.shift_fee_minor ?? 0) || !validFee));
   const m = useMutation({
     mutationFn: async () => {
       if (payOnly && staff) {
         if (payRevision === undefined) throw new Error('Обновите карточку, чтобы получить актуальные условия оплаты.');
+        if (chosen) {
+          await command('pay_scheme_apply',{partner:partnerId,scheme:chosen.id,scheme_version:chosen.version,user:staff.user_id,
+            effective_from:payStart || null,expected_version:payRevision,internship_floor_minor:kind==='trainee'?traineeFee:null});
+          return;
+        }
         await staffPaySave({
           partner: partnerId, user: staff.user_id, use_partner: payMode === 'partner',
           rate_bp: payMode === 'fixed' ? bp ?? 0 : staff.rate_bp,
           shift_fee: payMode === 'fixed' ? fee || '0' : String(staff.shift_fee_minor),
-          custom_pay: payMode === 'custom' ? customPolicy : payMode === 'partner' ? initialCustomPay ?? null : null,
+          custom_pay: payMode === 'custom' ? customPolicy : payMode === 'partner' ? initialCustomPay ?? null :
+            initialCustomPay && 'mode' in initialCustomPay && chosen===undefined && bp===initialCustomPay.rate_bp && Number(fee)===initialCustomPay.fee_minor ? initialCustomPay : null,
           pay_effective_from: payStart || null, expected_pay_revision: payRevision,
           internship_floor_minor: kind === 'trainee' ? traineeFee : null,
         });
@@ -157,9 +198,12 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           access: { ...access, ...(position !== 'manager' && access.manage_pay ? { manage_pay: false } : {}) },
         } : {}),
         ...(payMode === 'custom' && (formulaChanged || payMode !== initialPayMode) ? { custom_pay: customPolicy } : {}),
-        ...(payMode === 'fixed' && payMode !== initialPayMode ? { custom_pay: null } : {}),
+        ...(payMode === 'fixed' && (payMode !== initialPayMode || (initialCustomPay && 'mode' in initialCustomPay &&
+          (chosen===null || bp!==initialCustomPay.rate_bp || Number(fee)!==initialCustomPay.fee_minor))) ? { custom_pay: null } : {}),
       };
-      await command('staff_profile_save_phone', {
+      if (chosen) await command('staff_profile_save_scheme',{partner:partnerId,user:staff?.user_id ?? null,full_name:name.trim(),
+        phone,password:submittedPassword,locations:selectedLocations,scheme:chosen.id,scheme_version:chosen.version,settings});
+      else await command('staff_profile_save_phone', {
         user: staff?.user_id ?? null, partner: partnerId, full_name: name.trim(), phone, password: submittedPassword,
         locations: selectedLocations, use_partner: payMode === 'partner',
         rate_bp: payMode === 'fixed' ? bp ?? 0 : staff?.rate_bp ?? 0,
@@ -169,146 +213,161 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
       if (!staff && digits) setCreated({ phone: formatPhone(digits), password: submittedPassword });
     },
     onError: error => {
-      if (toAppError(error).code === 'version-conflict') void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
+      if (toAppError(error).code === 'version-conflict') {
+        void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] }); void qc.invalidateQueries({queryKey:['pay-schemes',partnerId]});
+      }
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
       void qc.invalidateQueries({ queryKey: ['team', partnerId] });
       void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] });
-      if (staff) { toast(payOnly ? 'Условия оплаты сохранены' : 'Карточка сотрудника сохранена'); onClose(); }
+      if (staff) { toast(payOnly ? t('Условия оплаты сохранены', 'Ücret koşulları kaydedildi') : t('Карточка сотрудника сохранена', 'Çalışan kartı kaydedildi')); onClose(); }
     },
   });
-  if (created) return <NewAccountCredentials title="Сотрудник добавлен" {...created} onClose={onClose} />;
+  if (created) return <NewAccountCredentials title={t('Сотрудник добавлен', 'Çalışan eklendi')} {...created} onClose={onClose} />;
   const editable = !staff || staff.active;
   const showSave = editable && (section !== 'login' || (canSetAccess && (!staff || dirty)));
   return (
     <>
-      <ConfirmDialog open title={payOnly ? 'Условия оплаты' : staff ? 'Карточка' : 'Новый сотрудник'} cancelLabel={staff ? 'Закрыть' : undefined}
-        confirmLabel={showSave ? (staff ? 'Сохранить' : 'Добавить сотрудника') : undefined} busy={m.isPending} error={m.error}
+      <ConfirmDialog open title={payOnly ? t('Условия оплаты', 'Ücret koşulları') : staff ? t('Карточка', 'Çalışan kartı') : t('Новый сотрудник', 'Yeni çalışan')} cancelLabel={staff ? t('Закрыть', 'Kapat') : undefined}
+        confirmLabel={showSave ? (staff ? t('Сохранить', 'Kaydet') : t('Добавить сотрудника', 'Çalışan ekle')) : undefined} busy={m.isPending} error={m.error}
         disabled={!editable || (payOnly ? !dirty || payRevision === undefined || !currencyReady : !validProfile) || !validPay} dirty={editable && dirty} onClose={onClose} onConfirm={() => m.mutate()}>
         {staff && <p style={{ marginBottom: 'var(--space-3)', overflowWrap: 'anywhere' }}><strong>{staff.full_name}</strong></p>}
-        {!payOnly && <Chips options={cardSections.filter(item => item.id !== 'login' || staff || canSetAccess)} value={section} onChange={setSection} label="Настройки сотрудника" />}
+        {!payOnly && <Chips options={cardSections.filter(item => item.id !== 'login' || staff || canSetAccess).map(item => ({ id: item.id, label: t(item.label, item.tr) }))} value={section} onChange={setSection} label={t('Настройки сотрудника', 'Çalışan ayarları')} />}
         {!payOnly && <div hidden={!editable || section !== 'profile'}>
-          <Field label="Имя" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Дина" maxLength={160} />}</Field>
+          <Field label={t('Имя', 'Ad')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('Например, Дина', 'Örneğin Deniz')} maxLength={160} />}</Field>
           {!staff && (
             <div className="grid grid-2" style={{ gap: 12 }}>
-              <Field label="Телефон для входа" required hint="Полный номер с кодом страны" error={phone && !digits ? 'Проверьте номер телефона' : undefined}>{(id, describedBy) =>
+              <Field label={t('Телефон для входа', 'Giriş için telefon numarası')} required hint={t('Полный номер с кодом страны', 'Ülke koduyla birlikte tam numarayı girin')} error={phone && !digits ? t('Проверьте номер телефона', 'Telefon numarasını kontrol edin') : undefined}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
-              <Field label="Пароль" required hint="Можно оставить предложенный" error={password.length < 6 ? 'Минимум 6 символов' : undefined}>{(id, describedBy) =>
+              <Field label={t('Пароль', 'Parola')} required hint="Можно оставить предложенный" error={password.length < 6 ? t('Минимум 6 символов', 'En az 6 karakter') : undefined}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
             </div>
           )}
           <DataState query={locations} skeleton={2}>{() => (
-            <Field label="Точки, где работает" required error={selectedLocations.length ? undefined : 'Выберите хотя бы одну точку'}>{() => (
-              <div role="group" aria-label="Точки, где работает">{availableLocs.map((l) => (
-                <Checkbox key={l.id} label={l.name} hint={l.status === 'closed' ? 'Закрытая точка' : undefined}
+            <Field label={t('Точки, где работает', 'Çalıştığı mağazalar')} required error={selectedLocations.length ? undefined : t('Выберите хотя бы одну точку', 'En az bir mağaza seçin')}>{() => (
+              <div role="group" aria-label={t('Точки, где работает', 'Çalıştığı mağazalar')}>{availableLocs.map((l) => (
+                <Checkbox key={l.id} label={l.name} hint={l.status === 'closed' ? t('Закрытая точка', 'Kapalı mağaza') : undefined}
                   checked={sel.includes(l.id)} onChange={(v) => setSel(v ? [...sel, l.id] : sel.filter((x) => x !== l.id))} />
               ))}</div>
             )}</Field>
           )}</DataState>
-          <Field label="Статус сотрудника">{id => <Select id={id} value={position} disabled={!canSetAccess && position === 'manager'} onChange={e => {
+          <Field label={t('Статус сотрудника', 'Çalışan rolü')}>{id => <Select id={id} value={position} disabled={!canSetAccess && position === 'manager'} onChange={e => {
             setPosition(e.target.value as StaffPosition);
             setTraineeFeeParsed(true);
           }}>
-            <option value="sales_manager">Менеджер продаж</option><option value="trainee">Стажёр</option>
-            {(canSetAccess || position === 'manager') && <option value="manager">Управляющий</option>}
+            <option value="sales_manager">{t('Менеджер продаж', 'Satış danışmanı')}</option><option value="trainee">{t('Стажёр', 'Stajyer')}</option>
+            {(canSetAccess || position === 'manager') && <option value="manager">{t('Управляющий', 'Mağaza yöneticisi')}</option>}
           </Select>}</Field>
           {kind === 'trainee' && <div className="grid grid-2">
-            <Field label="Начало стажировки" hint="По умолчанию сегодня по времени точки">{id => <Input id={id} type="date" value={start} onChange={e => setStart(e.target.value)} />}</Field>
-            <Field label="Последний день" hint="По умолчанию один календарный месяц" error={validDates ? undefined : 'Проверьте даты стажировки'}>{(id, describedBy) =>
+            <Field label={t('Начало стажировки', 'Staj başlangıcı')} hint={t('По умолчанию сегодня по времени точки', 'Varsayılan olarak mağazanın yerel tarihine göre bugün')}>{id => <Input id={id} type="date" value={start} onChange={e => setStart(e.target.value)} />}</Field>
+            <Field label={t('Последний день', 'Son gün')} hint={t('По умолчанию один календарный месяц', 'Varsayılan süre bir takvim ayı')} error={validDates ? undefined : t('Проверьте даты стажировки', 'Staj tarihlerini kontrol edin')}>{(id, describedBy) =>
               <Input id={id} aria-describedby={describedBy} type="date" min={start || undefined} value={until} onChange={e => setUntil(e.target.value)} />}</Field>
           </div>}
-          <Checkbox label="Обучение включено" checked={learningEnabled} onChange={setLearningEnabled} />
-          {!validPay && <p className="hint">Проверьте настройки в разделе «Оплата».</p>}
+          <Checkbox label={t('Обучение включено', 'Eğitim açık')} checked={learningEnabled} onChange={setLearningEnabled} />
+          {!validPay && <p className="hint">{t('Проверьте настройки в разделе «Оплата».', '«Ücret» bölümündeki ayarları kontrol edin.')}</p>}
         </div>}
         <div hidden={!editable || section !== 'pay'} className="pay-settings">
           {!payOnly && !locations.isSuccess ? <DataState query={locations} skeleton={2}>{() => null}</DataState>
             : payOnly && !currencyReady ? <DataState query={common} skeleton={2}>{() => null}</DataState> :
             <div className="pay-layout">
             <div className="pay-field-grid">
-              <Field label={kind === 'trainee' ? 'Схема после стажировки' : 'Схема оплаты'}>{id =>
-                <Select id={id} value={payMode} onChange={e => setPayMode(e.target.value as PayMode)}>
+              <Field label={kind==='trainee'?t('Схема после стажировки','Staj sonrası plan'):t('Схема оплаты','Ücret planı')}
+                help={t('Общая схема следует настройкам команды. Именованная схема сохраняет выбранные условия для сотрудника.',
+                  'Ortak plan ekip ayarlarını izler. Adlandırılmış planın seçilen koşulları çalışan için kaydedilir.')}>{id =>
+                <Select id={id} value={picked?.id ?? payMode} onChange={e=>{
+                  const selected=catalogue.data?.find(s=>s.active && s.id===e.target.value);
+                  setChosen(selected ?? null); if(!selected)setPayMode(e.target.value as PayMode);
+                }}>
                   {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
-                    <option key={choice.id} value={choice.id}>{choice.title}</option>)}
+                    <option key={choice.id} value={choice.id}>{t(choice.title,choice.id==='partner'?'Ortak plan':choice.id==='fixed'?'Sabit ücret + yüzde':'Özel kademeler')}</option>)}
+                  {catalogue.data?.some(s=>s.active) && <optgroup label={t('Сохранённые схемы','Kayıtlı planlar')}>
+                    {catalogue.data.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.policy.name}</option>)}
+                  </optgroup>}
                 </Select>}</Field>
-              {staff && <Field label="Новые условия действуют с" hint={payStart ? undefined : 'По умолчанию — сегодня по времени точки.'}>{(id, describedBy) =>
+              {staff && <Field label={t('Новые условия действуют с','Yeni koşulların başlangıcı')} help={t('Ранее принятые смены сохраняют исходные условия.','Daha önce kaydedilen vardiyalar ilk koşullarını korur.')} hint={payStart ? undefined : t('По умолчанию — сегодня по времени точки.','Varsayılan tarih şubenin yerel saatine göre bugündür.')}>{(id, describedBy) =>
                 <Input id={id} type="date" value={payStart} aria-describedby={describedBy} onChange={e => setPayStart(e.target.value)} />}</Field>}
             </div>
-            {kind === 'trainee' && <Field label={`Гарантия стажёра за смену, ${unit}`}
-              hint={until ? `До ${formatDate(until)} включительно, по ступеням общей схемы.` : 'На время стажировки действуют ступени общей схемы.'}
+            {kind === 'trainee' && <Field label={t('Гарантия стажёра за смену','Stajyerin vardiya garantisi')+', '+unit}
+              help={t('На стажировке эта сумма заменяет гарантию или ставку за выход в общей схеме.','Staj sırasında bu tutar ortak plandaki garantinin veya vardiya ücretinin yerini alır.')}
+              hint={until ? t('До ','Bitiş ')+formatDate(until,locale) : undefined}
               error={!traineeFeeParsed ? 'Введите корректную сумму' : !validTraineeFee ? `Максимальная гарантия — ${formatMoneyShort(maxPolicyMinor, currency)}` : undefined}>{(id, describedBy) =>
                 <MoneyInput id={id} describedBy={describedBy} invalid={!validTraineeFee} currency={currency} value={traineeFee} placeholder="0"
                   onChange={setTraineeFee} onValidityChange={setTraineeFeeParsed} />}</Field>}
-            <div hidden={payMode !== 'fixed'}><div className="pay-field-grid">
-              <Field label={`Ставка за выход, ${unit}`} error={validFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
+            {canSetCustomPay && catalogue.error && <DataState query={catalogue}>{()=>null}</DataState>}
+            {picked && <p className="pay-help">{'mode' in picked.policy
+              ? formatMoneyShort(picked.policy.fee_minor,currency,locale)+' + '+pctBp(picked.policy.rate_bp)
+              : t('Гарантия за смену','Vardiya garantisi')+' '+formatMoneyShort(picked.policy.floor_minor,currency,locale)+' · '+t('ступеней','kademe')+' '+picked.policy.tiers.length}</p>}
+            <div hidden={Boolean(picked) || payMode !== 'fixed'}><div className="pay-field-grid">
+              <Field label={t('Ставка за выход','Vardiya ücreti')+', '+unit} help={t('Начисляется один раз за рабочий день.','İş günü başına bir kez hesaplanır.')} error={validFee ? undefined : 'Введите корректную сумму'}>{(id, describedBy) =>
                 <MoneyInput id={id} describedBy={describedBy} value={fee} onChange={setFee} onValidityChange={setValidFee} currency={currency} placeholder="0" />}</Field>
-              <Field label="Доля выручки, %" error={bp !== null ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
+              <Field label={t('Доля выручки, %','Ciro payı, %')} help={t('Процент от выручки смены прибавляется к ставке.','Vardiyanın ciro yüzdesi vardiya ücretine eklenir.')} error={bp !== null ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} aria-invalid={bp === null || undefined} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
             </div></div>
-            {canSetCustomPay && <div hidden={payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
-            <details className="pay-explanation"><summary>Условия и пример расчёта</summary>
-              {staff && <p className="pay-help">Сохранено: {payTerms(staff, currency)}
-                {staff.pay_effective_from && ` · с ${formatDate(staff.pay_effective_from)}`}</p>}
-              {staff?.pay_scheduled?.filter(v => v.effective_from !== staff.pay_effective_from).map(v =>
-                <p className="pay-help" key={v.effective_from}>С {formatDate(v.effective_from)} — {v.label}</p>)}
-              <p className="pay-help">{payChoices.find(choice => choice.id === payMode)?.hint}</p>
+            {canSetCustomPay && <div hidden={Boolean(picked) || payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
+            <details className="pay-explanation"><summary>{t('Условия и пример расчёта','Koşullar ve hesaplama örneği')}</summary>
+              {staff && <><p className="pay-help">{t('Сейчас','Güncel')} · {payTerms(staff, currency, language)}</p><ScheduledPay staff={staff}/></>}
+              {!picked && <p className="pay-help">{t(choice.hint,choice.tr)}</p>}
               {(payMode === 'partner' || kind === 'trainee') && canSetCustomPay && !teamPolicy &&
                 <DataState query={common} skeleton={1}>{() => null}</DataState>}
-              {(payMode !== 'partner' || (teamPolicy && previewForDate)) && <PayExample currency={currency} policy={payPreview}
+              {(picked || payMode !== 'partner' || (teamPolicy && previewForDate)) && <PayExample currency={currency} policy={payPreview}
                 traineePolicy={kind === 'trainee' ? teamPolicy && validTraineeFee && previewForDate
-                  ? { ...teamPolicy, floor_minor: Number(traineeFee) } : null : undefined} />}
-              <p className="pay-help">{payTiming}</p>
+                  ? ('mode' in teamPolicy ? { ...teamPolicy,fee_minor:Number(traineeFee) } : { ...teamPolicy,floor_minor:Number(traineeFee) }) : null : undefined} />}
+              <p className="pay-help">{t(payTiming,'Vardiya tarihindeki koşullar uygulanır. Kaydedilmiş ve daha önce açılmış vardiyaların koşulları korunur.')}</p>
             </details>
+            {canSetAccess && !picked && payMode!=='partner' && payPreview && <Button size="sm" onClick={()=>setCopyToCatalogue(payPreview)}>
+              {t('Сохранить как новую схему','Yeni plan olarak kaydet')}</Button>}
             {payOnly && payRevision === undefined && <p className="hint">Обновите карточку, чтобы получить актуальные условия оплаты.</p>}
-            {!payOnly && !validProfile && !locations.error && <p className="hint">Проверьте поля в разделе «Основное».</p>}
+            {!payOnly && !validProfile && !locations.error && <p className="hint">{t('Проверьте поля в разделе «Основное».', '«Genel» bölümündeki alanları kontrol edin.')}</p>}
           </div>}
         </div>
         {staff && !staff.active && section !== 'login' && <div style={{ containerType: 'inline-size' }}>
           {section === 'profile' ? <KV items={[
-            ['Статус', positionLabels[positionOf(staff)]],
-            ['Точки', staff.location_names.join(', ') || 'Точки не назначены'],
+            ['Статус', positionLabel(staff, language)],
+            ['Точки', staff.location_names.join(', ') || t('Точки не назначены', 'Mağaza atanmamış')],
             ['Обучение', staff.learning_enabled === false ? 'Выключено' : 'Включено'],
-            ...(staff.employee_kind === 'trainee' ? [['Начало стажировки', staff.internship_from ? dayLabel(staff.internship_from) : null],
-              ['Последний день', staff.internship_until ? dayLabel(staff.internship_until) : null]] as [string, string | null][] : []),
+            ...(staff.employee_kind === 'trainee' ? [[t('Начало стажировки', 'Staj başlangıcı'), staff.internship_from ? dayLabel(staff.internship_from, locale) : null],
+              [t('Последний день', 'Son gün'), staff.internship_until ? dayLabel(staff.internship_until, locale) : null]] as [string, string | null][] : []),
           ]} /> : <DataState query={locations} skeleton={2}>{() => <KV items={[
-            ['Оплата', payTerms(staff, currency)],
+            [t('Оплата', 'Ücret'), payTerms(staff, currency, language)],
             ...(staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined
               ? [['Минимум за смену на стажировке', formatMoneyShort(staff.internship_floor_minor, currency)]] as [string, string][] : []),
           ]} />}</DataState>}
         </div>}
         {section === 'login' && <div className="stack">
           {staff && <div style={{ overflowWrap: 'anywhere' }}>
-            <div className="faint">Логин</div>
+            <div className="faint">{t('Логин', 'Giriş numarası')}</div>
             <div className="row">
-              <strong>{formatPhone(staff.phone) || 'Не задан'}</strong>
+              <strong>{formatPhone(staff.phone) || t('Не задан', 'Belirtilmedi')}</strong>
               {staff.phone && <CopyCredential kind="login" value={formatPhone(staff.phone)} />}
             </div>
           </div>}
-          {editable && canSetAccess && <div role="group" aria-label="Права сотрудника">
-            <strong>Права сотрудника</strong>
-            {accessKeys.filter(key => key !== 'manage_pay' || position === 'manager').map(key => <Checkbox key={key} label={accessLabels[key]} checked={Boolean(access[key])}
+          {editable && canSetAccess && <div role="group" aria-label={t('Права сотрудника', 'Çalışan yetkileri')}>
+            <strong>{t('Права сотрудника', 'Çalışan yetkileri')}</strong>
+            {accessKeys.filter(key => key !== 'manage_pay' || position === 'manager').map(key => <Checkbox key={key} label={t(accessLabels[key], turkishAccess[key])} checked={Boolean(access[key])}
               onChange={checked => setAccess(current => ({ ...current, [key]: checked }))} />)}
             {position === 'manager' && staff?.access?.legacy_staff_management && <p className="faint">
               Право «Видеть сотрудников» также открывает этому управляющему редактирование карточек и просмотр начислений на назначенных точках.
             </p>}
-            {showSave && (!validProfile || !validPay) && <p className="hint">Проверьте разделы «Основное» и «Оплата».</p>}
+            {showSave && (!validProfile || !validPay) && <p className="hint">{t('Проверьте разделы «Основное» и «Оплата».', '«Genel» ve «Ücret» bölümlerini kontrol edin.')}</p>}
           </div>}
           {staff && (staff.active ? <>
             <div className="row">
-              <Button size="sm" disabled={m.isPending} onClick={() => setLoginAction('phone')}>Изменить телефон</Button>
-              <Button size="sm" disabled={m.isPending} onClick={() => setLoginAction('password')}>Задать пароль</Button>
+              <Button size="sm" disabled={m.isPending} onClick={() => setLoginAction('phone')}>{t('Изменить телефон', 'Telefonu değiştir')}</Button>
+              <Button size="sm" disabled={m.isPending} onClick={() => setLoginAction('password')}>{t('Задать пароль', 'Parola belirle')}</Button>
             </div>
-            <Button size="sm" variant="ghost" className="danger-text" disabled={m.isPending} onClick={() => onChangeAccess(staff, dirty)}>Закрыть доступ</Button>
-            {dirty && <p className="hint" role="status">Изменения в карточке ещё не сохранены.</p>}
+            <Button size="sm" variant="ghost" className="danger-text" disabled={m.isPending} onClick={() => onChangeAccess(staff, dirty)}>{t('Закрыть доступ', 'Erişimi kapat')}</Button>
+            {dirty && <p className="hint" role="status">{t('Изменения в карточке ещё не сохранены.', 'Karttaki değişiklikler henüz kaydedilmedi.')}</p>}
           </> : <>
-            <p className="faint">Доступ закрыт</p>
-            <Button size="sm" onClick={() => onChangeAccess(staff, false)}>Вернуть доступ</Button>
+            <p className="faint">{t('Доступ закрыт', 'Erişim kapalı')}</p>
+            <Button size="sm" onClick={() => onChangeAccess(staff, false)}>{t('Вернуть доступ', 'Erişimi geri aç')}</Button>
           </>)}
         </div>}
         {staff?.active && (managerPositionChanged || accessChanged) && <p className="faint" style={{ marginTop: 'var(--space-3)' }}>
           После изменения прав сотруднику нужно войти заново.
         </p>}
       </ConfirmDialog>
+      {copyToCatalogue && <SchemeEditor partner={partnerId} currency={currency} initial={copyToCatalogue} onClose={()=>setCopyToCatalogue(null)}/>}
       {staff && loginAction === 'phone' && <PhoneLoginDialog user={staff.user_id} name={staff.full_name} currentPhone={staff.phone} onClose={() => setLoginAction(null)} />}
       {staff && loginAction === 'password' && <PasswordReset partnerId={partnerId} staff={staff} onClose={() => setLoginAction(null)} />}
     </>
@@ -316,19 +375,20 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
 }
 
 function PasswordReset({ partnerId, staff, onClose }: { partnerId: string; staff: StaffRow; onClose: () => void }) {
+  const { t } = useLocale();
   const qc = useQueryClient();
   const [pw, setPw] = useState(randomPassword);
   const [issued, setIssued] = useState<string | null>(null);
   const m = useMutation({ mutationFn: async () => { const password = pw; await userSetPassword(staff.user_id, password); setIssued(password); },
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] }); } });
-  if (issued) return <ConfirmDialog open title="Пароль изменён" cancelLabel="Готово" onClose={onClose}>
-    <p>Новый пароль доступен до закрытия этого окна.</p>
+  if (issued) return <ConfirmDialog open title={t('Пароль изменён', 'Parola değiştirildi')} cancelLabel={t('Готово', 'Bitti')} onClose={onClose}>
+    <p>{t('Новый пароль доступен до закрытия этого окна.', 'Yeni parola bu pencere kapanana kadar görünür.')}</p>
     <CredentialFields login={formatPhone(staff.phone)} password={issued} />
   </ConfirmDialog>;
   return (
-    <ConfirmDialog open title="Новый пароль" confirmLabel="Задать пароль" busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
+    <ConfirmDialog open title={t('Новый пароль', 'Yeni parola')} confirmLabel={t('Задать пароль', 'Parola belirle')} busy={m.isPending} error={m.error} disabled={pw.length < 6} onClose={onClose} onConfirm={() => m.mutate()}>
       <p><strong>{staff.full_name}</strong><br />{formatPhone(staff.phone)}</p>
-      <Field label="Пароль" hint="Минимум 6 символов">{(id, describedBy) => <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>
+      <Field label={t('Пароль', 'Parola')} hint={t('Минимум 6 символов', 'En az 6 karakter')}>{(id, describedBy) => <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>
     </ConfirmDialog>
   );
 }
@@ -355,18 +415,19 @@ async function downloadPayroll(list: PayrollRow[], month: string, currency: stri
 }
 
 const staffSections = [
-  { id: 'team', label: 'Команда' },
-  { id: 'shifts', label: 'Смены и начисления' },
-  { id: 'pay', label: 'Оплата' },
+  { id: 'team', label: 'Команда', tr: 'Ekip' },
+  { id: 'shifts', label: 'Смены и начисления', tr: 'Vardiya ve kazanç' },
+  { id: 'pay', label: 'Оплата', tr: 'Ücret' },
 ] as const;
 
 const staffStatuses = [
-  { id: 'active', label: 'Работают' },
-  { id: 'closed', label: 'Доступ закрыт' },
+  { id: 'active', label: 'Работают', tr: 'Aktif çalışanlar' },
+  { id: 'closed', label: 'Доступ закрыт', tr: 'Erişimi kapalı' },
 ] as const;
 
 /** Список сотрудников и ведомость для франчайзи и для менеджера в карточке франчайзи. */
 export function StaffPanel({ partnerId }: { partnerId: string }) {
+  const { t, locale, language } = useLocale();
   const { me } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
@@ -401,7 +462,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const setActive = useMutation({
     mutationFn: ({ user, active }: { user: string; active: boolean }) => staffSetActive(user, active),
     onSuccess: (_, { user, active }) => {
-      toast(active ? 'Доступ возвращён' : 'Доступ закрыт');
+      toast(active ? t('Доступ возвращён', 'Erişim geri açıldı') : t('Доступ закрыт', 'Erişim kapalı'));
       setAccess(null);
       setEdit(current => current && current !== 'new' && current.staff.user_id === user ? null : current);
       void qc.invalidateQueries({ queryKey: ['staff-list', partnerId] });
@@ -414,11 +475,11 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
   const exp = useMutation({ mutationFn: async () => {
     if (payrollCurrency) await downloadPayroll(payroll, month, payrollCurrency);
   } });
-  const term = search.trim().toLocaleLowerCase('ru-RU');
+  const term = search.trim().toLocaleLowerCase(locale);
   const digits = /^[+\d()\s.-]+$/.test(term) ? (phoneLoginDigits(term) ?? term.replace(/\D/g, '')) : '';
   const visibleStaff = (q.data ?? []).filter((s) => s.active === (status === 'active') && (
-    !term || [s.full_name, ...s.location_names].some((value) => value.toLocaleLowerCase('ru-RU').includes(term))
-    || (canManageEmployees && (s.phone.toLocaleLowerCase('ru-RU').includes(term) || (digits && s.phone.replace(/\D/g, '').includes(digits))))
+    !term || [s.full_name, ...s.location_names].some((value) => value.toLocaleLowerCase(locale).includes(term))
+    || (canManageEmployees && (s.phone.toLocaleLowerCase(locale).includes(term) || (digits && s.phone.replace(/\D/g, '').includes(digits))))
   ));
   const canManageStaff = (staff: StaffRow) => canManageEmployees && staff.user_id !== me?.user.id && staff.can_manage !== false;
   const [params, setParams] = useSearchParams();
@@ -442,18 +503,18 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
 
   return (
     <div className="stack">
-      {availableSections.length > 1 && <Chips options={availableSections} value={visibleSection} onChange={setSection} label="Разделы сотрудников" />}
-      {visibleSection === 'team' && <section className="stack" aria-label="Команда">
+      {availableSections.length > 1 && <Chips options={availableSections.map(item => ({ id: item.id, label: t(item.label, item.tr) }))} value={visibleSection} onChange={setSection} label={t('Разделы сотрудников', 'Çalışan bölümleri')} />}
+      {visibleSection === 'team' && <section className="stack" aria-label={t('Команда', 'Ekip')}>
         {(canCreateStaff || canManageEmployees) && <div className="row between">
-          {canCreateStaff && <Button variant="primary" onClick={() => setEdit('new')} disabled={!canAdd}><Plus size={16} aria-hidden />Добавить сотрудника</Button>}
-          {canManageEmployees && <Link className="btn btn-ghost" to={`/learning/manage?partner=${partnerId}`}>Обучение сотрудников</Link>}
+          {canCreateStaff && <Button variant="primary" onClick={() => setEdit('new')} disabled={!canAdd}><Plus size={16} aria-hidden />{t('Добавить сотрудника', 'Çalışan ekle')}</Button>}
+          {canManageEmployees && <Link className="btn btn-ghost" to={`/learning/manage?partner=${partnerId}`}>{t('Обучение сотрудников', 'Çalışan eğitimi')}</Link>}
         </div>}
-        {canCreateStaff && locs.isSuccess && !canAdd && <p className="faint">Нет действующих точек для нового сотрудника.</p>}
+        {canCreateStaff && locs.isSuccess && !canAdd && <p className="faint">{t('Нет действующих точек для нового сотрудника.', 'Yeni çalışan atamak için açık mağaza yok.')}</p>}
         <ActionError error={locs.error} />
-        {canManageEmployees && overdueShifts > 0 && <Button size="sm" onClick={() => setSection('shifts')}>Незакрытые смены за прошлые дни: {overdueShifts}</Button>}
+        {canManageEmployees && overdueShifts > 0 && <Button size="sm" onClick={() => setSection('shifts')}>{t(`Незакрытые смены за прошлые дни: ${overdueShifts}`, `Geçmiş günlerden açık vardiya: ${overdueShifts}`)}</Button>}
         {canViewStaff && <>
-        <Field label="Найти сотрудника">{id => <Input id={id} type="search" value={search} placeholder={canManageEmployees ? 'Имя, телефон или точка' : 'Имя или точка'} onChange={e => setSearch(e.target.value)} />}</Field>
-        <Chips options={[...staffStatuses]} value={status} onChange={setStatus} label="Статус доступа" />
+        <Field label={t('Найти сотрудника', 'Çalışan ara')}>{id => <Input id={id} type="search" value={search} placeholder={canManageEmployees ? t('Имя, телефон или точка', 'Ad, telefon veya mağaza') : t('Имя или точка', 'Ad veya mağaza')} onChange={e => setSearch(e.target.value)} />}</Field>
+        <Chips options={staffStatuses.map(item => ({ id: item.id, label: t(item.label, item.tr) }))} value={status} onChange={setStatus} label={t('Статус доступа', 'Erişim durumu')} />
         <DataState query={q}>{(list) => (
           visibleStaff.length ? <div className="stack">
             {visibleStaff.map((staff) => {
@@ -463,25 +524,25 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                   <div style={{ minWidth: 0 }}>
                     <div className="row">
                       <strong id={`staff-name-${staff.user_id}`}>{staff.full_name}</strong>
-                      <Badge tone={positionOf(staff) === 'trainee' ? 'info' : 'neutral'}>{positionLabels[positionOf(staff)]}</Badge>
-                      {positionOf(staff) === 'trainee' && staff.internship_completed && <span className="faint">Стажировка завершена</span>}
-                      {canManageEmployees && staff.open_shift && <Badge tone="success">На смене в «{staff.open_shift.location_name}»</Badge>}
+                      <Badge tone={positionOf(staff) === 'trainee' ? 'info' : 'neutral'}>{positionLabel(staff, language)}</Badge>
+                      {positionOf(staff) === 'trainee' && staff.internship_completed && <span className="faint">{t('Стажировка завершена', 'Staj tamamlandı')}</span>}
+                      {canManageEmployees && staff.open_shift && <Badge tone="success">{t(`На смене в «${staff.open_shift.location_name}»`, `«${staff.open_shift.location_name}» mağazasında vardiyada`)}</Badge>}
                     </div>
-                    <div className="faint">{staff.location_names.join(', ') || 'Точки не назначены'}</div>
+                    <div className="faint">{staff.location_names.join(', ') || t('Точки не назначены', 'Mağaza atanmamış')}</div>
                     {canManageEmployees && staff.phone && <div className="faint">{formatPhone(staff.phone)}</div>}
                   </div>
                   {canManage && <Button size="sm" aria-describedby={`staff-name-${staff.user_id}`}
-                    onClick={() => setEdit({ staff, section: staff.active ? 'profile' : 'login' })}>Открыть карточку</Button>}
+                    onClick={() => setEdit({ staff, section: staff.active ? 'profile' : 'login' })}>{t('Открыть карточку', 'Çalışan kartını aç')}</Button>}
                 </div>
-                {canManageEmployees && !canManage && staff.user_id !== me?.user.id && <p className="faint">Доступ и условия меняет франчайзи</p>}
+                {canManageEmployees && !canManage && staff.user_id !== me?.user.id && <p className="faint">{t('Доступ и условия меняет франчайзи', 'Erişimi ve koşulları franchise işletmecisi değiştirir')}</p>}
               </Card>;
             })}
-          </div> : <EmptyState title={term ? 'Сотрудники не найдены' : !list.length ? 'Сотрудников пока нет' : status === 'active' ? 'Нет сотрудников с открытым доступом' : 'Нет сотрудников с закрытым доступом'}
-            action={term ? <Button size="sm" onClick={() => setSearch('')}>Сбросить поиск</Button> : undefined} />
+          </div> : <EmptyState title={term ? t('Сотрудники не найдены', 'Çalışan bulunamadı') : !list.length ? t('Сотрудников пока нет', 'Henüz çalışan yok') : status === 'active' ? t('Нет сотрудников с открытым доступом', 'Erişimi açık çalışan yok') : t('Нет сотрудников с закрытым доступом', 'Erişimi kapalı çalışan yok')}
+            action={term ? <Button size="sm" onClick={() => setSearch('')}>{t('Сбросить поиск', 'Aramayı temizle')}</Button> : undefined} />
         )}</DataState>
         </>}
       </section>}
-      {visibleSection === 'shifts' && <section className="stack" aria-label="Смены и начисления">
+      {visibleSection === 'shifts' && <section className="stack" aria-label={t('Смены и начисления', 'Vardiya ve kazanç')}>
         <ShiftReview partner={partnerId} />
         <div className="row between">
           <MonthNav month={month} onChange={setMonth} max={monthStart()} />
@@ -491,32 +552,32 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
         </div>
         <ActionError error={exp.error} />
         <DataState query={q}>{() => <DataState query={locs} empty={points => points.length ? null :
-          <EmptyState title="За этот месяц нет закрытых смен" />}>{() => (
+          <EmptyState title={t('За этот месяц нет закрытых смен', 'Bu ay kapanmış vardiya yok')} />}>{() => (
           <div className="stack">
             <div className="kpis">
-              <div className="kpi"><span className="v">{formatMoneyShort(sumMinor(payroll.map(staff => staff.month_earned_minor)), currency)}</span><span className="l">начислено за месяц</span></div>
+              <div className="kpi"><span className="v">{formatMoneyShort(sumMinor(payroll.map(staff => staff.month_earned_minor)), currency)}</span><span className="l">{t('начислено за месяц', 'Aylık kazanç')}</span></div>
             </div>
             <PayrollSchedule month={month} currency={currency}
               amounts={[sumMinor(payroll.map(staff => staff.payHalves[0])), sumMinor(payroll.map(staff => staff.payHalves[1]))]} />
-            {!payroll.length && <EmptyState title="За этот месяц нет закрытых смен" />}
+            {!payroll.length && <EmptyState title={t('За этот месяц нет закрытых смен', 'Bu ay kapanmış vardiya yok')} />}
             {payroll.map((staff) => <Card key={staff.user_id}>
               <div className="stack">
                 <div className="row between staff-summary">
                   <div style={{ minWidth: 0 }}><strong>{staff.full_name}</strong>
-                    <div className="faint">Выходов: {staff.month_shifts} · Выручка: {formatMoneyShort(staff.month_revenue_minor, currency)}</div>
+                    <div className="faint">{t('Выходов', 'Vardiya')}: {staff.month_shifts} · {t('Выручка', 'Ciro')}: {formatMoneyShort(staff.month_revenue_minor, currency, locale)}</div>
                   </div>
-                  <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency)}</strong>
+                  <strong className="num">{formatMoneyShort(staff.month_earned_minor, currency, locale)}</strong>
                 </div>
                 <PayrollSchedule month={month} amounts={staff.payHalves} currency={currency} />
               </div>
-              {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>Смены за месяц</summary>
+              {staff.shifts.length > 0 && <details style={{ marginTop: 8 }}><summary>{t('Смены за месяц', 'Ayın vardiyaları')}</summary>
                 <ul className="list">{staff.shifts.map((shift) => <li key={shift.id} className="row between access-row">
-                  <span>{dayLabel(shift.day)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
-                    {payrollShiftTime(shift)}{shift.counts_as_exit === false && ' · Дополнительная точка'} · Выручка: {formatMoneyShort(shift.total_minor, currency)}
+                  <span>{dayLabel(shift.day, locale)} · {shift.location_name}<span className="faint" style={{ display: 'block' }}>
+                    {payrollShiftTime(shift)}{shift.counts_as_exit === false && t(' · Дополнительная точка', ' · Ek mağaza')} · {t('Выручка', 'Ciro')}: {formatMoneyShort(shift.total_minor, currency, locale)}
                   </span></span>
                   <div className="row wrap">
-                    <strong className="num">{formatMoneyShort(shift.earned_minor, currency)}</strong>
-                    {shift.can_correct && canManageStaff(staff) && <Button size="sm" onClick={() => setCorrection({ employee: staff.full_name, shift })}>Исправить смену</Button>}
+                    <strong className="num">{formatMoneyShort(shift.earned_minor, currency, locale)}</strong>
+                    {shift.can_correct && canManageStaff(staff) && <Button size="sm" onClick={() => setCorrection({ employee: staff.full_name, shift })}>{t('Исправить смену', 'Vardiyayı düzelt')}</Button>}
                   </div>
                 </li>)}</ul>
               </details>}
@@ -525,22 +586,22 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
         )}</DataState>}</DataState>
       </section>}
       {(canManageEmployees || canSetEmployeePay) && <div hidden={visibleSection !== 'pay'}>
-        <section className="stack" aria-label="Оплата">
+        <section className="stack" aria-label={t('Оплата', 'Ücret')}>
           {canManageEmployees && <MotivationPanel partner={partnerId} canEdit={canSetAccess} />}
           <DataState query={q}>{(list) => {
             const activeStaff = list.filter(staff => staff.active && (canManageEmployees || staff.can_edit_pay));
-            return activeStaff.length ? <Card title="Условия сотрудников"><ul className="list">
+            return activeStaff.length ? <Card title={t('Условия сотрудников', 'Çalışanların ücret koşulları')}><ul className="list">
               {activeStaff.map((staff) => <li key={staff.user_id} className="row between access-row">
                 <div style={{ minWidth: 0 }}>
                   <strong>{staff.full_name}</strong>
-                  {payrollCurrency && <div className="faint">{payTerms(staff, payrollCurrency)}{staff.pay_effective_from && ` · с ${formatDate(staff.pay_effective_from)}`}</div>}
-                  {payrollCurrency && staff.employee_kind === 'trainee' && staff.internship_floor_minor !== undefined && <div className="faint">
-                    Минимум за смену на стажировке: {formatMoneyShort(staff.internship_floor_minor, currency)}
+                  {payrollCurrency && <><div className="faint">{payTerms(staff, payrollCurrency, language)}</div><ScheduledPay staff={staff}/></>}
+                  {payrollCurrency && staff.pay_current_trainee_floor != null && <div className="faint">
+                    {t('Минимум за смену на стажировке', 'Stajyer vardiya garantisi')}: {formatMoneyShort(staff.pay_current_trainee_floor, currency, locale)}
                   </div>}
                 </div>
-                {(canManageStaff(staff) || staff.can_edit_pay) && <Button size="sm" onClick={() => setEdit({ staff, section: 'pay' })}>Изменить</Button>}
+                {(canManageStaff(staff) || staff.can_edit_pay) && <Button size="sm" onClick={() => setEdit({ staff, section: 'pay' })}>{t('Изменить', 'Düzenle')}</Button>}
               </li>)}
-            </ul></Card> : <EmptyState title={canManageEmployees ? 'Нет сотрудников с открытым доступом' : 'Нет сотрудников для настройки оплаты'} />;
+            </ul></Card> : <EmptyState title={canManageEmployees ? t('Нет сотрудников с открытым доступом', 'Erişimi açık çalışan yok') : t('Нет сотрудников для настройки оплаты', 'Ücreti düzenlenebilecek çalışan yok')} />;
           }}</DataState>
         </section>
       </div>}
@@ -549,17 +610,18 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       {edit && canOpenEdit && <StaffDialog key={selectedStaff?.user_id ?? 'new'} partnerId={partnerId} locations={locs} staff={selectedStaff}
         canSetAccess={canSetAccess} canSetCustomPay={canManageEmployees || (edit !== 'new' && Boolean(selectedStaff?.can_edit_pay))} initialSection={edit === 'new' ? undefined : edit.section}
         onClose={() => setEdit(null)} onChangeAccess={changeAccess} />}
-      {access && canManageEmployees && <ConfirmDialog open danger={access.staff.active} title={`${access.staff.active ? 'Закрыть' : 'Вернуть'} доступ?`} confirmLabel={access.staff.active ? 'Закрыть доступ' : 'Вернуть доступ'}
+      {access && canManageEmployees && <ConfirmDialog open danger={access.staff.active} title={access.staff.active ? t('Закрыть доступ?', 'Erişim kapatılsın mı?') : t('Вернуть доступ?', 'Erişim geri açılsın mı?')} confirmLabel={access.staff.active ? t('Закрыть доступ', 'Erişimi kapat') : t('Вернуть доступ', 'Erişimi geri aç')}
         busy={setActive.isPending} error={setActive.error} onClose={() => setAccess(null)} onConfirm={() => setActive.mutate({ user: access.staff.user_id, active: !access.staff.active })}>
         <p><strong>{access.staff.full_name}</strong></p>
-        <p>{access.staff.active ? 'Сотрудник сразу потеряет доступ к кабинету. Смены и начисления сохранятся.' : 'Сотрудник сможет снова войти в кабинет.'}</p>
-        {access.dirty && <p>Несохранённые изменения карточки будут отброшены.</p>}
+        <p>{access.staff.active ? t('Сотрудник сразу потеряет доступ к кабинету. Смены и начисления сохранятся.', 'Çalışanın panele erişimi hemen kapanır. Vardiyaları ve kazançları korunur.') : t('Сотрудник сможет снова войти в кабинет.', 'Çalışan panele yeniden giriş yapabilir.')}</p>
+        {access.dirty && <p>{t('Несохранённые изменения карточки будут отброшены.', 'Karttaki kaydedilmemiş değişiklikler silinir.')}</p>}
       </ConfirmDialog>}
     </div>
   );
 }
 
 export function StaffPage() {
+  const { t } = useLocale();
   const { me } = useSession();
   const ownedCards = franchiseePartnerCards(me);
   const delegated = ownedCards.length === 0 ? me?.assignments.find(a =>
@@ -567,9 +629,9 @@ export function StaffPage() {
   const partner = ownedCards.length === 1 ? ownedCards[0] : delegated;
   return (
     <>
-      <PageHeader title="Сотрудники" />
-      {ownedCards.length > 1 ? <EmptyState title="Уточните доступ к карточке франчайзи" text={FRANCHISEE_CARD_AMBIGUITY} />
-        : partner ? <StaffPanel key={partner} partnerId={partner} /> : <EmptyState title="Нет франчайзи" />}
+      <PageHeader title={t('Сотрудники', 'Çalışanlar')} />
+      {ownedCards.length > 1 ? <EmptyState title={t('Уточните доступ к карточке франчайзи', 'Franchise kartı erişimini doğrulayın')} text={t(FRANCHISEE_CARD_AMBIGUITY, 'Bu hesap birden fazla franchise işletmecisinin kartına erişiyor. Franchise yöneticinize danışın.')} />
+        : partner ? <StaffPanel key={partner} partnerId={partner} /> : <EmptyState title={t('Нет франчайзи', 'Franchise işletmecisi bulunamadı')} />}
     </>
   );
 }

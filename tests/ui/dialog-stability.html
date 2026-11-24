@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Проверка прокрутки диалогов и подсказок</title>
+<style>
+  iframe { display: block; border: 0; }
+  .dialog-fixture { height: 440px; overflow: auto; }
+  .dialog-fixture section { padding: 24px; min-height: 1100px; }
+  .dialog-fixture .open-fixture { position: sticky; top: 0; }
+</style>
+<div id="root"></div>
+<script type="module">
+import { createElement as h, StrictMode, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { ConfirmDialog, Field, Input } from '/src/ui/index.tsx';
+import { startViewport } from '/src/platform/viewport.ts';
+import '/src/ui/styles.css';
+
+if (new URLSearchParams(location.search).has('inner')) {
+  const root = document.documentElement;
+  for (const token of ['--fs-xs', '--fs-s', '--fs', '--fs-l', '--fs-xl', '--fs-2xl']) {
+    root.style.setProperty(token, parseFloat(getComputedStyle(root).getPropertyValue(token)) * 2 + 'px');
+  }
+  startViewport();
+  function Fixture() {
+    const [open, setOpen] = useState(false);
+    const [note, setNote] = useState('');
+    return h('main', { className: 'content dialog-fixture' }, h('section', null,
+      h('button', { className: 'open-fixture', onClick: () => setOpen(true) }, 'Открыть форму'),
+      open && h(ConfirmDialog, {
+        open, title: 'Суммы за смену', confirmLabel: 'Сохранить суммы за смену', onConfirm: () => setOpen(false),
+        cancelLabel: 'Закрыть', onClose: () => setOpen(false), dirty: Boolean(note),
+      },
+        ...Array.from({ length: 14 }, (_, i) => h(Field, { key: i, label: i ? 'Значение ' + i : 'Комментарий',
+          help: i ? undefined : 'Этот комментарий виден франчайзи.', helpLabel: 'Кто увидит комментарий' }, id =>
+          h(Input, i ? { id, defaultValue: '' } : { id, value: note, onChange: event => setNote(event.target.value) }))),
+      )));
+  }
+  createRoot(document.getElementById('root')).render(h(StrictMode, null, h(Fixture)));
+} else {
+  const output = document.createElement('output');
+  output.textContent = 'Проверка…';
+  const frame = document.createElement('iframe');
+  frame.width = 320;
+  frame.height = 620;
+  frame.title = 'Диалог с вымышленными данными';
+  document.getElementById('root').append(output, frame);
+  frame.src = location.pathname + '?inner=1';
+  const read = selector => frame.contentDocument?.querySelector(selector);
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  async function until(probe, message) {
+    const deadline = performance.now() + 8000;
+    while (performance.now() < deadline) {
+      const result = probe();
+      if (result) return result;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    throw new Error(message);
+  }
+  const button = text => [...frame.contentDocument.querySelectorAll('dialog[open] button')]
+    .find(control => control.textContent.trim() === text);
+  try {
+    const launch = await until(() => read('.open-fixture'), 'Нет кнопки открытия');
+    const app = frame.contentWindow;
+    const doc = frame.contentDocument;
+    const shell = read('.dialog-fixture');
+    shell.scrollTop = 180;
+    launch.focus({ preventScroll: true });
+    launch.click();
+    const dialog = await until(() => read('dialog[open]'), 'Форма закрылась при первом открытии');
+    const body = read('.dialog-body');
+    const css = element => app.getComputedStyle(element);
+    const escape = () => doc.activeElement.dispatchEvent(new app.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    const centered = () => {
+      const rect = dialog.getBoundingClientRect();
+      const viewport = app.visualViewport;
+      return Math.abs((rect.top + rect.bottom) / 2 - (viewport.offsetTop + viewport.height / 2)) < 2;
+    };
+    assert(css(dialog).overflowX === 'clip' && css(dialog).overflowY === 'clip', 'Корпус диалога сам прокручивается');
+    assert(css(body).overflowX === 'hidden' && css(body).touchAction === 'pan-y', 'В форме разрешено горизонтальное движение');
+    assert(css(shell).overflowY === 'hidden' && shell.scrollTop === 180, 'Фон прокручивается или сбросил позицию');
+    assert(body.scrollWidth <= body.clientWidth + 1, 'Форма шире области просмотра');
+    assert(centered(), 'Окно не отцентрировано до прокрутки');
+    body.scrollTop = 270;
+    assert(body.scrollTop > 0 && dialog.scrollTop === 0 && shell.scrollTop === 180, 'Прокручивается корпус или фон вместо формы');
+    body.scrollTop = 0;
+
+    const help = read('.help-tip-trigger');
+    help.focus({ preventScroll: true });
+    help.click();
+    const tip = await until(() => read('.help-tip-popover:not([hidden])'), 'Подсказка не открылась');
+    const bounds = tip.getBoundingClientRect();
+    assert(bounds.left >= 0 && bounds.right <= app.innerWidth && bounds.top >= 0 && bounds.bottom <= app.innerHeight, 'Подсказка вышла за видимую область');
+    escape();
+    await until(() => !read('.help-tip-popover:not([hidden])'), 'Escape не закрыл подсказку');
+    assert(dialog.open && doc.activeElement === help, 'При закрытии подсказки закрылась форма или потерялся фокус');
+
+    frame.height = 290;
+    const innerFrame = await until(() => read('.short-viewport .dialog-frame'), 'Нет короткого режима диалога');
+    await until(centered, 'Окно не отцентрировалось после уменьшения видимой области');
+    innerFrame.scrollTop = 400;
+    assert(innerFrame.scrollTop > 0 && body.scrollTop === 0 && dialog.scrollTop === 0, 'У короткого окна две области прокрутки');
+    innerFrame.scrollTop = 0;
+
+    const field = body.querySelector('input');
+    field.focus({ preventScroll: true });
+    Object.getOwnPropertyDescriptor(app.HTMLInputElement.prototype, 'value').set.call(field, 'Черновик');
+    field.dispatchEvent(new app.Event('input', { bubbles: true }));
+    await until(() => field.value === 'Черновик', 'Ввод потерян');
+    dialog.dispatchEvent(new app.Event('cancel', { cancelable: true }));
+    (await until(() => button('Продолжить ввод'), 'Нет проверки черновика')).click();
+    await until(() => doc.activeElement === field, 'Фокус не вернулся в поле');
+    assert(field.value === 'Черновик', 'Черновик пропал после возврата');
+    button('Закрыть').click();
+    (await until(() => button('Отбросить изменения'), 'Нет подтверждения закрытия')).click();
+    await until(() => !read('dialog[open]'), 'Диалог не закрылся');
+    assert(doc.activeElement === launch && shell.scrollTop === 180 && css(shell).overflowY !== 'hidden', 'После закрытия не вернулись прокрутка и фокус');
+    output.textContent = 'PASS. Один вертикальный скролл, фон зафиксирован, подсказка и черновик работают.';
+  } catch (error) {
+    output.textContent = 'FAIL. ' + error.message;
+    throw error;
+  }
+}
+</script>
+</html>

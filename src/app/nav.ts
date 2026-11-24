@@ -1,6 +1,7 @@
 import { BookOpen, GraduationCap, Home, Inbox, Users, Wallet } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { useSession } from '../platform/session';
+import { localized, type Language } from '../platform/locale';
 
 export interface NavItem {
   to: string;
@@ -55,7 +56,25 @@ export function workspaceAccess(role: WorkspaceRole, can: PermissionCheck) {
   };
 }
 
-export function navFor(role: WorkspaceRole, can: PermissionCheck = () => false): NavItem[] {
+const turkishWorkspaceTitle: Record<WorkspaceRole, string> = {
+  manager: 'Franchise yöneticisi', franchisee: 'Franchise işletmecisi', team: 'Mağaza yöneticisi',
+  staff: 'Çalışan', support: 'Teknik destek', pending: 'Erişim bekleniyor',
+};
+
+export const workspaceTitleFor = (role: WorkspaceRole, language: Language) =>
+  localized(language, workspaceTitle[role], turkishWorkspaceTitle[role]);
+
+const turkishNavLabels: Record<string, string> = {
+  'Главная': 'Ana sayfa', 'Сотрудники': 'Çalışanlar', 'Обучение': 'Eğitim', 'Знания': 'Bilgi bankası',
+  'База знаний': 'Bilgi bankası', 'Финансы': 'Finans', 'Экономика': 'Finans', 'Роялти': 'Royalti', 'Заявки': 'Başvurular',
+};
+
+export function navFor(role: WorkspaceRole, can: PermissionCheck = () => false, language: Language = 'ru'): NavItem[] {
+  const items = workspaceNav(role, can);
+  return language === 'ru' ? items : items.map(item => ({ ...item, label: turkishNavLabels[item.label] ?? item.label }));
+}
+
+function workspaceNav(role: WorkspaceRole, can: PermissionCheck): NavItem[] {
   const { network, finance, staffDirectory } = workspaceAccess(role, can);
   if (role === 'pending') return [];
   if (role === 'manager') return [

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocale } from '../../platform/locale';
 import { Alert, ConfirmDialog } from '../../ui';
 import { googleDriveClientId, loadGoogleDriveIdentity, saveFinanceReportToDrive, type GoogleDriveIdentity } from './financeDrive';
 import { downloadFinanceFile } from './financeReport';
@@ -11,6 +12,7 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
   makeFile: () => Promise<File>;
   onClose: () => void;
 }) {
+  const { t } = useLocale();
   const [identity, setIdentity] = useState<GoogleDriveIdentity | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +26,12 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
     if (clientId) {
       loadGoogleDriveIdentity().then(
         oauth => { if (active) setIdentity(oauth); },
-        () => { if (active) setError('Не удалось открыть вход в Google. Можно скачать файл и загрузить его вручную.'); },
+        () => { if (active) setError(t('Не удалось открыть вход в Google. Можно скачать файл и загрузить его вручную.',
+          'Google oturumu açılamadı. Dosyayı indirip elle yükleyebilirsiniz.')); },
       );
     }
     return () => { active = false; upload.current?.abort(); downloadRequest.current?.abort(); };
-  }, []);
+  }, [t]);
 
   async function save() {
     if (!clientId || !identity || upload.current) return;
@@ -40,7 +43,8 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
       const url = await saveFinanceReportToDrive(identity, clientId, makeFile, controller.signal);
       if (!controller.signal.aborted) setLink(url);
     } catch (failure) {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Не удалось сохранить отчёт в Google Drive.');
+      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message
+        : t('Не удалось сохранить отчёт в Google Drive.', 'Rapor Google Drive’a kaydedilemedi.'));
     } finally {
       upload.current = null;
       if (!controller.signal.aborted) setSaving(false);
@@ -56,7 +60,7 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
     try {
       await downloadFinanceFile(makeFile, controller.signal);
     } catch {
-      if (!controller.signal.aborted) setError('Не удалось скачать отчёт. Повторите попытку.');
+      if (!controller.signal.aborted) setError(t('Не удалось скачать отчёт. Повторите попытку.', 'Rapor indirilemedi. Tekrar deneyin.'));
     } finally {
       downloadRequest.current = null;
       if (!controller.signal.aborted) setDownloading(false);
@@ -64,17 +68,22 @@ export function FinanceDriveDialog({ period, scope, makeFile, onClose }: {
   }
 
   return (
-    <ConfirmDialog open title="Отчёт в Google Drive" onClose={onClose} cancelLabel="Закрыть"
-      confirmLabel={clientId && !link ? 'Сохранить в Google Drive' : undefined}
+    <ConfirmDialog open title={t('Отчёт в Google Drive', 'Google Drive raporu')} onClose={onClose} cancelLabel={t('Закрыть', 'Kapat')}
+      confirmLabel={clientId && !link ? t('Сохранить в Google Drive', 'Google Drive’a kaydet') : undefined}
       onConfirm={() => void save()} disabled={!identity} busy={saving}>
       <p>{period}<br />{scope}</p>
-      {link ? <Alert tone="info" title="Отчёт сохранён"><a href={link} target="_blank" rel="noreferrer">Открыть отчёт в Google Drive</a></Alert> : (
+      {link ? <Alert tone="info" title={t('Отчёт сохранён', 'Rapor kaydedildi')}><a href={link} target="_blank" rel="noreferrer">
+        {t('Открыть отчёт в Google Drive', 'Raporu Google Drive’da aç')}
+      </a></Alert> : (
         <>
-          {clientId && <p>Выберите свой аккаунт Google. Файл с этим отчётом появится в разделе «Мой диск».</p>}
+          {clientId && <p>{t('Выберите аккаунт Google. Файл появится в разделе «Мой диск».',
+            'Google hesabınızı seçin. Dosya “Drive’ım” bölümünde görünür.')}</p>}
           <button type="button" className="link-btn" disabled={downloading || saving} onClick={() => void download()}>
-            {downloading ? 'Готовим файл…' : 'Скачать отчёт Excel'}
+            {downloading ? t('Готовим файл…', 'Dosya hazırlanıyor…') : t('Скачать отчёт Excel', 'Excel raporunu indir')}
           </button>
-          <p>Затем загрузите файл в <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noreferrer">«Мой диск»</a>.</p>
+          <p>{t('Затем загрузите файл в ', 'Ardından dosyayı ')}
+            <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noreferrer">{t('«Мой диск»', '“Drive’ım”a')}</a>
+            {t('.', ' yükleyin.')}</p>
         </>
       )}
       {error && <Alert tone="danger">{error}</Alert>}

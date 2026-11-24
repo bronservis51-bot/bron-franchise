@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { HelpCircle } from 'lucide-react';
+import { useLocale, type Language } from '../../platform/locale';
 import { useSession } from '../../platform/session';
 import { command, toAppError } from '../../platform/backend';
 import { formatDate, formatDateTime } from '../../platform/dates';
@@ -14,19 +15,27 @@ import { LearningEditor } from '../learning/Learning';
 import { SupportAccounts } from '../staff/SupportAccounts';
 import { SectionSelect } from './KbBrowse';
 
+const TURKISH_CATEGORIES: Record<string, string> = {
+  films: 'Filmler ve kaplama', equipment: 'Ekipman', app: 'Uygulama ve erişim', orders: 'Sipariş ve ön sipariş',
+  finance: 'Finans ve royalti', team: 'Ekip ve yönetim', other: 'Diğer',
+};
+const questionCategory = (category: string, language: Language) => language === 'tr'
+  ? TURKISH_CATEGORIES[category] ?? TURKISH_CATEGORIES.other : QUESTION_CATEGORIES[category] ?? QUESTION_CATEGORIES.other;
+
 /** «Не нашли ответ? Спросите» — вопрос уходит менеджеру по франшизе, ответ придёт в «Мои вопросы». */
 export function AskDialog({ initial = '', article = null, onClose }: { initial?: string; article?: string | null; onClose: () => void }) {
+  const { t, language } = useLocale();
   const qc = useQueryClient();
   const toast = useToast();
   const [q, setQ] = useState('');
   const [category,setCategory]=useState('');
-  const m = useMutation({ mutationFn: () => kbAsk(q, category, article), onSuccess: () => { toast('Вопрос отправлен. Ответ появится в «Мои вопросы»'); void qc.invalidateQueries({ queryKey: ['kb'] }); onClose(); } });
+  const m = useMutation({ mutationFn: () => kbAsk(q, category, article), onSuccess: () => { toast(t('Вопрос отправлен. Ответ появится в «Мои вопросы»', 'Soru gönderildi. Yanıt, «Sorularım» bölümünde görünecek.')); void qc.invalidateQueries({ queryKey: ['kb'] }); onClose(); } });
   return (
-    <ConfirmDialog open title="Задать вопрос" confirmLabel="Отправить" busy={m.isPending} error={m.error} disabled={!category || q.trim().length < 3} onClose={onClose} onConfirm={() => m.mutate()}>
-      <p className="muted">Ответит менеджер по франшизе или технический специалист — в зависимости от категории вопроса.</p>
-      {initial.trim() && <p className="faint">Тема: {initial.replace(/: $/, '')}</p>}
-      <Field label="Категория вопроса" required>{id=><Select id={id} value={category} onChange={e=>setCategory(e.target.value)}><option value="">Выберите категорию</option>{Object.entries(QUESTION_CATEGORIES).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Select>}</Field>
-      <Field label="Ваш вопрос" required>{(id) => <Textarea id={id} rows={4} value={q} onChange={(e) => setQ(e.target.value)} maxLength={2000} />}</Field>
+    <ConfirmDialog open title={t('Задать вопрос', 'Soru sor')} confirmLabel={t('Отправить', 'Gönder')} busy={m.isPending} error={m.error} disabled={!category || q.trim().length < 3} onClose={onClose} onConfirm={() => m.mutate()}>
+      <p className="muted">{t('Ответит менеджер по франшизе или технический специалист — в зависимости от категории вопроса.', 'Kategoriye göre franchise yöneticisi veya teknik uzman yanıt verecek.')}</p>
+      {initial.trim() && <p className="faint">{t('Тема:', 'Konu:')} {initial.replace(/: $/, '')}</p>}
+      <Field label={t('Категория вопроса', 'Soru kategorisi')} required>{id=><Select id={id} value={category} onChange={e=>setCategory(e.target.value)}><option value="">{t('Выберите категорию', 'Kategori seçin')}</option>{Object.keys(QUESTION_CATEGORIES).map(k=><option key={k} value={k}>{questionCategory(k, language)}</option>)}</Select>}</Field>
+      <Field label={t('Ваш вопрос', 'Sorunuz')} required>{(id) => <Textarea id={id} rows={4} value={q} onChange={(e) => setQ(e.target.value)} maxLength={2000} />}</Field>
     </ConfirmDialog>
   );
 }
@@ -168,6 +177,7 @@ export function ArticleEditPage() {
 }
 
 export function QuestionsPage({ home = false }: { home?: boolean }) {
+  const { t, language, locale } = useLocale();
   const { can } = useSession();
   const editor = can('kb.edit');
   const qc = useQueryClient();
@@ -184,11 +194,11 @@ export function QuestionsPage({ home = false }: { home?: boolean }) {
   });
   return (
     <div className="home" style={{ maxWidth: 820 }}>
-      <PageHeader back={home ? undefined : { to: '/kb', label: 'База знаний' }} title={editor ? 'Вопросы франчайзи' : 'Мои вопросы'}
-        sub={home ? undefined : editor ? 'Ответьте здесь. Если вопрос повторяется — сделайте из ответа статью.' : 'Ответы менеджера по франшизе и технического специалиста'}
-        actions={!editor && <Button variant="primary" onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />Задать вопрос</Button>} />
+      <PageHeader back={home ? undefined : { to: '/kb', label: t('База знаний', 'Bilgi bankası') }} title={editor ? t('Вопросы франчайзи', 'Franchise işletmecilerinin soruları') : t('Мои вопросы', 'Sorularım')}
+        sub={home ? undefined : editor ? t('Ответьте здесь. Если вопрос повторяется — сделайте из ответа статью.', 'Buradan yanıtlayın. Sık sorulan konular için makale oluşturun.') : t('Ответы менеджера по франшизе и технического специалиста', 'Franchise yöneticisinin ve teknik uzmanın yanıtları')}
+        actions={!editor && <Button variant="primary" onClick={() => setAsking(true)}><HelpCircle size={16} aria-hidden />{t('Задать вопрос', 'Soru sor')}</Button>} />
       <SupportAccounts /><ActionError error={answer.error} />
-      <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title="Вопросов пока нет" text={editor ? 'Когда франчайзи спросят, вопросы появятся здесь.' : 'Не нашли ответ в базе знаний — спросите, менеджер по франшизе или технический специалист ответит.'} />)}>
+      <DataState query={q} empty={(d) => (d.length ? null : <EmptyState title={t('Вопросов пока нет', 'Henüz soru yok')} text={editor ? t('Когда франчайзи спросят, вопросы появятся здесь.', 'Franchise işletmecilerinin soruları burada görünür.') : t('Не нашли ответ в базе знаний — спросите, менеджер по франшизе или технический специалист ответит.', 'Bilgi bankasında yanıt yoksa sorun. Franchise yöneticisi veya teknik uzman yanıt verecek.')} />)}>
         {(list) => (
           <div className="stack">
             {(editor ? list : [...list].sort((a, b) => Number(b.unseen) - Number(a.unseen))).map((x) => {
@@ -198,18 +208,18 @@ export function QuestionsPage({ home = false }: { home?: boolean }) {
               const reply = text.trim() || (selectedArticle ? `Смотрите материал «${selectedArticle.title}».` : '');
               return (
                 <Card key={x.id} className={x.unseen ? 'new-answer' : ''}>
-                  <div className="faint">{editor ? `${x.user_name}${x.partner_name ? ` · ${x.partner_name}` : ''} · ` : ''}{formatDateTime(x.created_at)}{!x.answer && x.article_id && <> · <Link to={`/kb/articles/${x.article_id}`}>к статье</Link></>}</div>
-                  <div className="row"><Badge>{QUESTION_CATEGORIES[x.category] ?? 'Другое'}</Badge><span className="faint">{x.route==='technical'?'Технический специалист':'Менеджер по франшизе'}</span>{editor && !x.answer && <Button size="sm" onClick={()=>void command('kb_question_route',{question:x.id,route:x.route==='technical'?'franchise':'technical'}).then(()=>qc.invalidateQueries({queryKey:['kb']})).catch(e=>toast(String(e)))}>Передать {x.route==='technical'?'менеджеру':'специалисту'}</Button>}</div>
+                  <div className="faint">{editor ? `${x.user_name}${x.partner_name ? ` · ${x.partner_name}` : ''} · ` : ''}{formatDateTime(x.created_at, locale)}{!x.answer && x.article_id && <> · <Link to={`/kb/articles/${x.article_id}`}>{t('к статье', 'makaleye git')}</Link></>}</div>
+                  <div className="row"><Badge>{questionCategory(x.category, language)}</Badge><span className="faint">{x.route==='technical'?t('Технический специалист', 'Teknik uzman'):t('Менеджер по франшизе', 'Franchise yöneticisi')}</span>{editor && !x.answer && <Button size="sm" onClick={()=>void command('kb_question_route',{question:x.id,route:x.route==='technical'?'franchise':'technical'}).then(()=>qc.invalidateQueries({queryKey:['kb']})).catch(e=>toast(String(e)))}>Передать {x.route==='technical'?'менеджеру':'специалисту'}</Button>}</div>
                   <p style={{ margin: '6px 0', fontWeight: 600 }}>{x.question}</p>
                   {x.answer ? (
                     <div className="answer">
-                      <div className="faint">Ответ{x.answered_at ? ` · ${formatDateTime(x.answered_at)}` : ''}{x.unseen ? ' · новый' : ''}</div>
+                      <div className="faint">{t('Ответ', 'Yanıt')}{x.answered_at ? ` · ${formatDateTime(x.answered_at, locale)}` : ''}{x.unseen ? t(' · новый', ' · yeni') : ''}</div>
                       <div style={{ whiteSpace: 'pre-wrap' }}>{x.answer}</div>
-                      {x.article_id && <Link to={`/kb/articles/${x.article_id}`}>Открыть материал</Link>}
+                      {x.article_id && <Link to={`/kb/articles/${x.article_id}`}>{t('Открыть материал', 'İçeriği aç')}</Link>}
                     </div>
                   ) : editor ? (
                     <div>
-                      <Textarea rows={3} aria-label="Ответ" value={text} onChange={(e) => {
+                      <Textarea rows={3} aria-label={t('Ответ', 'Yanıt')} value={text} onChange={(e) => {
                         const text = e.target.value;
                         setDrafts(current => ({ ...current, [x.id]: { ...current[x.id], text } }));
                       }} placeholder="Ответ франчайзи" />
@@ -232,7 +242,7 @@ export function QuestionsPage({ home = false }: { home?: boolean }) {
                           onClick={() => answer.mutate({ id: x.id, text: reply, article: selectedArticle?.id ?? null })}>Ответить</Button>
                       </div>
                     </div>
-                  ) : <Badge tone="warning">ждёт ответа</Badge>}
+                  ) : <Badge tone="warning">{t('ждёт ответа', 'yanıt bekliyor')}</Badge>}
                 </Card>
               );
             })}

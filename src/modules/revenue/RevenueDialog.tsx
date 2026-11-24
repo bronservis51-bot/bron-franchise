@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toAppError } from '../../platform/backend';
 import { dayLabel } from '../../platform/dates';
+import { useLocale } from '../../platform/locale';
 import { useSession } from '../../platform/session';
 import { Button, Checkbox, ConfirmDialog, Field, Input, Money, MoneyInput } from '../../ui';
 import { useToast } from '../../ui/toast';
@@ -18,6 +19,7 @@ export function hasRevenueDiscrepancy(row: DayRow | undefined): row is DayRow & 
 export function RevenueDialog({ location, locationName, currency, day, existing, dayOff = false, canMarkOff, readOnly = false, onClose }: {
   location: string; locationName: string; currency: string; day: string; existing?: DayRow; dayOff?: boolean; canMarkOff: boolean; readOnly?: boolean; onClose: () => void;
 }) {
+  const { t, locale } = useLocale();
   const { me } = useSession();
   const qc = useQueryClient(); const toast = useToast();
   const initialTotal = existing ? String(existing.total_minor) : '';
@@ -67,8 +69,8 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
       ? revenueTotalSet(me!.user.id, location, day, total, row?.day_version ?? 'empty', comment.trim() || null)
       : revenueDayOffSet(location, day, action === 'mark-off'),
     onSuccess: (r, action) => {
-      toast(action !== 'save-total' ? (action === 'unmark-off' ? 'Отметка о выходном снята' : 'Отмечено как выходной')
-        : r && typeof r === 'object' && 'queued' in r ? 'Сохранено на устройстве — отправится при появлении сети' : 'Выручка сохранена');
+      toast(action !== 'save-total' ? (action === 'unmark-off' ? t('Отметка о выходном снята', 'Kapalı gün işareti kaldırıldı') : t('Отмечено как выходной', 'Kapalı gün olarak işaretlendi'))
+        : r && typeof r === 'object' && 'queued' in r ? t('Сохранено на устройстве — отправится при появлении сети', 'Cihaza kaydedildi. Bağlantı kurulunca gönderilecek.') : t('Выручка сохранена', 'Ciro kaydedildi'));
       if (action === 'unmark-off' && !dayOff) {
         void qc.invalidateQueries({ queryKey: ['rating'] });
         return refreshDay();
@@ -88,42 +90,43 @@ export function RevenueDialog({ location, locationName, currency, day, existing,
   });
   const submit = () => { if (!saveDisabled && !save.isPending) save.mutate(action); };
   const conflict = save.error && toAppError(save.error).code === 'version-conflict';
-  return <ConfirmDialog open title={dayOff ? `Выходной · ${dayLabel(day)}` : `Выручка за ${dayLabel(day)}`}
-    confirmLabel={dayOff ? 'Отменить выходной' : 'Сохранить'} cancelLabel={readOnly ? 'Закрыть' : undefined} busy={save.isPending} error={conflict ? null : save.error}
+  const label = dayLabel(day, locale);
+  return <ConfirmDialog open title={dayOff ? t(`Выходной · ${label}`, `Kapalı gün · ${label}`) : t(`Выручка за ${label}`, `${label} cirosu`)}
+    confirmLabel={dayOff ? t('Отменить выходной', 'Kapalı gün işaretini kaldır') : t('Сохранить', 'Kaydet')} cancelLabel={readOnly ? t('Закрыть', 'Kapat') : undefined} busy={save.isPending} error={conflict ? null : save.error}
     dirty={!readOnly && (markOff || !totalValid || total !== initialTotal || comment !== savedComment)} disabled={saveDisabled} onClose={onClose} onConfirm={readOnly ? undefined : submit}>
     <p className="muted">{locationName}</p>
-    {refreshStatus === 'loading' && <p role="status">Загружаем данные дня…</p>}
-    {refreshStatus === 'ready' && !newlyMarkedOff && <p role="status">Данные дня обновлены.
-      {row && !hasRevenueDiscrepancy(row) ? <> Сейчас учтено <Money minor={row.total_minor} currency={currency} />.</> : ' Сверьте сумму перед сохранением.'}
+    {refreshStatus === 'loading' && <p role="status">{t('Загружаем данные дня…', 'Günün verileri yükleniyor…')}</p>}
+    {refreshStatus === 'ready' && !newlyMarkedOff && <p role="status">{t('Данные дня обновлены.', 'Günün verileri güncellendi.')}
+      {row && !hasRevenueDiscrepancy(row) ? <>{t(' Сейчас учтено ', ' Şu an kayıtlı tutar: ')}<Money minor={row.total_minor} currency={currency} />.</> : t(' Сверьте сумму перед сохранением.', ' Kaydetmeden önce tutarı kontrol edin.')}
     </p>}
     {refreshStatus === 'error' && <div className="stack">
-      <p role="alert">Не удалось загрузить обновлённые данные дня. Введённая сумма сохранена в форме.</p>
-      <Button size="sm" onClick={() => void refreshDay()}>Обновить данные дня</Button>
+      <p role="alert">{t('Не удалось загрузить обновлённые данные дня. Введённая сумма сохранена в форме.', 'Günün güncel verileri yüklenemedi. Girdiğiniz tutar formda duruyor.')}</p>
+      <Button size="sm" onClick={() => void refreshDay()}>{t('Обновить данные дня', 'Günün verilerini yenile')}</Button>
     </div>}
     {hasRevenueDiscrepancy(row) && <p role="status">
-      Сумма смен больше ранее указанного итога (<Money minor={row.reported_total_minor} currency={currency} />).
-      В выручку включено <Money minor={row.total_minor} currency={currency} />.
+      {t('Сумма смен больше ранее указанного итога (', 'Vardiya toplamı, önceden bildirilen toplamı aşıyor (')}<Money minor={row.reported_total_minor} currency={currency} />).
+      {t('В выручку включено ', 'Ciroya dahil edilen tutar: ')}<Money minor={row.total_minor} currency={currency} />.
     </p>}
-    {(readOnly || locked) && <p>Редактирование за эту дату недоступно.</p>}
-    {row?.return_minor ? <p className="faint">Возвраты покупателям за день · <Money minor={row.return_minor} currency={currency} /></p> : null}
+    {(readOnly || locked) && <p>{t('Редактирование за эту дату недоступно.', 'Bu tarihi düzenleyemezsiniz.')}</p>}
+    {row?.return_minor ? <p className="faint">{t('Возвраты покупателям за день · ', 'Günlük müşteri iadeleri · ')}<Money minor={row.return_minor} currency={currency} /></p> : null}
     {newlyMarkedOff && <div className="stack">
-      <p role="status">Дату отметили как выходной. Чтобы внести выручку, сначала снимите отметку.</p>
+      <p role="status">{t('Дату отметили как выходной. Чтобы внести выручку, сначала снимите отметку.', 'Gün kapalı olarak işaretlendi. Ciro girmek için önce işareti kaldırın.')}</p>
       {!locked && !readOnly && <Button size="sm" disabled={refreshBlocksSave || save.isPending}
-        onClick={() => save.mutate('unmark-off')}>Снять отметку о выходном</Button>}
+        onClick={() => save.mutate('unmark-off')}>{t('Снять отметку о выходном', 'Kapalı gün işaretini kaldır')}</Button>}
     </div>}
-    {dayOff && <p>Если точка работала, снимите отметку и внесите выручку за этот день.</p>}
-    {!readOnly && !locked && !newlyMarkedOff && canMarkOff && !row && !dayOff && <Checkbox label="Точка не работала" checked={markOff} onChange={setMarkOff} hint={markOff ? 'Сохранится отметка «Выходной».' : undefined} />}
+    {dayOff && <p>{t('Если точка работала, снимите отметку и внесите выручку за этот день.', 'Mağaza açıksa kapalı gün işaretini kaldırın ve ciroyu girin.')}</p>}
+    {!readOnly && !locked && !newlyMarkedOff && canMarkOff && !row && !dayOff && <Checkbox label={t('Точка не работала', 'Mağaza kapalıydı')} checked={markOff} onChange={setMarkOff} hint={markOff ? t('Сохранится отметка «Выходной».', 'Bu gün kapalı olarak kaydedilecek.') : undefined} />}
     <div hidden={action !== 'save-total' || readOnly}>
-    <Field label="Вся выручка точки за день" hint="Включая продажи сотрудников" error={!totalValid ? 'Укажите сумму, например 12,50.' : undefined} required>{(id, describedBy) => (
+    <Field label={t('Вся выручка точки за день', 'Mağazanın günlük toplam cirosu')} hint={t('Включая продажи сотрудников', 'Çalışanların satışları dahil')} error={!totalValid ? t('Укажите сумму, например 12,50.', 'Bir tutar girin. Örneğin 12,50.') : undefined} required>{(id, describedBy) => (
       <MoneyInput id={id} describedBy={describedBy} value={total} onChange={setTotal} onValidityChange={setTotalValid} onEnter={() => commentInput.current?.focus()} enterKeyHint="next" requireExplicitValue currency={currency} placeholder="0" invalid={exceedsLimit || belowStaffTotal} />
     )}</Field>
     {staffTotal > 0 && <div className="stack">
-      <p className="faint">По сменам внесено <Money minor={staffTotal} currency={currency} />. Эта сумма входит в итог дня.</p>
-      {(total === '' || (totalValid && belowStaffTotal)) && <Button size="sm" onClick={() => { setTotal(String(staffTotal)); setTotalValid(true); }}>Подставить итог смен</Button>}
+      <p className="faint">{t('По сменам внесено ', 'Vardiyalardan kaydedilen tutar: ')}<Money minor={staffTotal} currency={currency} />{t('. Эта сумма входит в итог дня.', '. Bu tutar günlük toplama dahildir.')}</p>
+      {(total === '' || (totalValid && belowStaffTotal)) && <Button size="sm" onClick={() => { setTotal(String(staffTotal)); setTotalValid(true); }}>{t('Подставить итог смен', 'Vardiya toplamını kullan')}</Button>}
     </div>}
-    {totalValid && exceedsLimit && <p role="alert">Укажите сумму до <Money minor={MAX_TOTAL_MINOR} currency={currency} short /> включительно.</p>}
-    {totalValid && total && belowStaffTotal && <p role="alert">Итог дня должен включать всю выручку по сменам.</p>}
-    <Field label="Комментарий" hint="Необязательно">{(id, describedBy) => <Input id={id} ref={commentInput} aria-describedby={describedBy} value={comment} onChange={e => setComment(e.target.value)} />}</Field>
+    {totalValid && exceedsLimit && <p role="alert">{t('Укажите сумму до ', 'Tutar en çok ')}<Money minor={MAX_TOTAL_MINOR} currency={currency} short />{t(' включительно.', ' olabilir.')}</p>}
+    {totalValid && total && belowStaffTotal && <p role="alert">{t('Итог дня должен включать всю выручку по сменам.', 'Günlük toplam tüm vardiya cirosunu içermeli.')}</p>}
+    <Field label={t('Комментарий', 'Not')} hint={t('Необязательно', 'İsteğe bağlı')}>{(id, describedBy) => <Input id={id} ref={commentInput} aria-describedby={describedBy} value={comment} onChange={e => setComment(e.target.value)} />}</Field>
     </div>
   </ConfirmDialog>;
 }

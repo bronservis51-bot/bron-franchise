@@ -3,6 +3,7 @@
 /* Нужные интерфейсу наборы; остальные языки используют системный fallback. */
 @font-face { font-family: 'Montserrat Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('@fontsource-variable/montserrat/files/montserrat-cyrillic-wght-normal.woff2') format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
 @font-face { font-family: 'Montserrat Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('@fontsource-variable/montserrat/files/montserrat-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Montserrat Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('@fontsource-variable/montserrat/files/montserrat-latin-ext-wght-normal.woff2') format('woff2'); unicode-range: U+011E-011F,U+0130,U+015E-015F; }
 
 /* Токены по брендбуку «Бронь Сервис»: #0F0F11 (чёрный), #C1C2C4 (серебро), #FEFEFE (белый), шрифт Montserrat.
    Смысловые цвета (успех/предупреждение/ошибка) — служебные, только для статусов. */
@@ -284,7 +285,9 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 
 /* Формы (UX-06) */
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-bottom: var(--space-4); }
-.field > label, .field .label { font-weight: 600; font-size: var(--fs-s); }
+.field > label, .field .label, .field-heading > label { font-weight: 600; font-size: var(--fs-s); }
+.field-heading { display: flex; align-items: center; min-width: 0; gap: var(--space-1); }
+.field-heading > label { min-width: 0; }
 .field .req { color: var(--danger); margin-left: 2px; }
 .field .hint { color: var(--text-3); font-size: var(--fs-xs); }
 .field .error { color: var(--danger); font-size: var(--fs-s); display: flex; gap: 6px; align-items: center; }
@@ -315,7 +318,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 .app-update { align-items: center; flex-wrap: wrap; }
 .app-update .alert-body { flex-basis: 14rem; }
 .main > .app-update { margin: 12px 24px 0; }
-.login-panel .app-update { margin-bottom: 12px; }
+.login-entry .app-update { margin-bottom: 12px; }
 .alert.tone-danger { border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
 .alert.tone-warning { border-color: color-mix(in srgb, var(--warning) 25%, transparent); }
 .alert.tone-info { border-color: color-mix(in srgb, var(--info) 25%, transparent); }
@@ -344,15 +347,23 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 :root:not([data-theme="light"]) .progress > span { background: var(--link); }
 
 /* Диалоги и уведомления */
+:root:has(dialog:modal), :root:has(dialog:modal) :is(body, .content) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+@media (min-width: 961px) {
+  :root { scrollbar-gutter: stable; }
+}
 dialog.dialog {
   --dialog-inset: max(12px, env(safe-area-inset-top), env(safe-area-inset-bottom));
   --dialog-pad: clamp(14px, 4vw, 24px);
   position: fixed;
-  inset: auto 0 auto;
-  top: calc(var(--visual-top, 0px) + var(--app-height, 100dvh) / 2);
-  translate: 0 -50%;
-  margin: 0 auto;
+  inset-inline: 0;
+  inset-block-start: calc(var(--visual-top, 0px) + var(--dialog-inset));
+  inset-block-end: calc(100% - var(--visual-top, 0px) - var(--app-height, 100dvh) + var(--dialog-inset));
+  margin: auto;
   width: min(var(--dialog-width, 560px), calc(100% - 2 * max(12px, env(safe-area-inset-left), env(safe-area-inset-right))));
+  height: fit-content;
   max-width: none;
   max-height: calc(var(--app-height, 100dvh) - 2 * var(--dialog-inset));
   padding: 0;
@@ -361,19 +372,24 @@ dialog.dialog {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-2);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
+  overflow: clip;
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 dialog.dialog[open] { display: flex; flex-direction: column; }
-dialog.dialog::backdrop { background: rgb(10 15 22 / 60%); }
+dialog.dialog::backdrop { background: rgb(10 15 22 / 60%); touch-action: none; }
+.dialog-frame { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; overflow: clip; }
 .dialog-head { flex: none; padding: var(--dialog-pad) var(--dialog-pad) 0; outline: none; }
 .dialog-head h2 { overflow-wrap: anywhere; }
 .dialog-body {
   flex: 1 1 auto;
-  min-height: min(88px, var(--app-height, 100dvh) / 4);
+  min-width: 0;
+  min-height: 0;
   padding: var(--space-4) var(--dialog-pad);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden auto;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   overflow-wrap: anywhere;
 }
 .install-guide { min-width: 0; overflow-wrap: anywhere; }
@@ -390,9 +406,11 @@ dialog.dialog::backdrop { background: rgb(10 15 22 / 60%); }
   flex-wrap: wrap;
 }
 .dialog-foot .btn { max-width: 100%; height: auto; padding-block: 8px; line-height: 1.35; white-space: normal; }
-.short-viewport .dialog-body { flex: none; min-height: 0; overflow-y: visible; }
+.short-viewport .dialog-frame { display: block; overflow: hidden auto; overscroll-behavior: none; }
+.short-viewport .dialog-body { overflow: visible; }
 @media (max-height: 360px) {
-  .dialog-body { flex: none; min-height: 0; overflow-y: visible; }
+  .dialog-frame { display: block; overflow: hidden auto; overscroll-behavior: none; }
+  .dialog-body { overflow: visible; }
 }
 .summary { background: var(--surface-2); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
 .summary dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
@@ -457,7 +475,7 @@ a.stat-link:hover .card { border-color: var(--border-strong); }
 .login-card { width: min(420px, 100%); }
 .recovery-panel { height: var(--app-height, 100dvh); min-height: 0; overflow-y: auto; align-items: safe center; }
 .recovery-panel .card-body, .recovery-email { overflow-wrap: anywhere; }
-.recovery-panel h1 { margin-bottom: var(--space-4); }
+.recovery-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: var(--space-4); }
 .recovery-panel form > .btn { margin-top: var(--space-2); }
 .recovery-back { display: inline-block; margin-top: var(--space-4); }
 
@@ -531,21 +549,17 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, a.chip, .prod
 @media (max-width: 960px) { .hero { padding: 20px; border-radius: 16px; } .hero h1 { font-size: 23px; } .hero-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero .hero-pattern { opacity: .6; } }
 
 /* Экран входа */
-.login-split { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr); background: var(--bg); }
-.login-brand { position: relative; overflow: hidden; background: linear-gradient(155deg, #0f0f11 25%, #101d4d 72%, #1b3fd6); color: var(--brand-white); padding: 48px; display: flex; flex-direction: column; justify-content: space-between; }
-.login-brand .p1 { position: absolute; right: 24px; top: 24px; color: rgb(255 255 255 / 22%); }
-.login-brand .p2 { position: absolute; left: 40px; bottom: 30px; color: rgb(255 255 255 / 14%); }
-.login-brand .big-mark { position: absolute; right: -60px; bottom: 80px; color: rgb(255 255 255 / 5%); }
-.login-brand h1 { font-size: 34px; color: #fff; margin-top: 56px; line-height: 1.15; }
-.login-panel { min-width: 0; padding: 40px; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
-.login-panel .inner { min-width: 0; width: min(760px, 100%); }
-@media (max-width: 960px) {
-  .login-split { grid-template-columns: minmax(0, 1fr); }
-  .login-brand { padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 24px max(20px, env(safe-area-inset-left)); min-height: 0; }
-  .login-brand h1 { font-size: 24px; margin-top: 22px; }
-  .login-brand .p2, .login-brand .big-mark { display: none; }
-  .login-panel { padding: 20px max(16px, env(safe-area-inset-right)) max(40px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-}
+.login-entry { align-items: safe center; }
+.login-entry .login-card { min-width: 0; width: min(440px, 100%); }
+.login-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 16px; }
+.login-entry h1 { margin-bottom: 16px; }
+.login-submit { margin-top: 16px; }
+.login-error { margin: 12px 0; overflow-wrap: anywhere; }
+.login-server { margin-bottom: 12px; overflow-wrap: anywhere; }
+.login-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: var(--fs-s); }
+.login-footer > a { display: inline-flex; align-items: center; min-height: var(--touch); }
+.login-footer > .btn { min-height: var(--touch); }
+.login-version { flex-basis: 100%; font-size: var(--fs-xs); }
 .role-card { border-radius: 14px; }
 .role-card .role-avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--metal); color: var(--brand-black); }
 .role-card.partner .role-avatar { background: var(--metal-dark); color: var(--brand-white); }
@@ -760,7 +774,10 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, a.chip, .prod
 .answer { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
 .install-hint { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--info-weak); margin-bottom: 14px; font-size: var(--fs-s); }
 .forgot { margin-top: 12px; }
-.forgot summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-s); }
+.forgot summary { min-height: var(--touch); padding-block: 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-s); }
+.forgot p { color: var(--text-2); font-size: var(--fs-s); margin: 2px 0 8px; }
+.manager-help { border-top: 1px solid var(--border); }
+.manager-help > a { display: inline-flex; align-items: center; min-height: var(--touch); font-size: var(--fs-s); }
 @media (min-width: 961px) { .install-hint { display: none; } }
 .btn-lg { white-space: normal; text-align: center; line-height: 1.25; padding-top: 10px; padding-bottom: 10px; }
 
@@ -1028,11 +1045,8 @@ button.expense-row, .expense-royalty { display: grid; grid-template-columns: min
 .team-accounts summary { cursor: pointer; font-weight: 650; }
 .team-accounts > p { margin: 12px 0; }
 @media (max-width: 960px) {
-  .login-split { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .login-brand { min-height: 0; padding: 24px; }
-  .keyboard-open .login-brand { display: none; }
-  .keyboard-open .login-split { display: block; }
-  .keyboard-open .login-panel { min-height: 100%; padding-top: 16px; }
+  .login-entry { height: var(--app-height, 100dvh); min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .keyboard-open .login-entry { align-items: start; }
 }
 
 .learning-editor { margin-top: 20px; }

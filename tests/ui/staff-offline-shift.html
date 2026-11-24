@@ -40,6 +40,9 @@ try {
   await until(() => button(frame.contentDocument, closeLabel), 'Не загрузился экран открытой смены', 15000);
   const app = frame.contentWindow;
   const doc = app.document;
+  const queueButton = () => button(doc, 'Открыть неотправленные записи');
+  const pendingReceipt = () => doc.querySelector('.shift-receipt[data-state="queued"]');
+  const confirmedReceipt = () => doc.querySelector('.shift-receipt[data-state="closed"]');
   const fetchFixture = app.fetch;
   const attempts = [];
   let releaseHomeRefresh;
@@ -101,7 +104,7 @@ try {
 
   if (scenario === 'offline') online(false);
   await closeShift('125');
-  await until(() => doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'Итог без связи не появился в локальной очереди');
+  await until(() => pendingReceipt()?.textContent.includes(queuedMessage), 'Итог без связи не появился в локальной очереди');
   assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Открытая смена доступна для изменений при ожидающей записи');
 
   const discard = ['discard', 'storage', 'delete'].includes(scenario);
@@ -111,11 +114,12 @@ try {
   app.dispatchEvent(new app.Event('focus'));
 
   if (discard) {
-    await until(() => doc.body.textContent.includes(conflictMessage), 'Конфликт отправки не показан');
+    await until(() => doc.querySelector('main').textContent.includes('Требуют сверки:'), 'Конфликт отправки не показан');
     assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Конфликтная запись перестала блокировать смену');
-    button(doc, 'Посмотреть записи').click();
+    queueButton().click();
     const queue = await until(() => doc.querySelector('dialog[open]')?.textContent.includes(conflictMessage) && doc.querySelector('dialog[open]'), 'Открытая очередь не показывает конфликт');
-    button(queue, 'Скачать копию записей').click();
+    queue.querySelector('.queue-recovery').open = true;
+    button(queue, 'Скачать копию').click();
     const drop = button(queue, 'Копия сохранена — удалить из очереди');
     await until(() => !drop.disabled, 'Удаление после сохранения копии недоступно');
     if (scenario === 'delete') {
@@ -136,7 +140,7 @@ try {
     if (scenario === 'storage') {
       const alert = await until(() => doc.querySelector('main [role="alert"]'), 'Ошибка чтения очереди осталась незаметной');
       assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Ошибка чтения очереди сняла блокировку смены');
-      assert(doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'Ошибка чтения очереди скрыла последний известный итог');
+      assert(pendingReceipt()?.textContent.includes(queuedMessage), 'Ошибка чтения очереди скрыла последний известный итог');
       checkGeometry();
       app.IDBIndex.prototype.getAll = getAll;
       button(queue, 'Закрыть').click();
@@ -146,27 +150,27 @@ try {
       button(queue, 'Закрыть').click();
     }
     await until(() => !button(doc, closeLabel).disabled && !button(doc, cancelLabel).disabled, 'После удаления записи смену нельзя закрыть или отменить');
-    assert(!doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'После удаления всё ещё показан локальный итог');
+    assert(!pendingReceipt(), 'После удаления всё ещё показан локальный итог');
     connection = 'online';
     await closeShift('175');
-    await until(() => doc.querySelector('.earn-result')?.textContent.includes('Смена закрыта. Вы заработали'), 'Обычное закрытие не показало подтверждённый заработок');
+    await until(() => confirmedReceipt()?.textContent.includes('Начислено'), 'Обычное закрытие не показало подтверждённый заработок');
     assert(attempts.at(-1).p_cash === '17500' && attempts.at(-1).p_operation !== attempts[0].p_operation, 'Новое закрытие должно отправить уточнённые суммы с отдельным ключом');
   } else {
     if (scenario === 'sync') {
-      await until(() => !doc.querySelector('.earn-result'), 'После отправки всё ещё показан локальный итог');
+      await until(() => !pendingReceipt(), 'После отправки всё ещё показан локальный итог');
       assert(button(doc, closeLabel).disabled && button(doc, cancelLabel).disabled, 'Действия доступны до обновления состояния отправленной смены');
       releaseHomeRefresh();
     }
-    await until(() => doc.querySelector('.today-entered')?.textContent.includes('смена закрыта'), 'После отправки экран не показал закрытую смену');
+    const receipt = await until(confirmedReceipt, 'После отправки экран не показал закрытую смену');
     if (restoreDelete) {
-      assert(button(doc, 'Посмотреть записи') && doc.querySelector('.today-entered').disabled, 'После ошибки удаления потеряна ожидающая запись');
+      assert(queueButton() && button(receipt, 'Исправить смену').disabled, 'После ошибки удаления потеряна ожидающая запись');
       assert(!doc.querySelector('.toasts').textContent.includes('Отправлено записей'), 'Неудалённая операция засчитана как отправленная');
       restoreDelete();
       app.dispatchEvent(new app.Event('focus'));
-      await until(() => !button(doc, 'Посмотреть записи'), 'Повтор не удалил отправленную операцию');
+      await until(() => !queueButton(), 'Повтор не удалил отправленную операцию');
       assert(attempts.length >= 3 && attempts[2].p_operation === attempts[0].p_operation, 'Повтор после ошибки удаления изменил ключ операции');
     }
-    await until(() => !doc.querySelector('.earn-result')?.textContent.includes(queuedMessage), 'После отправки всё ещё показан локальный итог');
+    await until(() => !pendingReceipt(), 'После отправки всё ещё показан локальный итог');
   }
   assert(attempts.length >= 2 && attempts[0].p_operation === attempts[1].p_operation, 'Повтор отправки изменил ключ операции');
   assert(attempts[0].p_shift === attempts[1].p_shift && attempts[0].p_expected_revision === attempts[1].p_expected_revision, 'Повтор отправки изменил смену или её версию');

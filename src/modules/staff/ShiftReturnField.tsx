@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { Button, Field, MoneyInput } from '../../ui';
+import { useLocale } from '../../platform/locale';
 
 export function validShiftReturn(value: string | null, inputValid: boolean) {
   return value === null || (inputValid && /^\d{1,12}$/.test(value) && Number(value) > 0 && Number(value) <= 100_000_000_000);
@@ -9,6 +10,7 @@ export function ShiftReturnField({ value, onChange, valid, onValidityChange, cur
   value: string | null; onChange: (value: string | null) => void; valid: boolean;
   onValidityChange: (valid: boolean) => void; currency: string; busy: boolean;
 }) {
+  const { t } = useLocale();
   const id = useId();
   const focusAfterToggle = useRef(false);
   const reveal = useRef<HTMLButtonElement>(null);
@@ -22,17 +24,17 @@ export function ShiftReturnField({ value, onChange, valid, onValidityChange, cur
   return <div className="stack" style={{ gap: 8 }}>
     {value === null ? <Button ref={reveal} size="sm" variant="ghost" style={{ alignSelf: 'flex-start' }}
       aria-expanded={false} aria-controls={id} disabled={busy}
-      onClick={() => { focusAfterToggle.current = true; onChange(''); }}>Был возврат</Button> : null}
+      onClick={() => { focusAfterToggle.current = true; onChange(''); }}>{t('Был возврат', 'İade var')}</Button> : null}
     <div id={id} hidden={value === null}>
       {value !== null && <>
-        <Field label="Сумма возврата" hint="Продажи укажите в полях «Наличные» и «Картой» до вычета возврата."
-          error={value !== '' && !validShiftReturn(value, valid) ? 'Укажите допустимую сумму возврата больше нуля.' : undefined}
+        <Field label={t('Сумма возврата', 'İade tutarı')} hint={t('Продажи укажите в полях «Наличные» и «Картой» до вычета возврата.', 'Nakit ve kart satışlarını iade düşülmeden önceki tutarlarla girin.')}
+          error={value !== '' && !validShiftReturn(value, valid) ? t('Укажите допустимую сумму возврата больше нуля.', 'Sıfırdan büyük, geçerli bir iade tutarı girin.') : undefined}
           required>{(input, describedBy) =>
           <MoneyInput id={input} describedBy={describedBy} value={value} onChange={onChange} onValidityChange={onValidityChange}
             inputRef={element => { amount.current = element; }} requireExplicitValue currency={currency} disabled={busy} />
         }</Field>
         <Button size="sm" variant="ghost" disabled={busy}
-          onClick={() => { focusAfterToggle.current = true; onValidityChange(true); onChange(null); }}>Убрать возврат</Button>
+          onClick={() => { focusAfterToggle.current = true; onValidityChange(true); onChange(null); }}>{t('Убрать возврат', 'İadeyi kaldır')}</Button>
       </>}
     </div>
   </div>;
