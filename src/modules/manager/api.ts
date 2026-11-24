@@ -50,11 +50,12 @@ export interface RoyaltyRow {
 export interface RoyaltySummary { month: string | null; current_month: string; rows: RoyaltyRow[];
   totals: { currency: string; accrued_minor: number; paid_minor: number; debt_minor: number }[]; debt_rub_minor: number | null }
 export interface LedgerMonth { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number;
-  correction_minor?: number; past_debt_minor?: number; paid_minor: number; debt_minor: number; is_open: boolean }
+  correction_minor?: number; past_debt_minor?: number; waived_royalty_minor?: number; paid_minor: number; debt_minor: number; is_open: boolean }
 export type UndatedRoyalty = Pick<LedgerMonth, 'manual_minor' | 'paid_minor' | 'debt_minor'>;
 export type RoyaltyPayment = { month: string | null; amount_minor: number; paid_on: string | null; note: string | null };
 export interface RoyaltyPartner { partner_id: string; partner_name: string; currency: string; rate_bp: number; months: LedgerMonth[];
   undated?: UndatedRoyalty | null;
+  royalty_holiday_from?: string | null; royalty_holiday_until?: string | null; royalty_accrual_from?: string | null;
   payments: (RoyaltyPayment & { id: string })[];
   manual: { id: string; month: string; amount_minor: number; note: string | null }[];
   rates: { effective_from: string; rate_bp: number }[] }
@@ -64,6 +65,8 @@ export const royaltyPartner = (partner: string) => command<RoyaltyPartner>('roya
 export const paymentDelete = (id: string) => command('royalty_payment_delete', { id });
 export const manualAdd = (partner: string, month: string | null, amount: string, note: string | null) => command('royalty_manual_add', { partner, month, amount, note });
 export const manualDelete = (id: string) => command('royalty_manual_delete', { id });
+export const royaltyHolidayStartSet = (partner: string, startedOn: string | null, previous: string | null) =>
+  command('royalty_holiday_start_set', { partner, started_on: startedOn, expected_start: previous });
 export const rateSet = (partner: string, rate_bp: number, from: string) => command('royalty_rate_set', { partner, rate_bp, from });
 
 export const pct = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;

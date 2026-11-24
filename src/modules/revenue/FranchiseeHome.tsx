@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, Plus } from 'lucide-react';
 import { Link } from 'react-router';
+import { command } from '../../platform/backend';
+import { RoyaltyHolidayNote } from '../finance/RoyaltyHolidayNote';
 import { formatDate, monthStart } from '../../platform/dates';
 import { useLocale } from '../../platform/locale';
 import { formatMoneyShort } from '../../platform/money';
@@ -10,7 +12,7 @@ import { useSession } from '../../platform/session';
 import { Alert, Button, DataState, EmptyState, ErrorState, PageHeader, Skeleton } from '../../ui';
 import { MissingRevenue } from '../../ui/MissingRevenue';
 import { MonthNav, PlanCard } from './components';
-import { LaunchChecklist, usePartnerLaunch } from './LaunchChecklist';
+import { LaunchChecklist, LaunchNotScheduled, usePartnerLaunch } from './LaunchChecklist';
 import { canEditRevenueDay, revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards, isPartnerReadOnly, usePartnerLifecycle } from './partnerLifecycle';
 import { RevenueDialog } from './RevenueDialog';
@@ -25,6 +27,21 @@ function financeDays(month: string, location?: string, day?: string) {
   if (location) params.set('location', location);
   if (day) params.set('day', day);
   return `/finance?${params}`;
+}
+
+function OpeningRoyalty() {
+  const { t } = useLocale();
+  const query = useQuery({
+    queryKey: ['royalty', 'my'],
+    queryFn: () => command<{ currency: string; live: { waived_royalty_minor?: number; royalty_holiday_until?: string; royalty_accrual_from?: string } }>('royalty_my'),
+    staleTime: 120_000,
+  });
+  const data = query.data;
+  if (!data?.live?.royalty_holiday_until) return null;
+  return <Link to="/finance" className="home-royalty-note">
+    <strong>{t('Роялти за месяц', 'Aylık royalty')}</strong>
+    <RoyaltyHolidayNote currency={data.currency} waived={data.live.waived_royalty_minor} until={data.live.royalty_holiday_until} accrualFrom={data.live.royalty_accrual_from} />
+  </Link>;
 }
 
 function RevenueReminders({ points, month, showLocation }: {
@@ -139,6 +156,10 @@ export function FranchiseeHome() {
       return <LaunchChecklist partner={partner} launch={launch.data}
         onHistory={launchCycle > 0 ? () => setHistoryCycle(launchCycle) : undefined} />;
     }
+    if (partner && status === 'active' && launch.isSuccess && !launch.data && overview.isSuccess &&
+      points.every(point => point.status === 'active' && point.opened_on && point.opened_on > point.today)) {
+      return <LaunchNotScheduled />;
+    }
     if (launch.isLoading) return <div className="home"><Skeleton lines={4} /></div>;
     if (launch.isError && overview.isSuccess && !points.length) return <div className="home">
       <PageHeader title={t('Главная', 'Ana sayfa')} /><ErrorState error={launch.error} onRetry={() => void launch.refetch()} />
@@ -203,6 +224,7 @@ export function FranchiseeHome() {
               )}
             </DataState>
             )}
+            {!partnerPaused && !inLaunchHistory && partner && month === currentMonth && <OpeningRoyalty />}
             <Link className="home-finance-link" to={financeDays(month, current?.location_id)}>
               {t('Выручка по дням', 'Günlük satış geliri')}<ArrowUpRight size={16} aria-hidden />
             </Link>

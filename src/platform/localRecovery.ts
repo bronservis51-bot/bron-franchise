@@ -12,7 +12,7 @@ export interface LocalRecovery {
   operations: QueuedOperation[];
   drafts: DraftRow[];
 }
-const kinds = new Set(['shift_submit', 'shift_close_versioned', 'shift_record_with_return', 'revenue_total_set', 'revenue_save', 'shift_close', 'revenue_save_checked', 'shift_close_checked']);
+const kinds = new Set(['shift_submit', 'shift_close_versioned', 'shift_record_with_return', 'revenue_total_set', 'revenue_split_set', 'revenue_save', 'shift_close', 'revenue_save_checked', 'shift_close_checked']);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const timestamp = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
@@ -68,13 +68,14 @@ export function parseLocalRecovery(text: string, userId: string): LocalRecovery 
     if (Object.values(payload).some(value => value !== null && !['string', 'number', 'boolean'].includes(typeof value))) return invalid();
     if (kind !== 'revenue_save' && kind !== 'shift_close' && payload.operation !== item.clientOpId) return invalid();
     const shiftWithReturn = kind === 'shift_record_with_return';
-    if (kind === 'shift_submit' || kind === 'revenue_total_set' || (shiftWithReturn && payload.shift === null)) {
+    const declaration = kind === 'revenue_total_set' || kind === 'revenue_split_set';
+    if (kind === 'shift_submit' || declaration || (shiftWithReturn && payload.shift === null)) {
       if (!uuid(payload.location) || !calendarDay(payload.day)) return invalid();
     }
     if (kind === 'shift_close_versioned' || (shiftWithReturn && payload.shift !== null)) {
       if (!uuid(payload.shift) || !Number.isSafeInteger(payload.expected_revision) || Number(payload.expected_revision) < 0) return invalid();
     }
-    if ((kind === 'shift_submit' || kind === 'shift_close_versioned' || shiftWithReturn) &&
+    if ((kind === 'shift_submit' || kind === 'shift_close_versioned' || shiftWithReturn || kind === 'revenue_split_set') &&
       minorAmount(payload.cash) + minorAmount(payload.card) > MAX_ENTRY_MINOR) return invalid();
     if (shiftWithReturn) {
       if (payload.reason !== null || (payload.shift === null
@@ -82,11 +83,9 @@ export function parseLocalRecovery(text: string, userId: string): LocalRecovery 
         : payload.location !== null || payload.day !== null)) return invalid();
       minorAmount(payload.return);
     }
-    if (kind === 'revenue_total_set') {
-      if (typeof payload.expected_version !== 'string' || !payload.expected_version) return invalid();
-      minorAmount(payload.total);
-    }
-    if ((kind === 'shift_submit' || kind === 'shift_close_versioned' || kind === 'revenue_total_set' || shiftWithReturn) &&
+    if (declaration && (typeof payload.expected_version !== 'string' || !payload.expected_version)) return invalid();
+    if (kind === 'revenue_total_set') minorAmount(payload.total);
+    if ((kind === 'shift_submit' || kind === 'shift_close_versioned' || declaration || shiftWithReturn) &&
       payload.comment != null && typeof payload.comment !== 'string') return invalid();
     if (kind === 'revenue_save_checked' && (!Number.isSafeInteger(payload.expected_revision) || Number(payload.expected_revision) < -1)) return invalid();
     if (kind === 'shift_close_checked' && payload.expected_closed_at !== null && !timestamp(payload.expected_closed_at)) return invalid();

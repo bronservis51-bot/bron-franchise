@@ -8,3 +8,14 @@
   font-weight: 600;
 }
 .home-finance-link svg { flex: none; }
+
+.home-royalty-note {
+  justify-self: start;
+  display: block;
+  min-width: 0;
+  padding: 10px 14px;
+  border-inline-start: 2px solid var(--border-strong);
+  color: var(--text);
+  text-decoration: none;
+}
+.home-royalty-note:hover > strong { color: var(--link); }
