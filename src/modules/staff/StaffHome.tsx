@@ -392,12 +392,12 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                   </div>
                 </div> : openShift ? (
                   <section className="shift-card" aria-label={t('Открытая смена', 'Açık vardiya')}>
-                    <div className="shift-label">{t('Незакрытая смена', 'Açık vardiya')}</div>
-                    <div className="staff-open-details"><span>{dayLabel(openShift.day, locale)}</span><span>{openShift.location_name}</span></div>
-                    {d.locations.find(l => l.location_id === openShift.location_id)?.today !== openShift.day && <p className="danger-text">{t('Сдайте выручку за указанную дату.', 'Belirtilen tarihin cirosunu girin.')}</p>}
                     <Button variant="primary" block className="btn-lg" data-tour-target="shift-close" disabled={shiftBlocked(openShift.id)} onClick={() => setClosing({ shift: openShift })}>
                       {t('Закрыть смену', 'Vardiyayı kapat')}
                     </Button>
+                    <div className="shift-label">{t('Незакрытая смена', 'Açık vardiya')}</div>
+                    <div className="staff-open-details"><span>{dayLabel(openShift.day, locale)}</span><span>{openShift.location_name}</span></div>
+                    {d.locations.find(l => l.location_id === openShift.location_id)?.today !== openShift.day && <p className="danger-text">{t('Сдайте выручку за указанную дату.', 'Belirtilen tarihin cirosunu girin.')}</p>}
                     <button type="button" className="link-btn" disabled={shiftBlocked(openShift.id)} onClick={() => setCancelling(openShift)}>{t('Отменить открытие', 'Vardiyayı iptal et')}</button>
                   </section>
                 ) : d.locations.length ? (
