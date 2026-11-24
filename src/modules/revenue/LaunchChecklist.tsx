@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
 import { Link } from 'react-router';
+import { ArrowUpRight, BookOpen, ClipboardCheck, MessageCircle, Package } from 'lucide-react';
+import './launch-checklist.css';
 import { useLocale } from '../../platform/locale';
 import { command, toAppError } from '../../platform/backend';
 import { ActionError, Button, Card, Checkbox, DataState, PageHeader } from '../../ui';
@@ -9,7 +10,7 @@ import { sections } from '../knowledge/api';
 
 const tasks = {
   location_requirements: { title: ['Уточнить требования к локации', 'Mağaza yeri gerekliliklerini öğren'] as const, description: ['Сверьте критерии подбора с менеджером по франшизе.', 'Seçim ölçütlerini franchise yöneticinizle teyit edin.'] as const },
-  location_options: { title: 'Собрать варианты локаций', description: ['Подготовьте названия или адреса площадок для обсуждения.', 'Görüşmek için yerlerin adlarını veya adreslerini hazırlayın.'] as const },
+  location_options: { title: ['Собрать варианты локаций', 'Mağaza yeri seçeneklerini topla'] as const, description: ['Подготовьте названия или адреса площадок для обсуждения.', 'Görüşmek için yerlerin adlarını veya adreslerini hazırlayın.'] as const },
   location_review: { title: ['Обсудить варианты с менеджером', 'Seçenekleri yöneticiyle görüş'] as const, description: ['Передайте варианты и уточните, какой из них проверить дальше.', 'Seçenekleri iletin ve hangisinin önce inceleneceğini sorun.'] as const },
   island_brief: { title: ['Собрать данные для проекта островка', 'Stand projesi için bilgi topla'] as const, description: ['Передайте проектировщику известные параметры площадки.', 'Yerin bilinen ölçülerini tasarımcıya bildirin.'] as const },
   island_design: { title: ['Подготовить проект островка', 'Stand projesini hazırla'] as const, description: ['Обсудите макет и внесите согласованные правки.', 'Çizimi görüşün ve kararlaştırılan değişiklikleri uygulayın.'] as const },
@@ -26,7 +27,27 @@ const openingTasks: TaskId[] = ['island_brief', 'island_design', 'purchase_list'
 const tasksForStage = (stage: Stage) => stage === 'opening_preparation' ? openingTasks : searchTasks;
 const launchQueryKey = (partner?: string | null) => ['partner-launch', partner] as const;
 const kbSearch = (query: string) => `/kb?q=${encodeURIComponent(query)}`;
-const materialLinkStyle = { display: 'flex', alignItems: 'center', minHeight: 'var(--touch)' };
+const stageTranslation = { contract_signed: 'Sözleşme imzalandı', location_search: 'Mağaza yeri arama', opening_preparation: 'Açılışa hazırlık' };
+
+export function LaunchNotScheduled() {
+  const { t } = useLocale();
+  return <div className="home launch-home">
+    <PageHeader title={t('Подготовка к открытию', 'Açılışa hazırlık')} />
+    <Card title={t('Уточните первый шаг с менеджером', 'İlk adımı yöneticinizle teyit edin')}>
+      <p>{t('Когда менеджер укажет этап, здесь появятся ваши задачи.', 'Yöneticiniz aşamayı belirlediğinde görevleriniz burada görünür.')}</p>
+      <LaunchLinks />
+    </Card>
+  </div>;
+}
+
+function LaunchLinks({ materials = '/kb?path=start', orders = false }: { materials?: string; orders?: boolean }) {
+  const { t } = useLocale();
+  return <div className="launch-links">
+    <Link className="link-btn" to={materials}><BookOpen size={16} aria-hidden />{t('Материалы по открытию', 'Açılış içerikleri')}</Link>
+    {orders && <Link className="link-btn" to="/order"><Package size={16} aria-hidden />{t('Каталог и заказ', 'Katalog ve sipariş')}</Link>}
+    <Link className="link-btn" to="/kb/questions"><MessageCircle size={16} aria-hidden />{t('Написать менеджеру', 'Yöneticiye yaz')}</Link>
+  </div>;
+}
 
 export function usePartnerLaunch(partner?: string | null) {
   return useQuery({ queryKey: launchQueryKey(partner), enabled: Boolean(partner), staleTime: 0,
@@ -46,12 +67,11 @@ function TaskList({ ids, completed, disabled, onChange }: {
 export function LaunchChecklist({ partner, launch, onHistory }: { partner: string; launch: Launch; onHistory?: () => void }) {
   const { t } = useLocale();
   const client = useQueryClient();
-  const [materialsOpen, setMaterialsOpen] = useState(false);
   const ids = tasksForStage(launch.stage);
   const completed = new Set(launch.completed_task_ids);
   const done = ids.filter(id => completed.has(id)).length;
   const nextId = ids.find(id => !completed.has(id));
-  const kbSections = useQuery({ queryKey: ['kb', 'sections'], queryFn: sections, enabled: materialsOpen || nextId === 'launch_learning' });
+  const kbSections = useQuery({ queryKey: ['kb', 'sections'], queryFn: sections });
   const sectionLink = (slug: string, fallback: string) => {
     const section = kbSections.data?.find(item => item.slug === slug);
     return section ? `/kb/s/${section.id}` : fallback;
@@ -75,48 +95,39 @@ export function LaunchChecklist({ partner, launch, onHistory }: { partner: strin
     },
   });
   const opening = launch.stage === 'opening_preparation';
+  const nextLink = nextId === 'location_requirements' ? kbSearch('локация')
+    : nextId === 'launch_learning' ? launchMaterials : nextId === 'purchase_list' ? purchaseMaterials : null;
 
-  return <div className="home">
-    <PageHeader title={t(PARTNER_PREPARATION[launch.stage][0], { contract_signed: 'Sözleşme imzalandı', location_search: 'Mağaza yeri arama', opening_preparation: 'Açılışa hazırlık' }[launch.stage])}
+  return <div className="home launch-home">
+    <PageHeader title={t('Подготовка к открытию', 'Açılışa hazırlık')}
       actions={onHistory && <Button onClick={onHistory}>{t('История выручки', 'Ciro geçmişi')}</Button>} />
-    <div className="stack">
-      <div aria-live="polite">
-        {nextId ? <Card title={t(tasks[nextId].title[0], tasks[nextId].title[1])}>
-          <p>{t(tasks[nextId].description[0], tasks[nextId].description[1])}</p>
-          <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-            <Button variant="primary" disabled={change.isPending} loading={change.isPending && change.variables?.task === nextId}
-              onClick={() => change.mutate({ task: nextId, completed: true })}>{t('Отметить выполненным', 'Tamamlandı olarak işaretle')}</Button>
-            {nextId === 'launch_learning' && <Link className="btn" to={launchMaterials}>{t('Открыть материалы', 'İçerikleri aç')}</Link>}
-          </div>
-        </Card> : <Card title={t('Все задачи этапа отмечены', 'Bu aşamanın görevleri tamamlandı')}>
-          <p>{t('Уточните следующий этап у менеджера по франшизе.', 'Bir sonraki aşamayı franchise yöneticinizle görüşün.')}</p>
-          <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-            <Link className="btn" to="/kb/questions">{t('Мои вопросы', 'Sorularım')}</Link>
-          </div>
-        </Card>}
-      </div>
-      <ActionError error={change.error} />
-      <Card><details>
-        <summary>{t('Чек-лист этапа', 'Aşama kontrol listesi')} <span className="faint">{t(`(${done} из ${ids.length})`, `(${done}/${ids.length})`)}</span></summary>
-        <TaskList ids={ids} completed={completed} disabled={change.isPending}
-          onChange={(task, completed) => change.mutate({ task, completed })} />
-      </details></Card>
-      <Card><details onToggle={e => setMaterialsOpen(e.currentTarget.open)}>
-        <summary>{t('Материалы и обучение', 'İçerikler ve eğitim')}</summary>
-        <ul className="list" style={{ marginTop: 'var(--space-3)' }}>
-          {!opening && <li><Link style={materialLinkStyle} to={kbSearch('локация')}>{t('Материалы по выбору локации', 'Mağaza yeri seçimi içerikleri')}</Link></li>}
-          <li><Link style={materialLinkStyle} to={launchMaterials}>{t('Материалы по открытию', 'Açılış içerikleri')}</Link></li>
-          {opening && <>
-            <li><Link style={materialLinkStyle} to={purchaseMaterials}>{t('Материалы по первой закупке', 'İlk sipariş içerikleri')}</Link>
-              {nextId !== 'purchase_list' && <p className="faint">{t(tasks.purchase_list.description[0], tasks.purchase_list.description[1])}</p>}
-            </li>
-            <li><Link style={materialLinkStyle} to="/order">{t('Каталог и заказ', 'Katalog ve sipariş')}</Link></li>
-          </>}
-          <li><Link style={materialLinkStyle} to={`/learning/manage?partner=${partner}`}>{t('Обучение сотрудников', 'Çalışan eğitimi')}</Link></li>
-          {nextId && <li><Link style={materialLinkStyle} to="/kb/questions">{t('Мои вопросы', 'Sorularım')}</Link></li>}
-        </ul>
-      </details></Card>
+    <div className="launch-stage">
+      <strong>{t(PARTNER_PREPARATION[launch.stage][0], stageTranslation[launch.stage])}</strong>
+      <span>{t(`Выполнено ${done} из ${ids.length}`, `${done}/${ids.length} tamamlandı`)}</span>
+      <progress value={done} max={ids.length} aria-label={t('Прогресс этапа', 'Aşama ilerlemesi')} />
     </div>
+    <div aria-live="polite">
+      {nextId ? <Card className="launch-next" title={t('Следующий шаг', 'Sonraki adım')}>
+        <h3>{t(tasks[nextId].title[0], tasks[nextId].title[1])}</h3>
+        <p>{t(tasks[nextId].description[0], tasks[nextId].description[1])}</p>
+        <div className="launch-next-actions">
+          {nextLink && <Link className="btn btn-primary" to={nextLink}>
+            {t('Открыть материалы', 'İçerikleri aç')}<ArrowUpRight size={16} aria-hidden />
+          </Link>}
+          <Button variant={nextLink ? 'secondary' : 'primary'} disabled={change.isPending} loading={change.isPending && change.variables?.task === nextId}
+            onClick={() => change.mutate({ task: nextId, completed: true })}>{t('Отметить выполненным', 'Tamamlandı olarak işaretle')}</Button>
+        </div>
+      </Card> : <Card title={t('Задачи выполнены', 'Görevler tamamlandı')}>
+        <p>{t('Сообщите менеджеру, что вы готовы перейти к следующему этапу.', 'Bir sonraki aşamaya hazır olduğunuzu yöneticinize bildirin.')}</p>
+      </Card>}
+    </div>
+    <ActionError error={change.error} />
+    <Card><details>
+      <summary><ClipboardCheck size={16} aria-hidden /> {t('Все задачи этапа', 'Aşamanın tüm görevleri')}</summary>
+      <TaskList ids={ids} completed={completed} disabled={change.isPending}
+        onChange={(task, completed) => change.mutate({ task, completed })} />
+    </details></Card>
+    <LaunchLinks materials={launchMaterials} orders={opening} />
   </div>;
 }
 

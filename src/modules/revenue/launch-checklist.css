@@ -1,0 +1,38 @@
+.launch-home {
+  display: grid;
+  max-width: 640px;
+  gap: var(--space-3);
+}
+.launch-home .page-head { margin-bottom: 0; }
+.launch-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.launch-stage progress {
+  flex-basis: 100%;
+  min-width: 0;
+  height: 8px;
+  accent-color: var(--link);
+}
+.launch-stage > span { color: var(--muted); }
+.launch-next { border-inline-start: 3px solid var(--link); }
+.launch-next h3 { margin-bottom: 6px; overflow-wrap: anywhere; }
+.launch-next p { margin-bottom: 12px; }
+.launch-next-actions, .launch-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.launch-links > a, .launch-next-actions > .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  white-space: normal;
+}
+.launch-links > a { min-height: var(--touch); }
+.launch-links svg, .launch-next-actions svg { flex: none; }
+.launch-home summary > svg { vertical-align: -.15em; }

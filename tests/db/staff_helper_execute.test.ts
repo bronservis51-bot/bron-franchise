@@ -193,6 +193,16 @@ it('preserves the finance, learning and CRM call paths across a native split-own
    "select public.staff_shift_correct($1,300000,200000,$2,'Сверка кассы',$3) as result",
    [open.id, closed.shift.revision, crypto.randomUUID()]);
   expect(correction).toMatchObject({ ok: true, revision: 2 });
+  const versionOfDay = async () => {
+   const month = await call<{ days: { day: string; day_version: string }[] }>(OWNER,
+    'select public.revenue_month($1,$2) as result', [target.location_id, open.day]);
+   return month.days.find(day => day.day === open.day)?.day_version;
+  };
+  await call(OWNER, 'select public.revenue_total_set($1,$2,550000,$3,$4) as result',
+   [target.location_id, open.day, await versionOfDay(), crypto.randomUUID()]);
+  const split = await call<{ total_minor: number }>(OWNER, 'select public.revenue_split_set($1,$2,350000,250000,$3,$4) as result',
+   [target.location_id, open.day, await versionOfDay(), crypto.randomUUID()]);
+  expect(split.total_minor).toBe(600000);
   const operation = crypto.randomUUID();
   const crm = 'fm@demo.example.com';
   const createLead = () => call<{id: string; updated_at: string}>(crm, 'select public.lead_save($1::jsonb,null,$2) as result',

@@ -184,3 +184,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.finance-day-payment {
+  grid-column: 1 / -1;
+  text-align: start;
+  overflow-wrap: anywhere;
+}

@@ -88,8 +88,8 @@ export function LoginPage() {
             </form>
           </div>
         </section>
+        <div className="login-install"><InstallButton /></div>
         <footer className="login-footer">
-          <InstallButton compact />
           <a href={`${import.meta.env.BASE_URL}help.html${language === 'tr' ? '#tr' : ''}`} target="_blank" rel="noopener noreferrer">
             {t('Помощь при сбое', 'Bağlantı yardımı')}
           </a>

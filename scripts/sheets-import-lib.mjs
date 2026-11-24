@@ -104,8 +104,8 @@ export async function importPartner(q, cfg, csvText, year, log = console.log) {
   for (const [md, minor] of [...days.entries()].sort()) {
     const day = `${year}-${md}`;
     if (day > today || Number.isNaN(Date.parse(day))) { skipped++; continue; }
-    await q(`insert into public.daily_revenue(location_id, partner_id, day, currency, cash_minor, card_minor, comment)
-      values ($1, $2, $3, $4, $5, 0, 'Перенесено из Google-таблицы (без разбивки на наличные и карту)')`, [l.id, pid, day, cfg.currency, minor]);
+    await q(`insert into public.daily_revenue(location_id, partner_id, day, currency, cash_minor, card_minor, unallocated_minor, comment)
+      values ($1, $2, $3, $4, 0, 0, $5, 'Перенесено из Google-таблицы (без разбивки на наличные и карту)')`, [l.id, pid, day, cfg.currency, minor]);
     n++;
   }
   for (const [m, minor] of plans) {

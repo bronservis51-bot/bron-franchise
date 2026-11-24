@@ -6,6 +6,7 @@ import { dayLabel } from '../../platform/dates';
 import { useLocale } from '../../platform/locale';
 import { groupByCurrency } from '../../platform/money';
 import { Alert, Button, Card, ConfirmDialog, DataState, EmptyState, Money, Skeleton } from '../../ui';
+import { hasPaymentDiscrepancy, RevenueBreakdown } from '../revenue/RevenueBreakdown';
 import { DayList } from '../revenue/components';
 import { hasRevenueDiscrepancy, RevenueDialog } from '../revenue/RevenueDialog';
 import { canEditRevenueDay, revenueMonth, type DayRow, type MonthDetail } from '../revenue/api';
@@ -131,6 +132,7 @@ function AllLocationDays({ points, totalsReady, onlyMissing, readOnly, linkedDay
                     off ? t('Выходной', 'Kapalı') : t('Не внесено', 'Kaydedilmedi')}
                 </span>
                 <ChevronRight size={16} aria-hidden />
+                {row && <small className="finance-day-payment faint"><RevenueBreakdown row={row} currency={point.currency} /></small>}
                 {hasRevenueDiscrepancy(row) && <small className="finance-day-warning" role="status">
                   {t('Сумма смен больше указанного итога', 'Vardiya toplamı bildirilen tutardan fazla')}
                 </small>}
@@ -162,6 +164,9 @@ function DayHistory({ day, entry: { point, row, off }, onClose }: { day: string;
       </dl>
       {hasRevenueDiscrepancy(row) && <p className="danger-text">
         {t('Сумма смен больше ранее указанного итога', 'Vardiya toplamı daha önce bildirilen tutardan fazla')}
+      </p>}
+      {hasPaymentDiscrepancy(row) && <p className="danger-text">
+        {t('После изменения смен разбивка разошлась с итогом дня.', 'Vardiya değişikliğinden sonra ödeme türleri günlük kayıtla uyuşmuyor.')}
       </p>}
       {row.comment && <p>{row.comment}</p>}
     </> : <p>{off ? t('Выходной', 'Kapalı') : t('Выручка не внесена', 'Satış geliri kaydedilmedi')}</p>}

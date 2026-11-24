@@ -159,10 +159,10 @@ function RepeatExpensesDialog({ month, currency, onClose }: { month: string; cur
   );
 }
 
-export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, royaltyMinor, royaltyHistory, readOnly = false }: {
+export function ExpensesCard({ month, currency, location, locations, expenses, own, prevCount, royaltyMinor, royaltyNote, royaltyHistory, readOnly = false }: {
   month: string; currency: string; location: string | null; locations: ExpensePoint[];
   expenses: Expense[]; own: string[]; prevCount: number;
-  royaltyMinor: MinorInput; royaltyHistory?: ReactNode; readOnly?: boolean;
+  royaltyMinor: MinorInput; royaltyNote?: ReactNode; royaltyHistory?: ReactNode; readOnly?: boolean;
 }) {
   const { t } = useLocale();
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -195,7 +195,7 @@ export function ExpensesCard({ month, currency, location, locations, expenses, o
           {body}<Pencil size={15} className="faint" aria-hidden />
         </button>}</li>;
     })}<li><div className="expense-row finance-royalty-row">
-      <span className="expense-main">{t('Роялти по ставке', 'Orana göre royalty')}</span>
+      <span className="expense-main">{t('Роялти по ставке', 'Orana göre royalty')}{royaltyNote}</span>
       <Money minor={royaltyMinor} currency={currency} short />
     </div></li></ul>
     {royaltyHistory}

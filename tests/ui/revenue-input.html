@@ -70,10 +70,10 @@ try {
       }
       return app.Response.json(body);
     }
-    if (url.pathname.endsWith('/rpc/revenue_total_set')) {
+    if (url.pathname.endsWith('/rpc/revenue_split_set')) {
       const payload = JSON.parse(init.body);
       saves.push(payload);
-      return Promise.resolve(new app.Response(JSON.stringify({ id: 'qa-revenue', total_minor: payload.p_total }), {
+      return Promise.resolve(new app.Response(JSON.stringify({ id: 'qa-revenue', total_minor: Number(payload.p_cash) + Number(payload.p_card) }), {
         headers: { 'Content-Type': 'application/json' },
       }));
     }
@@ -129,17 +129,18 @@ try {
     { name: 'сумма выше допустимой', values: ['12,50', '1000000000,01'], invalid: true },
     { name: 'удалённая сумма', values: ['12,50', ''] },
     { name: 'явный ноль после ошибки', values: ['12,50', '12,50x', '0'], total: '0' },
-    { name: 'переход к комментарию перед сохранением', values: ['1000000000,01', '12,50'], total: '1250', byKeyboard: true },
+    { name: 'переход с наличных на карту и к комментарию', values: ['1000000000,01', '12,50'], total: '1250', card: '425', byKeyboard: true },
     { name: 'максимально допустимая сумма', values: ['1000000000'], total: '100000000000' },
   ];
-  for (const { name, values, invalid, total, byKeyboard } of cases) {
+  for (const { name, values, invalid, total, card = '0', byKeyboard } of cases) {
     const count = saves.length;
     open.click();
     const dialog = await until(() => app.document.querySelector('dialog[open]'));
-    const label = [...dialog.querySelectorAll('label')].find(node => node.textContent.includes('Вся выручка точки за день'));
-    const input = app.document.getElementById(label.htmlFor);
+    const [input, cardInput] = dialog.querySelectorAll('input[inputmode=decimal]');
     const save = button(dialog, 'Сохранить');
     try {
+      type(cardInput, card === '425' ? '4,25' : '0');
+      await wait(0);
       for (const value of values) {
         type(input, value);
         await wait(0);
@@ -149,18 +150,21 @@ try {
       assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
       if (byKeyboard) {
         input.dispatchEvent(new app.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        assert(app.document.activeElement === cardInput, 'клавиатура не перевела фокус с наличных на карту');
+        cardInput.dispatchEvent(new app.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         assert(app.document.activeElement === dialog.querySelector('input[type="text"], input:not([type]):not([inputmode=decimal])'), 'клавиатура не перевела фокус к комментарию');
         assert(saves.length === count && dialog.isConnected, 'переход к следующему полю отправил выручку');
       }
       save.click();
       if (total === undefined) {
         await wait(50);
-        assert(saves.length === count, `отправлена сумма ${saves.at(-1)?.p_total}`);
+        assert(saves.length === count, `отправлена сумма ${JSON.stringify(saves.at(-1))}`);
         assert(save.disabled, 'кнопка сохранения доступна');
         if (invalid) assert(input.getAttribute('aria-invalid') === 'true', 'поле не помечено как ошибочное');
       } else {
         const payload = await until(() => saves[count]);
-        assert(payload.p_total === total, `отправлена сумма ${payload.p_total}, ожидалось ${total}`);
+        assert(payload.p_cash === total, `отправлены наличные ${payload.p_cash}, ожидалось ${total}`);
+        assert(payload.p_card === card, `отправлена карта ${payload.p_card}, ожидалось ${card}`);
         assert(payload.p_comment === null, 'пустой комментарий должен оставаться необязательным');
         await until(() => !dialog.isConnected);
       }

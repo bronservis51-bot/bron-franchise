@@ -7,13 +7,37 @@
   min-width: 0;
 }
 
+.language-control {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.language-control::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 14px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
 .language-select select {
+  appearance: none;
   max-width: 100%;
   min-height: var(--touch);
-  padding-inline: 10px;
+  padding-inline: 12px 32px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-s);
   background: var(--surface);
   color: var(--text);
   font: inherit;
+}
+
+@media (forced-colors: active) {
+  .language-control::after { color: ButtonText; }
 }

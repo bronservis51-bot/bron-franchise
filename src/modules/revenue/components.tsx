@@ -3,6 +3,7 @@ import { Button } from '../../ui';
 import { CalendarX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLocale } from '../../platform/locale';
 import { dayLabel, monthLabel, shiftMonth } from '../../platform/dates';
+import { RevenueBreakdown } from './RevenueBreakdown';
 import { formatMoneyShort } from '../../platform/money';
 import { EmptyState, Money } from '../../ui';
 import { BrandPattern } from '../../ui/brand';
@@ -78,11 +79,7 @@ export function DayList({ m, readOnly = false, showHistory = false, onPick }: {
               {r ? (
                 <span className="day-sum2">
                   <Money minor={r.total_minor} currency={m.currency} short />
-                  <span className="day-split">{r.comment && (/Google-таблиц/i.test(r.comment) || /Google Sheets/i.test(r.comment))
-                    ? t('Из Google-таблицы: способ оплаты не указан', 'Google E-Tablolar’dan alındı: ödeme türü belirtilmedi')
-                    : r.entries.some((e) => e.employee_id)
-                      ? r.entries.map((e) => `${e.employee_name ?? t('без разбивки', 'ayrıntı yok')} ${formatMoneyShort(e.total_minor, m.currency, locale)}`).join(' · ')
-                      : t('Всего за день', 'Günlük toplam')}</span>
+                  <span className="day-split"><RevenueBreakdown row={r} currency={m.currency} /></span>
                   {r.reported_total_minor != null && Number(r.total_minor) > Number(r.reported_total_minor) && <span className="day-split" role="status">{t('Сумма смен больше ранее указанного итога — проверьте день', 'Vardiya toplamı önceki günlük toplamı aşıyor. Kaydı kontrol edin.')}</span>}
                   {r.return_minor ? <span className="day-split">{t('Возвраты', 'İadeler')} · {formatMoneyShort(r.return_minor, m.currency, locale)}</span> : null}
                   {r.comment && <span className="day-split">{r.comment}</span>}

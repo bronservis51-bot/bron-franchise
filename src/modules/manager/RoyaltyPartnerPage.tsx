@@ -2,12 +2,13 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PencilLine, Percent, Plus, Wallet } from 'lucide-react';
-import { monthLabel, monthStart } from '../../platform/dates';
+import { CalendarClock, PencilLine, Percent, Plus, Wallet } from 'lucide-react';
+import { formatDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { Button, Card, ConfirmDialog, DataState, Field, Input, Money, PageHeader, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
-import { pct, rateSet, royaltyPartner } from './api';
+import { RoyaltyHolidayNote } from '../finance/RoyaltyHolidayNote';
+import { pct, rateSet, royaltyHolidayStartSet, royaltyPartner } from './api';
 import { CorrectionDialog, ManualDebtDialog, monthOptions, PaymentDialog, RoyaltyOps } from './RoyaltyDialogs';
 
 function RateDialog({ partner, current, onClose }: { partner: string; current: number; onClose: () => void }) {
@@ -35,12 +36,39 @@ function RateDialog({ partner, current, onClose }: { partner: string; current: n
   );
 }
 
+function HolidayDialog({ partner, current, onClose }: { partner: string; current: string | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [saved] = useState(current);
+  const [date, setDate] = useState(current ?? '');
+  const mutation = useMutation({
+    mutationFn: () => royaltyHolidayStartSet(partner, date || null, saved),
+    onSuccess: () => {
+      toast('Настройки каникул сохранены');
+      void qc.invalidateQueries({ queryKey: ['royalty'] });
+      void qc.invalidateQueries({ queryKey: ['finance'] });
+      onClose();
+    },
+    onError: () => { void qc.invalidateQueries({ queryKey: ['royalty', 'partner', partner] }); },
+  });
+  return <ConfirmDialog open title="Каникулы по роялти" confirmLabel="Сохранить" busy={mutation.isPending}
+    error={mutation.error} dirty={(date || null) !== saved} disabled={(date || null) === saved}
+    onClose={onClose} onConfirm={() => mutation.mutate()}>
+    <Field label="Подтверждённая дата открытия"
+      hint="Роялти начисляются после двух календарных месяцев с этой даты. Указывайте день фактического открытия.">
+      {id => <Input id={id} type="date" value={date} onChange={event => setDate(event.target.value)} />}
+    </Field>
+    {saved && !date && <p>Если сохранить пустую дату, каникулы снимутся и начисления за эти дни пересчитаются.</p>}
+  </ConfirmDialog>;
+}
+
 export function RoyaltyPartnerPage() {
   const { id = '' } = useParams();
   const [pay, setPay] = useState<{ month?: string | null; amount?: number } | null>(null);
   const [fix, setFix] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [rate, setRate] = useState(false);
+  const [holiday, setHoliday] = useState(false);
   const q = useQuery({ queryKey: ['royalty', 'partner', id], queryFn: () => royaltyPartner(id) });
 
   return (
@@ -56,8 +84,10 @@ export function RoyaltyPartnerPage() {
                 <Button variant="primary" onClick={() => setPay({})}><Wallet size={16} aria-hidden />Отметить оплату</Button>
                 <Button onClick={() => setFix(monthStart())}><PencilLine size={16} aria-hidden />Исправить начисление</Button>
                 <Button onClick={() => setManual(true)}><Plus size={16} aria-hidden />Прошлый долг</Button>
+                <Button variant="ghost" onClick={() => setHoliday(true)}><CalendarClock size={16} aria-hidden />Каникулы</Button>
                 <Button variant="ghost" onClick={() => setRate(true)}><Percent size={16} aria-hidden />Ставка</Button>
               </>} />
+            {r.royalty_holiday_from && <p className="muted">Открытие {formatDate(r.royalty_holiday_from)} · начисление роялти с {formatDate(r.royalty_accrual_from)}</p>}
             <div className="kpis">
               <div className={`kpi${debt > 0 ? ' warn' : ''}`}><span className="v">{formatMoneyShort(debt, r.currency)}</span><span className="l">долг по роялти</span></div>
               {open && <div className="kpi"><span className="v">{formatMoneyShort(open.accrued_minor, r.currency)}</span><span className="l">начисляется за {monthLabel(open.month, false)}</span></div>}
@@ -73,21 +103,29 @@ export function RoyaltyPartnerPage() {
                   <table className="table">
                     <thead><tr><th>Месяц</th><th className="r">Выручка</th><th className="r">Ставка</th><th className="r">Начислено</th><th className="r">Корректировки</th><th className="r">Прошлый долг</th><th className="r">Оплачено</th><th className="r">Долг</th><th /></tr></thead>
                     <tbody>
-                      {r.months.map((m) => (
-                        <tr key={m.month}>
-                          <td className="table-month">{monthLabel(m.month)}{m.is_open && <div className="faint">начисляется</div>}</td>
-                          <td className="r num">{formatMoneyShort(m.revenue_minor, r.currency)}</td>
-                          <td className="r">{pct(m.rate_bp)}</td>
-                          <td className="r num">{formatMoneyShort(m.accrued_minor, r.currency)}</td>
-                          <td className="r num">{(m.correction_minor ?? m.manual_minor) ? formatMoneyShort(m.correction_minor ?? m.manual_minor, r.currency) : '—'}</td>
-                          <td className="r num">{m.past_debt_minor ? formatMoneyShort(m.past_debt_minor, r.currency) : '—'}</td>
-                          <td className="r num">{formatMoneyShort(m.paid_minor, r.currency)}</td>
-                          <td className={`r num${m.debt_minor > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={r.currency} short strong />}</td>
-                          <td className="r"><span className="table-actions">
-                            {!m.is_open && m.debt_minor > 0 && <Button size="sm" onClick={() => setPay({ month: m.month, amount: m.debt_minor })}>Оплата</Button>}
-                            <Button size="sm" variant="ghost" onClick={() => setFix(m.month)}>Исправить</Button></span></td>
-                        </tr>
-                      ))}
+                      {r.months.map((m) => {
+                        const inHoliday = r.royalty_holiday_from && r.royalty_holiday_until
+                          && shiftMonth(m.month, 1) > r.royalty_holiday_from && m.month < r.royalty_holiday_until;
+                        return (
+                          <tr key={m.month}>
+                            <td className="table-month">{monthLabel(m.month)}
+                              {inHoliday ? <RoyaltyHolidayNote currency={r.currency} waived={m.waived_royalty_minor}
+                                until={r.royalty_holiday_until} accrualFrom={r.royalty_accrual_from} />
+                                : m.is_open && <div className="faint">начисляется</div>}
+                            </td>
+                            <td className="r num">{formatMoneyShort(m.revenue_minor, r.currency)}</td>
+                            <td className="r">{pct(m.rate_bp)}</td>
+                            <td className="r num">{formatMoneyShort(m.accrued_minor, r.currency)}</td>
+                            <td className="r num">{(m.correction_minor ?? m.manual_minor) ? formatMoneyShort(m.correction_minor ?? m.manual_minor, r.currency) : '—'}</td>
+                            <td className="r num">{m.past_debt_minor ? formatMoneyShort(m.past_debt_minor, r.currency) : '—'}</td>
+                            <td className="r num">{formatMoneyShort(m.paid_minor, r.currency)}</td>
+                            <td className={`r num${m.debt_minor > 0 && !m.is_open ? ' danger-text' : ''}`}>{m.is_open ? '—' : <Money minor={m.debt_minor} currency={r.currency} short strong />}</td>
+                            <td className="r"><span className="table-actions">
+                              {!m.is_open && m.debt_minor > 0 && <Button size="sm" onClick={() => setPay({ month: m.month, amount: m.debt_minor })}>Оплата</Button>}
+                              <Button size="sm" variant="ghost" onClick={() => setFix(m.month)}>Исправить</Button></span></td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -100,6 +138,7 @@ export function RoyaltyPartnerPage() {
               hasUndated={Number(r.undated?.debt_minor ?? 0) > 0} month={pay.month} suggested={pay.amount} onClose={() => setPay(null)} />}
             {fix && <CorrectionDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} month={fix} onClose={() => setFix(null)} />}
             {manual && <ManualDebtDialog partner={{ id: r.partner_id, name: r.partner_name }} currency={r.currency} onClose={() => setManual(false)} />}
+            {holiday && <HolidayDialog partner={r.partner_id} current={r.royalty_holiday_from ?? null} onClose={() => setHoliday(false)} />}
             {rate && <RateDialog partner={r.partner_id} current={r.rate_bp} onClose={() => setRate(false)} />}
           </>
         );

@@ -15,6 +15,7 @@ import { revenueMonthSheet } from '../revenue/monthReport';
 import { PayrollSchedule } from '../staff/PayrollSchedule';
 import { ExpensesCard, type Expense } from './Expenses';
 import { FinanceDriveDialog } from './FinanceDriveDialog';
+import { RoyaltyHolidayNote } from './RoyaltyHolidayNote';
 import { FinanceDays } from './FinanceEditor';
 import { financeMonthLimit, financeOfficeMonth, financeSelection, type FinanceSection } from './financeNavigation';
 import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, financeRevenueMethods, payrollAccrualLabels } from './financeReport';
@@ -32,6 +33,9 @@ interface Fin {
   shifts: number;
   rate_bp: number;
   royalty_minor: number;
+  waived_royalty_minor?: number;
+  royalty_holiday_until?: string | null;
+  royalty_accrual_from?: string | null;
   expenses_minor: number;
   return_minor?: number;
   net_minor: number;
@@ -102,7 +106,7 @@ async function financeWorkbook(f: Finance, reportOnly: boolean, language: Langua
       money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
   };
   const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? t('все точки', 'tüm noktalar'), money(e.amount_minor), e.note ?? '']);
-  if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
+  if (toBigInt(f.current.royalty_minor) !== 0n || f.current.royalty_holiday_until) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
   const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month, language) : [];
   const sheets = [
     statement,
@@ -149,7 +153,10 @@ function FinanceStatement({ finance }: { finance: Finance }) {
       {financeReportRows(totals, finance.expenses, { language }).map(row => (
         <div key={row.id} data-row={row.id} data-indent={row.indent} className={
           row.id === 'result' ? 'finance-result' : row.id === 'revenue' || row.id === 'expenses' ? 'finance-group' : undefined}>
-          <dt><span>{row.label}</span>{row.detail && <small className="finance-line-detail">{row.detail}</small>}</dt>
+          <dt><span>{row.label}</span>{row.detail && <small className="finance-line-detail">{row.detail}</small>}
+            {row.id === 'royalty' && <RoyaltyHolidayNote currency={finance.currency} waived={totals.waived_royalty_minor}
+              until={totals.royalty_holiday_until} accrualFrom={totals.royalty_accrual_from} />}
+          </dt>
           <dd><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
         </div>
       ))}
@@ -248,6 +255,8 @@ export function FinancePage() {
           currency={f.currency} location={f.location_id} locations={f.locations}
           expenses={f.expenses} own={f.expense_categories} prevCount={Number(f.prev_expenses_count)}
           royaltyMinor={f.current.royalty_minor}
+          royaltyNote={<RoyaltyHolidayNote currency={f.currency} waived={f.current.waived_royalty_minor}
+            until={f.current.royalty_holiday_until} accrualFrom={f.current.royalty_accrual_from} />}
           royaltyHistory={!f.location_id && f.royalty ? <RoyaltyHistory r={f.royalty} currency={f.currency} /> : undefined}
           readOnly={readOnly || month > officeMonth} />;
         if (section === 'payroll') return <PayrollDetails finance={f} canOpenTeam={can('staff.manage') || can('staff.view')} />;

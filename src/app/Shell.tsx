@@ -16,7 +16,7 @@ import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
-import { InstallButton, InstallDialog, useInstallState } from './InstallApp';
+import { InstallButton, InstallConfirmation, InstallDialog, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunPreview } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
@@ -364,6 +364,7 @@ export function Shell() {
               </div>
             </div>
           )}
+          <InstallConfirmation />
           <InstallHint />
           {role === 'pending' ? (
             <div className="state"><h1>{t('Доступ ещё не выдан', 'Erişim henüz verilmedi')}</h1><div>{t('За доступом обратитесь к франчайзи или менеджеру по франшизе.', 'Erişim için franchise işletmecinizle veya franchise yöneticisiyle görüşün.')}</div></div>
