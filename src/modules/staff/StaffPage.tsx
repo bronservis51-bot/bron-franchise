@@ -381,6 +381,9 @@ function PasswordReset({ partnerId, staff, onClose }: { partnerId: string; staff
   const [issued, setIssued] = useState<string | null>(null);
   const m = useMutation({ mutationFn: async () => { const password = pw; await userSetPassword(staff.user_id, password); setIssued(password); },
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['staff-access-history', partnerId] }); } });
+  const phone = phoneLoginDigits(staff.phone);
+  if (issued && phone) return <NewAccountCredentials title={t('Пароль изменён', 'Parola değiştirildi')}
+    phone={formatPhone(phone)} password={issued} onClose={onClose} />;
   if (issued) return <ConfirmDialog open title={t('Пароль изменён', 'Parola değiştirildi')} cancelLabel={t('Готово', 'Bitti')} onClose={onClose}>
     <p>{t('Новый пароль доступен до закрытия этого окна.', 'Yeni parola bu pencere kapanana kadar görünür.')}</p>
     <CredentialFields login={formatPhone(staff.phone)} password={issued} />
