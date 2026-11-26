@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error Node importer is native ESM.
-import { readDocuments, sourceCostCurrency, documentReader } from '../../scripts/moysklad-documents-lib.mjs';
+import { readDocuments, readMonthSnapshots, sourceCostCurrency, documentReader } from '../../scripts/moysklad-documents-lib.mjs';
 
 const id = 'bbbb0000-0000-0000-0000-000000000001';
 const item = { id, quantity: 2, price: 100, discount: 10, vat: 20, stock: { cost: 87 }, assortment: { id, name: 'Плёнка' } };
@@ -56,4 +56,33 @@ it('reconciles fractional source prices without binary rounding at a half-kopeck
 
 it('verifies the configured legal entity even when a source ignores its filter',async()=>{
   await expect(read({...doc,organization:{id:'bbbb0000-0000-0000-0000-000000000003'}})).rejects.toThrow(/organization/i);
+});
+
+it('revalidates an earlier kind across the entire two-month window after reading later kinds', async () => {
+  let moved = false;
+  const get = async (path: string) => {
+    if (path.endsWith('positions')) return page([item]);
+    if (path === 'entity/salesreturn') moved = true;
+    if (path !== 'entity/demand') return page([]);
+    return page([moved ? {...doc, moment:'2026-11-02 09:00:00.000', updated:'2026-11-03 12:00:00.000'} : doc]);
+  };
+  await expect(readMonthSnapshots(get,['2026-10-01','2026-11-01'],'RUB',id)).rejects.toThrow(/changed/i);
+});
+
+it('refuses insecure process TLS before creating a token-backed reader', () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  try {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    expect(() => documentReader('test-only')).toThrow(/TLS/);
+  } finally {
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  }
+});
+
+it('keeps a return without stock.cost unknown even when the manual cost field exists', async () => {
+  const { stock, ...withNoStock } = item;
+  const manualReturn = { ...withNoStock, cost: 87 };
+  const docs = await read(doc, manualReturn);
+  expect(docs.find((d:{kind:string})=>d.kind==='salesreturn').lines[0].cost_minor).toBeNull();
 });

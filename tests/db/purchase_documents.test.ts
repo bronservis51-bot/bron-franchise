@@ -53,6 +53,29 @@ it('isolates supplier costs, shared partner purchases, point-specific data and r
   expect((await read(null)).rows).toHaveLength(2);
 });
 
+it('closes a partner assignment until a successor is verified, preserving all three periods', async () => {
+  const period = '2026-08-01';
+  const cp = 'b7100000-0000-0000-0000-000000000001';
+  const [alpha, beta] = await t.admin<{id: string}>("select id from partner where code in ('ALPHA','BETA') order by code");
+  const [point] = await t.admin<{id: string}>('select id from location where partner_id=$1 limit 1', [alpha.id]);
+  const days = ['2026-08-01', '2026-08-10', '2026-08-20'];
+  const docs = days.map((day, i) => ({ ...doc, id: cp.slice(0,-1) + (i+1), counterparty: cp, day }));
+  await t.admin('select app_private.purchase_documents_store($1,$2,$3::jsonb)', [period,'2026-09-01',JSON.stringify(docs)]);
+  const map = (partner: string | null, day: string, location: string | null = null) =>
+    t.as(fm,'select public.manager_purchase_mapping($1,$2,$3,$4)',[cp,partner,location,day]);
+  await map(alpha.id,days[0]);
+  await expect(map(null,days[1],point.id)).rejects.toThrow('validation');
+  await map(null,days[1]);
+  await map(null,days[1]); // repeated click / network retry
+  await map(beta.id,days[2]);
+  const visible = async (user: string) => (await t.as<{j:{rows:{day:string}[]}}>(user,
+    'select public.purchase_documents_my($1,null) j',[period]))[0].j.rows.map(r => r.day);
+  expect(await visible(owner)).toEqual([days[0]]);
+  expect(await visible('beta.owner@demo.example.com')).toEqual([days[2]]);
+  const [{j}] = await t.as<{j:{rows:{day:string;partner_id:string|null}[]}}>(fm,'select public.manager_purchase_documents($1) j',[period]);
+  expect(j.rows.map(r => [r.day,r.partner_id])).toEqual([[days[2],beta.id],[days[1],null],[days[0],alpha.id]]);
+});
+
 it('requires an unambiguous active franchisee assignment',async()=>{
   await t.admin("insert into public.role_assignment(user_id,role,scope_type,scope_id) select $1,'franchisee','partner',id from partner where code='BETA'",[await t.userId(owner)]);
   await t.expectError(owner,'select public.purchase_documents_my($1,null)','validation',[month]);

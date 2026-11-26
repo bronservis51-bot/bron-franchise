@@ -15,37 +15,46 @@ interface Position {
   counterparty?: string; counterparty_name?: string; partner_id?: string | null;
 }
 interface Partner { id: string; name: string; locations: { id: string; name: string }[] }
-interface Snapshot { fetched_at: string | null; rows: Position[]; partners?: Partner[] }
+interface KnownCounterparty { id: string; name: string | null }
+interface Snapshot { known_counterparties?: KnownCounterparty[]; fetched_at: string | null; rows: Position[]; partners?: Partner[] }
 
-function DocumentMapping({ rows, partners }: { rows: Position[]; partners: Partner[] }) {
+function DocumentMapping({ rows, partners, known }: { rows: Position[]; partners: Partner[]; known: KnownCounterparty[] }) {
   const [counterparty, setCounterparty] = useState('');
   const [partner, setPartner] = useState('');
   const [location, setLocation] = useState('');
   const [day, setDay] = useState('');
+  const closing = partner === 'unassigned';
   const qc = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => command('manager_purchase_mapping', { counterparty, partner, location: location || null, effective_from: day }),
-    onSuccess: async () => { setCounterparty(''); await qc.invalidateQueries({ queryKey: ['purchase-documents'] }); },
+    mutationFn: () => command('manager_purchase_mapping', { counterparty, partner: closing ? null : partner, location: closing ? null : location || null, effective_from: day }),
+    onSuccess: async () => {
+      setCounterparty('');
+      setPartner('');
+      setLocation('');
+      setDay('');
+      await qc.invalidateQueries({ queryKey: ['purchase-documents'] });
+    },
   });
-  const accounts = new Map(rows.filter(r => r.kind === 'demand' || r.kind === 'salesreturn').map(r => [r.counterparty, r.counterparty_name]));
+  const accounts = new Map(known.map(c => [c.id, c.name ?? c.id]));
+  rows.filter(r => r.kind === 'demand' || r.kind === 'salesreturn').forEach(r => { if (r.counterparty) accounts.set(r.counterparty, r.counterparty_name ?? r.counterparty); });
   if (!accounts.size) return null;
-  return <Card><details><summary>Подтвердить привязку контрагента</summary>
+  return <Card><details><summary>Изменить привязку контрагента</summary>
     <form className="stack" onSubmit={event => { event.preventDefault(); mutation.mutate(); }}>
       <Field label="Контрагент МойСклад">{id => <Select id={id} required value={counterparty} onChange={e => setCounterparty(e.target.value)}>
         <option value="">Выберите контрагента</option>
         {[...accounts].map(([key, name]) => <option key={key} value={key}>{name} · {key}</option>)}
       </Select>}</Field>
       <Field label="Франчайзи">{id => <Select id={id} required value={partner} onChange={e => { setPartner(e.target.value); setLocation(''); }}>
-        <option value="">Выберите франчайзи</option>{partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        <option value="">Выберите действие или франчайзи</option><option value="unassigned">Снять привязку</option>{partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
       </Select>}</Field>
-      <Field label="Точка">{id => <Select id={id} value={location} onChange={e => setLocation(e.target.value)}>
+      {!closing && <Field label="Точка">{id => <Select id={id} value={location} onChange={e => setLocation(e.target.value)}>
         <option value="">Без привязки к точке</option>
         {partners.find(p => p.id === partner)?.locations.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </Select>}</Field>
-      <Field label="Дата начала привязки">{id => <Input id={id} type="date" required value={day} onChange={e => setDay(e.target.value)} />}</Field>
-      <Button type="submit" loading={mutation.isPending}>Подтвердить</Button>
+      </Select>}</Field>}
+      <Field label={closing ? "Снять привязку с даты" : "Дата начала привязки"}>{id => <Input id={id} type="date" required value={day} onChange={e => setDay(e.target.value)} />}</Field>
+      <Button type="submit" loading={mutation.isPending}>{closing ? 'Снять привязку' : 'Подтвердить'}</Button>
       <ActionError error={mutation.error} />
-      {mutation.isSuccess && <p role="status">Привязка сохранена.</p>}
+      {mutation.isSuccess && <p role="status">Изменение сохранено.</p>}
     </form>
   </details></Card>;
 }
@@ -90,6 +99,6 @@ export function PurchaseDocuments({ month, location = null, manager = false }: {
         </table></div>
       </Card>;
     })}
-    {manager && <DocumentMapping rows={snapshot.rows} partners={snapshot.partners ?? []} />}
+    {manager && <DocumentMapping rows={snapshot.rows} partners={snapshot.partners ?? []} known={snapshot.known_counterparties ?? []} />}
   </div>}</DataState>;
 }

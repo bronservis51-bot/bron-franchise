@@ -4,6 +4,7 @@ import { createMoyskladReader, readEntityPages } from './procurement-sync-lib.mj
 const kinds = ['demand', 'salesreturn', 'supply', 'purchasereturn'];
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 export function documentReader(token) {
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') throw new Error('TLS certificate verification is required');
   return createMoyskladReader(token, { allowPath(path) {
     if (path === 'entity/currency') return true;
     const parts = path.split('/');
@@ -64,12 +65,14 @@ export async function readDocuments(get, start, end, costCurrency, organizationI
   check(uuid.test(organizationId), 'Invalid organization UUID');
   const organization = organizationId.toLowerCase();
   const documents = [];
+  const revisionsByKind = new Map();
   const filter = 'organization=https://api.moysklad.ru/api/remap/1.2/entity/organization/' + organization +
     ';applicable=true;moment>=' + start + ' 00:00:00;moment<' + end + ' 00:00:00';
   for (const kind of kinds) {
     const path = 'entity/' + kind;
     const query = { filter, expand:'agent,rate.currency,organization', order:'moment,asc' };
     const headers = await readEntityPages({get}, path, query);
+    revisionsByKind.set(kind, new Map(headers.map(doc => [doc.id, [doc.updated, doc.moment]])));
     for (const doc of headers) {
       check(doc.organization?.id?.toLowerCase() === organization, 'Unverified source organization');
       check(doc.applicable === true && typeof doc.updated === 'string' && doc.updated.length >= 10 &&
@@ -86,10 +89,28 @@ export async function readDocuments(get, start, end, costCurrency, organizationI
       documents.push({kind, organization, id:doc.id, name:name(doc.name), day:doc.moment.slice(0,10), counterparty:doc.agent.id,
         counterparty_name:name(doc.agent.name), currency:currency(doc.rate?.currency?.isoCode), total_minor:doc.sum, lines});
     }
-    const verified = await readEntityPages({get}, path, {filter, order:query.order});
-    const revisions = new Map(verified.map(doc => [doc.id,doc.updated]));
-    check(verified.length === headers.length && headers.every(doc => revisions.get(doc.id) === doc.updated),
-      'Source document changed during import');
+  }
+  // Recheck the full requested window after every type and all positions have been read.
+  for (const kind of kinds) {
+    const verified = await readEntityPages({get}, 'entity/' + kind, {filter, order:'moment,asc'});
+    const revisions = revisionsByKind.get(kind);
+    check(verified.length === revisions.size && verified.every(doc => {
+      const original = revisions.get(doc.id);
+      return original && original[0] === doc.updated && original[1] === doc.moment;
+    }), 'Source document changed during import');
   }
   return documents;
+}
+
+export function shiftMonth(month, count) {
+  const date = new Date(month + 'T00:00:00Z');
+  date.setUTCMonth(date.getUTCMonth() + count);
+  return date.toISOString().slice(0,10);
+}
+
+export async function readMonthSnapshots(get, months, costCurrency, organization) {
+  const documents = await readDocuments(get, months[0], shiftMonth(months.at(-1), 1), costCurrency, organization);
+  return months.map(month => ({
+    month, documents: documents.filter(doc => doc.day.slice(0,7) === month.slice(0,7)),
+  }));
 }
