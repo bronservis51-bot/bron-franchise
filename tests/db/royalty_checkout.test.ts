@@ -161,3 +161,48 @@ it('retries with the same attempt, rejects old leases and credits only a validat
   await expect(observe(newAttempt,'succeeded')).rejects.toThrow('duplicate key');
   expect(await db.admin('select id from public.royalty_payment where partner_id=$1',[partner])).toEqual([]);
 });
+
+it('preserves confirmed provider settlements while allowing a manager to reverse a manual payment', async () => {
+  await report();
+  await request();
+  const [j] = await work();
+  expect(await observe(j,'succeeded')).toBe(true);
+  const manager = 'fm@demo.example.com';
+  const remove = 'select public.royalty_payment_delete($1)';
+  await db.expectError(manager,remove,'validation',[j.id]);
+  const [{id}] = await db.admin<{id:string}>('insert into public.royalty_payment(partner_id,month,amount_minor,paid_on) values ($1,$2,100,$3) returning id',[partner,month,lastDay]);
+  await db.as(manager,remove,[id]);
+  expect(await db.admin('select id from public.royalty_payment where partner_id=$1',[partner])).toEqual([{id:j.id}]);
+});
+
+it('recovers an unknown expired creation only by verified lookup, including after the amount changes', async () => {
+  await report();
+  await request();
+  const [unknown] = await work();
+  const attach = 'select app_private.royalty_checkout_recover($1,$2) as accepted';
+  const wrong = crypto.randomUUID();
+  const correct = crypto.randomUUID();
+  await expect(db.as('fm@demo.example.com',attach,[unknown.id,wrong])).rejects.toThrow('permission denied');
+  expect(await db.admin(attach,[unknown.id,wrong])).toEqual([{accepted:false}]);
+  await db.admin("update app_private.royalty_checkout_attempt set first_dispatch_at=now()-interval '24 hours' where id=$1",[unknown.id]);
+  expect(await db.admin(attach,[unknown.id,wrong])).toEqual([{accepted:false}]);
+  const expireLease = () => db.admin("update app_private.royalty_checkout_attempt set lease_until=now()-interval '1 minute' where id=$1",[unknown.id]);
+  await expireLease();
+  expect(await work()).toEqual([]);
+  expect(await db.admin(attach,[unknown.id,wrong])).toEqual([{accepted:true}]);
+  await db.admin('update public.royalty_manual set amount_minor=5000 where partner_id=$1',[partner]);
+  const [lookup] = await work();
+  expect(lookup).toMatchObject({id:unknown.id,provider_id:wrong});
+  expect(await db.admin(attach,[unknown.id,correct])).toEqual([{accepted:false}]);
+  await expect(observe(lookup,'succeeded',null,correct)).rejects.toThrow('invalid-observation');
+  expect(await db.admin('select id from public.royalty_payment where partner_id=$1',[partner])).toEqual([]);
+  await expireLease();
+  expect(await db.admin(attach,[unknown.id,correct])).toEqual([{accepted:true}]);
+  expect(await observe(lookup,'succeeded',null,wrong)).toBe(false);
+  const [verified] = await work();
+  expect(verified).toMatchObject({id:unknown.id,provider_id:correct});
+  expect(await observe(verified,'succeeded',null,correct)).toBe(true);
+  expect(await db.admin(attach,[unknown.id,wrong])).toEqual([{accepted:false}]);
+  expect(await work()).toEqual([]);
+  expect(await db.admin('select debt_minor::int as balance from app_private.royalty_ledger($1) where month=$2',[partner,month])).toEqual([{balance:-7500}]);
+});
