@@ -185,7 +185,7 @@ export function FranchiseeHome() {
       {!partnerPaused && readOnly && <Alert title={t('Только просмотр', 'Salt okunur')} />}
       {!partnerPaused && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>{t('К подготовке открытия', 'Açılış hazırlığına dön')}</Button>}
       {!partnerPaused && noActivePoints && !inLaunchHistory && <Alert title={t('Нет действующих точек', 'Aktif şube yok')} />}
-      {partner && me && !partnerPaused && !inLaunchHistory && <RoyaltyHome key={me.user.id + ":" + partner} viewerId={me.user.id} partnerId={partner} />}
+      {partner && me && !partnerPaused && !inLaunchHistory && !edit && !enter && <RoyaltyHome key={me.user.id + ":" + partner} viewerId={me.user.id} partnerId={partner} />}
       <MonthNav month={month} onChange={(next) => setPeriod({ month: next, followCurrent: next === currentMonth })} max={currentMonth} />
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title={t('В этом месяце записей нет', 'Bu ay kayıt yok')} />)}>
         {() => (

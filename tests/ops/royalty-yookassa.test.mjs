@@ -53,6 +53,7 @@ test('creates a test checkout with the exact month in the visible description an
   assert.equal(sent[0].url, 'https://api.yookassa.ru/v3/payments');
   assert.equal(sent[0].method, 'POST');
   assert.equal(sent[0].payload.description, 'Роялти за ноябрь 2026 года');
+  assert.equal(sent[0].payload.confirmation.return_url, 'http://localhost:5173/#/?royalty_checkout=' + job.id);
   assert.deepEqual(sent[0].payload.amount, { value: '1234.05', currency: 'RUB' });
   assert.equal(sent[0].key, job.id);
   assert.deepEqual(sent[1], sent[0]);

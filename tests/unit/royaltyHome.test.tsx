@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import { RoyaltyHomeCard, trustedRoyaltyCheckout, type RoyaltyHomeState } from '../../src/modules/revenue/RoyaltyHome';
+import { RoyaltyCheckoutResult, RoyaltyHomeCard, trustedRoyaltyCheckout, type RoyaltyHomeState } from '../../src/modules/revenue/RoyaltyHome';
 
 const payable: RoyaltyHomeState = {
   state: 'payable', month: '2026-11-01', due_on: '2026-12-05', amount_minor: '123405',
@@ -17,7 +17,7 @@ describe('royalty on the franchisee homepage', () => {
       ...payable, state: 'missing_revenue',
       missing: [{ location_id: 'point-one', location_name: 'Точка 1', days: ['2026-11-29'] }],
     });
-    expect(html).toContain('Заполните выручку');
+    expect(html).toContain('Заполните выручку за ноябрь');
     expect(html).toContain('home-missing-danger');
     expect(html).toContain('day=2026-11-29');
     expect(html).not.toContain('Оплатить');
@@ -25,7 +25,7 @@ describe('royalty on the franchisee homepage', () => {
 
   it('offers payment in an inline card with a deadline before overdue', () => {
     const html = render(payable);
-    expect(html).toContain('2026');
+    expect(html).toContain('Роялти за ноябрь 2026 года');
     expect(html).toContain('до 5-го числа включительно');
     expect(html).toContain('Оплатить');
     expect(html).not.toContain('role="dialog"');
@@ -42,6 +42,18 @@ describe('royalty on the franchisee homepage', () => {
     const html = render({ ...payable, state: 'checking' });
     expect(html).toContain('Проверить статус');
     expect(html).not.toContain('Оплатить</button>');
+  });
+
+  it('keeps the overdue message visible during payment checking', () => {
+    expect(render({ ...payable, state: 'checking', overdue: true })).toContain('Вы просрочили оплату роялти');
+  });
+
+  it('shows a confirmed receipt or an in-progress check on provider return, without opening another payment', () => {
+    for (const [state, message] of [['paid', 'Оплата подтверждена'], ['checking', 'Проверяем оплату']] as const) {
+      const html = renderToStaticMarkup(<RoyaltyCheckoutResult state={state} onClose={() => undefined} />);
+      expect(html).toContain(message);
+      expect(html).not.toContain('Оплатить');
+    }
   });
 
   it('does not render a payment link for untrusted origins', () => {

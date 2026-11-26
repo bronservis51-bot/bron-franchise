@@ -66,10 +66,12 @@ export async function reconcileRoyaltyAttempt(attempt, client) {
   const monthName = parts.find(part => part.type === 'month').value;
   const year = parts.find(part => part.type === 'year').value;
   const metadata = { royalty_attempt_id: attempt.id, royalty_month: attempt.month.slice(0, 7) };
+  const returnUrl = new URL(client.returnUrl);
+  returnUrl.hash = '/?royalty_checkout=' + attempt.id;
   const payment = await client.request(attempt.provider_id, attempt.id, {
     amount: { value, currency: 'RUB' },
     capture: true,
-    confirmation: { type: 'redirect', return_url: client.returnUrl },
+    confirmation: { type: 'redirect', return_url: returnUrl.href },
     description: `Роялти за ${monthName} ${year} года`,
     metadata,
   });

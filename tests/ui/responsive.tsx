@@ -52,8 +52,24 @@ const royaltyRows = ['TRY', 'RUB', 'KZT'].map((currency, i) => ({
 }));
 const detail = { ...location, location_id: location.id, location_name: location.name, partner_id: partner.id, partner_name: partner.name, month, today: '2026-11-04', plan_minor: null, fact_minor: 0, cash_minor: 0, card_minor: 0, pct: null, days_in_month: 30, days_left: 26, need_per_day_minor: null, missing_days: ['2026-11-01', '2026-11-02', '2026-11-03'], last_day: null, fx_rub: 1, editable_from: '2026-10-01', days: [], prev_month_total_minor: 0, prev_same_period_minor: 0, same_period_minor: 0, weekday_avg: [], staff: [] };
 const oldMonth = '2026-10-01';
+const royaltyState = qaParams.get('royalty-home') ?? 'none';
+const royaltyHome = {
+  state: royaltyState, month: oldMonth, due_on: '2026-11-05',
+  overdue: royaltyState === 'overdue',
+  amount_minor: royaltyState === 'missing_revenue' ? null : '123456789',
+  currency: 'RUB', checkout_url: null,
+  missing: royaltyState === 'missing_revenue' ? [
+    { location_id: '00000000-0000-4000-8000-000000000011', location_name: location.name, days: ['2026-10-27', '2026-10-28', '2026-10-29'] },
+    { location_id: '00000000-0000-4000-8000-000000000012', location_name: teamLocation.name, days: ['2026-10-31'] },
+  ] : [],
+};
 const historic = { ...detail, month: oldMonth, status: 'closed', days_in_month: 31, missing_days: [], fact_minor: 15000, editable_days: ['2026-10-31'],
   days: [{ day: '2026-10-31', total_minor: 15000, comment: 'Историческая выручка', entries: [] }] };
+const purchasePosition = {
+  kind: 'demand', document_id: 'synthetic-demand', id: 'synthetic-position', name: 'Тестовая отгрузка №100',
+  day: '2026-11-25', product: 'Тестовая плёнка с длинным названием и несколькими характеристиками',
+  quantity: 32.5, amount_minor: '123456789', currency: 'RUB', location_id: null,
+};
 const profile = { owner_name: 'Вымышленный владелец', legal_name: 'Индивидуальный предприниматель с длинным наименованием', legal_address: 'Длинный адрес юридического лица для проверки мобильной карточки', notes: 'Текст для проверки. '.repeat(20), updated_at: '2026-11-04T12:00:00Z' };
 const me = { user: { ...user, full_name: 'Тест интерфейса', is_demo: false }, assignments: [{ id: 'qa-role', role: 'franchise_manager', role_name: 'Менеджер по франшизе', scope_type: 'company', scope_id: null as string | null, scope_name: 'Вся сеть', permissions: ['org.manage', 'kb.read', 'kb.edit', 'revenue.read', 'revenue.enter', 'plan.manage', 'royalty.manage', 'staff.manage', 'team.manage', 'rating.read'] }] };
 const leadFixture=createLeadFixture(qaParams);
@@ -147,6 +163,21 @@ window.fetch = async (input, init) => {
       partner_access: { users: [{ assignment_id: 'qa-access', user_id: 'qa-owner-account', full_name: 'Вымышленный пользователь с длинным именем', email: '79001234567@staff.bron.local', phone:'79001234567',can_manage:true }], invites: [] },
       staff_list: [{user_id:'qa-worker-edit',employee_kind:'trainee',internship_from:'2026-11-09',internship_until:'2026-12-08',internship_floor_minor:50000,learning_enabled:true,full_name:'Вымышленный сотрудник с длинным именем и фамилией',phone:'70000000000',active:true,use_partner_motivation:true,location_ids:[location.id],location_names:[location.name],rate_bp:2000,shift_fee_minor:50000,open_shift:null,month_shifts:20,month_revenue_minor:100000000,month_earned_minor:20000000,shifts:[]}], revenue_month: detail,
       revenue_overview: { month, rows: launchStage ? [] : [detail], fact_rub_minor: 0, plan_rub_minor: null, missing_fx: [] },
+      royalty_home_status: royaltyHome,
+      royalty_checkout_request: { ...royaltyHome, state: 'checking' },
+      royalty_checkout_return_status: { state: qaParams.get('royalty-return') ?? 'checking', month: oldMonth, amount_minor: '123456789', currency: 'RUB' },
+      purchase_documents_my: { fetched_at: '2026-11-26T12:00:00Z', rows: qaParams.get('purchase-documents') === 'empty' ? [] : [purchasePosition] },
+      manager_purchase_documents: { fetched_at: '2026-11-26T12:00:00Z', rows: qaParams.get('purchase-documents') === 'empty' ? [] : [
+        { ...purchasePosition, counterparty: 'synthetic-counterparty', counterparty_name: partner.name, partner_id: partner.id, cost_minor: '12340000', cost_currency: 'RUB' },
+        { ...purchasePosition, kind: 'supply', document_id: 'synthetic-supply', currency: 'TRY', counterparty_name: 'Поставщик для проверки отображения' },
+      ], partners: [{ ...partner, locations: [{ id: location.id, name: location.name }] }] },
+      finance_my: {
+        partner_name: partner.name, currency: 'RUB', month, location_id: null, partner_status: 'active',
+        locations: [{ id: location.id, name: location.name, status: 'active' }],
+        current: { month, revenue_minor: 100000, cash_minor: 60000, card_minor: 40000, payroll_minor: 20000,
+          rate_bp: 700, royalty_minor: 7000, expenses_minor: 0, net_minor: 73000, shifts: 2, is_open: true },
+        months: [], by_location: null, by_staff: [], expenses: [], expense_categories: [], prev_expenses_count: 0, royalty: null,
+      },
       kb_home: { sections: [section, { ...section, id: 'qa-empty', title: 'Раздел для будущего наполнения', count: 0 }], recent: articles, popular: [], continue: [], drafts: 0, total: articles.length },
       kb_section_page: { section, parent: null, children: [], articles }, kb_article_open: { section, parent: null, related: articles.slice(1), my_rating: null, stats: { views_30: 0, helpful: 0, not_helpful: 0, comments: [] } },
       kb_manage: articles.map(a => ({ ...a, section_title: section.title, parent_title: null, helpful: 0, not_helpful: 0, ack_done: null, ack_total: null })),
@@ -159,6 +190,10 @@ window.fetch = async (input, init) => {
           payroll_halves: [2000000, 2250750], closed_shifts: 16, expenses_minor: 900000,
           expense_categories: [{ category: 'Аренда', amount_minor: 900000 }] }] },
     };
+    if (name === 'royalty_checkout_request' && qaParams.has('deferred-checkout')) {
+      await new Promise(resolve => window.setTimeout(resolve, 1500));
+      return Response.json({ ...royaltyHome, checkout_url: 'https://yookassa.ru/test-checkout-do-not-open' });
+    }
     if (name === 'order_link' && qaParams.get('order') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой загрузки ссылки' }, { status: 503 });
     if (name === 'manager_supply_snapshot' && qaParams.get('supply') === 'error') return Response.json({ message: 'offline', details: 'Тестовый сбой МойСклад' }, { status: 503 });
     if (lifecycle && (name === 'revenue_month' || name === 'revenue_overview')) {
