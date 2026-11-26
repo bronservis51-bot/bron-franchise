@@ -8,9 +8,12 @@ let db: TestDb;
 let actor: string, partner: string, point: string, month: string, lastDay: string;
 type Status = { state: string; overdue: boolean; month: string; due_on: string; amount_minor: string | null; checkout_url: string | null; missing: unknown[] };
 type Job = { id: string; lease: string; month: Date; amount_minor: number; provider_id: string | null };
-const status = async (fn = 'royalty_home_status', user = owner) =>
-  (await db.as<{ value: Status }>(user, `select public.${fn}() as value`))[0].value;
-const request = () => status('royalty_checkout_request');
+const status = async (user = owner) =>
+  (await db.as<{ value: Status }>(user, 'select public.royalty_home_status() as value'))[0].value;
+const requestSql = 'select public.royalty_checkout_request($1,$2) as value';
+const request = async (amount: string | null = '12500', period: string | null = month) =>
+  (await db.as<{ value: Status }>(owner,requestSql,[period,amount]))[0].value;
+const returnSql = 'select public.royalty_checkout_return_status($1) as value';
 const work = () => db.admin<Job>('select * from app_private.royalty_checkout_work(1)');
 const ready = () => db.admin("update app_private.royalty_checkout_attempt set next_check_at=now()-interval '1 minute'");
 const observe = async (j: Job, state: string, link: string | null = null, id = 'provider-fixture') =>
@@ -58,17 +61,20 @@ it('prioritizes missing dates, accepts a confirmed zero or a day off, and checks
 
 it('reminds outside the pilot but never creates a payment without eligibility and session scope', async () => {
   await db.admin('delete from app_private.royalty_checkout_pilot where partner_id=$1',[partner]);
-  expect((await request()).state).toBe('missing_revenue');
+  expect((await status()).state).toBe('missing_revenue');
+  await expect(request()).rejects.toThrow('version-conflict');
   await report();
-  expect((await request()).state).toBe('none');
+  expect((await status()).state).toBe('none');
+  await expect(request()).rejects.toThrow('version-conflict');
   await db.admin('insert into app_private.royalty_checkout_pilot values ($1)',[partner]);
   for (const setting of ["status='suspended'","status='active',currency='KZT'","currency='RUB',is_demo=true"]) {
     await db.admin(`update public.partner set ${setting} where id=$1`,[partner]);
-    expect((await request()).state).toBe('none');
+    expect((await status()).state).toBe('none');
+    await expect(request()).rejects.toThrow('version-conflict');
   }
-  expect((await status('royalty_home_status',other)).missing).not.toContainEqual(expect.objectContaining({location_id:point}));
-  await db.expectError('fm@demo.example.com','select public.royalty_checkout_request()','forbidden');
-  await expect(db.as(null,'select public.royalty_checkout_request()')).rejects.toThrow('permission denied');
+  expect((await status(other)).missing).not.toContainEqual(expect.objectContaining({location_id:point}));
+  await db.expectError('fm@demo.example.com',requestSql,'forbidden',[month,'12500']);
+  await expect(db.as(null,requestSql,[month,'12500'])).rejects.toThrow('permission denied');
   await expect(db.as(owner,'select * from app_private.royalty_checkout_work(1)')).rejects.toThrow('permission denied');
   expect(await work()).toEqual([]);
 });
@@ -83,7 +89,7 @@ it('reuses a verified link, hides it after a change, and credits the original am
   expect(await observe(first,'pending',url)).toBe(true);
   expect((await request()).checkout_url).toBe(url);
   await db.admin('insert into public.royalty_payment(partner_id,month,amount_minor,paid_on) values ($1,$2,1000,$3)',[partner,month,lastDay]);
-  expect(await request()).toMatchObject({state:'checking',checkout_url:null});
+  expect(await request('11500')).toMatchObject({state:'checking',checkout_url:null});
   await ready();
   const [recheck] = await work();
   expect(recheck).toMatchObject({id:first.id,provider_id:'provider-fixture'});
@@ -98,12 +104,12 @@ it('drops never-dispatched stale work, blocks unresolved creates beyond the retr
   await request();
   await db.admin('update public.royalty_manual set amount_minor=9500 where partner_id=$1',[partner]);
   expect(await work()).toEqual([]);
-  await request();
+  await request('9500');
   const [first] = await work();
   expect(Number(first.amount_minor)).toBe(9500);
   await db.admin("update app_private.royalty_checkout_attempt set lease_until=now()-interval '1 minute',first_dispatch_at=now()-interval '24 hours'");
   expect(await work()).toEqual([]);
-  expect((await request()).state).toBe('checking');
+  expect((await request('9500')).state).toBe('checking');
 });
 
 it('waits until the month ends locally and respects historical shutdown intervals', async () => {
@@ -122,15 +128,16 @@ it('waits until the month ends locally and respects historical shutdown interval
 it('rechecks the originating live session before dispatch and rejects a revoked caller', async () => {
   await report();
   const sid = crypto.randomUUID();
-  const withSession = () => db.db.transaction(async tx => {
+  const withSession = (sql = requestSql, params: unknown[] = [month, '12500']) => db.db.transaction(async tx => {
     await tx.query("select set_config('request.jwt.claims',$1,true)",[JSON.stringify({role:'authenticated',sub:actor,session_id:sid})]);
     await tx.exec('set local role authenticated');
-    return (await tx.query<{value: Status}>('select public.royalty_checkout_request() value')).rows[0].value;
+    return (await tx.query<{value: Status}>(sql, params)).rows[0].value;
   });
   await db.admin('insert into auth.sessions(id,user_id) values ($1,$2)',[sid,actor]);
   expect((await withSession()).state).toBe('checking');
   await db.admin('delete from auth.sessions where id=$1',[sid]);
   await expect(withSession()).rejects.toThrow('unauthenticated');
+  await expect(withSession(returnSql,[crypto.randomUUID()])).rejects.toThrow('unauthenticated');
   expect(await work()).toEqual([]);
   expect((await status()).state).toMatch(/payable|overdue/);
 });
@@ -205,4 +212,46 @@ it('recovers an unknown expired creation only by verified lookup, including afte
   expect(await db.admin(attach,[unknown.id,wrong])).toEqual([{accepted:false}]);
   expect(await work()).toEqual([]);
   expect(await db.admin('select debt_minor::int as balance from app_private.royalty_ledger($1) where month=$2',[partner,month])).toEqual([{balance:-7500}]);
+});
+
+it('rejects a changed quote before enqueuing an attempt or returning an existing link', async () => {
+  await report();
+  const displayed = await status();
+  await db.admin('update public.royalty_manual set amount_minor=15000 where partner_id=$1',[partner]);
+  await expect(request(displayed.amount_minor,displayed.month)).rejects.toThrow('version-conflict');
+  await expect(request('15000','2000-01-01')).rejects.toThrow('version-conflict');
+  await expect(request('15000',null)).rejects.toThrow('version-conflict');
+  await expect(request(null)).rejects.toThrow('version-conflict');
+  expect(await work()).toEqual([]);
+  await request('15000');
+  const [j] = await work();
+  expect(await observe(j,'pending',url)).toBe(true);
+  await expect(request(displayed.amount_minor)).rejects.toThrow('version-conflict');
+  expect((await request('15000')).checkout_url).toBe(url);
+});
+
+it('reads only the owner’s original return period and verified status across a month rollover', async () => {
+  const historicalMonth = '2025-09-01';
+  const providerId = crypto.randomUUID();
+  const [{id}] = await db.admin<{id:string}>(`insert into app_private.royalty_checkout_attempt
+    (partner_id,month,requested_by,amount_minor,provider_id,first_dispatch_at) values ($1,$2,$3,17000,$4,now()-interval '1 year') returning id`,
+    [partner,historicalMonth,actor,providerId]);
+  const read = async (key: string, user = owner) => (await db.as<{value:unknown}>(user,returnSql,[key]))[0].value;
+  const unavailable = {state:'unavailable',month:null,amount_minor:null,currency:'RUB'};
+  const period = {month:historicalMonth,amount_minor:'17000',currency:'RUB'};
+  await db.admin('update public.app_user set is_demo=false where id=$1',[await db.userId(other)]);
+  expect(await read(id,other)).toEqual(unavailable);
+  expect(await read(id,'fm@demo.example.com')).toEqual(unavailable);
+  expect(await read(crypto.randomUUID())).toEqual(unavailable);
+  await expect(db.as(null,returnSql,[id])).rejects.toThrow('permission denied');
+  expect(await read(id)).toEqual({state:'checking',...period});
+  const [j] = await work();
+  expect(await observe(j,'succeeded',null,providerId)).toBe(true);
+  expect(await read(id)).toEqual({state:'paid',...period});
+  expect(await read(id)).toEqual({state:'paid',...period});
+  await report();
+  await request();
+  const [canceled] = await work();
+  expect(await observe(canceled,'canceled',null,crypto.randomUUID())).toBe(true);
+  expect(await read(canceled.id)).toEqual({state:'canceled',month,amount_minor:'12500',currency:'RUB'});
 });
