@@ -1,4 +1,4 @@
-export const financeSections = ['report', 'days', 'expenses', 'payroll'] as const;
+export const financeSections = ['report', 'days', 'expenses', 'payroll', 'purchases'] as const;
 export type FinanceSection = typeof financeSections[number];
 
 export function financeMonthLimit(officeMonth: string, points: readonly { location_id: string; today: string }[], location: string | null) {

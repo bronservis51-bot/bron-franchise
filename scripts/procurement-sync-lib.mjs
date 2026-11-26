@@ -68,12 +68,12 @@ function metaId(value, type) {
 /** Only hardcoded MoySklad GET endpoints. Redirects cannot forward the token elsewhere. */
 export function createMoyskladReader(token, {
   fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
-  timeoutMs = 30_000, maxAttempts = 3,
+  timeoutMs = 30_000, maxAttempts = 3, allowPath = path => READ_PATHS.has(path),
 } = {}) {
   if (typeof token !== 'string' || !token.trim() || /[\r\n]/.test(token)) fail('missing server read token');
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) fail('invalid retry limit');
   async function get(path, query = {}) {
-    if (!READ_PATHS.has(path)) fail('endpoint is not in the read allowlist');
+    if (!allowPath(path)) fail('endpoint is not in the read allowlist');
     const url = new URL(path, API);
     url.search = new URLSearchParams(query).toString();
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -109,6 +109,10 @@ export function createMoyskladReader(token, {
  * Keep pages <=100: MoySklad does not expand unit/category metadata for larger pages. */
 export async function readAllEntities(reader, path, query = {}, pageSize = 100) {
   if (!['entity/product', 'entity/variant'].includes(path)) fail('invalid entity endpoint');
+  return readEntityPages(reader, path, query, pageSize);
+}
+
+export async function readEntityPages(reader, path, query = {}, pageSize = 100) {
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) fail('invalid page size');
   let expected = null;
   const result = [], seen = new Set();
@@ -127,7 +131,7 @@ export async function readAllEntities(reader, path, query = {}, pageSize = 100) 
       result.push(row);
     }
     if (result.length === size) return result;
-    if (result.length > size || page.rows.length !== pageSize) fail('missing catalog page');
+    if (result.length > size || page.rows.length !== pageSize) fail('missing entity page');
   }
   fail('catalog exceeds safety limit');
 }

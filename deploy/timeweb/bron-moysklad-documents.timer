@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Bron Franchise MoySklad primary document snapshots hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=bron-moysklad-documents.service
+
+[Install]
+WantedBy=timers.target

@@ -19,6 +19,7 @@ import { RoyaltyHolidayNote } from './RoyaltyHolidayNote';
 import { FinanceDays } from './FinanceEditor';
 import { financeMonthLimit, financeOfficeMonth, financeSelection, type FinanceSection } from './financeNavigation';
 import { downloadFinanceFile, FINANCE_PAYROLL_NOTE, FINANCE_REPORT_NOTE, financeExpensesMinor, financeReportRows, financeRevenueMethods, payrollAccrualLabels } from './financeReport';
+import { PurchaseDocuments } from './PurchaseDocuments';
 import './finance.css';
 
 interface Fin {
@@ -244,10 +245,11 @@ export function FinancePage() {
     <Chips<FinanceSection> label={t('Раздел отчёта', 'Rapor bölümü')} value={section}
       onChange={value => navigate({ section: value === 'report' ? null : value, day: null })} options={[
         { id: 'report', label: t('Отчёт', 'Rapor') }, { id: 'days', label: t('По дням', 'Günlük') },
-        { id: 'expenses', label: t('Расходы', 'Giderler') }, { id: 'payroll', label: t('Зарплата', 'Maaşlar') },
+        { id: 'purchases', label: t('Закупки', 'Alımlar') }, { id: 'expenses', label: t('Расходы', 'Giderler') }, { id: 'payroll', label: t('Зарплата', 'Maaşlar') },
       ]} />
     {checkingPeriod ? <Skeleton lines={4} /> : <DataState query={q} skeleton={4}>
       {f => {
+        if (section === 'purchases') return <PurchaseDocuments month={f.month} location={f.location_id} />;
         if (section === 'days') return <FinanceDays key={f.month + (f.location_id ?? '')} month={f.month}
           location={f.location_id} locations={f.locations} requestedDay={day} readOnly={readOnly}
           clearRequestedDay={() => navigate({ day: null }, true)} />;

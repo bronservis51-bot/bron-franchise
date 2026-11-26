@@ -13,6 +13,7 @@ import { MonthNav } from '../revenue/components';
 import { royaltySummary, type RoyaltySummary } from './api';
 import { economyComparison, networkSpreadsheetLink, type PartnerEconomy, type SupplyRow } from './economyComparison';
 import { RoyaltyPage } from './RoyaltyPage';
+import { PurchaseDocuments } from '../finance/PurchaseDocuments';
 import './supply-finance.css';
 
 interface Unmapped { counterparty_id: string; name: string; sales_minor: number; cost_minor: number; profit_minor: number }
@@ -23,6 +24,7 @@ const sections = [
   ['overview', 'Обзор'],
   ['comparison', 'Сравнение'],
   ['supply', 'Поставки'],
+  ['documents', 'Закупки и отгрузки'],
   ['royalty', 'Роялти и оплаты'],
 ] as const;
 type Section = typeof sections[number][0];
@@ -50,13 +52,17 @@ export function SupplyFinancePage() {
         <button key={id} type="button" className="chip" aria-pressed={selected === id} onClick={() => setSection(id)}>{label}</button>
       ))}
     </div>
-    {selected === 'royalty' ? <RoyaltyPage /> :
+    {selected === 'documents' ? <>
+      <PageHeader title="Закупки и отгрузки" />
+      <MonthNav month={month} onChange={setMonth} max={monthStart()} />
+      <PurchaseDocuments key={month} month={month} manager />
+    </> : selected === 'royalty' ? <RoyaltyPage /> :
       <NetworkEconomy section={selected} month={month} setMonth={setMonth} showRoyalty={showRoyalty} />}
   </div>;
 }
 
 function NetworkEconomy({ section, month, setMonth, showRoyalty }: {
-  section: Exclude<Section, 'royalty'>; month: string; setMonth: (month: string) => void; showRoyalty: boolean;
+  section: Exclude<Section, 'royalty' | 'documents'>; month: string; setMonth: (month: string) => void; showRoyalty: boolean;
 }) {
   const { can } = useSession();
   const showRevenue = can('revenue.read');

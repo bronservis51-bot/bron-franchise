@@ -190,3 +190,9 @@
   text-align: start;
   overflow-wrap: anywhere;
 }
+
+.purchase-documents, .purchase-documents .card, .purchase-documents form { min-width: 0; }
+.purchase-documents .table-wrap { max-width: 100%; overflow-x: auto; }
+.purchase-documents .table th, .purchase-documents .table td { overflow-wrap: anywhere; min-width: 6rem; }
+.purchase-documents .table small { display: block; }
+.purchase-documents select { max-width: 100%; }
