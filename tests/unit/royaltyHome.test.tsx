@@ -48,6 +48,13 @@ describe('royalty on the franchisee homepage', () => {
     expect(render({ ...payable, state: 'checking', overdue: true })).toContain('Вы просрочили оплату роялти');
   });
 
+  it.each(['0', '-15000'])('shows only reconciliation when the balance is %s', (amount_minor) => {
+    const html = render({ ...payable, state: 'checking', overdue: true, amount_minor });
+    expect(html).toContain('Проверяем платёж');
+    expect(html).toContain('Проверить статус');
+    expect(html).not.toMatch(/₽|Оплатите|Оплатить|просрочили/);
+  });
+
   it('shows a confirmed receipt or an in-progress check on provider return, without opening another payment', () => {
     for (const [state, message] of [['paid', 'Оплата подтверждена'], ['checking', 'Проверяем оплату']] as const) {
       const html = renderToStaticMarkup(<RoyaltyCheckoutResult state={state} onClose={() => undefined} />);

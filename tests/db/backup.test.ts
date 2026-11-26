@@ -1,4 +1,5 @@
 // Восстановление из резервной копии: те же данные, долги по роялти и права в новой установке.
+import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error — общий модуль на JS без деклараций типов
 import { createDb, demoUsers } from '../../scripts/db-lib.mjs';
@@ -6,6 +7,37 @@ import { createDb, demoUsers } from '../../scripts/db-lib.mjs';
 import { exportData, restoreData } from '../../scripts/backup-lib.mjs';
 
 describe('резервная копия и восстановление', () => {
+  it('reads every table in one read-only repeatable-read transaction and releases it on success or failure', async () => {
+    const db = new PGlite();
+    try {
+      await db.exec(`create schema auth; create table auth.users(id int);
+        create table public.app_user(id int, email text, full_name text, status text, is_demo boolean);
+        create schema app_private; create table app_private.royalty_checkout_attempt(id int)`);
+      const snapshots = new Set<string>();
+      let failAuthRead = false;
+      const client = { query: async (sql: string, params?: unknown[]) => {
+        if (/^select/i.test(sql.trim())) {
+          const { rows } = await db.query(`select txid_current() as tx,
+            current_setting('transaction_isolation') as isolation, current_setting('transaction_read_only') as readonly`);
+          snapshots.add(JSON.stringify(rows[0]));
+          if (failAuthRead && sql.includes('from auth.users')) return db.query('select 1/0');
+        }
+        return db.query(sql, params);
+      } };
+      const dump = await exportData(client);
+      expect(dump.migrations).toEqual([]);
+      expect(dump.private_tables.royalty_checkout_attempt).toEqual([]);
+      expect(snapshots.size).toBe(1);
+      expect(JSON.parse([...snapshots][0])).toMatchObject({ isolation: 'repeatable read', readonly: 'on' });
+      await db.query('insert into auth.users values (1)');
+      failAuthRead = true;
+      await expect(exportData(client)).rejects.toThrow(/division by zero/);
+      await db.query('insert into auth.users values (2)');
+    } finally {
+      await db.close();
+    }
+  });
+
   it('экспорт → новая установка с другими id пользователей → те же данные, долги и права', async () => {
     const src = await createDb();
     const seedRecovery = async (db: typeof src) => {

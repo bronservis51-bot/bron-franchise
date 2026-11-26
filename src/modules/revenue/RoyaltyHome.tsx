@@ -52,13 +52,16 @@ export function RoyaltyHomeCard({ status, busy = false, error, onAction }: {
   }
 
   const checking = status.state === 'checking';
+  const showBalance = !checking || toBigInt(status.amount_minor) > 0n;
   const overdue = status.state === 'overdue' || status.overdue === true;
   return <section className="home-royalty-card" aria-label={t('Оплата роялти', 'Royalty ödemesi')}>
     <div className="home-royalty-card-details">
-      <strong>{t(`Роялти за ${period} года`, `Royalty · ${period}`)} · {formatMoneyShort(status.amount_minor, status.currency, locale)}</strong>
-      <p className="faint">{t('Оплатите роялти до 5-го числа включительно.', 'Royalty ödemesini ayın 5’i dâhil yapın.')}</p>
-      {overdue && <p className="danger-text">{t('Вы просрочили оплату роялти. Оплатите, чтобы избежать санкций.',
-        'Royalty ödemeniz gecikti. Yaptırımları önlemek için ödeme yapın.')}</p>}
+      {showBalance && <>
+        <strong>{t(`Роялти за ${period} года`, `Royalty · ${period}`)} · {formatMoneyShort(status.amount_minor, status.currency, locale)}</strong>
+        <p className="faint">{t('Оплатите роялти до 5-го числа включительно.', 'Royalty ödemesini ayın 5’i dâhil yapın.')}</p>
+        {overdue && <p className="danger-text">{t('Вы просрочили оплату роялти. Оплатите, чтобы избежать санкций.',
+          'Royalty ödemeniz gecikti. Yaptırımları önlemek için ödeme yapın.')}</p>}
+      </>}
       {checking && <p className="faint">{t('Проверяем платёж.', 'Ödeme kontrol ediliyor.')}</p>}
     </div>
     <Button size="sm" variant="primary" disabled={busy} onClick={onAction}>
