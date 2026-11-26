@@ -11,8 +11,8 @@ describe('new account access message', () => {
       .toBe('Parola — initial-test-password');
   });
 
-  it('generates two pronounceable groups followed by four digits', () => {
-    expect(randomPassword()).toMatch(/^(?:[bcdfghjkmnprstvwz][aeiou]){3}-(?:[bcdfghjkmnprstvwz][aeiou]){3}-[2-9]{4}$/);
+  it('generates a short name followed by digits without separators', () => {
+    expect(randomPassword()).toMatch(/^[BCDFGHJKMNPRSTVWZ][aeiou][bcdfghjkmnprstvwz][aeiou]\d{6}$/);
   });
 
   it.each([

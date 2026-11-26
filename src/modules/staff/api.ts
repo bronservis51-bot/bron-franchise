@@ -92,14 +92,13 @@ export const staffEmail = (phone: string) => `${phoneDigits(phone)}@staff.bron.l
 export const formatPhone = (digits: string) => (!/^\d+$/.test(digits) ? digits : /^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
 export const pctBp = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 
-/** Пароль для выдачи человеку: две группы простых слогов и четыре цифры. */
+/** Короткое случайное имя и числовой суффикс. */
 export function randomPassword() {
   const consonants = 'bcdfghjkmnprstvwz';
   const vowels = 'aeiou';
-  const digits = '23456789';
-  const random = crypto.getRandomValues(new Uint32Array(16));
-  const syllables = Array.from({ length: 6 }, (_, i) =>
-    consonants[random[i * 2] % consonants.length] + vowels[random[i * 2 + 1] % vowels.length]);
-  const suffix = Array.from(random.subarray(12), value => digits[value % digits.length]).join('');
-  return `${syllables.slice(0, 3).join('')}-${syllables.slice(3).join('')}-${suffix}`;
+  const random = crypto.getRandomValues(new Uint32Array(10));
+  const name = consonants[random[0] % consonants.length].toUpperCase() + vowels[random[1] % vowels.length]
+    + consonants[random[2] % consonants.length] + vowels[random[3] % vowels.length];
+  const suffix = Array.from(random.subarray(4), value => value % 10).join('');
+  return name + suffix;
 }
