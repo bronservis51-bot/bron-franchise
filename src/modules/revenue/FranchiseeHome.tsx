@@ -4,6 +4,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 import { command } from '../../platform/backend';
+import { financeDays } from '../finance/financeNavigation';
 import { RoyaltyHolidayNote } from '../finance/RoyaltyHolidayNote';
 import { formatDate, monthStart } from '../../platform/dates';
 import { useLocale } from '../../platform/locale';
@@ -16,18 +17,12 @@ import { LaunchChecklist, LaunchNotScheduled, usePartnerLaunch } from './LaunchC
 import { canEditRevenueDay, revenueMonth, revenueOverview, type DayRow, type LocationMonth, type MonthDetail } from './api';
 import { FRANCHISEE_CARD_AMBIGUITY, franchiseePartnerCards, isPartnerReadOnly, usePartnerLifecycle } from './partnerLifecycle';
 import { RevenueDialog } from './RevenueDialog';
+import { RoyaltyHome } from './RoyaltyHome';
 import './franchisee-home.css';
 
 const LOC_KEY = 'bron.location';
 const ALL = 'all';
 const monthOf = (day: string) => `${day.slice(0, 7)}-01`;
-
-function financeDays(month: string, location?: string, day?: string) {
-  const params = new URLSearchParams({ section: 'days', month });
-  if (location) params.set('location', location);
-  if (day) params.set('day', day);
-  return `/finance?${params}`;
-}
 
 function OpeningRoyalty() {
   const { t } = useLocale();
@@ -190,6 +185,7 @@ export function FranchiseeHome() {
       {!partnerPaused && readOnly && <Alert title={t('Только просмотр', 'Salt okunur')} />}
       {!partnerPaused && inLaunchHistory && <Button size="sm" onClick={() => setHistoryCycle(null)}>{t('К подготовке открытия', 'Açılış hazırlığına dön')}</Button>}
       {!partnerPaused && noActivePoints && !inLaunchHistory && <Alert title={t('Нет действующих точек', 'Aktif şube yok')} />}
+      {partner && me && !partnerPaused && !inLaunchHistory && <RoyaltyHome key={me.user.id + ":" + partner} viewerId={me.user.id} partnerId={partner} />}
       <MonthNav month={month} onChange={(next) => setPeriod({ month: next, followCurrent: next === currentMonth })} max={currentMonth} />
       <DataState query={overview} skeleton={4} empty={(o) => (o.rows.length ? null : <EmptyState title={t('В этом месяце записей нет', 'Bu ay kayıt yok')} />)}>
         {() => (

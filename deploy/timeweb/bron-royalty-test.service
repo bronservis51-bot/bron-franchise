@@ -1,0 +1,15 @@
+[Unit]
+Description=Bron Franchise YooKassa test payment reconciler
+
+[Service]
+Type=oneshot
+User=bron-royalty-test
+WorkingDirectory=/opt/bron/royalty-test
+EnvironmentFile=/etc/bron-franchise/royalty-test.env
+ExecStart=/usr/bin/env node scripts/royalty-yookassa.mjs
+TimeoutStartSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077

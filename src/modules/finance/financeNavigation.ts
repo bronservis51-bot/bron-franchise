@@ -37,3 +37,10 @@ export function financeSelection(params: URLSearchParams, currentMonth: string) 
   }
   return { section, month, location, day };
 }
+
+export function financeDays(month: string, location?: string, day?: string) {
+  const params = new URLSearchParams({ section: 'days', month });
+  if (location) params.set('location', location);
+  if (day) params.set('day', day);
+  return `/finance?${params}`;
+}

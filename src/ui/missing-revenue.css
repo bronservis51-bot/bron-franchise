@@ -58,3 +58,10 @@
 .home-missing-dates :is(a:hover, button:hover:not(:disabled)) { text-decoration: underline; }
 .home-missing-dates button:disabled { opacity: .55; cursor: not-allowed; }
 .home-missing-dates li > span { color: var(--text-2); }
+
+.home-missing-danger {
+  background: var(--danger-weak);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.home-missing-danger .home-missing-label strong { color: var(--danger); }

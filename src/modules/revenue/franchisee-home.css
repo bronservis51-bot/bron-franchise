@@ -19,3 +19,18 @@
   text-decoration: none;
 }
 .home-royalty-note:hover > strong { color: var(--link); }
+
+.home-royalty-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+
+.home-royalty-card-details { min-width: 0; overflow-wrap: anywhere; }
+.home-royalty-card p { margin: var(--space-1) 0 0; }
