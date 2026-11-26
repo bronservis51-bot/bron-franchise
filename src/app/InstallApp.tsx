@@ -1,8 +1,34 @@
 import { useState, useSyncExternalStore } from 'react';
-import { EllipsisVertical, MonitorDown, Plus, Share, Smartphone } from 'lucide-react';
+import { ChevronRight, Smartphone } from 'lucide-react';
 import { Button, ConfirmDialog, Field, Input, Select } from '../ui';
 import { getInstallController, installDevice, installationUrl, isStandalone, type InstallDevice } from '../platform/install';
 import { useLocale } from '../platform/locale';
+import { InstallGuide } from './InstallGuide';
+import './install-app.css';
+
+const confirmationKey = 'bron.install-confirmed';
+const confirmationEvent = 'bron:install-confirmed';
+let confirmedForSession = false;
+
+function hasConfirmedInstallation() {
+  try { return confirmedForSession || localStorage.getItem(confirmationKey) === 'yes'; }
+  catch { return confirmedForSession; }
+}
+
+function subscribeToConfirmation(listener: () => void) {
+  window.addEventListener(confirmationEvent, listener);
+  window.addEventListener('storage', listener);
+  return () => {
+    window.removeEventListener(confirmationEvent, listener);
+    window.removeEventListener('storage', listener);
+  };
+}
+
+function confirmInstallation() {
+  confirmedForSession = true;
+  try { localStorage.setItem(confirmationKey, 'yes'); } catch { /* Keep the confirmation for this session. */ }
+  window.dispatchEvent(new Event(confirmationEvent));
+}
 
 export function useInstallState() {
   const c = getInstallController();
@@ -29,31 +55,12 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
   const [device, setDevice] = useState<InstallDevice>(detected);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const url = installationUrl(location.origin, import.meta.env.BASE_URL);
   const temporary = location.hostname.endsWith('.github.io');
-  const macSafari = /macintosh/i.test(navigator.userAgent) && /safari/i.test(navigator.userAgent) && !/chrome|chromium|edg/i.test(navigator.userAgent);
-  const native = state.available && device === detected && device !== 'ios';
-  const action = device === 'ios' ? t('Поделиться', 'Paylaş')
-    : device === 'android' ? t('Меню Chrome', 'Chrome menüsü')
-      : macSafari ? t('Меню «Файл»', 'Dosya menüsü') : t('Установка в браузере', 'Tarayıcıda kurulum');
-  const add = device === 'ios' ? t('На экран «Домой»', 'Ana Ekrana Ekle')
-    : device === 'desktop' && macSafari ? t('Добавить в Dock', 'Dock’a Ekle')
-      : t('Установить приложение', 'Uygulamayı kur');
-  const BrowserAction = device === 'ios' ? Share : device === 'android' ? EllipsisVertical : MonitorDown;
-  const steps = [
-    { visual: <><BrowserAction size={20} /><span>{action}</span></>,
-      text: device === 'ios' ? t('Откройте кабинет в Safari и нажмите кнопку со стрелкой вверх.', 'Paneli Safari’de açın ve yukarı ok düğmesine dokunun.')
-        : device === 'android' ? t('Откройте кабинет в Chrome и нажмите ⋮ вверху.', 'Paneli Chrome’da açın ve yukarıdaki ⋮ düğmesine dokunun.')
-          : macSafari ? t('Откройте кабинет в Safari. В меню «Файл» выберите добавление в Dock.', 'Paneli Safari’de açın. Dosya menüsünden Dock’a eklemeyi seçin.')
-            : t('Откройте кабинет в Chrome или Edge. Найдите значок в адресной строке или команду установки в меню.', 'Paneli Chrome veya Edge’de açın. Adres çubuğundaki simgeyi veya menüdeki kurulum seçeneğini bulun.') },
-    { visual: <><Plus size={20} /><span>{add}</span></>,
-      text: device === 'ios' ? t('Выберите этот пункт и нажмите «Добавить». Если есть настройка «Открывать как веб-приложение», оставьте её включённой.', 'Bu seçeneği seçip «Ekle»ye dokunun. «Web Uygulaması Olarak Aç» seçeneği varsa açık bırakın.')
-        : device === 'android' ? t('Выберите «Установить приложение» или «Добавить на главный экран», затем подтвердите.', '«Uygulamayı kur» veya «Ana ekrana ekle»yi seçip onaylayın.')
-          : t('Подтвердите установку.', 'Kurulumu onaylayın.') },
-    { visual: <><img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} width={24} height={24} alt="" /><span>{t('Бронь Сервис', 'Bron Servis')}</span></>,
-      text: t('Откройте кабинет с нового значка, войдите и подтвердите запуск в приложении.', 'Paneli yeni simgesinden açın, giriş yapın ve uygulamada açtığınızı onaylayın.') },
-  ];
+  const macSafari = detected === 'desktop' && /macintosh/i.test(navigator.userAgent)
+    && /safari/i.test(navigator.userAgent) && !/chrome|chromium|edg/i.test(navigator.userAgent);
+  const native = !state.installed && state.available && device === detected && device !== 'ios';
 
   async function install() {
     setBusy(true); setMessage('');
@@ -64,53 +71,57 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
         t('Браузер не открыл установку. Воспользуйтесь инструкцией ниже.', 'Tarayıcı kurulumu açamadı. Aşağıdaki adımları izleyin.'));
   }
 
-  const copyError = t('Не удалось скопировать. Выделите ссылку в поле выше и скопируйте вручную.', 'Kopyalanamadı. Yukarıdaki bağlantıyı seçip elle kopyalayın.');
-  return <ConfirmDialog open className="install-dialog" title={t('Установить Бронь Сервис', 'Bron Servis’i kur')} cancelLabel={t('Закрыть', 'Kapat')} onClose={onClose}>
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyState('copied');
+    } catch { setCopyState('error'); }
+  }
+
+  return <ConfirmDialog open className="install-dialog" title={t('Как установить приложение', 'Uygulama nasıl yüklenir?')}
+    cancelLabel={t('Закрыть', 'Kapat')} confirmLabel={t('Да, приложение установлено', 'Evet, uygulama yüklendi')}
+    onClose={onClose} onConfirm={() => { confirmInstallation(); onClose(); }}>
     <div className="install-guide">
-      {state.installed ? <p role="status">{t('Приложение установлено. Откройте его через значок «Бронь Сервис».', 'Uygulama kuruldu. Bron Servis simgesinden açın.')}</p> : <>
-        <p>{t('Добавьте значок кабинета на экран устройства.', 'Panel simgesini cihazınızın ekranına ekleyin.')}</p>
-        {temporary && <p className="faint">{t('Сейчас это временный адрес кабинета. После перехода на постоянный адрес приложение потребуется установить заново.', 'Bu geçici panel adresidir. Kalıcı adrese geçildiğinde uygulamayı yeniden kurmanız gerekir.')}</p>}
-        <Field label={t('Ваше устройство', 'Cihazınız')}>{id => <Select id={id} value={device} onChange={e => { setDevice(e.target.value as InstallDevice); setMessage(''); }}>
-          <option value="ios">iPhone / iPad</option><option value="android">Android</option><option value="desktop">{t('Компьютер', 'Bilgisayar')}</option>
-        </Select>}</Field>
-        {native && <Button variant="primary" block loading={busy} onClick={() => void install()}>{t('Установить приложение', 'Uygulamayı kur')}</Button>}
-        {message && <p role="status">{message}</p>}
-        <ol className="install-steps">{steps.map(step => <li key={step.text}>
-          <div className="install-step-visual">{step.visual}</div><p>{step.text}</p>
-        </li>)}</ol>
-        {device === 'desktop' && macSafari && <p className="faint">
-          {t('В Safari нет пункта «Добавить в Dock»? Откройте кабинет в Chrome или Edge и найдите установку в меню.',
-            'Safari’de «Dock’a Ekle» yoksa paneli Chrome veya Edge’de açıp menüden kurun.')}
-        </p>}
-        <p className="faint">{t('Ссылка открылась в мессенджере? Скопируйте её и откройте в Safari или Chrome.', 'Bağlantı mesajlaşma uygulamasında mı açıldı? Kopyalayıp Safari veya Chrome’da açın.')}</p>
-        <Field label={t('Ссылка на кабинет', 'Panel bağlantısı')} hint={t('Можно скопировать и открыть в другом браузере.', 'Kopyalayıp başka bir tarayıcıda açabilirsiniz.')}>
+      <p>{t('Установите кабинет на экран устройства. После этого открывайте его через значок, как любое приложение.', 'Paneli cihazınızın ekranına ekleyin. Ardından diğer uygulamalar gibi simgesinden açın.')}</p>
+      {temporary && <p className="faint">{t('Сейчас это временный адрес кабинета. После перехода на постоянный адрес приложение потребуется установить заново.', 'Bu geçici panel adresidir. Kalıcı adrese geçildiğinde uygulamayı yeniden kurmanız gerekir.')}</p>}
+      <Field label={t('Ваше устройство', 'Cihazınız')}>{id => <Select id={id} value={device} onChange={e => { setDevice(e.target.value as InstallDevice); setMessage(''); }}>
+        <option value="ios">iPhone / iPad</option><option value="android">Android</option><option value="desktop">{t('Компьютер', 'Bilgisayar')}</option>
+      </Select>}</Field>
+      {native && <Button variant="primary" block loading={busy} onClick={() => void install()}>{t('Установить приложение', 'Uygulamayı kur')}</Button>}
+      {message && <p className="install-status" role="status">{message}</p>}
+      <InstallGuide device={device} host={new URL(url).host} macSafari={macSafari} />
+      {device === 'desktop' && macSafari && <p className="faint">
+        {t('В Safari нет пункта «Добавить в Dock»? Откройте кабинет в Chrome или Edge и найдите установку в меню.',
+          'Safari’de «Dock’a Ekle» yoksa paneli Chrome veya Edge’de açıp menüden kurun.')}
+      </p>}
+      <details className="install-link">
+        <summary>{t('Как открыть ссылку из мессенджера', 'Mesajdaki bağlantı nasıl açılır?')}</summary>
+        <p>{t('Скопируйте ссылку и вставьте её в адресную строку Safari или Chrome.', 'Bağlantıyı kopyalayıp Safari veya Chrome’un adres çubuğuna yapıştırın.')}</p>
+        <Field label={t('Ссылка на кабинет', 'Panel bağlantısı')}>
           {id => <Input id={id} readOnly value={url} onFocus={e => e.target.select()} />}</Field>
-        <Button onClick={() => {
-          void navigator.clipboard?.writeText(url).then(() => { setCopied(true); setMessage(''); }).catch(() => { setCopied(false); setMessage(copyError); });
-          if (!navigator.clipboard) setMessage(copyError);
-        }}>{copied ? t('Ссылка скопирована', 'Bağlantı kopyalandı') : t('Скопировать ссылку', 'Bağlantıyı kopyala')}</Button>
-      </>}
+        <Button onClick={() => void copyLink()}>{t('Скопировать ссылку', 'Bağlantıyı kopyala')}</Button>
+        {copyState === 'copied' && <p className="install-status" role="status">{t('Ссылка скопирована', 'Bağlantı kopyalandı')}</p>}
+        {copyState === 'error' && <p className="install-status" role="status">
+          {t('Выделите ссылку в поле выше и скопируйте вручную.', 'Yukarıdaki bağlantıyı seçip elle kopyalayın.')}
+        </p>}
+      </details>
     </div>
   </ConfirmDialog>;
 }
 
-/** Only a launch in the installed window can be explicitly confirmed. */
-export function InstallConfirmation() {
+export function InstallReminder() {
   const { t } = useLocale();
   useInstallState();
-  const [confirmed, setConfirmed] = useState(() => {
-    try { return localStorage.getItem('bron.install-confirmed') === 'yes'; } catch { return false; }
-  });
-  if (confirmed || !isStandalone()) return null;
-  return <div className="install-hint install-confirmation" role="status">
-    <Smartphone size={18} aria-hidden />
-    <div className="alert-body">
-      <strong>{t('Кабинет открыт в приложении', 'Panel uygulamada açıldı')}</strong>
-      <div>{t('Подтвердите, что открыли его через значок «Бронь Сервис».', 'Bron Servis simgesinden açtığınızı onaylayın.')}</div>
-      <Button size="sm" onClick={() => {
-        setConfirmed(true);
-        try { localStorage.setItem('bron.install-confirmed', 'yes'); } catch { /* keep the confirmation for this session */ }
-      }}>{t('Подтвердить установку', 'Kurulumu onayla')}</Button>
-    </div>
-  </div>;
+  const confirmed = useSyncExternalStore(subscribeToConfirmation, hasConfirmedInstallation);
+  const [open, setOpen] = useState(false);
+  const mobile = installDevice(navigator.userAgent, navigator.maxTouchPoints) !== 'desktop';
+  return <>
+    {!confirmed && (mobile || isStandalone()) && <button className="install-reminder" type="button"
+      aria-haspopup="dialog" onClick={() => setOpen(true)}>
+      <Smartphone size={19} aria-hidden="true" />
+      <span>{t('Убедитесь, что вы правильно установили приложение', 'Uygulamayı doğru yüklediğinizden emin olun')}</span>
+      <ChevronRight size={17} aria-hidden="true" />
+    </button>}
+    {open && <InstallDialog onClose={() => setOpen(false)} />}
+  </>;
 }

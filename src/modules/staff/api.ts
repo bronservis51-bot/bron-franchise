@@ -92,8 +92,14 @@ export const staffEmail = (phone: string) => `${phoneDigits(phone)}@staff.bron.l
 export const formatPhone = (digits: string) => (!/^\d+$/.test(digits) ? digits : /^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
 export const pctBp = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 
-/** Пароль для выдачи человеку: 16 символов без похожих (0/O, 1/l). */
+/** Пароль для выдачи человеку: две группы простых слогов и четыре цифры. */
 export function randomPassword() {
-  const a = 'abcdefghijkmnpqrstuvwxyz23456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => a[b % a.length]).join('');
+  const consonants = 'bcdfghjkmnprstvwz';
+  const vowels = 'aeiou';
+  const digits = '23456789';
+  const random = crypto.getRandomValues(new Uint32Array(16));
+  const syllables = Array.from({ length: 6 }, (_, i) =>
+    consonants[random[i * 2] % consonants.length] + vowels[random[i * 2 + 1] % vowels.length]);
+  const suffix = Array.from(random.subarray(12), value => digits[value % digits.length]).join('');
+  return `${syllables.slice(0, 3).join('')}-${syllables.slice(3).join('')}-${suffix}`;
 }

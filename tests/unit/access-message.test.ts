@@ -1,19 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { accessMessage, accessMessengerDraft, accessMessengerLinks } from '../../src/modules/staff/accessMessage';
+import { randomPassword } from '../../src/modules/staff/api';
 
 describe('new account access message', () => {
-  it('contains exactly the app address, login instruction and starting password', () => {
+  it('labels the starting password in the forwarded message', () => {
     expect(accessMessage('https://example.invalid/app/', 'initial-test-password')).toBe(
-      'https://example.invalid/app/\nТвой логин — твой номер телефона\ninitial-test-password',
+      'https://example.invalid/app/\nТвой логин — твой номер телефона\nПароль — initial-test-password',
     );
+    expect(accessMessage('https://example.invalid/app/', 'initial-test-password', 'tr').split('\n').at(-1))
+      .toBe('Parola — initial-test-password');
   });
 
+  it('generates two pronounceable groups followed by four digits', () => {
+    expect(randomPassword()).toMatch(/^(?:[bcdfghjkmnprstvwz][aeiou]){3}-(?:[bcdfghjkmnprstvwz][aeiou]){3}-[2-9]{4}$/);
+  });
 
   it.each([
     ['WhatsApp', 'whatsapp://send'],
     ['Telegram', 'tg://resolve'],
   ] as const)('opens %s for the employee number with the entire draft and no extra parameters', (name, target) => {
-    const message = 'https://example.invalid/app/\nТвой логин — твой номер телефона\nTest&?=# %+';
+    const message = accessMessage('https://example.invalid/app/', 'Test&?=# %+');
     const url = new URL(accessMessengerDraft(name, '79000000000', message));
     expect(url.origin).toBe('null');
     expect(url.protocol + '//' + url.hostname).toBe(target);

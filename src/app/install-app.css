@@ -1,0 +1,100 @@
+.install-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--info-weak);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-s);
+  font-weight: 650;
+  text-align: start;
+  cursor: pointer;
+}
+
+.install-reminder:hover { border-color: var(--link); }
+.install-reminder > svg { flex: none; color: var(--link); }
+.install-reminder > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.install-guide { min-width: 0; overflow-wrap: anywhere; }
+.install-guide p { margin: 0 0 var(--space-3); }
+.install-guide .install-status { margin-top: var(--space-3); }
+.install-steps { margin-block: var(--space-4); padding-inline-start: 1.5em; }
+.install-steps > li { padding-inline-start: var(--space-1); }
+.install-steps > li + li { margin-block-start: var(--space-4); }
+.install-steps > li::marker { font-weight: 700; color: var(--link); }
+.install-steps > li > p { margin-bottom: var(--space-2); }
+
+.install-figure {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+}
+
+.install-figure svg { flex: none; }
+.install-browser-sample { display: grid; gap: var(--space-2); }
+.install-browser-chrome, .install-browser-tools { display: flex; align-items: center; gap: var(--space-2); }
+.install-browser-tools { justify-content: space-between; color: var(--text-2); }
+.install-control-mark {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid var(--link);
+  border-radius: 10px;
+  color: var(--link);
+  background: var(--info-weak);
+}
+
+.install-address {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 6px var(--space-2);
+  text-align: center;
+  background: var(--surface);
+  color: var(--text-2);
+}
+
+.install-menu-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--link);
+  border-radius: var(--radius-s);
+  background: var(--info-weak);
+}
+
+.install-menu-option svg { color: var(--link); }
+.install-menu-option > :is(strong, span:first-child) { min-width: 0; }
+.install-menu-toggle { justify-content: space-between; margin-top: var(--space-2); border-color: var(--border); background: var(--surface); }
+.install-switch { display: flex; flex: none; justify-content: end; width: 32px; height: 18px; padding: 2px; border-radius: 12px; background: #26834b; }
+.install-switch::after { content: ''; display: block; width: 14px; height: 14px; border-radius: 50%; background: white; }
+.install-menu-action { display: flex; justify-content: flex-end; margin-top: var(--space-2); }
+.install-menu-action > span { min-width: 0; border-radius: var(--radius-s); padding: 5px var(--space-2); background: var(--primary); color: var(--primary-text); font-weight: 650; }
+
+.install-launch-sample { display: grid; grid-template-columns: minmax(0, .75fr) auto minmax(0, 1.25fr); align-items: center; gap: var(--space-2); }
+.install-launch-sample > svg { color: var(--link); }
+.install-home-sample { min-width: 0; display: grid; justify-items: center; gap: 4px; text-align: center; font-weight: 650; }
+.install-launch-icon { width: min(48px, 100%); height: auto; aspect-ratio: 1; border-radius: 22%; outline: 2px solid var(--link); outline-offset: 2px; }
+.install-home-sample[data-device="android"] .install-launch-icon { border-radius: 50%; }
+.install-window-sample { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-s); padding: 6px; background: var(--surface); }
+.install-window-sample > div { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.install-window-sample img { flex: none; border-radius: 4px; }
+.install-window-sample strong { min-width: 0; }
+.install-window-sample > span { display: block; width: 80%; height: 5px; margin-top: 5px; border-radius: 4px; background: var(--border); }
+.install-window-sample > span:last-child { width: 58%; }
+.install-link > summary { min-height: var(--touch); padding-block: var(--space-2); font-weight: 650; cursor: pointer; }
+.install-link > .field { margin-bottom: var(--space-2); }
+.install-link .install-status { margin-bottom: 0; }
