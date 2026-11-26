@@ -92,13 +92,13 @@ export const staffEmail = (phone: string) => `${phoneDigits(phone)}@staff.bron.l
 export const formatPhone = (digits: string) => (!/^\d+$/.test(digits) ? digits : /^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
 export const pctBp = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 
-/** Короткое случайное имя и числовой суффикс. */
+/** Короткое случайное имя и двузначное число. */
 export function randomPassword() {
   const consonants = 'bcdfghjkmnprstvwz';
   const vowels = 'aeiou';
-  const random = crypto.getRandomValues(new Uint32Array(10));
-  const name = consonants[random[0] % consonants.length].toUpperCase() + vowels[random[1] % vowels.length]
-    + consonants[random[2] % consonants.length] + vowels[random[3] % vowels.length];
-  const suffix = Array.from(random.subarray(4), value => value % 10).join('');
-  return name + suffix;
+  const random = crypto.getRandomValues(new Uint32Array(7));
+  const name = Array.from({ length: 3 }, (_, i) =>
+    consonants[random[i * 2] % consonants.length] + vowels[random[i * 2 + 1] % vowels.length]).join('');
+  const suffix = 10 + random[6] % 90;
+  return `${name[0].toUpperCase()}${name.slice(1)}${suffix}`;
 }
