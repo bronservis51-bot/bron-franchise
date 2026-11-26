@@ -142,13 +142,13 @@ function StoreLinkActionForUser({ userId, compact }: { userId: string; compact?:
   </>;
 }
 
-/** Кнопка в шапке — оба способа закупки с любого экрана франчайзи. */
+/** Кнопка в шапке открывает раздел закупок. */
 export function OrderTopButton() {
   const { t } = useLocale();
   const { readOnly } = useOwnPartnerLifecycle();
   if (readOnly) return null;
   return (
-      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label={t('Заказать материалы', 'Malzeme sipariş et')} title={t('Заказ и предзаказ материалов', 'Malzeme siparişi ve ön sipariş')} data-tour-target="order">
+      <NavLink className="btn btn-secondary btn-sm order-top" to="/order" aria-label={t('Заказать материалы', 'Malzeme sipariş et')} title={t('Заказать материалы', 'Malzeme sipariş et')} data-tour-target="order">
         <ShoppingCart size={16} aria-hidden /><span className="order-top-label">{t('Заказать', 'Sipariş ver')}</span><ChevronRight size={14} aria-hidden className="order-top-chev" />
       </NavLink>
   );
@@ -188,6 +188,12 @@ export function OrderFallback() {
           <p className="faint">{t('Наличие на сайте и на складе может отличаться.', 'Sitede görünen stok, depodaki stoktan farklı olabilir.')}</p>
           <a className="btn btn-secondary" href="https://bronserviceshop.space/" target="_blank" rel="noopener noreferrer">
             {t('Открыть каталог', 'Kataloğu aç')}<ExternalLink size={16} aria-hidden />
+          </a>
+        </section>
+        <section className="card order-option" aria-labelledby="order-prints-title">
+          <div className="row order-option-title"><h2 id="order-prints-title">{t('Плёнки с индивидуальными принтами', 'Özel baskılı filmler')}</h2></div>
+          <a className="btn btn-secondary" href="https://design.bronservice.ru/order" target="_blank" rel="noopener noreferrer">
+            {t('Заказать плёнки', 'Film sipariş et')}<ExternalLink size={16} aria-hidden />
           </a>
         </section>
       </div>

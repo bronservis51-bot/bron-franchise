@@ -73,7 +73,6 @@
 .staff-history-details { flex: 1 1 12rem; }
 .staff-history-details .num { color: var(--text); }
 
-.staff-close-dialog .staff-payment-hint { margin-block: var(--space-3) var(--space-2); }
 .staff-payments {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--fs) * 8)), 1fr));
@@ -81,3 +80,4 @@
 }
 .staff-payments .field { margin: 0; }
 .staff-close-dialog :is(.day-total-line, .earn-line) { flex-wrap: wrap; gap: var(--space-2); }
+.staff-close-dialog .earn-line { margin-bottom: var(--space-4); }

@@ -291,6 +291,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 .field .req { color: var(--danger); margin-left: 2px; }
 .field .hint { color: var(--text-3); font-size: var(--fs-xs); }
 .field .error { color: var(--danger); font-size: var(--fs-s); display: flex; gap: 6px; align-items: center; }
+.shift-return { margin-block: var(--space-2) var(--space-4); }
+.shift-return .field { margin: var(--space-2) 0 0; }
 .input, .select, .textarea {
   width: 100%; min-width: 0; max-width: 100%; min-height: var(--touch); padding: 10px 12px; border-radius: var(--radius-s); border: 1px solid var(--border-strong);
   background: var(--surface); color: var(--text);
@@ -931,6 +933,7 @@ button.expense-row, .expense-royalty { display: grid; grid-template-columns: min
 .order-option .btn { max-width: 100%; white-space: normal; text-align: center; }
 .order-option .btn > svg, .order-private > svg { flex: none; }
 @media (max-width: 767px) { .order-options { grid-template-columns: minmax(0, 1fr); } .order-option { padding: 20px; } }
+@media (min-width: 1100px) { .order-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .order-top { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
 .order-top-chev { display: none; }
 @media (max-width: 420px) { .order-top-label { display: none; } .order-top { width: var(--touch); min-height: var(--touch); padding: 0; } }

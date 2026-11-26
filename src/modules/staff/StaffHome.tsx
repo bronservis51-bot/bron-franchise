@@ -79,6 +79,8 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
   const initialReturn = shift?.return_minor ? String(shift.return_minor) : null;
   const [returned, setReturned] = useState<string | null>(initialReturn);
   const [returnValid, setReturnValid] = useState(true);
+  const returnAmount = returned || null;
+  const returnChanged = returnAmount !== initialReturn;
   const [cashValid,setCashValid]=useState(true); const [cardValid,setCardValid]=useState(true); const [zero,setZero]=useState(false);
   const [comment, setComment] = useState(shift?.comment ?? '');
   const cardInput = useRef<HTMLInputElement>(null);
@@ -105,7 +107,6 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
   const pointTerms = point && (day === point.today ? point.pay_today ?? policy :
     day === addDays(point.today, -1) ? point.pay_yesterday : undefined);
   const terms = shift ? shift.pay_policy ?? policy : pointTerms;
-  const fixed = terms && 'mode' in terms ? terms : { fee_minor: fee, rate_bp: rate };
   const showEstimate = Boolean(shift || pointTerms || (point && day === point.today));
   const earned = showEstimate && !exceedsLimit ? calculatePay(total, rate, fee, terms) : null;
   const m = useMutation({
@@ -114,8 +115,8 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
       const note = comment.trim() || null;
       const target = shift ? { shiftId: shift.id, revision: shift.revision } : { locationId, day };
       const amounts = { cash: cash || '0', card: card || '0' };
-      const response = returned !== initialReturn
-        ? await recordShiftReturn(userId, target, { ...amounts, returned: returned ?? '0', comment: note })
+      const response = returnChanged
+        ? await recordShiftReturn(userId, target, { ...amounts, returned: returnAmount ?? '0', comment: note })
         : shift ? await shiftClose(userId, shift.id, amounts.cash, amounts.card, note, shift.revision)
           : await shiftSubmit(userId, locationId, day, amounts.cash, amounts.card, note);
       return { response, key, currency, earned, day, pointName: point?.location_name ?? shift?.location_name };
@@ -126,7 +127,7 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
   const canSave = !readOnly && Boolean(key) && !restriction && !blocked(key) && hasSalesInput && cashValid && cardValid
     && !exceedsLimit && validShiftReturn(returned, returnValid) && (total !== 0n || zero);
   const submit = () => { if (canSave && !m.isPending) m.mutate(); };
-  const dirty = cash !== initialCash || card !== initialCard || !cashValid || !cardValid || returned !== initialReturn || zero || comment !== (shift?.comment ?? '');
+  const dirty = cash !== initialCash || card !== initialCard || !cashValid || !cardValid || returnChanged || !returnValid || zero || comment !== (shift?.comment ?? '');
   return (
     <ConfirmDialog open className="staff-close-dialog" title={editing ? t('Исправить смену', 'Vardiyayı düzelt') : t('Закрыть смену', 'Vardiyayı kapat')} confirmLabel={editing ? t('Сохранить', 'Kaydet') : t('Закрыть смену', 'Vardiyayı kapat')} busy={m.isPending} error={m.error}
       disabled={!canSave} dirty={dirty} onClose={onClose} onConfirm={submit}>
@@ -147,7 +148,6 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
         )}</Field>}
         {points.length === 0 && <p className="muted">{t('Доступных дат для сдачи смены больше нет. Проверьте статус точки.', 'Vardiya girebileceğiniz tarih kalmadı. Mağazanın durumunu kontrol edin.')}</p>}
       </>}
-      <p className="faint staff-payment-hint">{t('Пустое поле равно нулю. Заполните хотя бы одно.', 'Boş alan sıfır sayılır. En az bir alanı doldurun.')}</p>
       <div className="staff-payments">
         <Field label={t('Наличные', 'Nakit')} error={!cashValid ? t('Укажите сумму наличными.', 'Nakit tutarını girin.') : undefined}>{(id, describedBy) => (
           <MoneyInput id={id} describedBy={describedBy} value={cash} onChange={value => { setCash(value); setZero(false); }} preserveBlank onValidityChange={setCashValid} onEnter={() => cardInput.current?.focus()} enterKeyHint="next" currency={currency} placeholder="0" disabled={m.isPending || readOnly} />
@@ -157,16 +157,13 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
         )}</Field>
       </div>
       <ShiftReturnField currency={currency} value={returned} onChange={setReturned} valid={returnValid}
-        onValidityChange={setReturnValid} busy={m.isPending} />
+        onValidityChange={setReturnValid} busy={m.isPending || readOnly} />
       {hasSalesInput && cashValid && cardValid && total === 0n && <Checkbox label={t('Продаж за смену не было', 'Bu vardiyada satış yapılmadı')} checked={zero} onChange={setZero} />}
       {editing && <p className="faint">{t('Выручку можно исправить в течение 5 минут после первой сдачи. Позже обратитесь к руководителю.', 'Ciroyu ilk kayıttan sonraki 5 dakika içinde düzeltebilirsiniz. Bu süreden sonra yöneticinizle görüşün.')}</p>}
       {exceedsLimit ? <p className="danger-text" role="alert">{t(`Сумма смены не может превышать ${formatMoneyShort(maxShiftTotal, currency, locale)}.`, `Vardiya tutarı en fazla ${formatMoneyShort(maxShiftTotal, currency, locale)} olabilir.`)}</p> :
         <div className="day-total-line"><span>{t('Выручка смены', 'Vardiya cirosu')}</span><Money minor={total} currency={currency} strong /></div>}
       {(shift?.counts_as_exit === false || terms?.additional_point) && <p className="faint">{t('Выход за эту дату уже учтён на другой точке.', 'Bu tarihin vardiya ücreti başka bir mağazada hesaplandı.')}</p>}
-      {earned !== null ? <>
-        <div className="earn-line"><span>{t('Ожидаемое начисление', 'Tahmini kazanç')}</span><Money minor={earned} currency={currency} strong /></div>
-        <p className="faint">{terms && !('mode' in terms) ? t('Больше из гарантированного минимума и процента от выручки, плюс премия', 'Asgari ücret ile ciro priminden yüksek olan tutar, artı bonus') : fixedTerms(fixed, currency, locale)}</p>
-      </> : point && !exceedsLimit && <p className="faint">{t('Начисление за выбранную дату появится после сохранения.', 'Seçilen tarihin kazancı kayıttan sonra görünür.')}</p>}
+      {earned !== null && <div className="earn-line"><span>{t('Ожидаемое начисление', 'Tahmini kazanç')}</span><Money minor={earned} currency={currency} strong /></div>}
       <Field label={t('Комментарий', 'Not')}>{(id) => <Input id={id} ref={commentInput} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('Необязательно', 'İsteğe bağlı')} />}</Field>
     </ConfirmDialog>
   );
