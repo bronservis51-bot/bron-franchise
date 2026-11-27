@@ -255,3 +255,42 @@ it('reads only the owner’s original return period and verified status across a
   expect(await observe(canceled,'canceled',null,crypto.randomUUID())).toBe(true);
   expect(await read(canceled.id)).toEqual({state:'canceled',month,amount_minor:'12500',currency:'RUB'});
 });
+
+it('keeps invoice jobs separate and pays the authorized franchisee month once', async () => {
+  await report();
+  await db.admin("update public.partner set contact_name='Другое контактное лицо' where id=$1", [partner]);
+  await db.admin('update app_private.royalty_checkout_pilot set use_invoice=true where partner_id=$1', [partner]);
+  expect(await request()).toMatchObject({ state: 'checking' });
+  expect(await work()).toEqual([]);
+  const invoiceWork = () => db.admin<Job & { invoice_name: string; first_dispatch_at: Date }>(
+    'select * from app_private.royalty_invoice_checkout_work(1)');
+  await expect(db.as(owner, 'select * from app_private.royalty_invoice_checkout_work(1)')).rejects.toThrow('permission denied');
+  const [first] = await invoiceWork();
+  expect(first.invoice_name).toBe('Тестовый партнёр');
+  await db.admin("update public.partner set name='Новое название' where id=$1", [partner]);
+  await db.admin("update app_private.royalty_checkout_pilot set use_invoice=false where partner_id=$1", [partner]);
+  await db.admin("update app_private.royalty_checkout_attempt set lease_until=now()-interval '1 second' where id=$1", [first.id]);
+  expect(await work()).toEqual([]);
+  const [retry] = await invoiceWork();
+  expect(retry).toMatchObject({ id: first.id, invoice_name: first.invoice_name, first_dispatch_at: first.first_dispatch_at });
+  const invoiceId = 'in-e44e8088-bd73-43b1-959a-954f3a7d0c54';
+  const invoiceUrl = 'https://yookassa.ru/my/i/example/a';
+  expect(await observe(retry,'pending',invoiceUrl,invoiceId)).toBe(true);
+  expect((await request()).checkout_url).toBe(invoiceUrl);
+  expect((await status(other)).checkout_url).not.toBe(invoiceUrl);
+  await ready();
+  const [settlement] = await invoiceWork();
+  expect(await observe(settlement,'succeeded',null,invoiceId)).toBe(true);
+  expect(await observe(settlement,'succeeded',null,invoiceId)).toBe(false);
+  expect(await invoiceWork()).toEqual([]);
+  expect(await db.admin('select id, month::text from public.royalty_payment where partner_id=$1', [partner]))
+    .toEqual([{ id: first.id, month }]);
+});
+
+it('declines an invoice below the YooKassa minimum without opening an attempt', async () => {
+  await report();
+  await db.admin('update public.royalty_manual set amount_minor=99 where partner_id=$1 and month=$2', [partner,month]);
+  await db.admin('update app_private.royalty_checkout_pilot set use_invoice=true where partner_id=$1', [partner]);
+  await expect(request('99')).rejects.toThrow('validation');
+  expect(await db.admin('select id from app_private.royalty_checkout_attempt')).toEqual([]);
+});

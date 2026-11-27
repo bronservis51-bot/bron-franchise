@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTestYooKassa, reconcileRoyaltyAttempt, royaltyTestConfig } from '../../scripts/royalty-yookassa.mjs';
+import { createMockInvoiceYooKassa, createTestYooKassa, reconcileRoyaltyAttempt, reconcileRoyaltyInvoice, royaltyTestConfig } from '../../scripts/royalty-yookassa.mjs';
 
 const job = {
   id: '4d41be19-a505-4e3b-802d-fbbc7ed77928',
@@ -89,5 +89,79 @@ test('rejects a response for a different amount, month, shop, non-test payment o
   ]) {
     const client = createTestYooKassa({ shopId: '123456', key: 'test_example' }, async () => response(mismatch));
     await assert.rejects(reconcileRoyaltyAttempt(job, client));
+  }
+});
+
+const invoiceId = 'in-e44e8088-bd73-43b1-959a-954f3a7d0c54';
+const invoiceLink = 'https://yookassa.ru/my/i/example/a';
+const invoiceJob = { ...job, invoice_name: '  Иван   Петров ', first_dispatch_at: new Date('2026-12-05T12:00:00Z') };
+const invoiceMetadata = { royalty_attempt_id: job.id, royalty_month: '2026-11' };
+const invoiceCart = [{ description: 'Оплата роялти за ноябрь 2026', quantity: 1, price: { value: '1234.05', currency: 'RUB' } }];
+const invoiceResponse = (overrides = {}) => Response.json({
+  id: invoiceId,
+  status: 'pending',
+  cart: invoiceCart,
+  metadata: invoiceMetadata,
+  delivery_method: { type: 'self', url: invoiceLink },
+  ...overrides,
+});
+
+test('issues a one-time invoice and includes buyer, period and verification text in the invoice description', async () => {
+  const sent = [];
+  const client = createMockInvoiceYooKassa('http://127.0.0.1:54349', async (url, init) => {
+    sent.push({ url, method: init.method, key: new Headers(init.headers).get('Idempotence-Key'), payload: JSON.parse(init.body) });
+    return invoiceResponse();
+  });
+  const observed = await reconcileRoyaltyInvoice(invoiceJob, client);
+  await reconcileRoyaltyInvoice(invoiceJob, client);
+  assert.deepEqual(observed, { providerId: invoiceId, status: 'pending', checkoutUrl: invoiceLink, paidOn: null });
+  assert.equal(sent[0].url, 'http://127.0.0.1:54349/v3/invoices');
+  assert.equal(sent[0].method, 'POST');
+  assert.equal(sent[0].key, job.id);
+  const payload = sent[0].payload;
+  assert.equal(payload.description, 'Иван Петров · Роялти за ноябрь 2026 года. Перед оплатой проверьте, правильно ли указаны данные.');
+  assert.deepEqual(payload.delivery_method_data, { type: 'self' });
+  assert.deepEqual(payload.cart, invoiceCart);
+  assert.equal(payload.payment_data.capture, true);
+  assert.deepEqual(payload.payment_data.amount, { value: '1234.05', currency: 'RUB' });
+  assert.equal(payload.payment_data.receipt.tax_system_code, 2);
+  assert.equal(payload.payment_data.receipt.items[0].vat_code, 7);
+  assert.equal(payload.expires_at, '2026-12-06T12:00:00.000Z');
+  assert.deepEqual(sent[1], sent[0]);
+});
+
+test('keeps the month and verification text when the buyer name exceeds the description limit', async () => {
+  const client = createMockInvoiceYooKassa('http://localhost:54349', async (_url, init) => {
+    const { description } = JSON.parse(init.body);
+    assert.ok(description.length <= 128);
+    assert.match(description, /^Я+… · Роялти за ноябрь 2026 года\. Перед оплатой проверьте, правильно ли указаны данные\.$/u);
+    return invoiceResponse();
+  });
+  await reconcileRoyaltyInvoice({ ...invoiceJob, invoice_name: 'Я'.repeat(160) }, client);
+  await assert.rejects(reconcileRoyaltyInvoice({ ...invoiceJob, invoice_name: ' ' }, client), /buyer name/);
+});
+
+test('checks the payment linked to a successful invoice before returning a settlement date', async () => {
+  let linkedInvoice = invoiceId;
+  const client = createMockInvoiceYooKassa('http://127.0.0.1:54349', async (url, init) => {
+    assert.equal(init.method, 'GET');
+    if (url.endsWith('/v3/invoices/' + invoiceId)) {
+      return invoiceResponse({ status: 'succeeded', payment_details: { id: providerId, status: 'succeeded' } });
+    }
+    assert.ok(url.endsWith('/v3/payments/' + providerId));
+    return response({
+      invoice_details: { id: linkedInvoice }, status: 'succeeded', paid: true, captured_at: '2026-12-05T22:00:00Z',
+    });
+  });
+  const attempt = { ...invoiceJob, provider_id: invoiceId };
+  assert.deepEqual(await reconcileRoyaltyInvoice(attempt, client),
+    { providerId: invoiceId, status: 'succeeded', checkoutUrl: null, paidOn: '2026-12-06' });
+  linkedInvoice = 'in-06d106bd-ae6e-4c5e-a277-3cffea026c0b';
+  await assert.rejects(reconcileRoyaltyInvoice(attempt, client), /Mismatched invoice payment/);
+});
+
+test('invoice verification accepts only a loopback mock endpoint', async () => {
+  for (const url of ['https://api.yookassa.ru', 'http://user@localhost:54349', 'http://localhost:54349/example']) {
+    assert.throws(() => createMockInvoiceYooKassa(url), /loopback mock/);
   }
 });
