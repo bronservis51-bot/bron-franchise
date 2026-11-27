@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile Bron Franchise live royalty invoices
+
+[Timer]
+OnActiveSec=3s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=bron-royalty-invoice.service
+
+[Install]
+WantedBy=timers.target

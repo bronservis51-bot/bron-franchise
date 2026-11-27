@@ -39,7 +39,8 @@ async function privateTablesInOrder(db) {
     where n.nspname='app_private' and c.relkind='r'
       and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme',
         'learning_config','learning_task','revenue_day_off','partner_launch_task',
-        'pay_scheme','team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact')
+        'pay_scheme','team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact',
+        'royalty_checkout_pilot','royalty_checkout_attempt')
         or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid
@@ -63,19 +64,29 @@ async function columns(db, table) {
 }
 
 export async function exportData(db) {
-  const tables = await tablesInOrder(db);
-  const data = {};
-  for (const t of tables) {
-    data[t] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from public.${JSON.stringify(t)} x`)).rows[0].rows;
+  await db.query('begin isolation level repeatable read read only');
+  try {
+    const tables = await tablesInOrder(db);
+    const data = {};
+    for (const t of tables) {
+      data[t] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from public.${JSON.stringify(t)} x`)).rows[0].rows;
+    }
+    const users = (await db.query(`select u.id, u.email, u.full_name, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
+    const migrationTable = await db.query("select to_regclass('app_private.schema_migration') is not null as present");
+    const migrations = migrationTable.rows[0].present
+      ? (await db.query(`select name from app_private.schema_migration order by name`)).rows.map(row => row.name)
+      : [];
+    const private_tables = {};
+    for (const name of await privateTablesInOrder(db)) {
+      private_tables[name] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from app_private.${name} x`)).rows[0].rows;
+    }
+    const auth_users = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from auth.users x`)).rows[0].rows;
+    await db.query('commit');
+    return { format: 'bron-backup', version: 1, private_tables, auth_users, exported_at: new Date().toISOString(), migrations, users, tables: data };
+  } catch (error) {
+    await db.query('rollback');
+    throw error;
   }
-  const users = (await db.query(`select u.id, u.email, u.full_name, u.status, u.is_demo from public.app_user u order by u.email`)).rows;
-  const migrations = await db.query(`select coalesce(jsonb_agg(name order by name), '[]'::jsonb) as m from app_private.schema_migration`).catch(() => ({ rows: [{ m: [] }] }));
-  const private_tables = {};
-  for (const name of await privateTablesInOrder(db)) {
-    private_tables[name] = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from app_private.${name} x`)).rows[0].rows;
-  }
-  const auth_users = (await db.query(`select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) as rows from auth.users x`)).rows[0].rows;
-  return { format: 'bron-backup', version: 1, private_tables, auth_users, exported_at: new Date().toISOString(), migrations: migrations.rows[0].m, users, tables: data };
 }
 
 /**

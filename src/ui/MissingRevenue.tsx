@@ -11,15 +11,17 @@ type DateAction = { label: string } & (
 
 type MissingRevenuePoint = { id: string; name?: string; count?: number; dates: DateAction[] };
 
-export function MissingRevenue({ points, hint }: { points: MissingRevenuePoint[]; hint?: string }) {
+export function MissingRevenue({ points, hint, title, urgent = false }: {
+  points: MissingRevenuePoint[]; hint?: string; title?: string; urgent?: boolean;
+}) {
   const { t } = useLocale();
   const missing = points.filter(point => point.dates.length > 0);
   if (!missing.length) return null;
   const count = missing.length === 1 ? missing[0].count : undefined;
-  return <details className="home-disclosure home-missing">
+  return <details className={`home-disclosure home-missing${urgent ? " home-missing-danger" : ""}`}>
     <summary>
       <span className="home-missing-label">
-        <strong>{t('Не внесена выручка', 'Gelir kaydı eksik')}</strong>
+        <strong>{title ?? t('Не внесена выручка', 'Gelir kaydı eksik')}</strong>
         {count ? <span>{t(`${count} дн.`, `${count} gün`)}</span> : null}
       </span>
       <ChevronDown size={18} aria-hidden />

@@ -20,6 +20,7 @@ jobs:
       - run: node --test gateway/server.test.mjs
       - run: node --test tests/ops/availability-status.test.mjs
       - run: node --test tests/ops/manager-recovery-delivery.test.mjs
+      - run: node --test tests/ops/royalty-yookassa.test.mjs
       - run: python3 -m unittest discover -s tests/ops -p 'test_backup_alert_telegram.py'
       - run: python3 -B -m unittest discover -s tests/ops -p 'test_manager_recovery_smtp.py'
       - run: python3 -B -m unittest discover -s tests/ops -p 'test_target_backup.py'

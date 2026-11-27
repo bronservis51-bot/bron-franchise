@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Bron Franchise payment reconciler for an isolated test database
+
+[Timer]
+OnActiveSec=3s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=bron-royalty-test.service
+
+[Install]
+WantedBy=timers.target

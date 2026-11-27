@@ -1,4 +1,5 @@
 // Восстановление из резервной копии: те же данные, долги по роялти и права в новой установке.
+import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error — общий модуль на JS без деклараций типов
 import { createDb, demoUsers } from '../../scripts/db-lib.mjs';
@@ -6,6 +7,37 @@ import { createDb, demoUsers } from '../../scripts/db-lib.mjs';
 import { exportData, restoreData } from '../../scripts/backup-lib.mjs';
 
 describe('резервная копия и восстановление', () => {
+  it('reads every table in one read-only repeatable-read transaction and releases it on success or failure', async () => {
+    const db = new PGlite();
+    try {
+      await db.exec(`create schema auth; create table auth.users(id int);
+        create table public.app_user(id int, email text, full_name text, status text, is_demo boolean);
+        create schema app_private; create table app_private.royalty_checkout_attempt(id int)`);
+      const snapshots = new Set<string>();
+      let failAuthRead = false;
+      const client = { query: async (sql: string, params?: unknown[]) => {
+        if (/^select/i.test(sql.trim())) {
+          const { rows } = await db.query(`select txid_current() as tx,
+            current_setting('transaction_isolation') as isolation, current_setting('transaction_read_only') as readonly`);
+          snapshots.add(JSON.stringify(rows[0]));
+          if (failAuthRead && sql.includes('from auth.users')) return db.query('select 1/0');
+        }
+        return db.query(sql, params);
+      } };
+      const dump = await exportData(client);
+      expect(dump.migrations).toEqual([]);
+      expect(dump.private_tables.royalty_checkout_attempt).toEqual([]);
+      expect(snapshots.size).toBe(1);
+      expect(JSON.parse([...snapshots][0])).toMatchObject({ isolation: 'repeatable read', readonly: 'on' });
+      await db.query('insert into auth.users values (1)');
+      failAuthRead = true;
+      await expect(exportData(client)).rejects.toThrow(/division by zero/);
+      await db.query('insert into auth.users values (2)');
+    } finally {
+      await db.close();
+    }
+  });
+
   it('экспорт → новая установка с другими id пользователей → те же данные, долги и права', async () => {
     const src = await createDb();
     const seedRecovery = async (db: typeof src) => {
@@ -68,6 +100,15 @@ describe('резервная копия и восстановление', () => 
         from app_private.employee_daily_exit v join public.app_user u on u.id=v.employee_id)) as facts`)).rows[0].facts;
     const catalogue = { name: 'Шаблон из архива', mode: 'legacy', fee_minor: 29000, rate_bp: 725 };
     await src.query("insert into app_private.pay_scheme(partner_id,policy,version,active) select id,$1,3,false from partner where code='ALPHA'", [JSON.stringify(catalogue)]);
+    const settlement = '10000000-0000-0000-0000-000000000087';
+    await src.query(`insert into app_private.royalty_checkout_pilot(partner_id)
+      select id from public.partner where code='ALPHA'`);
+    await src.query(`insert into app_private.royalty_checkout_attempt(id,partner_id,month,amount_minor,requested_by,status,provider_id)
+      select $1,p.id,date '2026-09-01',1200,u.id,'succeeded','backup-test-provider'
+      from public.partner p, public.app_user u where p.code='ALPHA' and u.email='alpha.owner@demo.example.com'`, [settlement]);
+    await src.query(`insert into public.royalty_payment(id,partner_id,month,amount_minor,paid_on,note)
+      select id,partner_id,month,amount_minor,date '2026-10-01','ЮKassa · backup-test-provider'
+      from app_private.royalty_checkout_attempt where id=$1`, [settlement]);
     const dump = await exportData(src);
     // Older private-table backups must receive defaults for columns added later.
     for (const key of ['for_trainees','for_franchisees','stage','position','pass_percent','quiz_size']) delete dump.private_tables.learning_config[0][key];
@@ -84,6 +125,8 @@ describe('резервная копия и восстановление', () => 
     expect(dump.private_tables.employee_daily_exit.length).toBeGreaterThan(1);
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_account');
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_job');
+    expect(dump.private_tables.royalty_checkout_pilot).toHaveLength(1);
+    expect(dump.private_tables.royalty_checkout_attempt).toMatchObject([{ id: settlement, status: 'succeeded' }]);
 
     // Новая установка: только миграции, пользователи созданы заново (новые id)
     const dst = await createDb({ seed: false });
@@ -103,6 +146,9 @@ describe('резервная копия и восстановление', () => 
     expect(restoredLesson.questions).toHaveLength(1);expect(restoredLesson.for_trainees).toBe(false);expect(restoredLesson.pass_percent).toBe(80);
     const restored = (await dst.query(`select id, number, created_by, items from app_private.procurement_request`)).rows[0];
     const restoredOwner = (await dst.query(`select id from public.app_user where email='alpha.owner@demo.example.com'`)).rows[0].id;
+    expect((await dst.query('select requested_by, status from app_private.royalty_checkout_attempt where id=$1', [settlement])).rows)
+      .toEqual([{ requested_by: restoredOwner, status: 'succeeded' }]);
+    await expect(dst.query('delete from public.royalty_payment where id=$1', [settlement])).rejects.toThrow('validation');
     const restoredDayOff = (await dst.query(`select to_jsonb(d) as day_off from app_private.revenue_day_off d`)).rows[0].day_off;
     expect(restoredDayOff).toEqual({ ...dump.private_tables.revenue_day_off[0], marked_by: restoredOwner });
     const restoredLaunchTask = (await dst.query('select to_jsonb(t) as task from app_private.partner_launch_task t')).rows[0].task;
