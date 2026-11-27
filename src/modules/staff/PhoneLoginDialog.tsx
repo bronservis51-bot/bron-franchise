@@ -17,7 +17,7 @@ export function PhoneLoginDialog({ user, name, currentPhone, onClose }: {
   const [phone, setPhone] = useState(() => phoneLoginInitial(currentPhone));
   const digits = phoneLoginDigits(phone);
   const m = useMutation({
-    mutationFn: () => command<{ phone: string; login: string; changed: boolean }>('user_set_phone_login', { user, phone }),
+    mutationFn: (submittedPhone: string) => command<{ phone: string; login: string; changed: boolean }>('user_set_phone_login', { user, phone: submittedPhone }),
     onSuccess: async (result) => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['access'] }),
@@ -32,7 +32,7 @@ export function PhoneLoginDialog({ user, name, currentPhone, onClose }: {
   });
   return <ConfirmDialog open title={t(`Телефон / логин — ${name}`, `Telefon / giriş numarası · ${name}`)}
     confirmLabel={t('Сохранить телефон', 'Telefonu kaydet')} busy={m.isPending}
-    error={m.error} disabled={!digits} onClose={onClose} onConfirm={() => m.mutate()}>
+    error={m.error} disabled={!digits} onClose={onClose} onConfirm={() => { if (digits) m.mutate(digits); }}>
     <Field label={t('Телефон для входа', 'Giriş için telefon numarası')} required hint={t('Полный номер с кодом страны', 'Ülke koduyla birlikte tam numarayı girin')}>{id =>
       <Input id={id} type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder={t('+7 900 123-45-67', '+90 500 123 45 67')} />}</Field>
     {digits && <p className="faint">{t('Новый логин:', 'Yeni giriş numarası:')} <strong>{formatPhone(digits)}</strong></p>}
