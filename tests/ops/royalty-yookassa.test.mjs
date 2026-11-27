@@ -126,6 +126,8 @@ test('issues a one-time invoice and includes buyer, period and verification text
   assert.deepEqual(payload.payment_data.amount, { value: '1234.05', currency: 'RUB' });
   assert.equal(payload.payment_data.receipt.tax_system_code, 2);
   assert.equal(payload.payment_data.receipt.items[0].vat_code, 7);
+  assert.equal(payload.payment_data.receipt.items[0].payment_subject, 'commodity');
+  assert.equal(payload.payment_data.receipt.items[0].payment_mode, 'full_prepayment');
   assert.equal(payload.expires_at, '2026-12-06T12:00:00.000Z');
   assert.deepEqual(sent[1], sent[0]);
 });

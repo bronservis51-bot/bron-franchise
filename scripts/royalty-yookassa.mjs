@@ -164,10 +164,9 @@ export async function reconcileRoyaltyInvoice(attempt, client) {
   const invoice = attempt.provider_id ? await client.getInvoice(attempt.provider_id) : await client.createInvoice(attempt.id, {
     description: invoiceDescription(attempt.invoice_name, period),
     payment_data: { amount, capture: true, description: item, metadata,
-      // Fiscal treatment for the local mock fixture. The working store's
-      // item subject and settlement method must be verified before launch.
+      // Fiscal attributes from the confirmed royalty receipt configuration.
       receipt: { tax_system_code: 2, items: [{ description: item, amount, quantity: 1,
-        vat_code: 7, payment_mode: 'full_payment', payment_subject: 'service' }] } },
+        vat_code: 7, payment_mode: 'full_prepayment', payment_subject: 'commodity' }] } },
     cart: [{ description: item, price: amount, quantity: 1 }],
     delivery_method_data: { type: 'self' },
     expires_at: new Date(attempt.first_dispatch_at.getTime() + 24 * 60 * 60_000).toISOString(),
