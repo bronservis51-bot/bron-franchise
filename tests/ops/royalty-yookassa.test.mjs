@@ -167,3 +167,69 @@ test('invoice verification accepts only a loopback mock endpoint', async () => {
     assert.throws(() => createMockInvoiceYooKassa(url), /loopback mock/);
   }
 });
+
+const liveSettings = { shopId: '123456', key: 'live_fixture' };
+const liveEnv = {
+  BRON_YOOKASSA_MODE: 'invoice_live', YOOKASSA_LIVE_SHOP_ID: liveSettings.shopId,
+  YOOKASSA_LIVE_SECRET: liveSettings.key, BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@db.example/postgres',
+};
+const liveJob = { ...invoiceJob, invoice_receipt_email: 'buyer@example.test' };
+
+test('uses only explicit live credentials and a distinct database for live invoices', async () => {
+  const { royaltyLiveInvoiceConfig } = await import('../../scripts/royalty-yookassa.mjs');
+  assert.equal(typeof royaltyLiveInvoiceConfig, 'function');
+  assert.deepEqual(royaltyLiveInvoiceConfig(liveEnv), { ...liveSettings, databaseUrl: liveEnv.BRON_ROYALTY_LIVE_DATABASE_URL });
+  for (const invalid of [
+    { YOOKASSA_LIVE_SECRET: 'test_fixture' }, { YOOKASSA_LIVE_SECRET: undefined },
+    { BRON_YOOKASSA_MODE: 'invoice_mock' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+    { BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@localhost/bron_royalty_test' },
+    { BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@localhost/postgres?dbname=bron_royalty_test' },
+  ]) assert.throws(() => royaltyLiveInvoiceConfig({ ...liveEnv, ...invalid }));
+});
+
+test('issues invoices on the fixed HTTPS origin with a receipt email and without redirecting credentials', async () => {
+  const { createLiveInvoiceYooKassa } = await import('../../scripts/royalty-yookassa.mjs');
+  const calls = [];
+  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return invoiceResponse();
+  });
+  assert.equal((await reconcileRoyaltyInvoice(liveJob, client)).checkoutUrl, invoiceLink);
+  assert.equal(calls[0].url, 'https://api.yookassa.ru/v3/invoices');
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.redirect, 'error');
+  assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Basic ' + Buffer.from('123456:live_fixture').toString('base64'));
+  assert.equal(new Headers(calls[0].init.headers).get('Idempotence-Key'), job.id);
+  assert.deepEqual(calls[0].body.payment_data.receipt.customer, { email: 'buyer@example.test' });
+  assert.equal(calls[0].body.payment_data.receipt.items[0].measure, 'piece');
+  await assert.rejects(reconcileRoyaltyInvoice({ ...liveJob, invoice_receipt_email: ' ' }, client), /receipt email/);
+  assert.equal(calls.length, 1);
+});
+
+test('records a live invoice payment only when the payment belongs to its live shop and invoice', async () => {
+  const { createLiveInvoiceYooKassa } = await import('../../scripts/royalty-yookassa.mjs');
+  let payment = {};
+  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
+    assert.equal(init.method, 'GET');
+    if (url.endsWith('/invoices/' + invoiceId)) {
+      return invoiceResponse({ status: 'succeeded', payment_details: { id: providerId, status: 'succeeded' } });
+    }
+    assert.equal(url, 'https://api.yookassa.ru/v3/payments/' + providerId);
+    return response({ invoice_details: { id: invoiceId }, status: 'succeeded', paid: true, test: false,
+      captured_at: '2026-12-05T22:00:00Z', ...payment });
+  });
+  const attempt = { ...liveJob, provider_id: invoiceId };
+  assert.deepEqual(await reconcileRoyaltyInvoice(attempt, client),
+    { providerId: invoiceId, status: 'succeeded', checkoutUrl: null, paidOn: '2026-12-06' });
+  for (const mismatch of [{ test: true }, { test: undefined }, { recipient: { account_id: '654321' } }]) {
+    payment = mismatch;
+    await assert.rejects(reconcileRoyaltyInvoice(attempt, client), /Mismatched invoice payment/);
+  }
+});
+
+test('reports provider rejection without including the response body', async () => {
+  const { createLiveInvoiceYooKassa, YooKassaHttpError } = await import('../../scripts/royalty-yookassa.mjs');
+  const client = createLiveInvoiceYooKassa(liveSettings, async () => new Response('private response', { status: 401 }));
+  await assert.rejects(client.getPayment(providerId), error =>
+    error instanceof YooKassaHttpError && error.status === 401 && error.message === 'YooKassa HTTP 401');
+});

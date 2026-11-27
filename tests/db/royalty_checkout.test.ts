@@ -294,3 +294,28 @@ it('declines an invoice below the YooKassa minimum without opening an attempt', 
   await expect(request('99')).rejects.toThrow('validation');
   expect(await db.admin('select id from app_private.royalty_checkout_attempt')).toEqual([]);
 });
+
+it('isolates live invoices by shop and keeps the receipt email stable across retries', async () => {
+  await report();
+  await db.admin('update public.partner set contact_email=null where id=$1', [partner]);
+  await db.admin("update app_private.royalty_checkout_pilot set use_invoice=true,invoice_shop_id='123456' where partner_id=$1", [partner]);
+  const liveWork = (shop = '123456') => db.admin<Job & { invoice_receipt_email: string }>(
+    'select * from app_private.royalty_live_invoice_checkout_work(1,$1)',[shop]);
+  await expect(request()).rejects.toThrow('validation');
+  expect(await db.admin('select id from app_private.royalty_checkout_attempt')).toEqual([]);
+  await db.admin("update public.partner set contact_email='buyer@example.test' where id=$1", [partner]);
+  expect(await request()).toMatchObject({state:'checking'});
+  expect(await work()).toEqual([]);
+  expect(await db.admin('select * from app_private.royalty_invoice_checkout_work(1)')).toEqual([]);
+  expect(await liveWork('654321')).toEqual([]);
+  await expect(db.as(owner, "select * from app_private.royalty_live_invoice_checkout_work(1,'123456')")).rejects.toThrow('permission denied');
+  const [first] = await liveWork();
+  expect(first.invoice_receipt_email).toBe('buyer@example.test');
+  await db.admin("update public.partner set contact_email='new@example.test' where id=$1", [partner]);
+  await db.admin("update app_private.royalty_checkout_pilot set invoice_shop_id='654321' where partner_id=$1", [partner]);
+  await db.admin("update app_private.royalty_checkout_attempt set lease_until=now()-interval '1 second' where id=$1", [first.id]);
+  expect(await liveWork('654321')).toEqual([]);
+  expect(await db.admin('select * from app_private.royalty_invoice_checkout_work(1)')).toEqual([]);
+  const [retry] = await liveWork();
+  expect(retry).toMatchObject({id:first.id, invoice_receipt_email:'buyer@example.test'});
+});
