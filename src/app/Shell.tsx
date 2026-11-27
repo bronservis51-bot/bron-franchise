@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff, X } from 'lucide-react';
+import { ChevronRight, CloudOff, GraduationCap, KeyRound, LogOut, Mail, Phone, Smartphone, User, Users, WifiOff } from 'lucide-react';
 import { AppError, command } from '../platform/backend';
 import { useSession } from '../platform/session';
 import { useLocale } from '../platform/locale';
@@ -16,11 +16,10 @@ import { ownedTeamPartner } from '../modules/staff/TeamAccounts';
 import { BrandPattern, LogoFull, LogoMark } from '../ui/brand';
 import { Button, ConfirmDialog, Field, Input } from '../ui';
 import { useToast } from '../ui/toast';
-import { InstallButton, InstallConfirmation, InstallDialog, useInstallState } from './InstallApp';
+import { InstallDialog, InstallReminder, useInstallState } from './InstallApp';
 import { AppUpdateBanner } from './AppUpdateBanner';
 import { FirstRunGuide, hasSeenFirstRunGuide, markFirstRunGuideSeen, type FirstRunPreview } from './FirstRunGuide';
 import { ManagerRecoverySettings } from './ManagerRecoverySettings';
-import { installDevice } from '../platform/install';
 import { exportLocalRecovery, importLocalRecovery, MAX_RECOVERY_BYTES, parseLocalRecovery, type LocalRecovery } from '../platform/localRecovery';
 import { sameJson, type QueuedOperation } from '../platform/offline';
 
@@ -237,23 +236,6 @@ function UserMenu({ pending, queueIssue, onLocalWork, showTeamAccess, role }: {
   );
 }
 
-/** Подсказка установить на экран телефона (один раз, можно закрыть). */
-function InstallHint() {
-  const { t } = useLocale();
-  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem('bron.install-hint') === 'off'; } catch { return false; } });
-  const state = useInstallState();
-  const mobile = installDevice(navigator.userAgent, navigator.maxTouchPoints) !== 'desktop';
-  if (hidden || state.installed || !mobile) return null;
-  return (
-    <div className="install-hint" role="status">
-      <Smartphone size={18} aria-hidden />
-      <div className="alert-body">{t('Добавьте кабинет на экран телефона — он будет открываться как приложение.', 'Paneli telefonunuzun ana ekranına ekleyip uygulama gibi açın.')}
-        <div style={{ marginTop: 8 }}><InstallButton /></div></div>
-      <button type="button" className="icon-btn" aria-label={t('Скрыть', 'Gizle')} onClick={() => { setHidden(true); try { localStorage.setItem('bron.install-hint', 'off'); } catch { /* удобство */ } }}><X size={16} /></button>
-    </div>
-  );
-}
-
 export function Shell() {
   const { t, language } = useLocale();
   const session = useSession();
@@ -364,8 +346,7 @@ export function Shell() {
               </div>
             </div>
           )}
-          <InstallConfirmation />
-          <InstallHint />
+          <InstallReminder />
           {role === 'pending' ? (
             <div className="state"><h1>{t('Доступ ещё не выдан', 'Erişim henüz verilmedi')}</h1><div>{t('За доступом обратитесь к франчайзи или менеджеру по франшизе.', 'Erişim için franchise işletmecinizle veya franchise yöneticisiyle görüşün.')}</div></div>
           ) : <Outlet key={scopeRevision} />}

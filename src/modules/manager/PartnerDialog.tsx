@@ -149,10 +149,10 @@ export function AccessDialog({ partnerId, onClose }: { partnerId: string; onClos
   const m = useMutation({
     mutationFn: async () => {
       if (mode === 'create') {
-        const submittedPhone = phone;
+        const submittedPhone = digits ?? '';
         const submittedPassword = password;
         await accountCreatePhone(partnerId, name, submittedPhone, submittedPassword);
-        setMade({ phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword });
+        setMade({ phone: formatPhone(submittedPhone), password: submittedPassword });
         return { status: 'created' as const };
       }
       return { status: (await accessGrant(partnerId, login)).status };

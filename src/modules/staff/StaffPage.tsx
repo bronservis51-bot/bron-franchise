@@ -187,6 +187,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
         });
         return;
       }
+      const submittedPhone = digits ?? '';
       const submittedPassword = password;
       const settings = {
         ...(payRevision !== undefined ? { expected_pay_revision: payRevision } : {}),
@@ -202,15 +203,15 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           (chosen===null || bp!==initialCustomPay.rate_bp || Number(fee)!==initialCustomPay.fee_minor))) ? { custom_pay: null } : {}),
       };
       if (chosen) await command('staff_profile_save_scheme',{partner:partnerId,user:staff?.user_id ?? null,full_name:name.trim(),
-        phone,password:submittedPassword,locations:selectedLocations,scheme:chosen.id,scheme_version:chosen.version,settings});
+        phone:submittedPhone,password:submittedPassword,locations:selectedLocations,scheme:chosen.id,scheme_version:chosen.version,settings});
       else await command('staff_profile_save_phone', {
-        user: staff?.user_id ?? null, partner: partnerId, full_name: name.trim(), phone, password: submittedPassword,
+        user: staff?.user_id ?? null, partner: partnerId, full_name: name.trim(), phone: submittedPhone, password: submittedPassword,
         locations: selectedLocations, use_partner: payMode === 'partner',
         rate_bp: payMode === 'fixed' ? bp ?? 0 : staff?.rate_bp ?? 0,
         shift_fee: payMode === 'fixed' ? fee || '0' : String(staff?.shift_fee_minor ?? 0),
         settings,
       });
-      if (!staff && digits) setCreated({ phone: formatPhone(digits), password: submittedPassword });
+      if (!staff && submittedPhone) setCreated({ phone: formatPhone(submittedPhone), password: submittedPassword });
     },
     onError: error => {
       if (toAppError(error).code === 'version-conflict') {
@@ -238,7 +239,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           <Field label={t('Имя', 'Ad')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('Например, Дина', 'Örneğin Deniz')} maxLength={160} />}</Field>
           {!staff && (
             <div className="grid grid-2" style={{ gap: 12 }}>
-              <Field label={t('Телефон для входа', 'Giriş için telefon numarası')} required hint={t('Полный номер с кодом страны', 'Ülke koduyla birlikte tam numarayı girin')} error={phone && !digits ? t('Проверьте номер телефона', 'Telefon numarasını kontrol edin') : undefined}>{(id, describedBy) =>
+              <Field label={t('Телефон для входа', 'Giriş için telefon numarası')} required hint={t('С кодом страны. Российский мобильный можно ввести без +7.', 'Ülke koduyla birlikte tam numarayı girin')} error={phone && !digits ? t('Введите телефон полностью', 'Telefon numarasını eksiksiz girin') : undefined}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" />}</Field>
               <Field label={t('Пароль', 'Parola')} required hint="Можно оставить предложенный" error={password.length < 6 ? t('Минимум 6 символов', 'En az 6 karakter') : undefined}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>

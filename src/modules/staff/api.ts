@@ -92,8 +92,13 @@ export const staffEmail = (phone: string) => `${phoneDigits(phone)}@staff.bron.l
 export const formatPhone = (digits: string) => (!/^\d+$/.test(digits) ? digits : /^7\d{10}$/.test(digits) ? `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}` : `+${digits}`);
 export const pctBp = (bp: number) => `${(bp / 100).toLocaleString('ru-RU')} %`;
 
-/** Пароль для выдачи человеку: 16 символов без похожих (0/O, 1/l). */
+/** Короткое случайное имя и двузначное число. */
 export function randomPassword() {
-  const a = 'abcdefghijkmnpqrstuvwxyz23456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => a[b % a.length]).join('');
+  const consonants = 'bcdfghjkmnprstvwz';
+  const vowels = 'aeiou';
+  const random = crypto.getRandomValues(new Uint32Array(7));
+  const name = Array.from({ length: 3 }, (_, i) =>
+    consonants[random[i * 2] % consonants.length] + vowels[random[i * 2 + 1] % vowels.length]).join('');
+  const suffix = 10 + random[6] % 90;
+  return `${name[0].toUpperCase()}${name.slice(1)}${suffix}`;
 }

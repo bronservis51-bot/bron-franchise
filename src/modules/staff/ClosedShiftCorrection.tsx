@@ -32,14 +32,15 @@ export function ClosedShiftCorrection({ employee, shift, currency, userId, onClo
   const [reason, setReason] = useState('');
   const [zeroConfirmed, setZeroConfirmed] = useState(false);
   const amountsChanged = cash !== String(shift.cash_minor) || card !== String(shift.card_minor);
-  const returnChanged = returned !== initialReturn;
+  const returnAmount = returned || null;
+  const returnChanged = returnAmount !== initialReturn;
   const zero = cash === '0' && card === '0';
   const valid = cashValid && cardValid && cash !== '' && card !== '' && reason.trim().length >= 3
     && (amountsChanged || returnChanged) && validShiftReturn(returned, returnValid) && (!zero || !amountsChanged || zeroConfirmed);
   const save = useMutation({
     mutationFn: async () => {
       if (returnChanged) {
-        await recordShiftReturn(userId, { shiftId: shift.id, revision: shift.revision }, { cash, card, returned: returned ?? '0', reason: reason.trim() });
+        await recordShiftReturn(userId, { shiftId: shift.id, revision: shift.revision }, { cash, card, returned: returnAmount ?? '0', reason: reason.trim() });
       } else {
         await staffShiftCorrect(userId, shift, cash, card, reason);
       }
@@ -56,7 +57,7 @@ export function ClosedShiftCorrection({ employee, shift, currency, userId, onClo
     },
   });
   return <ConfirmDialog open className="shift-correction-dialog" title="Исправить закрытую смену" confirmLabel="Сохранить"
-    busy={save.isPending} error={save.error} dirty={amountsChanged || returnChanged || Boolean(reason) || !cashValid || !cardValid}
+    busy={save.isPending} error={save.error} dirty={amountsChanged || returnChanged || !returnValid || Boolean(reason) || !cashValid || !cardValid}
     disabled={!valid || (save.isError && toAppError(save.error).code === 'version-conflict')} onConfirm={() => save.mutate()} onClose={onClose}>
     <p><strong>{employee}</strong> · {shift.location_name} · {formatDate(shift.day)}</p>
     <p className="faint">Выручка до исправления — {formatMoneyShort(shift.total_minor, currency)}. Заработок пересчитается по условиям этой смены.</p>

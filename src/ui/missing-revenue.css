@@ -23,6 +23,11 @@
 .home-disclosure[open] > summary svg { transform: rotate(180deg); }
 .home-disclosure-body { display: grid; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3); }
 
+.home-disclosure.home-missing { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.home-disclosure.home-missing > summary { background: var(--danger-weak); color: var(--danger); }
+.home-disclosure.home-missing > summary:hover { background: color-mix(in srgb, var(--danger) 7%, var(--danger-weak)); }
+.home-disclosure.home-missing > summary svg { color: currentColor; }
+
 .home-missing-label {
   display: flex;
   flex-wrap: wrap;
@@ -31,8 +36,8 @@
   overflow-wrap: anywhere;
 }
 
-.home-missing-label strong { color: var(--warning); }
-.home-missing-label > span, .home-missing-body p { color: var(--text-2); font-size: var(--fs-s); }
+.home-missing-label > span, .home-missing-body p { font-size: var(--fs-s); }
+.home-missing-body p { color: var(--text-2); }
 .home-missing-body p { margin: 0; }
 .home-missing-point { display: grid; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
 .home-missing-dates { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }

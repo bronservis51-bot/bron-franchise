@@ -1,7 +1,9 @@
 import { localized, type Language } from '../../platform/locale';
 
 export function accessMessage(site: string, password: string, language: Language = 'ru') {
-  return `${site}\n${localized(language, 'Твой логин — твой номер телефона', 'Giriş numaran telefon numaran.')}\n${password}`;
+  const login = localized(language, 'Твой логин — твой номер телефона', 'Giriş numaran telefon numaran.');
+  const passwordLabel = localized(language, 'Пароль', 'Parola');
+  return `${site}\n${login}\n${passwordLabel} — ${password}`;
 }
 
 const appDraftTargets = {

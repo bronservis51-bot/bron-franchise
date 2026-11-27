@@ -165,12 +165,13 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
   const [selected, setSelected] = useState<string[]>([]);
   const locations = useQuery({ queryKey: ['team-locations', partner], enabled: action === 'new', queryFn: () => rows<{ id: string; name: string }>(from('location').select('id,name').eq('partner_id', partner).eq('status', 'active')) });
   const access = action !== 'new' && action.type === 'active';
+  const digits = phoneLoginDigits(phone);
   const m = useMutation({ mutationFn: async () => {
     const submittedPassword = password;
     if (action === 'new') {
-      const submittedPhone = phone;
+      const submittedPhone = digits ?? '';
       await command('staff_account_create_phone', { partner, full_name: name.trim(), phone: submittedPhone, password: submittedPassword, locations: selected, manager: true });
-      setIssued({ phone: formatPhone(phoneLoginDigits(submittedPhone)!), password: submittedPassword });
+      setIssued({ phone: formatPhone(submittedPhone), password: submittedPassword });
       return;
     }
     if (action.type === 'active') { await command('team_set_active', { partner, user: action.user.user_id, active: !action.user.active }); return; }
@@ -184,7 +185,7 @@ function TeamDialog({ partner, action, onClose }: { partner: string; action: 'ne
   </ConfirmDialog>;
   return <ConfirmDialog open title={action === 'new' ? t('Новый управляющий', 'Yeni yönetici') : access ? (action.user.active ? t('Закрыть доступ?', 'Erişim kapatılsın mı?') : t('Вернуть доступ?', 'Erişim geri açılsın mı?')) : t('Новый пароль', 'Yeni parola')}
     confirmLabel={access ? t('Подтвердить', 'Onayla') : t('Сохранить', 'Kaydet')} onConfirm={() => m.mutate()} onClose={onClose} busy={m.isPending} error={m.error}
-    disabled={!access && (password.length < 6 || action === 'new' && (!name.trim() || !phoneLoginDigits(phone) || !selected.length))}>
+    disabled={!access && (password.length < 6 || action === 'new' && (!name.trim() || !digits || !selected.length))}>
     {access ? <p>{t('История сохранится. Для следующего входа понадобится заново ввести логин и пароль.', 'Geçmiş korunur. Bir sonraki girişte giriş numarası ve parola yeniden girilir.')}</p> : <>
       {action === 'new' && <><p className="faint">{t('Для новой учётной записи доступны управление сотрудниками и их оплатой на выбранных точках, а также заказы.', 'Yeni hesap seçilen mağazalardaki çalışanları ve ücretlerini yönetebilir, ayrıca sipariş verebilir.')}</p>
         <Field label={t('Имя', 'Ad')} required>{id => <Input id={id} value={name} onChange={e => setName(e.target.value)} />}</Field>

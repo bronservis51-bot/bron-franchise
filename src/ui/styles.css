@@ -291,6 +291,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
 .field .req { color: var(--danger); margin-left: 2px; }
 .field .hint { color: var(--text-3); font-size: var(--fs-xs); }
 .field .error { color: var(--danger); font-size: var(--fs-s); display: flex; gap: 6px; align-items: center; }
+.shift-return { margin-block: var(--space-2) var(--space-4); }
+.shift-return .field { margin: var(--space-2) 0 0; }
 .input, .select, .textarea {
   width: 100%; min-width: 0; max-width: 100%; min-height: var(--touch); padding: 10px 12px; border-radius: var(--radius-s); border: 1px solid var(--border-strong);
   background: var(--surface); color: var(--text);
@@ -392,24 +394,6 @@ dialog.dialog::backdrop { background: rgb(10 15 22 / 60%); touch-action: none; }
   touch-action: pan-y;
   overflow-wrap: anywhere;
 }
-.install-guide { min-width: 0; overflow-wrap: anywhere; }
-.install-guide ol { padding-left: 1.4em; }
-.install-guide li { margin: 0.8em 0; }
-.install-guide p { margin: 0 0 16px; }
-.install-guide .install-steps { margin-block: 16px; padding-inline-start: 1.65em; }
-.install-steps li::marker { font-weight: 700; color: var(--link); }
-.install-steps .install-step-visual {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
-  font-weight: 650;
-}
-.install-step-visual :is(svg, img) { flex: none; }
-.install-steps li > p { margin: 6px 0 12px; }
 .dialog-foot {
   flex: none;
   display: flex;
@@ -787,14 +771,11 @@ a.list-item, .nav a, .btn, a.stat-link, .bottom-nav a, .back-link, a.chip, .prod
 .ask-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 24px; padding-top: 14px; }
 .new-answer { border-color: var(--success); }
 .answer { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
-.install-hint { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--info-weak); margin-bottom: 14px; font-size: var(--fs-s); }
 .forgot { margin-top: 12px; }
 .forgot summary { min-height: var(--touch); padding-block: 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-s); }
 .forgot p { color: var(--text-2); font-size: var(--fs-s); margin: 2px 0 8px; }
 .manager-help { border-top: 1px solid var(--border); }
 .manager-help > a { display: inline-flex; align-items: center; min-height: var(--touch); font-size: var(--fs-s); }
-@media (min-width: 961px) { .install-hint:not(.install-confirmation) { display: none; } }
-.install-confirmation .btn { margin-top: 8px; }
 .btn-lg { white-space: normal; text-align: center; line-height: 1.25; padding-top: 10px; padding-bottom: 10px; }
 
 /* ============ Финансы ============ */
@@ -931,6 +912,7 @@ button.expense-row, .expense-royalty { display: grid; grid-template-columns: min
 .order-option .btn { max-width: 100%; white-space: normal; text-align: center; }
 .order-option .btn > svg, .order-private > svg { flex: none; }
 @media (max-width: 767px) { .order-options { grid-template-columns: minmax(0, 1fr); } .order-option { padding: 20px; } }
+@media (min-width: 1100px) { .order-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .order-top { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
 .order-top-chev { display: none; }
 @media (max-width: 420px) { .order-top-label { display: none; } .order-top { width: var(--touch); min-height: var(--touch); padding: 0; } }
