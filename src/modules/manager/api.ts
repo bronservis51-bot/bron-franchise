@@ -52,7 +52,7 @@ export interface RoyaltySummary { month: string | null; current_month: string; r
 export interface LedgerMonth { month: string; revenue_minor: number; rate_bp: number; accrued_minor: number; manual_minor: number;
   correction_minor?: number; past_debt_minor?: number; waived_royalty_minor?: number; paid_minor: number; debt_minor: number; is_open: boolean }
 export type UndatedRoyalty = Pick<LedgerMonth, 'manual_minor' | 'paid_minor' | 'debt_minor'>;
-export type RoyaltyPayment = { month: string | null; amount_minor: number; paid_on: string | null; note: string | null };
+export type RoyaltyPayment = { month: string | null; amount_minor: number; refunded_minor?: number; paid_on: string | null; note: string | null };
 export interface RoyaltyPartner { partner_id: string; partner_name: string; currency: string; rate_bp: number; months: LedgerMonth[];
   undated?: UndatedRoyalty | null;
   royalty_holiday_from?: string | null; royalty_holiday_until?: string | null; royalty_accrual_from?: string | null;

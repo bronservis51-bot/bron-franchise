@@ -342,6 +342,9 @@ function RoyaltyHistory({ r, currency }: { r: Royalty; currency: string }) {
             {payment.paid_on ? formatDate(payment.paid_on, locale) : t('Дата оплаты не указана', 'Ödeme tarihi belirtilmemiş')}
             {payment.note && ' · ' + payment.note}
           </span>
+          {!!payment.refunded_minor && <span className="finance-payment-date faint">
+            {t('Возврат ЮKassa', 'ЮKassa iadesi')} · {money(payment.refunded_minor)}
+          </span>}
         </span>
         <Money minor={payment.amount_minor} currency={currency} strong />
       </div>)}

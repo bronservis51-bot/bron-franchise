@@ -120,6 +120,7 @@ export const CONTRACT = {
   royalty_checkout_return_status: { args: ['attempt'], returns: 'scalar' },
   royalty_holiday_start_set: { args: ['partner', 'started_on', 'expected_start'], returns: 'void' },
   royalty_home_status: { args: [], returns: 'scalar' },
+  royalty_invoice_manage: { args: ['partner', 'month', 'pause'], returns: 'scalar' },
   royalty_manual_add: { args: ['partner', 'month', 'amount', 'note'], returns: 'scalar' },
   royalty_manual_delete: { args: ['id'], returns: 'void' },
   royalty_my: { args: [], returns: 'scalar' },

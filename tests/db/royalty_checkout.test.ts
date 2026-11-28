@@ -35,6 +35,8 @@ beforeAll(async () => {
 afterAll(async () => db?.db.close());
 beforeEach(async () => {
   await db.admin('delete from app_private.royalty_checkout_attempt');
+  await db.admin("do $$ begin if to_regclass('app_private.royalty_checkout_hold') is not null then delete from app_private.royalty_checkout_hold; end if; end $$");
+  await db.admin('delete from app_private.royalty_checkout_pilot where partner_id=$1',[partner]);
   await db.admin('delete from public.royalty_payment where partner_id=$1',[partner]);
   await db.admin('delete from public.daily_revenue where partner_id=$1',[partner]);
   await db.admin('delete from app_private.revenue_day_off where location_id=$1',[point]);
@@ -318,4 +320,99 @@ it('isolates live invoices by shop and keeps the receipt email stable across ret
   expect(await db.admin('select * from app_private.royalty_invoice_checkout_work(1)')).toEqual([]);
   const [retry] = await liveWork();
   expect(retry).toMatchObject({id:first.id, invoice_receipt_email:'buyer@example.test'});
+});
+
+const manager = 'fm@demo.example.com';
+const shop = '123456';
+const invoice = 'in-e44e8088-bd73-43b1-959a-954f3a7d0c54';
+const payment = '243bc8ba-046d-5aab-a34e-ab9316d31fb2';
+const liveWork = () => db.admin<Job>('select * from app_private.royalty_live_invoice_checkout_work(1,$1)',[shop]);
+const prepareLive = async () => {
+  await report();
+  await db.admin("update public.partner set contact_email='buyer@example.test' where id=$1", [partner]);
+  await db.admin('update app_private.royalty_checkout_pilot set use_invoice=true,invoice_shop_id=$2 where partner_id=$1',[partner,shop]);
+  await request();
+};
+const manage = (pause: boolean | null, user = manager) =>
+  db.as<{ value: Record<string, unknown> }>(user, 'select public.royalty_invoice_manage($1,$2,$3) value',[partner,month,pause])
+    .then(([row]) => row.value);
+const cash = (amount = 12500) => db.as(manager,
+  'select public.royalty_payment_add($1,$2,$3,$4,$5)',[partner,month,amount,lastDay,'Наличные']);
+const liveObserve = (job: Job, refunded = 0) => db.admin<{ ok: boolean }>(
+  'select app_private.royalty_live_invoice_checkout_observe($1,$2,$3,$4,$5,$6,$7,$8) ok',
+  [job.id,job.lease,invoice,'succeeded',null,lastDay,payment,refunded]).then(([row]) => row.ok);
+
+it('locks balance changes until the provider has confirmed that the live invoice is canceled', async () => {
+  await prepareLive();
+  const [first] = await liveWork();
+  expect(await observe(first,'pending',url,invoice)).toBe(true);
+  await expect(cash()).rejects.toThrow('version-conflict');
+  await expect(db.admin('update public.royalty_manual set amount_minor=10000 where partner_id=$1',[partner])).rejects.toThrow('version-conflict');
+  await expect(db.admin('update public.daily_revenue set cash_minor=100 where partner_id=$1',[partner])).rejects.toThrow('version-conflict');
+  await expect(manage(true,owner)).rejects.toThrow('forbidden');
+  expect(await manage(true)).toMatchObject({paused:true,state:'pending',invoice_id:invoice});
+  expect(await status()).toMatchObject({state:'paused',checkout_url:null});
+  await expect(cash()).rejects.toThrow('version-conflict');
+  await ready();
+  const [checking] = await liveWork();
+  expect(await observe(checking,'canceled',null,invoice)).toBe(true);
+  expect(await manage(null)).toMatchObject({paused:true,state:'canceled'});
+  await expect(cash()).resolves.toBeDefined();
+  expect(await status()).toMatchObject({state:'none',checkout_url:null});
+  expect(await liveWork()).toEqual([]);
+});
+
+it('pauses queued work before sending it and enables a fresh price after a correction', async () => {
+  await prepareLive();
+  expect(await manage(true)).toMatchObject({paused:true,state:'canceled'});
+  expect(await liveWork()).toEqual([]);
+  await expect(request()).rejects.toThrow('version-conflict');
+  await db.admin('update public.royalty_manual set amount_minor=11000 where partner_id=$1',[partner]);
+  expect(await manage(false)).toMatchObject({paused:false});
+  await request('11000');
+  expect(await liveWork()).toMatchObject([{amount_minor:11000}]);
+});
+
+it('credits the net confirmed online payment, reconciles later refunds and rejects double entry', async () => {
+  await prepareLive();
+  const [job] = await liveWork();
+  expect(await liveObserve(job,1000)).toBe(true);
+  expect(await liveObserve(job,1000)).toBe(false);
+  const balance = () => db.admin('select debt_minor::int balance from app_private.royalty_ledger($1) where month=$2',[partner,month]);
+  expect(await balance()).toEqual([{balance:1000}]);
+  expect((await db.as<{value: Status}>(owner,returnSql,[job.id]))[0].value.state).toBe('partially_refunded');
+  const reviewed = (reference?: string, amount = 12500) =>
+    db.as(manager,"select public.financial_operation('royalty_payment_reviewed',$1::jsonb,$2::uuid)", [{
+      p_partner:partner,p_month:month,p_amount:amount,p_paid_on:lastDay,p_note:'Наличные',p_reviewed:[job.id],
+      p_source:reference ? 'cash' : null,p_reference:reference ?? null,
+    },crypto.randomUUID()]);
+  await expect(reviewed()).rejects.toThrow('version-conflict');
+  await expect(reviewed(payment)).rejects.toThrow('version-conflict');
+  const [scheduled] = await db.admin<{id:string;lease:string;payment_id:string}>(
+    'select * from app_private.royalty_live_refund_work(1,$1)',[shop]);
+  expect(scheduled).toMatchObject({id:job.id,payment_id:payment});
+  const record = (sum: number) => db.admin<{ok:boolean}>(
+    'select app_private.royalty_live_refund_observe($1,$2,$3,$4) ok',[job.id,scheduled.lease,payment,sum]).then(([row]) => row.ok);
+  expect(await record(12500)).toBe(true);
+  expect(await record(12500)).toBe(false);
+  expect(await balance()).toEqual([{balance:12500}]);
+  expect((await db.as<{value: Status}>(owner,returnSql,[job.id]))[0].value.state).toBe('refunded');
+  expect(await db.admin('select amount_minor::int,refunded_minor::int from public.royalty_payment where id=$1',[job.id])).toEqual([{amount_minor:12500,refunded_minor:12500}]);
+  await expect(reviewed('Касса-15')).resolves.toBeDefined();
+  await expect(reviewed(' касса-15 ',1000)).rejects.toThrow('version-conflict');
+  expect(await balance()).toEqual([{balance:0}]);
+});
+
+it('never recreates a paused unknown invoice and checks the provider reference recovered by an operator', async () => {
+  await prepareLive();
+  const [sent] = await liveWork();
+  expect(await manage(true)).toMatchObject({paused:true,state:'checking',needs_review:true});
+  await db.admin("update app_private.royalty_checkout_attempt set lease_until=now()-interval '1 second' where id=$1",[sent.id]);
+  expect(await liveWork()).toEqual([]);
+  await expect(cash()).rejects.toThrow('version-conflict');
+  expect(await db.admin('select app_private.royalty_checkout_recover($1,$2) ok',[sent.id,invoice.slice(3)])).toEqual([{ok:true}]);
+  const [check] = await liveWork();
+  expect(check).toMatchObject({id:sent.id,provider_id:invoice});
+  expect(await observe(check,'canceled',null,invoice)).toBe(true);
+  await expect(cash()).resolves.toBeDefined();
 });

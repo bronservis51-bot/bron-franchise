@@ -10,7 +10,7 @@ import { MissingRevenue } from '../../ui/MissingRevenue';
 import { financeDays } from '../finance/financeNavigation';
 
 export interface RoyaltyHomeState {
-  state: 'none' | 'missing_revenue' | 'payable' | 'overdue' | 'checking' | 'unavailable';
+  state: 'none' | 'missing_revenue' | 'payable' | 'overdue' | 'checking' | 'unavailable' | 'paused';
   month: string;
   due_on: string;
   overdue?: boolean;
@@ -50,6 +50,11 @@ export function RoyaltyHomeCard({ status, busy = false, error, onAction }: {
     return <Alert title={t('Роялти пока не удалось проверить', 'Royalty henüz doğrulanamadı')}
       action={<Button size="sm" disabled={busy} onClick={onAction}>{t('Проверить', 'Kontrol et')}</Button>} />;
   }
+  if (status.state === 'paused') {
+    return <Alert title={t('Онлайн-оплата роялти приостановлена', 'Çevrimiçi royalty ödemesi duraklatıldı')}>
+      {t('Уточните статус у менеджера по франшизе.', 'Durumu franchise yöneticisinden öğrenin.')}
+    </Alert>;
+  }
 
   const checking = status.state === 'checking';
   const showBalance = !checking || toBigInt(status.amount_minor) > 0n;
@@ -71,7 +76,7 @@ export function RoyaltyHomeCard({ status, busy = false, error, onAction }: {
   </section>;
 }
 
-type ReturnState = 'checking' | 'paid' | 'canceled' | 'unavailable';
+type ReturnState = 'checking' | 'paid' | 'canceled' | 'unavailable' | 'refunded' | 'partially_refunded';
 const attemptIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 
 export function RoyaltyCheckoutResult({ state, onClose }: { state: ReturnState; onClose: () => void }) {
@@ -79,6 +84,8 @@ export function RoyaltyCheckoutResult({ state, onClose }: { state: ReturnState; 
   const labels: Record<ReturnState, string> = {
     checking: t('Проверяем оплату роялти', 'Royalty ödemesi kontrol ediliyor'),
     paid: t('Оплата подтверждена', 'Ödeme onaylandı'),
+    refunded: t('Оплата полностью возвращена', 'Ödeme tamamen iade edildi'),
+    partially_refunded: t('Часть оплаты возвращена', 'Ödemenin bir kısmı iade edildi'),
     canceled: t('Оплата не завершена', 'Ödeme tamamlanmadı'),
     unavailable: t('Не удалось проверить этот платёж', 'Bu ödeme doğrulanamadı'),
   };

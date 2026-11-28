@@ -6,7 +6,7 @@ import { command } from '../../platform/backend';
 import { formatDate, formatDateTime, isoDate, monthLabel, monthStart, shiftMonth } from '../../platform/dates';
 import { formatMoneyShort } from '../../platform/money';
 import { useSession } from '../../platform/session';
-import { Badge, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, Select } from '../../ui';
+import { ActionError, Badge, Button, Card, ConfirmDialog, DataState, Field, Input, MoneyInput, Select } from '../../ui';
 import { useToast } from '../../ui/toast';
 import { saveFinancialOperation } from '../finance/financeOperations';
 import { manualAdd, manualDelete, paymentDelete, pct, royaltyPartner } from './api';
@@ -30,9 +30,68 @@ function useUndoable() {
   };
 }
 
-type PaymentMatch = { id: string; month: string | null; note: string | null };
+type PaymentMatch = { id: string; month: string | null; note: string | null; provider_payment_id?: string | null };
 type PaymentResult = { id: string } | { matches: PaymentMatch[] };
-type PaymentDraft = { key: string; month: string | null; amount: string; paidOn: string; note: string | null; reviewed: string[] };
+type PaymentDraft = { key: string; month: string | null; amount: string; paidOn: string; note: string | null; reviewed: string[];
+  source: string | null; reference: string | null };
+
+type InvoiceControl = {
+  enabled: boolean; paused: boolean; invoice_id: string | null;
+  state: 'none' | 'checking' | 'pending' | 'canceled' | 'succeeded';
+  needs_review: boolean;
+};
+
+function useRoyaltyInvoice(partner: string, month: string) {
+  const qc = useQueryClient();
+  const key = ['royalty', 'invoice-manager', partner, month] as const;
+  const query = useQuery({
+    queryKey: key, enabled: Boolean(month),
+    queryFn: () => command<InvoiceControl>('royalty_invoice_manage', { partner, month }),
+    refetchInterval: (current) => current.state.data?.paused &&
+      ['pending', 'checking'].includes(current.state.data.state) ? 3_000 : false,
+  });
+  const setPause = useMutation({
+    mutationFn: (pause: boolean) => command<InvoiceControl>('royalty_invoice_manage', { partner, month, pause }),
+    onSuccess: (result) => {
+      qc.setQueryData(key, result);
+      void qc.invalidateQueries({ queryKey: ['royalty'] });
+    },
+  });
+  const blocked = query.data?.state === 'pending' || query.data?.state === 'checking';
+  return { query, setPause, blocked };
+}
+
+function RoyaltyInvoiceControl({ control }: { control: ReturnType<typeof useRoyaltyInvoice> }) {
+  const { query, setPause, blocked } = control;
+  const data = query.data;
+  if (!data?.enabled) return null;
+  const status = data.state === 'checking' ? 'Проверяем исход выставления счёта'
+    : data.state === 'pending' ? 'Счёт ещё можно оплатить'
+    : data.state === 'canceled' ? 'Счёт больше нельзя оплатить'
+    : data.state === 'succeeded' ? 'Оплата по счёту уже подтверждена ЮKassa'
+    : 'Активного счёта нет';
+  return <div className="stack">
+    <strong>{data.paused ? 'Оплата по ссылке приостановлена' : 'Оплата по ссылке доступна'}</strong>
+    <p className="muted">{status}.{data.invoice_id ? ` № ${data.invoice_id}` : ''}</p>
+    {data.paused && blocked && <p className="muted">
+      {data.state === 'checking'
+        ? data.needs_review
+          ? 'Найдите счёт в ЮKassa и передайте его ID администратору для сверки. Пока исход неизвестен, запись оплаты и изменение суммы недоступны.'
+          : 'Дождитесь сверки ЮKassa. Пока исход неизвестен, запись оплаты и изменение суммы недоступны.'
+        : 'Отмените неоплаченный счёт в разделе «Счета клиентам» ЮKassa и дождитесь подтверждения в кабинете.'}
+    </p>}
+    {data.paused && !blocked && <p className="muted">Можно отметить поступление вне ЮKassa или исправить сумму. Возобновите онлайн-оплату, когда будете готовы.</p>}
+    <div className="row wrap">
+      <Button size="sm" disabled={setPause.isPending} onClick={() => setPause.mutate(!data.paused)}>
+        {data.paused ? 'Возобновить онлайн-оплату' : 'Приостановить онлайн-оплату'}
+      </Button>
+      {blocked && <Button size="sm" variant="ghost" disabled={query.isFetching} onClick={() => void query.refetch()}>
+        Проверить статус
+      </Button>}
+    </div>
+    <ActionError error={setPause.error || query.error} />
+  </div>;
+}
 
 export function PaymentDialog({ partner, currency, month, suggested, hasUndated = false, onClose }: {
   partner: { id: string; name: string }; currency: string; month?: string | null; suggested?: number; hasUndated?: boolean; onClose: () => void;
@@ -41,19 +100,25 @@ export function PaymentDialog({ partner, currency, month, suggested, hasUndated 
   const userId = useSession().me?.user.id;
   const initialMonth = month === null && hasUndated ? '' : month ?? shiftMonth(monthStart(), -1);
   const [m, setM] = useState(initialMonth);
+  const invoice = useRoyaltyInvoice(partner.id, m);
   const [enteredAmount, setEnteredAmount] = useState<string>();
   const [amountValid, setAmountValid] = useState(true);
   const amount = enteredAmount ?? (m === initialMonth && suggested && suggested > 0 ? String(suggested) : '');
   const [paidOn, setPaidOn] = useState(isoDate());
   const [note, setNote] = useState('');
+  const [source, setSource] = useState('');
+  const [reference, setReference] = useState('');
   const [review, setReview] = useState<{ key: string; matches: PaymentMatch[] } | null>(null);
-  const reviewKey = JSON.stringify([m, paidOn, amount, note.trim()]);
+  const reviewKey = JSON.stringify([m, paidOn, amount, note.trim(), source, reference.trim()]);
   const matches = review?.key === reviewKey ? review.matches : null;
-  const canSave = !!(amountValid && amount && amount !== '0' && paidOn);
+  const invoicePaid = invoice.query.data?.state === 'succeeded' || !!matches?.some(match => match.provider_payment_id);
+  const needsDocument = Boolean(invoicePaid || source || reference.trim());
+  const canSave = !invoice.blocked && !!(amountValid && amount && amount !== '0' && paidOn) &&
+    (!needsDocument || Boolean(source && reference.trim()));
   const save = useMutation({
     mutationFn: (draft: PaymentDraft) => saveFinancialOperation<PaymentResult>(userId, 'royalty_payment_reviewed', {
       p_partner: partner.id, p_month: draft.month, p_amount: draft.amount, p_paid_on: draft.paidOn,
-      p_note: draft.note, p_reviewed: draft.reviewed,
+      p_note: draft.note, p_reviewed: draft.reviewed, p_source: draft.source, p_reference: draft.reference,
     }),
     onSuccess: (result, draft) => {
       if ('matches' in result) {
@@ -70,9 +135,10 @@ export function PaymentDialog({ partner, currency, month, suggested, hasUndated 
       onConfirm={() => {
         if (canSave && !save.isPending) save.mutate({
           key: reviewKey, month: m || null, amount, paidOn, note: note.trim() || null, reviewed: matches?.map(match => match.id).sort() ?? [],
+          source: source || null, reference: reference.trim() || null,
         });
       }}>
-      <p className="muted">Деньги поступили — отметьте сумму. Ошиблись — нажмите «Отменить» в уведомлении или в журнале операций.</p>
+      <p className="muted">Отметьте получение наличных или прямой перевод франчайзи. Оплата по счёту ЮKassa учитывается автоматически.</p>
       <fieldset className="stack" disabled={save.isPending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="grid grid-2" style={{ gap: 12 }}>
           <Field label="За месяц">{(id) => (
@@ -88,7 +154,20 @@ export function PaymentDialog({ partner, currency, month, suggested, hasUndated 
             onValidityChange={setAmountValid} currency={currency} />}
         </Field>
         <Field label="Комментарий" hint="Укажите номер платёжного документа, если он есть">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
+        {(invoice.query.data?.enabled || invoicePaid) && <div className="grid grid-2" style={{ gap: 12 }}>
+          <Field label="Способ отдельной оплаты" required={needsDocument}>{(id) => (
+            <Select id={id} value={source} onChange={e => setSource(e.target.value)}>
+              <option value="">Выберите способ</option>
+              <option value="cash">Наличные</option>
+              <option value="bank">Банковский перевод вне ЮKassa</option>
+            </Select>
+          )}</Field>
+          <Field label="Номер платёжного документа" required={needsDocument}>{(id) => (
+            <Input id={id} value={reference} maxLength={120} onChange={e => setReference(e.target.value)} />
+          )}</Field>
+        </div>}
       </fieldset>
+      <RoyaltyInvoiceControl control={invoice} />
       {matches && <div className="alert tone-warning" role="status">
         <div className="alert-body">
           <strong>Есть похожая оплата</strong>
@@ -105,6 +184,7 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
   const done = useUndoable();
   const userId = useSession().me?.user.id;
   const [m, setM] = useState(month ?? shiftMonth(monthStart(), -1));
+  const invoice = useRoyaltyInvoice(partner.id, m);
   const ledger = useQuery({ queryKey: ['royalty', 'partner', partner.id], queryFn: () => royaltyPartner(partner.id) });
   const row = ledger.data?.months.find((x) => x.month === m);
   const auto = Number(row?.accrued_minor ?? 0);
@@ -115,7 +195,7 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
   const [targetValid, setTargetValid] = useState(true);
   const [note, setNote] = useState('');
   const delta = Number(target || 0) - auto - corrections;
-  const canSave = ledger.isSuccess && targetValid && target !== '' && Boolean(note.trim()) && delta !== 0;
+  const canSave = !invoice.blocked && ledger.isSuccess && targetValid && target !== '' && Boolean(note.trim()) && delta !== 0;
   const save = useMutation({
     mutationFn: (draft: { month: string; target: string; note: string }) => saveFinancialOperation<{ id: string | null; delta_minor: number }>(userId, 'royalty_set_accrual_only',
       { p_partner: partner.id, p_month: draft.month, p_target: draft.target, p_note: draft.note }),
@@ -162,6 +242,7 @@ export function CorrectionDialog({ partner, currency, month, onClose }: { partne
         </Field>
         <Field label="Причина" required hint="Сохранится в журнале операций">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: пересчитали по акту сверки" />}</Field>
       </fieldset>
+      <RoyaltyInvoiceControl control={invoice} />
     </ConfirmDialog>
   );
 }
@@ -198,12 +279,17 @@ export function ManualDebtDialog({ partner, currency, onClose }: { partner: { id
 }
 
 interface Op { id: string; op: 'payment' | 'past_debt' | 'correction'; partner_id: string; partner_name: string; currency: string; month: string | null;
-  amount_minor: number; note: string | null; paid_on?: string | null; created_at: string; by: string | null }
+  amount_minor: number; note: string | null; paid_on?: string | null; provider_payment_id?: string | null;
+  refunded_minor?: number; external_source?: 'cash' | 'bank' | null; external_reference?: string | null; created_at: string; by: string | null }
 const OP_LABEL: Record<Op['op'], [string, 'success' | 'info' | 'warning']> = {
   payment: ['оплата', 'success'], past_debt: ['прошлый долг', 'warning'], correction: ['исправление', 'info'],
 };
 
-const operationLabel = (op: Op) => op.op === 'payment' && op.paid_on === null ? 'оплата подтверждена без даты' : OP_LABEL[op.op][0];
+const operationLabel = (op: Op) => {
+  if (op.provider_payment_id) return 'оплата ЮKassa';
+  if (op.external_source) return op.external_source === 'cash' ? 'наличные' : 'банковский перевод';
+  return op.op === 'payment' && op.paid_on === null ? 'оплата подтверждена без даты' : OP_LABEL[op.op][0];
+};
 
 /** Журнал операций по роялти с отменой. */
 export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: number }) {
@@ -227,8 +313,10 @@ export function RoyaltyOps({ partner, limit = 15 }: { partner?: string; limit?: 
                     <strong className="num">{o.amount_minor > 0 && o.op === 'correction' ? '+' : ''}{formatMoneyShort(o.amount_minor, o.currency)}</strong>
                     {!partner && <span>{o.partner_name}</span>}</span>
                   <span className="faint" style={{ display: 'block' }}>{o.month ? monthLabel(o.month) : 'Без периода'}{o.note ? ` · ${o.note}` : ''} · {formatDateTime(o.created_at)}{o.by ? ` · ${o.by}` : ''}</span>
+                  {o.external_reference && <span className="faint">Документ № {o.external_reference}</span>}
+                  {!!o.refunded_minor && <span className="faint">Возврат ЮKassa · {formatMoneyShort(o.refunded_minor, o.currency)}</span>}
                 </span>
-                <Button size="sm" variant="ghost" onClick={() => setConfirm(o)}><Undo2 size={14} aria-hidden />Отменить</Button>
+                {!o.provider_payment_id && <Button size="sm" variant="ghost" onClick={() => setConfirm(o)}><Undo2 size={14} aria-hidden />Отменить</Button>}
               </div>
             ))}
           </>

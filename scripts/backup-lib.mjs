@@ -40,7 +40,7 @@ async function privateTablesInOrder(db) {
       and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme',
         'learning_config','learning_task','revenue_day_off','partner_launch_task',
         'pay_scheme','team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact',
-        'royalty_checkout_pilot','royalty_checkout_attempt')
+        'royalty_checkout_pilot','royalty_checkout_attempt','royalty_checkout_hold')
         or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);
   const fks = (await db.query(`select child.relname as child, parent.relname as parent
     from pg_constraint f join pg_class child on child.oid=f.conrelid

@@ -220,7 +220,13 @@ test('records a live invoice payment only when the payment belongs to its live s
   });
   const attempt = { ...liveJob, provider_id: invoiceId };
   assert.deepEqual(await reconcileRoyaltyInvoice(attempt, client),
-    { providerId: invoiceId, status: 'succeeded', checkoutUrl: null, paidOn: '2026-12-06' });
+    { providerId: invoiceId, status: 'succeeded', checkoutUrl: null, paidOn: '2026-12-06', paymentId: providerId, refundedMinor: '0' });
+  payment = { refunded_amount: { value: '12.35', currency: 'RUB' } };
+  assert.equal((await reconcileRoyaltyInvoice(attempt, client)).refundedMinor, '1235');
+  for (const refunded_amount of [{ value: '1234.06', currency: 'RUB' }, { value: '1.00', currency: 'KZT' }]) {
+    payment = { refunded_amount };
+    await assert.rejects(reconcileRoyaltyInvoice(attempt, client), /refund amount/);
+  }
   for (const mismatch of [{ test: true }, { test: undefined }, { recipient: { account_id: '654321' } }]) {
     payment = mismatch;
     await assert.rejects(reconcileRoyaltyInvoice(attempt, client), /Mismatched invoice payment/);
@@ -232,4 +238,19 @@ test('reports provider rejection without including the response body', async () 
   const client = createLiveInvoiceYooKassa(liveSettings, async () => new Response('private response', { status: 401 }));
   await assert.rejects(client.getPayment(providerId), error =>
     error instanceof YooKassaHttpError && error.status === 401 && error.message === 'YooKassa HTTP 401');
+});
+
+test('checks a settled live invoice for refunds using its verified payment reference', async () => {
+  const { createLiveInvoiceYooKassa, reconcileRoyaltyRefund } = await import('../../scripts/royalty-yookassa.mjs');
+  let calls = 0;
+  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
+    calls++;
+    assert.equal(url, 'https://api.yookassa.ru/v3/payments/' + providerId);
+    assert.equal(init.method, 'GET');
+    return response({ invoice_details: { id: invoiceId }, status: 'succeeded', paid: true, test: false,
+      captured_at: '2026-12-05T22:00:00Z', refunded_amount: { value: '1234.05', currency: 'RUB' } });
+  });
+  assert.deepEqual(await reconcileRoyaltyRefund({ ...liveJob, provider_id: invoiceId, payment_id: providerId }, client),
+    { paymentId: providerId, refundedMinor: '123405' });
+  assert.equal(calls, 1);
 });

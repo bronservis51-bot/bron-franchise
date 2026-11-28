@@ -200,6 +200,23 @@ function invoiceDescription(buyerName, period) {
   return visibleName + suffix;
 }
 
+async function verifiedInvoicePayment(client, invoiceId, paymentId, amount) {
+  if (!invoiceIdPattern.test(invoiceId) || !paymentIdPattern.test(paymentId)) throw new Error('Missing invoice payment');
+  const payment = await client.getPayment(paymentId);
+  if (payment?.id !== paymentId || payment.invoice_details?.id !== invoiceId || payment.test !== client.test ||
+      (client.test === false && String(payment.recipient?.account_id) !== client.shopId) ||
+      payment.status !== 'succeeded' || !matchingAmount(payment.amount, amount)) throw new Error('Mismatched invoice payment');
+  const paidOn = verifiedPaidOn(payment);
+  if (client.test !== false) return { paidOn };
+
+  const refund = payment.refunded_amount;
+  if (refund === undefined) return { paidOn, paymentId, refundedMinor: '0' };
+  if (refund?.currency !== amount.currency || !/^\d+\.\d{2}$/.test(refund.value)) throw new Error('Invalid invoice refund amount');
+  const refunded = BigInt(refund.value.replace('.', ''));
+  if (refunded > BigInt(amount.value.replace('.', ''))) throw new Error('Invalid invoice refund amount');
+  return { paidOn, paymentId, refundedMinor: refunded.toString() };
+}
+
 export async function reconcileRoyaltyInvoice(attempt, client) {
   const { amount, period, metadata } = royaltyTerms(attempt);
   if (attempt.provider_id !== null && !invoiceIdPattern.test(attempt.provider_id)) throw new Error('Invalid saved invoice ID');
@@ -237,21 +254,28 @@ export async function reconcileRoyaltyInvoice(attempt, client) {
       !['pending', 'canceled', 'succeeded'].includes(invoice.status)) throw new Error('Mismatched invoice');
 
   let checkoutUrl = null;
-  let paidOn = null;
   if (invoice.status === 'pending') {
     if (invoice.delivery_method?.type !== 'self') throw new Error('Untrusted checkout URL');
     checkoutUrl = verifiedCheckoutUrl(invoice.delivery_method.url);
   }
   if (invoice.status === 'succeeded') {
-    const paymentId = invoice.payment_details?.id;
-    if (!paymentIdPattern.test(paymentId) || invoice.payment_details.status !== 'succeeded') throw new Error('Missing invoice payment');
-    const payment = await client.getPayment(paymentId);
-    if (payment?.id !== paymentId || payment.invoice_details?.id !== invoice.id || payment.test !== client.test ||
-        (client.test === false && String(payment.recipient?.account_id) !== client.shopId) ||
-        payment.status !== 'succeeded' || !matchingAmount(payment.amount, amount)) throw new Error('Mismatched invoice payment');
-    paidOn = verifiedPaidOn(payment);
+    if (invoice.payment_details?.status !== 'succeeded') throw new Error('Missing invoice payment');
+    const detail = await verifiedInvoicePayment(client, invoice.id, invoice.payment_details.id, amount);
+    return { providerId: invoice.id, status: invoice.status, checkoutUrl, ...detail };
   }
-  return { providerId: invoice.id, status: invoice.status, checkoutUrl, paidOn };
+  if (invoice.status === 'canceled' && invoice.payment_details && invoice.payment_details.status !== 'canceled') {
+    throw new Error('Cancellation has an unresolved payment');
+  }
+  return { providerId: invoice.id, status: invoice.status, checkoutUrl, paidOn: null };
+}
+
+export async function reconcileRoyaltyRefund(attempt, client) {
+  if (client.test !== false || !invoiceIdPattern.test(attempt.provider_id)) throw new Error('Invalid refund check');
+  const settled = attempt.payment_id
+    ? await verifiedInvoicePayment(client, attempt.provider_id, attempt.payment_id, royaltyTerms(attempt).amount)
+    : await reconcileRoyaltyInvoice(attempt, client);
+  if (!settled.paymentId) throw new Error('Missing verified invoice payment for refund check');
+  return { paymentId: settled.paymentId, refundedMinor: settled.refundedMinor };
 }
 
 async function run(env) {
@@ -280,12 +304,33 @@ async function run(env) {
       if (!attempt) break;
       try {
         const p = await reconcile(attempt, client);
-        await db.query('select app_private.royalty_checkout_observe($1,$2,$3,$4,$5,$6)',
-          [attempt.id, attempt.lease, p.providerId, p.status, p.checkoutUrl, p.paidOn]);
+        const observation = [attempt.id, attempt.lease, p.providerId, p.status, p.checkoutUrl, p.paidOn];
+        if (live) {
+          await db.query('select app_private.royalty_live_invoice_checkout_observe($1,$2,$3,$4,$5,$6,$7,$8)',
+            [...observation, p.paymentId ?? null, p.refundedMinor ?? null]);
+        } else {
+          await db.query('select app_private.royalty_checkout_observe($1,$2,$3,$4,$5,$6)', observation);
+        }
       } catch (error) {
         // An uncertain request is retried only with the same key; it never produces a journal entry.
         console.error(error instanceof YooKassaHttpError ? error.message : 'Royalty payment could not be reconciled');
         process.exitCode = 1;
+      }
+    }
+    if (live) {
+      const { rows: settled } = await db.query(
+        `select id,lease,month::text as month,amount_minor,provider_id,payment_id
+         from app_private.royalty_live_refund_work(3,$1)`, [config.shopId]);
+      const results = await Promise.allSettled(settled.map(async (payment) => {
+        const refund = await reconcileRoyaltyRefund(payment, client);
+        await db.query('select app_private.royalty_live_refund_observe($1,$2,$3,$4)',
+          [payment.id, payment.lease, refund.paymentId, refund.refundedMinor]);
+      }));
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          console.error(result.reason instanceof YooKassaHttpError ? result.reason.message : 'Royalty refund could not be reconciled');
+          process.exitCode = 1;
+        }
       }
     }
   } finally {
