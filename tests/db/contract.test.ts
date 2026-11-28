@@ -56,7 +56,7 @@ describe('границы модулей в SQL (ARCH-02)', () => {
       '0002_knowledge.sql': ['article_', 'kb_'], '0007_kb_questions.sql': ['kb_'],
       '0003_revenue.sql': ['revenue_', 'shift_'],
       '0009_expenses_rating.sql': ['expense_'],
-      '0005_staff_shifts.sql': ['staff_', 'shift_', 'revenue_delete'], '0004_royalty.sql': ['royalty_'], '0012_leads.sql': ['lead_'],
+      '0005_staff_shifts.sql': ['staff_', 'shift_', 'automatic_pay_', 'revenue_delete'], '0004_royalty.sql': ['royalty_'], '0012_leads.sql': ['lead_'],
     };
     const allowed = new Set(['0001_core.sql']);
     const problems: string[] = [];

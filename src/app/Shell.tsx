@@ -263,7 +263,7 @@ export function Shell() {
     if (!main) return;
     main.scrollTop = 0;
     window.scrollTo(0, 0);
-    main.focus({ preventScroll: true });
+    if (!document.querySelector('dialog.first-run-dialog[open]')) main.focus({ preventScroll: true });
   }, [loc.pathname]);
 
   useLayoutEffect(() => {

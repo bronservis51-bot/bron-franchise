@@ -201,6 +201,7 @@ function FranchiseComparison({ month, showRevenue, showRoyalty, revenue, royalty
           <td>{p ? <>
             <strong className="economy-value">{money(p.payroll_minor, p.currency)}</strong>
             <small>Закрыто смен: {p.closed_shifts}</small>
+            {!!p.payroll_pending && <small>Смен ждут подтверждения: {p.payroll_pending}</small>}
             {p.payroll_halves && <details><summary>График выплат</summary>
               {p.payroll_halves.map((amount, index) => <small key={payrollLabels[index]}>{payrollLabels[index]} · {money(amount, p.currency)}</small>)}
             </details>}

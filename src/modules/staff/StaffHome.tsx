@@ -108,7 +108,8 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
     day === addDays(point.today, -1) ? point.pay_yesterday : undefined);
   const terms = shift ? shift.pay_policy ?? policy : pointTerms;
   const showEstimate = Boolean(shift || pointTerms || (point && day === point.today));
-  const earned = showEstimate && !exceedsLimit ? calculatePay(total, rate, fee, terms) : null;
+  const automatic = terms && 'tiers' in terms && Boolean(terms.automatic);
+  const earned = showEstimate && !exceedsLimit && !automatic ? calculatePay(total, rate, fee, terms) : null;
   const m = useMutation({
     networkMode: 'always',
     mutationFn: async () => {
@@ -163,6 +164,7 @@ function CloseDialog({ userId, shift, points, initialPoint, initialDay, home, re
       {exceedsLimit ? <p className="danger-text" role="alert">{t(`Сумма смены не может превышать ${formatMoneyShort(maxShiftTotal, currency, locale)}.`, `Vardiya tutarı en fazla ${formatMoneyShort(maxShiftTotal, currency, locale)} olabilir.`)}</p> :
         <div className="day-total-line"><span>{t('Выручка смены', 'Vardiya cirosu')}</span><Money minor={total} currency={currency} strong /></div>}
       {(shift?.counts_as_exit === false || terms?.additional_point) && <p className="faint">{t('Выход за эту дату уже учтён на другой точке.', 'Bu tarihin vardiya ücreti başka bir mağazada hesaplandı.')}</p>}
+      {automatic && <p className="faint">{t('Заработок рассчитывается по общей кассе дня и составу смены.', 'Kazanç günlük toplam ciro ve çalışan sayısına göre hesaplanır.')}</p>}
       {earned !== null && <div className="earn-line"><span>{t('Ожидаемое начисление', 'Tahmini kazanç')}</span><Money minor={earned} currency={currency} strong /></div>}
       <Field label={t('Комментарий', 'Not')}>{(id) => <Input id={id} ref={commentInput} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('Необязательно', 'İsteğe bağlı')} />}</Field>
     </ConfirmDialog>
@@ -288,7 +290,8 @@ function ShiftMonth({ data: d, current, compact }: { data: StaffHomeData; curren
             {s.counts_as_exit === false && <span>{t('Дополнительная точка', 'Ek mağaza')}</span>}
             {s.return_minor ? <span>{t('Возврат', 'İade')} <Money minor={s.return_minor} currency={d.currency} short /></span> : null}
           </div>
-          <Money minor={s.earned_minor ?? 0} currency={d.currency} short strong />
+          {s.earned_minor === null ? <span>{t('Ожидает расчёта', 'Hesaplama bekleniyor')}</span>
+            : <Money minor={s.earned_minor} currency={d.currency} short strong />}
         </li>
       ))}
     </ul>
@@ -377,6 +380,8 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
                 currency={currency} announce={saved?.shift.id === shift.id}>
                 {canCorrect(shift) && <Button size="sm" disabled={shiftBlocked(shift.id) || shiftBlocked(targetKey(shift.location_id, shift.day))}
                   onClick={() => setClosing({ shift: { ...shift, location_name: pointName } })}>{t('Исправить смену', 'Vardiyayı düzelt')}</Button>}
+                {shift.earned_minor === null && shift.pay_policy && 'tiers' in shift.pay_policy && shift.pay_policy.automatic
+                  && <p className="faint">{t('Начисление появится после подтверждения общей кассы и состава.', 'Kazanç toplam ciro ve çalışanlar onaylandıktan sonra görünür.')}</p>}
               </ShiftReceipt>
             );
             return (
@@ -457,7 +462,7 @@ function StaffShifts({ userId, pointRevenue }: { userId: string; pointRevenue?: 
             setResult('queued' in response
               ? { queued: { ...submitted, previousQueue: qc.getQueryData<QueueSnapshot>(queueKey) } }
               : { saved: { shift: response.shift, currency: response.currency ?? submitted.currency, pointName: response.shift.location_name ?? submitted.pointName } });
-            for (const name of ['staff', 'staff-list', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
+            for (const name of ['staff', 'staff-list', 'automatic-pay-days', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
               void qc.invalidateQueries({ queryKey: [name] });
             }
           }} />

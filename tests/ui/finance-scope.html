@@ -30,6 +30,7 @@ try {
   const fetchFixture = app.fetch;
   const scopes = [];
   const saves = [];
+  const manualSaves = [];
   const repeats = [];
   const outlet = { id: 'cb952096-9771-40c8-a182-0cdca77d759c', name: 'Торговый центр с очень длинным названием', status: 'active' };
   const locations = [outlet];
@@ -71,8 +72,12 @@ try {
     }
     if (url.pathname.endsWith('/rpc/financial_operation')) {
       const { p_command: command, p_args: args } = JSON.parse(init.body);
-      if (command === 'expense_save_with_recurring') {
+      if (command === 'expense_save_repeating') {
         saves.push(args);
+        return Promise.resolve(app.Response.json(commonExpense.id));
+      }
+      if (command === 'expense_save_with_recurring') {
+        manualSaves.push(args);
         return Promise.resolve(app.Response.json(commonExpense.id));
       }
       if (command === 'expense_repeat_checked') {
@@ -154,27 +159,51 @@ try {
     button(doc, 'Добавить расход').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
     const select = dialog.querySelector('select');
-    assert(select?.value === (locations.length === 1 ? outlet.id : ''), 'изменилось начальное назначение расхода');
-    assert([...select.options].some(option => option.value === '' && option.textContent === 'Общий — на все точки'), 'нет общего назначения');
+    assert(select?.value === outlet.id, 'новый расход должен начинаться с отдельной точки');
+    assert(select.options[select.options.length - 1].textContent === 'Общий — на все точки', 'общее назначение должно идти после точек');
+    const quickCategory = button(dialog, 'Аренда');
+    assert(quickCategory, 'нет кнопки быстрого выбора общей категории');
+    quickCategory.click();
+    const repeat = dialog.querySelector('input[type=checkbox]');
+    assert(repeat?.labels[0]?.textContent.includes('Повторяющийся расход') && !repeat.checked, 'повторение не является добровольным');
+    assert(dialog.textContent.includes('Расход будет автоматически повторяться каждый месяц.'), 'нет подсказки о повторении');
+    repeat.click();
     selectValue(select, '');
-    fieldValue(dialog.querySelector('input[list]'), 'Аренда');
     fieldValue(dialog.querySelector('input[inputmode=decimal]'), '25,50');
     assert(dialog.scrollWidth <= dialog.clientWidth, 'содержимое диалога выходит за его ширину');
     await wait(0);
     button(dialog, 'Добавить расход').click();
     const save = await until(() => saves[0]);
-    assert(save.p_location === null && save.p_amount === '2550' && save.p_note === null, 'неверная сумма или область общего расхода');
+    assert(save.p_location === null && save.p_amount === '2550' && save.p_note === null && save.p_category === 'Аренда' &&
+      save.p_recurring === true, 'неверная категория, сумма, область или признак повторения');
     await until(() => !dialog.isConnected);
   });
   await check('неверная сумма в существующем расходе', async () => {
-    const count = saves.length;
+    const count = saves.length + manualSaves.length;
     doc.querySelector('.expense-row').click();
     const dialog = await until(() => doc.querySelector('dialog[open]'));
+    assert(dialog.querySelector('select')?.value === '', 'существующий общий расход сменил назначение');
     fieldValue(dialog.querySelector('input[inputmode=decimal]'), '25x');
     await wait(0);
     button(dialog, 'Сохранить').click();
     await wait(50);
-    assert(saves.length === count, 'неверный ввод отправил предыдущую сумму');
+    assert(saves.length + manualSaves.length === count, 'неверный ввод отправил предыдущую сумму');
+  });
+  await check('отключение ручного переноса', async () => {
+    doc.querySelector('.expense-row').click();
+    const dialog = await until(() => doc.querySelector('dialog[open]'));
+    const [automatic, manual] = dialog.querySelectorAll('input[type=checkbox]');
+    assert(manual?.labels[0]?.textContent.includes('Переносить вручную') && manual.checked && !automatic.checked,
+      'не сохранилось исходное состояние ручного переноса');
+    automatic.click();
+    assert(automatic.checked && !manual.checked, 'автоматический и ручной режимы включены вместе');
+    manual.click();
+    assert(manual.checked && !automatic.checked, 'ручной перенос не выключил автоматический режим');
+    manual.click();
+    button(dialog, 'Сохранить').click();
+    const save = await until(() => manualSaves[0]);
+    assert(save.p_id === commonExpense.id && save.p_recurring === false, 'сохранение не отключило ручной перенос');
+    await until(() => !dialog.isConnected);
   });
   await check('роялти одной строкой внутри расходов', async () => {
     const report = await until(() => doc.querySelector('.finance-royalty-history'));

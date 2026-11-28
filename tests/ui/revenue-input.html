@@ -97,7 +97,7 @@ try {
   button(offDialog, 'Сохранить').click();
   const todayOff = await until(() => button(app.document, 'Сегодня выходной'));
   assert(dayOffWrites.length === 1 && dayOffWrites[0].p_day_off === true && saves.length === 0, 'выходной отправлен как выручка');
-  assert(app.document.querySelector('.home-missing')?.textContent.includes('Не внесена выручка'), 'исчезло напоминание за остальные дни');
+  assert(app.document.querySelector('.home-missing')?.textContent.includes('Занесите выручку'), 'исчез призыв занести выручку за остальные дни');
   assert(![...app.document.querySelectorAll('.home-missing-dates a')].some(link => link.textContent === '04.11'), 'выходной остался в пропусках');
   todayOff.click();
   const undoDialog = await until(() => app.document.querySelector('dialog[open]'));

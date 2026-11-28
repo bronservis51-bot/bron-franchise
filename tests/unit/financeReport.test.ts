@@ -73,6 +73,27 @@ describe('monthly operating statement', () => {
     expect(rows.at(-1)?.minor).toBe(-535n);
   });
 
+  it('shows the result as preliminary until automatic shifts are confirmed', () => {
+    const rows = financeReportRows({ revenue_minor: 12000, payroll_minor: 900, payroll_pending: 2,
+      royalty_minor: 0, expenses_minor: 0, net_minor: 11100 }, []);
+    expect(rows.find(row => row.id === 'payroll')).toMatchObject({ minor: -900n, detail: 'Смен ждут подтверждения: 2' });
+    expect(rows.at(-1)).toMatchObject({ label: 'Предварительный остаток', minor: 11100n });
+  });
+
+  it.each([
+    { billed: 0, waived: 7000, until: '2026-12-01', net: 75000 },
+    { billed: 1400, waived: 5600, until: '2026-11-25', net: 73600 },
+  ])('shows waived royalty after the balance and counts only $billed as an expense', ({ billed, waived, until, net }) => {
+    const rows = financeReportRows({ revenue_minor: 100000, payroll_minor: 20000,
+      royalty_minor: billed, waived_royalty_minor: waived, royalty_holiday_until: until,
+      expenses_minor: 5000, net_minor: net }, []);
+    const balanceIndex = rows.findIndex(row => row.id === 'result');
+    expect(rows.find(row => row.id === 'expenses')?.minor).toBe(-BigInt(25000 + billed));
+    expect(rows[balanceIndex].minor).toBe(BigInt(net));
+    expect(rows.find(row => row.id === 'royalty')?.minor).toBe(billed ? -BigInt(billed) : undefined);
+    expect(rows[balanceIndex + 1]).toMatchObject({ id: 'royalty-holiday', minor: BigInt(waived), indent: 0, total: false });
+  });
+
   it('shows the two payment periods in December without counting payroll twice', () => {
     const totals = { month: '2026-12-01', revenue_minor: 12000, payroll_minor: 5000, payroll_halves: [1800, 3200] as const,
       royalty_minor: 0, expenses_minor: 0, net_minor: 7000 };

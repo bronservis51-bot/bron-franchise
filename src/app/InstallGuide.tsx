@@ -16,21 +16,19 @@ export function InstallGuide({ device, host, macSafari }: {
       : safariDesktop ? t('Добавить в Dock', 'Dock’a Ekle') : t('Установить приложение', 'Uygulamayı yükle');
   const confirm = ios || safariDesktop ? t('Добавить', 'Ekle') : t('Установить', 'Yükle');
   const browserInstruction = ios
-    ? t('Откройте кабинет в Safari и нажмите «Поделиться». Если видите кнопку «Ещё» (…), сначала нажмите её.', 'Paneli Safari’de açıp “Paylaş”a dokunun. “Daha Fazla” (…) görünüyorsa önce ona dokunun.')
+    ? t('В Safari нажмите «Поделиться».', 'Safari’de “Paylaş”a dokunun.')
     : android
-      ? t('Откройте кабинет в Chrome и нажмите ⋮ рядом с адресной строкой.', 'Paneli Chrome’da açıp adres çubuğunun yanındaki ⋮ simgesine dokunun.')
+      ? t('В Chrome нажмите ⋮.', 'Chrome’da ⋮ simgesine dokunun.')
       : safariDesktop
-        ? t('Откройте кабинет в Safari и выберите меню «Файл».', 'Paneli Safari’de açıp “Dosya” menüsünü seçin.')
-        : t('Откройте кабинет в Chrome или Edge. Нажмите значок установки в адресной строке или найдите установку в меню браузера.', 'Paneli Chrome veya Edge’de açın. Adres çubuğundaki yükleme simgesini kullanın ya da tarayıcı menüsünden yüklemeyi seçin.');
+        ? t('В Safari откройте меню «Файл».', 'Safari’de “Dosya” menüsünü açın.')
+        : t('В Chrome или Edge нажмите значок установки.', 'Chrome veya Edge’de yükleme simgesine tıklayın.');
   const installInstruction = ios
-    ? t('Выберите «На экран „Домой“». Если есть переключатель «Открыть как веб-приложение», включите его. Нажмите «Добавить».',
-      '“Ana Ekrana Ekle”yi seçin. “Web Uygulaması Olarak Aç” anahtarı varsa açın. “Ekle”ye dokunun.')
+    ? t('«На экран „Домой“» → «Добавить».', '“Ana Ekrana Ekle” → “Ekle”.')
     : android
-      ? t('Выберите «Установить и создать ярлык» → «Установить». В некоторых версиях Chrome этот пункт называется «Добавить на главный экран». Если появится выбор, нажмите «Установить».',
-        '“Yükle ve kısayol oluştur” → “Yükle”yi seçin. Bazı Chrome sürümlerinde bu seçenek “Ana ekrana ekle” olarak görünür. Seçim sunulursa “Yükle”ye dokunun.')
+      ? t('«Установить и создать ярлык» → «Установить».', '“Yükle ve kısayol oluştur” → “Yükle”.')
       : safariDesktop
-        ? t('В меню выберите «Добавить в Dock» и нажмите «Добавить».', 'Menüden “Dock’a Ekle”yi seçip “Ekle”ye tıklayın.')
-        : t('Выберите установку приложения и подтвердите её.', 'Uygulamayı yüklemeyi seçip onaylayın.');
+        ? t('«Добавить в Dock» → «Добавить».', '“Dock’a Ekle” → “Ekle”.')
+        : t('Подтвердите установку.', 'Yüklemeyi onaylayın.');
   const appIcon = `${import.meta.env.BASE_URL}icons/${icon}`;
 
   return <ol className="install-steps">
@@ -50,6 +48,8 @@ export function InstallGuide({ device, host, macSafari }: {
           <BookOpen size={17} /><PanelsTopLeft size={17} />
         </div>}
       </div>
+      {ios && <p className="install-step-note">{t('В компактном меню сначала нажмите «Ещё» (…).', 'Kompakt menüde önce “Daha Fazla” (…) düğmesine dokunun.')}</p>}
+      {device === 'desktop' && !safariDesktop && <p className="install-step-note">{t('Установка также есть в меню браузера.', 'Yükleme seçeneği tarayıcı menüsünde de bulunur.')}</p>}
     </li>
     <li>
       <p>{installInstruction}</p>
@@ -60,11 +60,13 @@ export function InstallGuide({ device, host, macSafari }: {
         </div>}
         <div className="install-menu-action"><span>{confirm}</span></div>
       </div>
+      {ios && <p className="install-step-note">{t('Включите «Открыть как веб-приложение», если есть такой переключатель.', 'Varsa “Web Uygulaması Olarak Aç” seçeneğini açın.')}</p>}
+      {android && <p className="install-step-note">{t('В некоторых версиях «Добавить на главный экран» → «Установить».', 'Bazı sürümlerde “Ana ekrana ekle” → “Yükle”.')}</p>}
     </li>
     <li>
       <p>{device === 'desktop'
-        ? t(`Открывайте кабинет через значок «${name}» на компьютере. У приложения своё окно без адресной строки.`, `Paneli bilgisayarınızdaki “${name}” simgesinden açın. Uygulamanın adres çubuğu olmayan kendi penceresi vardır.`)
-        : t(`Открывайте кабинет со значка «${name}» на домашнем экране. Если установка прошла правильно, кабинет откроется без адресной строки браузера.`, `Paneli ana ekrandaki “${name}” simgesinden açın. Kurulum tamamlandıysa panel tarayıcı adres çubuğu olmadan açılır.`)}</p>
+        ? t(`Откройте кабинет через значок «${name}».`, `Paneli “${name}” simgesinden açın.`)
+        : t(`На главном экране нажмите значок «${name}».`, `Ana ekrandaki “${name}” simgesine dokunun.`)}</p>
       <div className="install-figure install-launch-sample" aria-hidden="true">
         <div className="install-home-sample" data-device={device}>
           <img className="install-launch-icon" src={appIcon} width={48} height={48} alt="" />
@@ -76,6 +78,7 @@ export function InstallGuide({ device, host, macSafari }: {
           <span /><span /><span />
         </div>
       </div>
+      <p className="install-step-note">{t('Кабинет откроется без адресной строки.', 'Panel adres çubuğu olmadan açılır.')}</p>
     </li>
   </ol>;
 }

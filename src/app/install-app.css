@@ -28,7 +28,8 @@
 .install-steps > li { padding-inline-start: var(--space-1); }
 .install-steps > li + li { margin-block-start: var(--space-4); }
 .install-steps > li::marker { font-weight: 700; color: var(--link); }
-.install-steps > li > p { margin-bottom: var(--space-2); }
+.install-steps > li > p:first-child { margin-bottom: var(--space-2); font-weight: 650; }
+.install-steps .install-step-note { margin: var(--space-1) 0 0; color: var(--text-2); font-size: var(--fs-s); }
 
 .install-figure {
   border: 1px solid var(--border);

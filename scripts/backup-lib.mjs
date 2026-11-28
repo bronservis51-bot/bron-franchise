@@ -38,6 +38,7 @@ async function privateTablesInOrder(db) {
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='app_private' and c.relkind='r'
       and (c.relname in ('supply_snapshot','supply_counterparty','operation_receipt','motivation_scheme',
+        'automatic_pay_basis','expense_repeat_schedule','expense_repeat_omission',
         'learning_config','learning_task','revenue_day_off','partner_launch_task',
         'pay_scheme','team_pay_version','employee_pay_version','employee_daily_exit','lead_recontact')
         or c.relname ~ '^(procurement|learning)_[a-z_]+$') order by c.relname`)).rows.map(r => r.name);

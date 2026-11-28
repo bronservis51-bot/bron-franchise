@@ -52,34 +52,18 @@ dialog.first-run-dialog::backdrop {
   outline-color: #c3d2ff;
 }
 
-.guide-arrow {
-  position: absolute;
-  height: 2px;
-  background: var(--guide-ring);
-  transform-origin: left center;
-  pointer-events: none;
-}
-
-.guide-arrow::after {
-  position: absolute;
-  top: -4px;
-  right: 0;
-  width: 8px;
-  height: 8px;
-  content: "";
-  border-top: 2px solid var(--guide-ring);
-  border-right: 2px solid var(--guide-ring);
-  rotate: 45deg;
-}
-
 .guide-card {
+  --guide-bottom: calc(82px + env(safe-area-inset-bottom));
   position: absolute;
-  top: 12px;
-  left: 12px;
+  left: 50%;
+  bottom: var(--guide-bottom);
+  transform: translateX(-50%);
   width: min(386px, 100% - 24px);
-  max-height: calc(100% - 24px);
+  height: min(264px, calc(100% - var(--guide-bottom) - 12px));
+  display: flex;
+  flex-direction: column;
   padding: clamp(12px, 3.5vw, 18px);
-  overflow: hidden auto;
+  overflow: hidden;
   overscroll-behavior: none;
   overflow-wrap: anywhere;
   background: var(--surface);
@@ -88,8 +72,27 @@ dialog.first-run-dialog::backdrop {
   box-shadow: var(--shadow-2);
 }
 
+@media (min-width: 961px) {
+  .guide-card {
+    --guide-top: clamp(12px, 20%, 160px);
+    left: auto;
+    right: clamp(12px, 4vw, 48px);
+    top: var(--guide-top);
+    bottom: auto;
+    height: min(264px, calc(100% - var(--guide-top) - 12px));
+    transform: none;
+  }
+}
+
+.first-run-dialog[data-short="true"] .guide-card {
+  --guide-bottom: 12px;
+  --guide-top: 12px;
+  overflow-y: auto;
+}
+
 .guide-meta {
   display: flex;
+  flex: none;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-3);
@@ -101,6 +104,7 @@ dialog.first-run-dialog::backdrop {
 
 .guide-progress {
   display: flex;
+  flex: none;
   gap: 5px;
 }
 
@@ -114,6 +118,15 @@ dialog.first-run-dialog::backdrop {
 .guide-progress > [data-current="true"] {
   background: var(--link);
 }
+
+.guide-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.first-run-dialog[data-short="true"] .guide-body { flex: none; overflow: visible; }
 
 .guide-content {
   display: grid;
@@ -146,6 +159,7 @@ dialog.first-run-dialog::backdrop {
 
 .guide-actions {
   display: flex;
+  flex: none;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--space-1);

@@ -19,7 +19,7 @@ export function MissingRevenue({ points, hint }: { points: MissingRevenuePoint[]
   return <details className="home-disclosure home-missing">
     <summary>
       <span className="home-missing-label">
-        <strong>{t('Не внесена выручка', 'Gelir kaydı eksik')}</strong>
+        <strong>{t('Занесите выручку', 'Ciroyu girin')}</strong>
         {count ? <span>{t(`${count} дн.`, `${count} gün`)}</span> : null}
       </span>
       <ChevronDown size={18} aria-hidden />

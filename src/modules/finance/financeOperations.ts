@@ -1,7 +1,7 @@
 import { AppError, captureSession, command } from '../../platform/backend';
 import { operationKey } from '../../platform/operation';
 
-type CheckedOperation = 'royalty_payment_reviewed' | 'royalty_set_accrual_only' | 'expense_save_with_recurring' | 'expense_repeat_checked';
+type CheckedOperation = 'royalty_payment_reviewed' | 'royalty_set_accrual_only' | 'expense_save_with_recurring' | 'expense_save_repeating' | 'expense_repeat_checked';
 
 export async function saveFinancialOperation<T>(userId: string | undefined, name: CheckedOperation, args: Record<string, unknown>) {
   if (!userId) throw new AppError('unauthenticated', 'Войдите в исходную учётную запись и повторите действие.', '', '');

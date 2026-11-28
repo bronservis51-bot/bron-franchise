@@ -3,14 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { command, toAppError } from '../../platform/backend';
 import { formatDate } from '../../platform/dates';
 import { formatMoneyShort, parseMoney } from '../../platform/money';
-import { ActionError, Button, Card, DataState, Field, Input, MoneyInput } from '../../ui';
+import { ActionError, Button, Card, DataState, Field, Input, MoneyInput, Select } from '../../ui';
 import { currencySymbol } from './CustomPayFields';
 import { pctBp } from './api';
 import { PayCatalogue, PayDraftFields, usePayDraft } from './PaySchemes';
 import { useLocale } from '../../platform/locale';
 import './pay-settings.css';
 
-export type PayPolicy = { floor_minor: number; tiers: { from_minor: number; rate_bp: number; bonus_minor: number }[] };
+type PayTier = { from_minor: number; rate_bp: number; bonus_minor: number };
+export type AutomaticPaySettings = { location_id: string; currency: 'RUB'; source?: 'history' | 'starter'; staffing: Partial<Record<2 | 3, PayTier[]>> };
+export type PayPolicy = { floor_minor: number; tiers: PayTier[]; automatic?: AutomaticPaySettings };
 export type ShiftPolicy = (PayPolicy | { mode: 'legacy'; rate_bp: number; fee_minor: number }) & { additional_point?: boolean; name?:string };
 type DatedPolicy<P = ShiftPolicy> = { effective_from: string; policy: P };
 type Motivation = { version: number; policy: ShiftPolicy; currency: string; today?: string;
@@ -56,15 +58,26 @@ export function PayExample({ currency, policy, traineePolicy }: { currency: stri
   const {t}=useLocale();
   const [revenue, setRevenue] = useState(() => String(parseMoney('10000', currency)));
   const [valid, setValid] = useState(true);
+  const [staffCount, setStaffCount] = useState<1 | 2 | 3>(1);
+  const automatic = policy && 'tiers' in policy ? policy.automatic : undefined;
+  const staffTiers = automatic && staffCount !== 1 ? automatic.staffing[staffCount] : undefined;
+  const examplePolicy: ShiftPolicy | null = staffTiers && policy && 'tiers' in policy ? { ...policy, tiers: staffTiers } : policy;
   return <section className="pay-example" aria-label={t('Пример расчёта','Hesaplama örneği')}>
     <h4>{t('Пример расчёта','Hesaplama örneği')}</h4>
-    <Field label={t('Выручка за смену','Vardiya cirosu')+', '+currencySymbol(currency)} error={!valid ? t('Введите сумму выручки','Ciro tutarını girin') : undefined}>{(id, describedBy) =>
+    {automatic && Object.keys(automatic.staffing).length > 0 && <Field label={t('Сотрудников на точке','Mağazadaki çalışan sayısı')}>{id =>
+      <Select id={id} value={staffTiers ? staffCount : 1} onChange={e=>setStaffCount(Number(e.target.value) as 1 | 2 | 3)}>
+        <option value="1">1</option>
+        {automatic.staffing[2] && <option value="2">2</option>}
+        {automatic.staffing[3] && <option value="3">3</option>}
+      </Select>}
+    </Field>}
+    <Field label={(automatic ? t('Общая касса точки за день','Mağazanın günlük toplam cirosu') : t('Выручка за смену','Vardiya cirosu'))+', '+currencySymbol(currency)} error={!valid ? t('Введите сумму выручки','Ciro tutarını girin') : undefined}>{(id, describedBy) =>
       <MoneyInput id={id} value={revenue} currency={currency} describedBy={describedBy} placeholder="0"
         onChange={setRevenue} onValidityChange={setValid} />}</Field>
     <div aria-live="polite">
       {valid && !policy && !traineePolicy && <p className="pay-help">{t('Для расчёта проверьте поля схемы.','Hesaplama için plan alanlarını kontrol edin.')}</p>}
       {valid && traineePolicy && <ExampleResult label={t('На стажировке','Staj sırasında')} currency={currency} total={BigInt(revenue || '0')} policy={traineePolicy} />}
-      {valid && policy && <ExampleResult label={traineePolicy !== undefined ? t('После стажировки','Stajdan sonra') : t('Сотрудник получит','Çalışanın kazancı')} currency={currency} total={BigInt(revenue || '0')} policy={policy} />}
+      {valid && examplePolicy && <ExampleResult label={traineePolicy !== undefined ? t('После стажировки','Stajdan sonra') : t('Сотрудник получит','Çalışanın kazancı')} currency={currency} total={BigInt(revenue || '0')} policy={examplePolicy} />}
     </div>
   </section>;
 }
