@@ -1,0 +1,21 @@
+[Unit]
+Description=Restricted YooKassa invoice gateway for Bron Franchise
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=bron-royalty-gateway
+WorkingDirectory=/opt/bron/royalty-gateway
+EnvironmentFile=/etc/bron-franchise/royalty-invoice.env
+UnsetEnvironment=BRON_ROYALTY_LIVE_DATABASE_URL DATABASE_URL NODE_OPTIONS NODE_EXTRA_CA_CERTS NODE_USE_ENV_PROXY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+Environment=PATH=/opt/bron/node-v22.23.5-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/bron/royalty-gateway/royalty-invoice-gateway.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+InaccessiblePaths=-/etc/bron-franchise/royalty-invoice-worker.env -/opt/bron/royalty-invoice
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+UMask=0077

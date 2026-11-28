@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { rootCertificates } from 'node:tls';
 import test from 'node:test';
 import { createMockInvoiceYooKassa, createTestYooKassa, reconcileRoyaltyAttempt, reconcileRoyaltyInvoice, royaltyTestConfig } from '../../scripts/royalty-yookassa.mjs';
 
@@ -168,37 +172,57 @@ test('invoice verification accepts only a loopback mock endpoint', async () => {
   }
 });
 
-const liveSettings = { shopId: '123456', key: 'live_fixture' };
+const liveSettings = { shopId: '123456', socketPath: '/run/bron-royalty-gateway/invoice.sock' };
 const liveEnv = {
   BRON_YOOKASSA_MODE: 'invoice_live', YOOKASSA_LIVE_SHOP_ID: liveSettings.shopId,
-  YOOKASSA_LIVE_SECRET: liveSettings.key, BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@db.example/postgres',
+  BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@127.0.0.1/postgres',
 };
 const liveJob = { ...invoiceJob, invoice_receipt_email: 'buyer@example.test' };
 
-test('uses only explicit live credentials and a distinct database for live invoices', async () => {
+test('requires the separate live gateway and a distinct loopback database', async () => {
   const { royaltyLiveInvoiceConfig } = await import('../../scripts/royalty-yookassa.mjs');
   assert.equal(typeof royaltyLiveInvoiceConfig, 'function');
   assert.deepEqual(royaltyLiveInvoiceConfig(liveEnv), { ...liveSettings, databaseUrl: liveEnv.BRON_ROYALTY_LIVE_DATABASE_URL });
   for (const invalid of [
-    { YOOKASSA_LIVE_SECRET: 'test_fixture' }, { YOOKASSA_LIVE_SECRET: undefined },
+    { YOOKASSA_LIVE_SECRET: 'live_fixture' }, { YOOKASSA_TEST_SECRET: 'test_fixture' },
+    { BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@db.example/postgres' },
     { BRON_YOOKASSA_MODE: 'invoice_mock' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' },
     { BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@localhost/bron_royalty_test' },
     { BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@localhost/postgres?dbname=bron_royalty_test' },
   ]) assert.throws(() => royaltyLiveInvoiceConfig({ ...liveEnv, ...invalid }));
 });
 
-test('issues invoices on the fixed HTTPS origin with a receipt email and without redirecting credentials', async () => {
+test('accepts an explicitly pinned private PostgreSQL address with TLS and rejects public or changed destinations', async t => {
+  const { royaltyLiveInvoiceConfig } = await import('../../scripts/royalty-yookassa.mjs');
+  const temp = await mkdtemp(join(tmpdir(), 'bron-royalty-ca-'));
+  t.after(() => rm(temp, { recursive: true, force: true }));
+  const ca = join(temp, 'ca.pem');
+  await writeFile(ca, rootCertificates[0]);
+  const config = {
+    ...liveEnv, BRON_ROYALTY_DB_IP: '172.18.3.12', BRON_DB_CA_FILE: ca,
+    BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@172.18.3.12/postgres?sslmode=verify-full',
+  };
+  assert.equal(royaltyLiveInvoiceConfig(config).databaseUrl, config.BRON_ROYALTY_LIVE_DATABASE_URL);
+  assert.throws(() => royaltyLiveInvoiceConfig({ ...config, BRON_DB_CA_FILE: undefined }));
+  assert.throws(() => royaltyLiveInvoiceConfig({ ...config, BRON_ROYALTY_DB_IP: '172.18.3.13' }));
+  assert.throws(() => royaltyLiveInvoiceConfig({ ...config, BRON_ROYALTY_DB_IP: '203.0.113.7',
+    BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@203.0.113.7/postgres' }));
+  assert.throws(() => royaltyLiveInvoiceConfig({ ...liveEnv, BRON_DB_ALLOW_LOCAL_PLAIN: '1',
+    BRON_ROYALTY_LIVE_DATABASE_URL: 'postgres://worker@127.0.0.1/postgres?sslmode=disable' }));
+});
+
+test('issues invoices through the Unix socket without a shop key in its request', async () => {
   const { createLiveInvoiceYooKassa } = await import('../../scripts/royalty-yookassa.mjs');
   const calls = [];
-  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
-    calls.push({ url, init, body: JSON.parse(init.body) });
+  const client = createLiveInvoiceYooKassa(liveSettings, async (socketPath, path, init) => {
+    calls.push({ socketPath, path, init, body: JSON.parse(init.body) });
     return invoiceResponse();
   });
   assert.equal((await reconcileRoyaltyInvoice(liveJob, client)).checkoutUrl, invoiceLink);
-  assert.equal(calls[0].url, 'https://api.yookassa.ru/v3/invoices');
+  assert.equal(calls[0].socketPath, liveSettings.socketPath);
+  assert.equal(calls[0].path, '/v3/invoices');
   assert.equal(calls[0].init.method, 'POST');
-  assert.equal(calls[0].init.redirect, 'error');
-  assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Basic ' + Buffer.from('123456:live_fixture').toString('base64'));
+  assert.equal(new Headers(calls[0].init.headers).get('Authorization'), null);
   assert.equal(new Headers(calls[0].init.headers).get('Idempotence-Key'), job.id);
   assert.deepEqual(calls[0].body.payment_data.receipt.customer, { email: 'buyer@example.test' });
   assert.equal(calls[0].body.payment_data.receipt.items[0].measure, 'piece');
@@ -209,12 +233,12 @@ test('issues invoices on the fixed HTTPS origin with a receipt email and without
 test('records a live invoice payment only when the payment belongs to its live shop and invoice', async () => {
   const { createLiveInvoiceYooKassa } = await import('../../scripts/royalty-yookassa.mjs');
   let payment = {};
-  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
+  const client = createLiveInvoiceYooKassa(liveSettings, async (_socket, path, init) => {
     assert.equal(init.method, 'GET');
-    if (url.endsWith('/invoices/' + invoiceId)) {
+    if (path === '/v3/invoices/' + invoiceId) {
       return invoiceResponse({ status: 'succeeded', payment_details: { id: providerId, status: 'succeeded' } });
     }
-    assert.equal(url, 'https://api.yookassa.ru/v3/payments/' + providerId);
+    assert.equal(path, '/v3/payments/' + providerId);
     return response({ invoice_details: { id: invoiceId }, status: 'succeeded', paid: true, test: false,
       captured_at: '2026-12-05T22:00:00Z', ...payment });
   });
@@ -243,9 +267,9 @@ test('reports provider rejection without including the response body', async () 
 test('checks a settled live invoice for refunds using its verified payment reference', async () => {
   const { createLiveInvoiceYooKassa, reconcileRoyaltyRefund } = await import('../../scripts/royalty-yookassa.mjs');
   let calls = 0;
-  const client = createLiveInvoiceYooKassa(liveSettings, async (url, init) => {
+  const client = createLiveInvoiceYooKassa(liveSettings, async (_socket, path, init) => {
     calls++;
-    assert.equal(url, 'https://api.yookassa.ru/v3/payments/' + providerId);
+    assert.equal(path, '/v3/payments/' + providerId);
     assert.equal(init.method, 'GET');
     return response({ invoice_details: { id: invoiceId }, status: 'succeeded', paid: true, test: false,
       captured_at: '2026-12-05T22:00:00Z', refunded_amount: { value: '1234.05', currency: 'RUB' } });

@@ -1,13 +1,15 @@
 [Unit]
 Description=Bron Franchise live YooKassa invoice reconciler
 Wants=network-online.target
-After=network-online.target
+Requires=bron-royalty-gateway.socket
+After=network-online.target bron-royalty-gateway.socket
 
 [Service]
 Type=oneshot
 User=bron-royalty-invoice
 WorkingDirectory=/opt/bron/royalty-invoice
-EnvironmentFile=/etc/bron-franchise/royalty-invoice.env
+EnvironmentFile=/etc/bron-franchise/royalty-invoice-worker.env
+UnsetEnvironment=YOOKASSA_LIVE_SECRET YOOKASSA_TEST_SECRET NODE_OPTIONS
 Environment=PATH=/opt/bron/node-v22.23.5-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/env node scripts/royalty-yookassa.mjs
 TimeoutStartSec=120
@@ -15,4 +17,10 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ProtectProc=invisible
+InaccessiblePaths=-/etc/bron-franchise/royalty-invoice.env -/opt/bron/royalty-gateway
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=
 UMask=0077

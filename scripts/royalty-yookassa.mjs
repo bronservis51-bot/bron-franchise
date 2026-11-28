@@ -1,10 +1,13 @@
 // Private worker for the test and live royalty queues. No public ingress.
 import { pathToFileURL } from 'node:url';
+import { request as httpRequest } from 'node:http';
+import { isIPv4 } from 'node:net';
 import pg from 'pg';
 import { databaseConfig } from './database-config.mjs';
 
 const yookassaOrigin = 'https://api.yookassa.ru';
 const api = yookassaOrigin + '/v3/payments';
+const liveGatewaySocket = '/run/bron-royalty-gateway/invoice.sock';
 const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
 const checkoutHosts = new Set(['yoomoney.ru', 'yookassa.ru']);
 const paymentIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,28 +39,28 @@ export function royaltyTestConfig(env) {
   return { shopId, key, databaseUrl, returnUrl: returnUrl.href };
 }
 
-function requireLiveCredentials(shopId, key) {
-  if (!/^\d+$/.test(shopId ?? '') || !/^live_[!-~]+$/.test(key ?? '')) throw new Error('Live YooKassa shop credentials are required');
-}
-
-function royaltyLiveCredentials(env) {
-  if (env.BRON_YOOKASSA_MODE !== 'invoice_live' || env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
-    throw new Error('Explicit live invoice mode with verified TLS is required');
-  }
+function royaltyLiveGatewaySettings(env) {
   const shopId = env.YOOKASSA_LIVE_SHOP_ID;
-  const key = env.YOOKASSA_LIVE_SECRET;
-  requireLiveCredentials(shopId, key);
-  return { shopId, key };
+  if (env.BRON_YOOKASSA_MODE !== 'invoice_live' || env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ||
+      env.YOOKASSA_LIVE_SECRET || env.YOOKASSA_TEST_SECRET || !/^\d+$/.test(shopId ?? '')) {
+    throw new Error('The live worker requires the shop ID and its separate gateway without a shop key');
+  }
+  return { shopId, socketPath: liveGatewaySocket };
 }
 
 export function royaltyLiveInvoiceConfig(env) {
-  const credentials = royaltyLiveCredentials(env);
+  const gateway = royaltyLiveGatewaySettings(env);
   const url = new URL(env.BRON_ROYALTY_LIVE_DATABASE_URL ?? '');
   const name = decodeURIComponent(url.pathname.slice(1));
-  if (!name || name === 'bron_royalty_test') throw new Error('A distinct working database is required');
+  const host = url.hostname;
+  const privateIp = isIPv4(host) && /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host);
+  const pinnedIp = privateIp && host === env.BRON_ROYALTY_DB_IP && Boolean(env.BRON_DB_CA_FILE);
+  if (!(localHosts.has(host) || pinnedIp) || !name || name === 'bron_royalty_test') {
+    throw new Error('A distinct working database on loopback or at its pinned private address is required');
+  }
   const databaseUrl = url.toString();
-  databaseConfig(databaseUrl, env);
-  return { ...credentials, databaseUrl };
+  if (!databaseConfig(databaseUrl, env).ssl) throw new Error('Verified TLS is required for the live database');
+  return { ...gateway, databaseUrl };
 }
 
 export function createTestYooKassa({ shopId, key, returnUrl = 'http://localhost:5173/' }, fetchImpl = fetch) {
@@ -157,13 +160,37 @@ export function createMockInvoiceYooKassa(baseUrl, fetchImpl = fetch) {
   const base = new URL(baseUrl);
   if (base.protocol !== 'http:' || !localHosts.has(base.hostname) || !base.port ||
       base.href !== base.origin + '/') throw new Error('A loopback mock URL with a port is required');
-  return createInvoiceClient(base.origin, { test: true }, fetchImpl);
+  return createInvoiceClient({ test: true },
+    (path, options) => fetchImpl(base.origin + path, { ...options, redirect: 'error', signal: AbortSignal.timeout(8_000) }));
 }
 
-export function createLiveInvoiceYooKassa({ shopId, key }, fetchImpl = fetch) {
-  requireLiveCredentials(shopId, key);
-  return createInvoiceClient(yookassaOrigin, { shopId, test: false,
-    authorization: 'Basic ' + Buffer.from(shopId + ':' + key).toString('base64') }, fetchImpl);
+export function createLiveInvoiceYooKassa({ shopId, socketPath }, send = requestOnSocket) {
+  if (!/^\d+$/.test(shopId ?? '') || typeof socketPath !== 'string' || !socketPath.startsWith('/')) {
+    throw new Error('A Unix invoice gateway and shop ID are required');
+  }
+  return createInvoiceClient({ shopId, test: false }, (path, options) => send(socketPath, path, options));
+}
+
+function requestOnSocket(socketPath, path, { body, ...options }) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ socketPath, path, ...options, signal: AbortSignal.timeout(10_000) }, res => {
+      let size = 0;
+      const chunks = [];
+      res.on('data', chunk => {
+        size += chunk.length;
+        if (size > 128_000) res.destroy(new Error('Gateway response too large'));
+        else chunks.push(chunk);
+      });
+      res.on('error', reject);
+      res.on('end', () => resolve({
+        status: res.statusCode,
+        ok: res.statusCode >= 200 && res.statusCode < 300,
+        json: () => JSON.parse(Buffer.concat(chunks).toString('utf8')),
+      }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 export class YooKassaHttpError extends Error {
@@ -173,13 +200,11 @@ export class YooKassaHttpError extends Error {
   }
 }
 
-function createInvoiceClient(origin, { shopId, test, authorization }, fetchImpl) {
+function createInvoiceClient({ shopId, test }, send) {
   async function request(path, options) {
     const headers = { Accept: 'application/json', ...options.headers };
-    if (authorization) headers.Authorization = authorization;
-    const response = await fetchImpl(origin + '/v3/' + path, {
-      ...options, headers, redirect: 'error', signal: AbortSignal.timeout(8_000),
-    });
+    if (shopId) headers['X-Bron-Royalty-Shop-Id'] = shopId;
+    const response = await send('/v3/' + path, { ...options, headers });
     if (!response.ok) throw new YooKassaHttpError(response.status);
     return response.json();
   }
@@ -342,7 +367,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const [action, id, ...extra] = process.argv.slice(2);
     if (action === '--verify-payment' && paymentIdPattern.test(id) && !extra.length) {
-      const settings = royaltyLiveCredentials(process.env);
+      const settings = royaltyLiveGatewaySettings(process.env);
       const client = createLiveInvoiceYooKassa(settings);
       const payment = await client.getPayment(id);
       if (payment?.id !== id || payment.test !== false || payment.paid !== true || payment.status !== 'succeeded' ||
