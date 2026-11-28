@@ -63,9 +63,9 @@ it('waives two calendar months by day in the ledger, finance and workbook export
   await db.expectError(manager, setOpening, 'version-conflict', [partner, '2025-06-16', null]);
   expect(await ledger()).toEqual([{ month: '2025-07-01', accrued_minor: 0 }, { month: '2025-08-01', accrued_minor: 7000 }]);
   const [july] = await db.as<{ value: { current: unknown } }>(owner, "select public.finance_my('2025-07-01',$1) as value", [location]);
-  expect(july.value.current).toMatchObject({ royalty_minor: 0, waived_royalty_minor: 7000, royalty_holiday_until: '2025-08-15' });
+  expect(july.value.current).toMatchObject({ royalty_minor: 0, waived_royalty_minor: 7000, royalty_holiday_until: '2025-08-15', net_minor: 100000 });
   const [august] = await db.as<{ value: { current: unknown } }>(owner, "select public.finance_my('2025-08-01',$1) as value", [location]);
-  expect(august.value.current).toMatchObject({ royalty_minor: 7000, waived_royalty_minor: 7000, royalty_holiday_until: '2025-08-15' });
+  expect(august.value.current).toMatchObject({ royalty_minor: 7000, waived_royalty_minor: 7000, royalty_holiday_until: '2025-08-15', net_minor: 193000 });
   const report = await db.admin(`select month,amount from app_private.google_finance_rows('2025-07-01','2025-08-31')
     where kind = 'royalty' and partner_id = $1 order by month`, [partner]);
   expect(report.map(row => [row.month, Number(row.amount)])).toEqual([['2025-07-01', 0], ['2025-08-01', 7000]]);

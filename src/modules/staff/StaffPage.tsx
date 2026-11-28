@@ -11,10 +11,11 @@ import { ActionError, Badge, Button, Card, Checkbox, Chips, ConfirmDialog, DataS
 import { CopyCredential, CredentialFields } from '../../ui/CredentialFields';
 import { useToast } from '../../ui/toast';
 import { CustomPayFields, currencySymbol, customPayDraft, customPayPolicy, maxPolicyMinor, percentToBp, tierPolicy, validPolicyMoney } from './CustomPayFields';
-import { MotivationPanel, PayExample, payTiming, teamPolicyForDate, useMotivation, type ShiftPolicy } from './Motivation';
+import { MotivationPanel, PayExample, payTiming, teamPolicyForDate, useMotivation, type PayPolicy, type ShiftPolicy } from './Motivation';
 import { localized, useLocale, type Language } from '../../platform/locale';
 import { SchemeEditor, usePaySchemes, type PayScheme } from './PaySchemes';
 import { ShiftReview, useOpenShifts } from './ShiftReview';
+import { AutomaticPayReview } from './AutomaticPayReview';
 import { ClosedShiftCorrection, payrollShiftTime } from './ClosedShiftCorrection';
 import { PhoneLoginDialog } from './PhoneLoginDialog';
 import { MonthNav } from '../revenue/components';
@@ -34,12 +35,14 @@ const cardSections = [
   { id: 'login', label: 'Вход', tr: 'Giriş' },
 ] as const;
 type CardSection = (typeof cardSections)[number]['id'];
-type PayMode = 'partner' | 'fixed' | 'custom';
+type PayMode = 'partner' | 'fixed' | 'custom' | 'automatic';
 
 const payChoices = [
   { id: 'partner', title: 'Общая схема', hint: 'Действуют общие условия франчайзи на дату смены.', tr: 'Vardiya tarihindeki ortak ücret koşulları uygulanır.' },
   { id: 'fixed', title: 'Фикс + процент', hint: 'За каждый выход — ставка плюс доля выручки смены.', tr: 'Vardiya ücretine vardiya cirosundan alınan pay eklenir.' },
   { id: 'custom', title: 'Свои ступени', hint: 'Своя гарантия, пороги выручки, проценты и премии.', tr: 'Kişisel garanti, ciro eşikleri, yüzdeler ve primler.' },
+  { id: 'automatic', title: 'Автоматический расчёт · Рекомендуется', hint: 'Процент зависит от общей кассы точки за день и числа сотрудников, которые работали в этот день.',
+    tr: 'Yüzde, mağazanın o günkü toplam cirosuna ve çalışan sayısına bağlıdır.' },
 ] as const;
 
 const positionLabels: Record<StaffPosition, string> = { sales_manager: 'Менеджер продаж', trainee: 'Стажёр', manager: 'Управляющий' };
@@ -59,7 +62,8 @@ function positionOf(staff?: StaffRow): StaffPosition {
 
 function payModeOf(staff?: StaffRow): PayMode {
   if (staff?.use_partner_motivation !== false) return 'partner';
-  return staff.custom_pay && !('mode' in staff.custom_pay) ? 'custom' : 'fixed';
+  if (staff.custom_pay && 'tiers' in staff.custom_pay) return staff.custom_pay.automatic ? 'automatic' : 'custom';
+  return 'fixed';
 }
 
 function payTerms(staff: StaffRow, currency: string, language: Language) {
@@ -114,6 +118,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const [payStart, setPayStart] = useState(initialPayStart);
   const [initialPayMode] = useState(() => payModeOf(staff));
   const [initialCustomPay] = useState(() => staff?.custom_pay);
+  const initialAutomatic = initialCustomPay && 'tiers' in initialCustomPay && initialCustomPay.automatic ? initialCustomPay : null;
+  const [recalculateAutomatic,setRecalculateAutomatic] = useState(false);
+  const [acceptedStarterPoint, setAcceptedStarterPoint] = useState<string | null>(null);
   const [initialPassword] = useState(randomPassword);
   const [name, setName] = useState(staff?.full_name ?? '');
   const [payMode, setPayMode] = useState<PayMode>(initialPayMode);
@@ -136,26 +143,39 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
   const [created, setCreated] = useState<{ phone: string; password: string } | null>(null);
   const digits = phoneLoginDigits(phone);
   const bp = percentToBp(rate);
-  const customPolicy = payMode === 'custom' ? customPayPolicy(formula) : null;
+  const selectedLocations = sel.filter((id) => availableLocs.some((l) => l.id === id));
+  const automaticPoint = selectedLocations.length === 1 ? availableLocs.find(loc=>loc.id===selectedLocations[0]) : undefined;
+  const useExistingAutomatic = initialAutomatic?.automatic?.location_id === automaticPoint?.id
+    && !recalculateAutomatic;
+  const automaticQuote = useQuery({
+    queryKey: ['automatic-pay-preview', automaticPoint?.id],
+    enabled: payMode==='automatic' && section==='pay' && canSetCustomPay && automaticPoint?.currency==='RUB' && !useExistingAutomatic,
+    queryFn: () => command<{sample_days:number;policy:PayPolicy & {name:string} | null}>('automatic_pay_preview',
+      {location:automaticPoint!.id}),
+  });
+  const automaticPolicy = automaticPoint?.currency==='RUB'
+    ? useExistingAutomatic ? initialAutomatic : automaticQuote.data?.policy ?? null : null;
+  const isStarterAutomatic = automaticPolicy?.automatic?.source === 'starter';
+  const customPolicy = payMode === 'automatic' ? automaticPolicy : payMode === 'custom' ? customPayPolicy(formula) : null;
   const commonTerms = canSetCustomPay && !common.error ? common.data : undefined;
   const teamPolicy = commonTerms && teamPolicyForDate(commonTerms, payStart);
   const previewForDate = !payStart || payStart === commonTerms?.today || Boolean(commonTerms?.history && commonTerms.baseline);
-  const storedScheme = initialPayMode !== 'partner' && initialCustomPay ? catalogue.data?.find(s=>s.active && sameJson(s.policy,initialCustomPay)) : undefined;
+  const storedScheme = initialPayMode !== 'partner' && initialPayMode !== 'automatic' && initialCustomPay ? catalogue.data?.find(s=>s.active && sameJson(s.policy,initialCustomPay)) : undefined;
   const picked = chosen === undefined ? storedScheme : chosen;
   const payPreview: ShiftPolicy | null = picked ? picked.policy : payMode === 'partner' ? previewForDate && teamPolicy || null
-    : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
+    : payMode === 'automatic' ? automaticPolicy : payMode === 'custom' ? customPolicy ?? tierPolicy(formula)
     : validFee && bp !== null && Number.isSafeInteger(Number(fee)) ? { mode: 'legacy', rate_bp: bp, fee_minor: Number(fee) } : null;
-  const formulaChanged = payMode === 'custom' && (!customPolicy || !sameJson(customPolicy, initialCustomPay));
+  const formulaChanged = (payMode === 'custom' || payMode === 'automatic') && (!customPolicy || !sameJson(customPolicy, initialCustomPay));
   const positionChanged = position !== initialPosition;
   const managerPositionChanged = positionChanged && (position === 'manager' || initialPosition === 'manager');
   const accessChanged = accessKeys.some(key => Boolean(access[key]) !== Boolean(initialAccess[key]));
   const kind = !positionChanged && staff?.employee_kind ? staff.employee_kind : position === 'trainee' ? 'trainee' : 'employee';
   const validDates = !until || !start || until >= start;
-  const selectedLocations = sel.filter((id) => availableLocs.some((l) => l.id === id));
   const validProfile = Boolean(locations.data && !locations.error && name.trim() && selectedLocations.length && (staff || (digits && password.length >= 6))
     && (kind !== 'trainee' || validDates));
   const currencyReady = Boolean(common.data?.currency || locations.data?.[0]?.currency);
-  const validPay = (Boolean(picked) || ((payMode !== 'fixed' || (validFee && bp !== null)) && (payMode !== 'custom' || Boolean(customPolicy))))
+  const validPay = (Boolean(picked) || ((payMode !== 'fixed' || (validFee && bp !== null)) && ((payMode !== 'custom' && payMode !== 'automatic') || Boolean(customPolicy))))
+    && (payMode !== 'automatic' || !isStarterAutomatic || useExistingAutomatic || acceptedStarterPoint === automaticPoint?.id)
     && (kind !== 'trainee' || validTraineeFee);
   const dirty = name !== (staff?.full_name ?? '') || phone !== '' || password !== initialPassword
     || sel.length !== initialLocations.length || sel.some((id) => !initialLocations.includes(id))
@@ -180,7 +200,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
           partner: partnerId, user: staff.user_id, use_partner: payMode === 'partner',
           rate_bp: payMode === 'fixed' ? bp ?? 0 : staff.rate_bp,
           shift_fee: payMode === 'fixed' ? fee || '0' : String(staff.shift_fee_minor),
-          custom_pay: payMode === 'custom' ? customPolicy : payMode === 'partner' ? initialCustomPay ?? null :
+          custom_pay: payMode === 'custom' || payMode === 'automatic' ? customPolicy : payMode === 'partner' ? initialCustomPay ?? null :
             initialCustomPay && 'mode' in initialCustomPay && chosen===undefined && bp===initialCustomPay.rate_bp && Number(fee)===initialCustomPay.fee_minor ? initialCustomPay : null,
           pay_effective_from: payStart || null, expected_pay_revision: payRevision,
           internship_floor_minor: kind === 'trainee' ? traineeFee : null,
@@ -198,7 +218,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
         ...(canSetAccess && (!staff || managerPositionChanged || accessChanged) ? {
           access: { ...access, ...(position !== 'manager' && access.manage_pay ? { manage_pay: false } : {}) },
         } : {}),
-        ...(payMode === 'custom' && (formulaChanged || payMode !== initialPayMode) ? { custom_pay: customPolicy } : {}),
+        ...((payMode === 'custom' || payMode === 'automatic') && (formulaChanged || payMode !== initialPayMode) ? { custom_pay: customPolicy } : {}),
         ...(payMode === 'fixed' && (payMode !== initialPayMode || (initialCustomPay && 'mode' in initialCustomPay &&
           (chosen===null || bp!==initialCustomPay.rate_bp || Number(fee)!==initialCustomPay.fee_minor))) ? { custom_pay: null } : {}),
       };
@@ -280,8 +300,9 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
                   const selected=catalogue.data?.find(s=>s.active && s.id===e.target.value);
                   setChosen(selected ?? null); if(!selected)setPayMode(e.target.value as PayMode);
                 }}>
-                  {payChoices.filter(choice => choice.id !== 'custom' || canSetCustomPay).map(choice =>
-                    <option key={choice.id} value={choice.id}>{t(choice.title,choice.id==='partner'?'Ortak plan':choice.id==='fixed'?'Sabit ücret + yüzde':'Özel kademeler')}</option>)}
+                  {payChoices.filter(choice => (choice.id !== 'custom' && choice.id !== 'automatic') || canSetCustomPay).map(choice =>
+                    <option key={choice.id} value={choice.id}>{t(choice.title,choice.id==='partner'?'Ortak plan':choice.id==='fixed'?'Sabit ücret + yüzde'
+                      :choice.id==='automatic'?'Otomatik hesaplama · Önerilen':'Özel kademeler')}</option>)}
                   {catalogue.data?.some(s=>s.active) && <optgroup label={t('Сохранённые схемы','Kayıtlı planlar')}>
                     {catalogue.data.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.policy.name}</option>)}
                   </optgroup>}
@@ -305,6 +326,29 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
               <Field label={t('Доля выручки, %','Ciro payı, %')} help={t('Процент от выручки смены прибавляется к ставке.','Vardiyanın ciro yüzdesi vardiya ücretine eklenir.')} error={bp !== null ? undefined : 'Введите число от 0 до 100 с точностью до сотых'}>{(id, describedBy) =>
                 <Input id={id} aria-describedby={describedBy} aria-invalid={bp === null || undefined} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" />}</Field>
             </div></div>
+            {canSetCustomPay && !picked && payMode === 'automatic' && (automaticPoint?.currency==='RUB' ? <>
+              <div><Badge tone="info">{t('Рекомендуется', 'Önerilen')}</Badge></div>
+              <p className="pay-help">{t('Пороги рассчитываются по истории кассы выбранной точки за три закрытых месяца.',
+                'Eşikler seçilen mağazanın kapanmış son üç aylık cirosuna göre belirlenir.')}</p>
+              <p className="pay-help">{t('Для двух и трёх сотрудников действуют отдельные ступени. Проверьте их в примере ниже.',
+                'İki ve üç çalışan için ayrı kademeler geçerlidir. Aşağıdaki örnekte bakabilirsiniz.')}</p>
+              {useExistingAutomatic && isStarterAutomatic && <p className="pay-help">{t('Действуют стартовые ступени.',
+                'Başlangıç kademeleri geçerli.')}</p>}
+              {useExistingAutomatic
+                ? <Button size="sm" onClick={()=>setRecalculateAutomatic(true)}>{t('Обновить расчёт по истории', 'Geçmişe göre yeniden hesapla')}</Button>
+                : <DataState query={automaticQuote} skeleton={1}>{quote=>quote.policy
+                  ? isStarterAutomatic
+                    ? <>
+                      <p className="pay-help">{t(`Стартовые ступени по образцу сети. Дней с отчётом: ${quote.sample_days}.`,
+                        `Ağ örneğine dayanan başlangıç kademeleri. Kayıtlı ciro günü: ${quote.sample_days}.`)}</p>
+                      <Checkbox checked={acceptedStarterPoint === automaticPoint.id} onChange={checked=>setAcceptedStarterPoint(checked ? automaticPoint.id : null)}
+                        label={t('Применить стартовые ступени', 'Başlangıç kademelerini uygula')} />
+                    </>
+                    : <p className="pay-help">{t(`Учтено рабочих дней: ${quote.sample_days}.`, `Hesaplanan iş günü: ${quote.sample_days}.`)}</p>
+                  : <p className="pay-help">{t('Не удалось рассчитать пороги по этой истории. Выберите другую схему.',
+                    'Bu geçmişe göre eşikler hesaplanamadı. Başka bir plan seçin.')}</p>}</DataState>}
+            </> : <p className="pay-help">{t('Для автоматического расчёта выберите одну точку с выручкой в рублях.',
+              'Otomatik hesaplama için cirosu ruble olan bir mağaza seçin.')}</p>)}
             {canSetCustomPay && <div hidden={Boolean(picked) || payMode !== 'custom'}><CustomPayFields currency={currency} draft={formula} setDraft={setFormula} /></div>}
             <details className="pay-explanation"><summary>{t('Условия и пример расчёта','Koşullar ve hesaplama örneği')}</summary>
               {staff && <><p className="pay-help">{t('Сейчас','Güncel')} · {payTerms(staff, currency, language)}</p><ScheduledPay staff={staff}/></>}
@@ -316,7 +360,7 @@ function StaffDialog({ partnerId, locations, staff, canSetAccess, canSetCustomPa
                   ? ('mode' in teamPolicy ? { ...teamPolicy,fee_minor:Number(traineeFee) } : { ...teamPolicy,floor_minor:Number(traineeFee) }) : null : undefined} />}
               <p className="pay-help">{t(payTiming,'Vardiya tarihindeki koşullar uygulanır. Kaydedilmiş ve daha önce açılmış vardiyaların koşulları korunur.')}</p>
             </details>
-            {canSetAccess && !picked && payMode!=='partner' && payPreview && <Button size="sm" onClick={()=>setCopyToCatalogue(payPreview)}>
+            {canSetAccess && !picked && payMode!=='partner' && payMode!=='automatic' && payPreview && <Button size="sm" onClick={()=>setCopyToCatalogue(payPreview)}>
               {t('Сохранить как новую схему','Yeni plan olarak kaydet')}</Button>}
             {payOnly && payRevision === undefined && <p className="hint">Обновите карточку, чтобы получить актуальные условия оплаты.</p>}
             {!payOnly && !validProfile && !locations.error && <p className="hint">{t('Проверьте поля в разделе «Основное».', '«Genel» bölümündeki alanları kontrol edin.')}</p>}
@@ -414,7 +458,7 @@ async function downloadPayroll(list: PayrollRow[], month: string, currency: stri
           { ...money(sumMinor(list.map(s => s.month_earned_minor))), fontWeight: 'bold' as const }, ...totals.map(money)]] },
     { sheet: 'Смены', columns: [{ width: 26 }, { width: 14 }, { width: 24 }, { width: 16 }, { width: 16 }],
       data: [['Сотрудник', 'Дата', 'Точка', 'Выручка', 'Заработок'].map(head),
-        ...list.flatMap((s) => s.shifts.map((x) => [s.full_name, x.day, x.location_name, money(x.total_minor), money(x.earned_minor)]))] },
+        ...list.flatMap((s) => s.shifts.map((x) => [s.full_name, x.day, x.location_name, money(x.total_minor), x.earned_minor === null ? 'Ожидает расчёта' : money(x.earned_minor)]))] },
   ]).toFile(`vedomost-${month.slice(0, 7)}.xlsx`);
 }
 
@@ -548,6 +592,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
       </section>}
       {visibleSection === 'shifts' && <section className="stack" aria-label={t('Смены и начисления', 'Vardiya ve kazanç')}>
         <ShiftReview partner={partnerId} />
+        {canSetAccess && <AutomaticPayReview partner={partnerId} month={month} />}
         <div className="row between">
           <MonthNav month={month} onChange={setMonth} max={monthStart()} />
           <Button size="sm" onClick={() => exp.mutate()} loading={exp.isPending} disabled={!payroll.length || !payrollCurrency}>
@@ -580,7 +625,7 @@ export function StaffPanel({ partnerId }: { partnerId: string }) {
                     {payrollShiftTime(shift)}{shift.counts_as_exit === false && t(' · Дополнительная точка', ' · Ek mağaza')} · {t('Выручка', 'Ciro')}: {formatMoneyShort(shift.total_minor, currency, locale)}
                   </span></span>
                   <div className="row wrap">
-                    <strong className="num">{formatMoneyShort(shift.earned_minor, currency, locale)}</strong>
+                    <strong className="num">{shift.earned_minor === null ? t('Ожидает расчёта', 'Hesaplama bekleniyor') : formatMoneyShort(shift.earned_minor, currency, locale)}</strong>
                     {shift.can_correct && canManageStaff(staff) && <Button size="sm" onClick={() => setCorrection({ employee: staff.full_name, shift })}>{t('Исправить смену', 'Vardiyayı düzelt')}</Button>}
                   </div>
                 </li>)}</ul>

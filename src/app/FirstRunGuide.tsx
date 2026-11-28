@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { ArrowLeft, ArrowRight, BookOpen, ClipboardCheck, Clock3, GraduationCap, Inbox, ShoppingCart, Store, User, Users, Wallet } from 'lucide-react';
@@ -44,7 +44,7 @@ const earnings: Step = {
 };
 const lessons: Step = {
   id: 'lessons', title: ['Пройдите урок', 'Dersi tamamlayın'], text: ['Откройте назначенный урок.', 'Size atanan dersi açın.'],
-  fallbackText: ['Здесь появятся назначенные уроки.', 'Size atanan dersler burada görünür.'],
+  fallbackText: ['Назначенные уроки находятся в разделе «Обучение».', 'Atanan dersleri “Eğitim” bölümünde bulabilirsiniz.'],
   icon: GraduationCap, target: 'first-lesson', fallback: 'nav-learning', route: '/learning',
 };
 const directory: Step = {
@@ -118,34 +118,25 @@ export function markFirstRunGuideSeen(userId: string, role: FirstRunRole) {
 
 type Rect = { left: number; top: number; width: number; height: number };
 type FocusedRect = Rect & { name: string };
-type Placement = { viewport: Rect; panel: CSSProperties; target?: FocusedRect; arrow?: CSSProperties };
-type Side = 'right' | 'left' | 'above' | 'below';
+type Placement = { viewport: Rect; target?: FocusedRect };
 
-const inset = 12;
-const gap = 23;
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
-
-function locateTarget(step: Step, viewport: Rect, scrolled: Set<Element>): FocusedRect | undefined {
+function locateTarget(step: Step, viewport: Rect, card: DOMRect, needsRoute: boolean): FocusedRect | undefined {
   const header = document.querySelector('.topbar')?.getBoundingClientRect();
   const navigation = document.querySelector('.bottom-nav')?.getBoundingClientRect();
   for (const name of [step.target, step.fallback]) {
     if (!name) continue;
     for (const element of document.querySelectorAll<HTMLElement>('[data-tour-target="' + name + '"]')) {
-      if (element.matches(':disabled, [aria-disabled=true]') || getComputedStyle(element).visibility === 'hidden') continue;
       const rect = element.getBoundingClientRect();
-      if (!rect.width || !rect.height) continue;
+      if (!rect.width || !rect.height || element.matches(':disabled, [aria-disabled=true]') || getComputedStyle(element).visibility !== 'visible') continue;
       const content = element.closest('.content')?.getBoundingClientRect();
-      const left = Math.max(rect.left, viewport.left, content?.left ?? -Infinity);
+      if (content && needsRoute) continue;
+      const nav = element.closest('.bottom-nav, .sidebar')?.getBoundingClientRect();
+      const left = Math.max(rect.left, viewport.left, content?.left ?? -Infinity, nav?.left ?? -Infinity);
       const top = Math.max(rect.top, viewport.top, content?.top ?? -Infinity, content && header?.height ? header.bottom : -Infinity);
-      const right = Math.min(rect.right, viewport.left + viewport.width, content?.right ?? Infinity);
+      const right = Math.min(rect.right, viewport.left + viewport.width, content?.right ?? Infinity, nav?.right ?? Infinity);
       const bottom = Math.min(rect.bottom, viewport.top + viewport.height, content?.bottom ?? Infinity, content && navigation?.height ? navigation.top : Infinity);
-      if (right - left < rect.width / 2 || bottom - top < rect.height / 2) {
-        if (content && !scrolled.has(element)) {
-          scrolled.add(element);
-          element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
-        }
-        continue;
-      }
+      if (right - left < rect.width / 2 || bottom - top < rect.height / 2) continue;
+      if (right > card.left && left < card.right && bottom > card.top && top < card.bottom) continue;
       const x = Math.max(0, left - viewport.left - 4);
       const y = Math.max(0, top - viewport.top - 4);
       return { name, left: x, top: y, width: Math.min(viewport.width, right - viewport.left + 4) - x,
@@ -154,39 +145,16 @@ function locateTarget(step: Step, viewport: Rect, scrolled: Set<Element>): Focus
   }
 }
 
-function placeCard(viewport: Rect, target: FocusedRect | undefined, contentHeight: number): Placement {
-  const width = Math.min(386, viewport.width - inset * 2);
-  const height = Math.min(viewport.height - inset * 2, contentHeight);
-  if (!target) return { viewport, panel: { left: (viewport.width - width) / 2, top: (viewport.height - height) / 2, width, maxHeight: height } };
+type FirstRunGuideProps = { role: FirstRunRole; replay: boolean; onClose: (navigating?: boolean) => void };
 
-  const right = target.left + target.width;
-  const bottom = target.top + target.height;
-  const middleX = target.left + target.width / 2;
-  const middleY = target.top + target.height / 2;
-  const roomAbove = target.top - inset - gap;
-  const roomBelow = viewport.height - bottom - inset - gap;
-  const side: Side = viewport.width - right >= width + gap + inset ? 'right'
-    : target.left >= width + gap + inset ? 'left' : roomBelow >= height || roomBelow >= roomAbove ? 'below' : 'above';
-  const horizontal = side === 'left' || side === 'right';
-
-  const maxHeight = horizontal ? height : clamp(side === 'above' ? roomAbove : roomBelow, 70, height);
-  const left = horizontal ? (side === 'right' ? right + gap : target.left - width - gap)
-    : clamp(middleX - width / 2, inset, viewport.width - width - inset);
-  const top = horizontal ? clamp(middleY - maxHeight / 2, inset, viewport.height - maxHeight - inset)
-    : clamp(side === 'above' ? target.top - maxHeight - gap : bottom + gap, inset, viewport.height - maxHeight - inset);
-  const fromX = horizontal ? (side === 'right' ? left : left + width) : clamp(middleX, left + 22, left + width - 22);
-  const fromY = horizontal ? clamp(middleY, top + 14, top + maxHeight - 14) : side === 'above' ? top + maxHeight : top;
-  const toX = horizontal ? (side === 'right' ? right + 5 : target.left - 5) : middleX;
-  const toY = horizontal ? middleY : side === 'above' ? target.top - 5 : bottom + 5;
-  const distance = Math.hypot(toX - fromX, toY - fromY);
-  const arrow = distance > 8 ? { left: fromX, top: fromY, width: distance, rotate: Math.atan2(toY - fromY, toX - fromX) + 'rad' } : undefined;
-  return { viewport, target, arrow, panel: { left, top, width, maxHeight } };
+export function FirstRunGuide(props: FirstRunGuideProps) {
+  const { query, readOnly } = useOwnPartnerLifecycle();
+  return query.isLoading ? null : <Guide {...props} readOnly={readOnly} />;
 }
 
-export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; replay: boolean; onClose: (navigating?: boolean) => void }) {
+function Guide({ role, replay, onClose, readOnly }: FirstRunGuideProps & { readOnly: boolean }) {
   const { t, language } = useLocale();
   const { can } = useSession();
-  const { readOnly } = useOwnPartnerLifecycle();
   const location = useLocation();
   const navigate = useNavigate();
   const preview = location.state as FirstRunPreview | null;
@@ -196,6 +164,7 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
   const [placement, setPlacement] = useState<Placement>();
   const dialog = useRef<HTMLDialogElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const progressId = useId();
@@ -206,6 +175,7 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
   const last = index === steps.length - 1;
   const startPath = origin.current.pathname;
   const onEditor = startPath.endsWith('/edit') || startPath === '/learning/manage';
+  const needsRoute = Boolean(active.route && location.pathname !== active.route);
 
   useLayoutEffect(() => {
     const element = dialog.current;
@@ -215,15 +185,15 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
 
   useLayoutEffect(() => {
     if (panel.current) panel.current.scrollTop = 0;
+    if (content.current) content.current.scrollTop = 0;
     heading.current?.focus({ preventScroll: true });
-  }, [active.id]);
+  }, [active.id, location.pathname]);
 
   useLayoutEffect(() => {
     const card = panel.current;
     const app = document.getElementById('root');
     if (!card) return;
     const view = window.visualViewport;
-    const scrolled = new Set<Element>();
     let frame = 0;
     const schedule = () => {
       cancelAnimationFrame(frame);
@@ -234,8 +204,8 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
         left: view?.offsetLeft ?? 0, top: view?.offsetTop ?? 0,
         width: view?.width ?? window.innerWidth, height: view?.height ?? window.innerHeight,
       };
-      const target = locateTarget(active, viewport, scrolled);
-      const next = placeCard(viewport, target, card.scrollHeight + 2);
+      const target = locateTarget(active, viewport, card.getBoundingClientRect(), needsRoute);
+      const next = { viewport, target };
       setPlacement(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
     };
     measure();
@@ -259,7 +229,7 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule, true);
     };
-  }, [active.target, active.fallback, location.pathname]);
+  }, [active.target, active.fallback, needsRoute, location.pathname]);
 
   const isPreview = preview?.firstRunPreview === true;
   useEffect(() => {
@@ -287,7 +257,6 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
   function go(next: Step) {
     if (returning.current) return;
     setStepId(next.id);
-    previewRoute(next.route);
   }
 
   function previewRoute(path?: string) {
@@ -316,28 +285,30 @@ export function FirstRunGuide({ role, replay, onClose }: { role: FirstRunRole; r
 
   const target = placement?.target;
   const targetStyle = target && { left: target.left, top: target.top, width: target.width, height: target.height };
-  const canOpenTarget = !onEditor && target && (target.name === active.target || target.name === active.fallback)
-    && (target.name.startsWith('nav-') || target.name === 'order') && active.route;
+  const canOpenRoute = !onEditor && needsRoute;
+  const canOpenTarget = canOpenRoute && target && (target.name.startsWith('nav-') || target.name === 'order');
   return createPortal(
     <dialog className="first-run-dialog" ref={dialog} style={placement?.viewport}
-      data-targeted={Boolean(target)} aria-labelledby={titleId} aria-describedby={progressId + ' ' + textId}
+      data-targeted={Boolean(target)} data-short={Boolean(placement && placement.viewport.height <= 460)}
+      aria-labelledby={titleId} aria-describedby={progressId + ' ' + textId}
       onCancel={event => { event.preventDefault(); finish(); }} onKeyDown={keyboard}>
       {target && (canOpenTarget ? <button type="button" className="guide-spotlight guide-spotlight-action"
-        data-target={target.name} style={targetStyle} aria-label={t(...active.title)} onClick={() => {
-          if (location.pathname !== active.route) previewRoute(active.route);
-          else if (last) finish();
-          else go(steps[index + 1]);
-        }} /> : <div className="guide-spotlight" data-target={target.name} style={targetStyle} aria-hidden />)}
-      {placement?.arrow && <span className="guide-arrow" style={placement.arrow} aria-hidden />}
-      <div ref={panel} className="guide-card" style={placement?.panel}>
+        data-target={target.name} style={targetStyle} aria-label={t(...active.title)} onClick={() => previewRoute(active.route)}
+        /> : <div className="guide-spotlight" data-target={target.name} style={targetStyle} aria-hidden />)}
+      <div ref={panel} className="guide-card">
         <div className="guide-meta"><span>{workspaceTitleFor(role, language)}</span><span id={progressId}>{t(`Шаг ${index + 1} из ${steps.length}`, `Adım ${index + 1}/${steps.length}`)}</span></div>
         <div className="guide-progress" aria-hidden>
           {steps.map((step, i) => <span key={step.id} data-current={i <= index} />)}
         </div>
-        <div className="guide-content">
-          <span className="guide-icon"><active.icon size={23} aria-hidden /></span>
-          <h2 id={titleId} ref={heading} tabIndex={-1}>{t(...active.title)}</h2>
-          <p id={textId}>{t(...(target?.name === active.target ? active.text : active.fallbackText ?? active.text))}</p>
+        <div ref={content} className="guide-body">
+          <div className="guide-content">
+            <span className="guide-icon"><active.icon size={23} aria-hidden /></span>
+            <h2 id={titleId} ref={heading} tabIndex={-1}>{t(...active.title)}</h2>
+            <p id={textId}>{t(...(target?.name === active.target ? active.text : active.fallbackText ?? active.text))}</p>
+          </div>
+          {canOpenRoute && !canOpenTarget && <Button variant="secondary" size="sm" onClick={() => previewRoute(active.route)}>
+            {t('Открыть раздел', 'Bölümü aç')}
+          </Button>}
         </div>
         <div className="guide-actions">
           <Button variant="ghost" onClick={finish}>{replay ? t('Закрыть', 'Kapat') : t('Пропустить', 'Atla')}</Button>

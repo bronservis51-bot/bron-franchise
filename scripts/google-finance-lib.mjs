@@ -55,17 +55,19 @@ function monthRows(records) {
   for (const row of records) {
     const period = reportMonth(row.month);
     const key = [period, row.partner_id, row.currency].join('|');
-    if (!groups.has(key)) groups.set(key, { period, row, totals: new Map() });
-    const { totals } = groups.get(key);
+    if (!groups.has(key)) groups.set(key, { period, row, totals: new Map(), pendingPayroll: false });
+    const group = groups.get(key);
+    const { totals } = group;
+    if (row.kind === 'payroll' && row.category) group.pendingPayroll = true;
     if (row.amount != null) totals.set(row.kind, (totals.get(row.kind) ?? 0n) + BigInt(row.amount));
   }
-  return [...groups.values()].map(({ period, row, totals }) => {
+  return [...groups.values()].map(({ period, row, totals, pendingPayroll }) => {
     const amount = (key) => amountCell(totals.get(key), row.minor_unit);
     const sum = (key) => totals.get(key) ?? 0n;
     const net = totals.has('revenue') ? sum('revenue') - sum('return') - sum('payroll') - sum('expense') - sum('royalty') : null;
     return [period, row.partner, row.currency, amount('plan'), amount('revenue'), amount('payroll'),
       amount('expense'), amount('royalty'), amount('royalty_adjustment'), amount('royalty_payment'), amountCell(net, row.minor_unit),
-      amount('return'), amount('royalty_past_debt')];
+      amount('return'), amount('royalty_past_debt'), pendingPayroll ? 'Зарплата рассчитана частично' : null];
   });
 }
 
@@ -92,7 +94,7 @@ export function buildGoogleReports(books, records, observedAt) {
           ['Обновлено из кабинета', observedAt],
           ['Периоды календарные. Остаток рассчитан по внесённым данным. Оплаты показаны отдельно.'],
           ['Месяц', 'Партнёр', 'Валюта', 'Планы по внесённым точкам', 'Выручка', 'Зарплата', 'Прочие расходы', 'Роялти по ставке',
-            'Корректировки роялти', 'Оплаты роялти по месяцу начисления', 'Остаток по внесённым данным', 'Возвраты покупателям', 'Прошлый долг по роялти'],
+            'Корректировки роялти', 'Оплаты роялти по месяцу начисления', 'Остаток по внесённым данным', 'Возвраты покупателям', 'Прошлый долг по роялти', 'Статус расчёта'],
           ...monthRows(recordsForBook),
         ],
       }, {

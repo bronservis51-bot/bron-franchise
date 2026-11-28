@@ -60,6 +60,13 @@ describe('резервная копия и восстановление', () => 
       select user_id,current_date+30,app_private.employee_pay_fields(s) from public.staff_member s limit 1;
       insert into app_private.employee_daily_exit(employee_id,day,location_id)
       select user_id,date '2020-01-01',location_ids[1] from public.staff_member limit 1;`);
+    await src.exec(`insert into app_private.automatic_pay_basis(employee_id,location_id,day,total_minor,staff_count,roster_hash)
+      select employee_id,location_id,day,2150000,1,md5(id::text) from public.work_shift where status='closed' limit 1;
+      insert into app_private.expense_repeat_schedule(series_id,partner_id,from_month,active,location_id,category,amount_minor,changed_by)
+      select '10000000-0000-0000-0000-000000000089',l.partner_id,date '2026-09-01',true,l.id,'Аренда',250000,u.id
+      from public.location l,public.app_user u where l.code='ALPHA-1' and u.email='alpha.owner@demo.example.com';
+      insert into app_private.expense_repeat_omission(series_id,month)
+      values('10000000-0000-0000-0000-000000000089',date '2026-10-01');`);
     const payState = async (db: typeof src) => (await db.query(`select jsonb_build_object(
       'team',(select jsonb_agg(to_jsonb(v) order by partner_id,effective_from) from app_private.team_pay_version v),
       'employee',(select jsonb_agg(to_jsonb(v)-'employee_id'||jsonb_build_object('email',u.email) order by u.email,effective_from)
@@ -82,6 +89,9 @@ describe('резервная копия и восстановление', () => 
     expect(dump.private_tables.team_pay_version).toHaveLength(2);
     expect(dump.private_tables.employee_pay_version.length).toBeGreaterThan(1);
     expect(dump.private_tables.employee_daily_exit.length).toBeGreaterThan(1);
+    expect(dump.private_tables.automatic_pay_basis).toHaveLength(1);
+    expect(dump.private_tables.expense_repeat_schedule).toHaveLength(1);
+    expect(dump.private_tables.expense_repeat_omission).toHaveLength(1);
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_account');
     expect(dump.private_tables).not.toHaveProperty('manager_recovery_job');
 
@@ -113,6 +123,15 @@ describe('резервная копия и восстановление', () => 
     });
     expect((await dst.query(`select closed_days::text days from public.location where code='ALPHA-1'`)).rows[0].days).toBe('{[2026-03-02,2026-03-05)}');
     expect(await payState(dst)).toEqual(await payState(src));
+    const sourceBasis = dump.private_tables.automatic_pay_basis[0];
+    const sourceEmployee = dump.users.find((user: { id: string }) => user.id === sourceBasis.employee_id);
+    const restoredEmployee = (await dst.query(`select id from public.app_user where email=$1`, [sourceEmployee.email])).rows[0].id;
+    expect((await dst.query(`select to_jsonb(b) as row from app_private.automatic_pay_basis b`)).rows[0].row)
+      .toEqual({ ...sourceBasis, employee_id: restoredEmployee });
+    expect((await dst.query(`select to_jsonb(r) as row from app_private.expense_repeat_schedule r`)).rows[0].row)
+      .toEqual({ ...dump.private_tables.expense_repeat_schedule[0], changed_by: restoredOwner });
+    expect((await dst.query(`select to_jsonb(o) as row from app_private.expense_repeat_omission o`)).rows[0].row)
+      .toEqual(dump.private_tables.expense_repeat_omission[0]);
     expect(restored.id).toBe(request.id);
     expect(restored.items).toEqual(request.items);
     expect(restored.created_by).toBe(restoredOwner);

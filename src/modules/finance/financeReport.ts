@@ -1,3 +1,4 @@
+import { formatDate } from '../../platform/dates';
 import { toBigInt, type MinorInput } from '../../platform/money';
 import { payrollDateLabel, payrollPeriodLabel, payrollPeriods } from '../staff/payrollPeriods';
 
@@ -23,7 +24,11 @@ interface ReportTotals {
   return_minor?: MinorInput;
   payroll_minor: MinorInput;
   payroll_halves?: readonly [MinorInput, MinorInput];
+  payroll_pending?: number;
   royalty_minor: MinorInput;
+  waived_royalty_minor?: MinorInput;
+  royalty_holiday_until?: string | null;
+  royalty_accrual_from?: string | null;
   expenses_minor: MinorInput;
   net_minor: MinorInput;
 }
@@ -69,11 +74,13 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly Repor
   }
   const payroll = toBigInt(totals.payroll_minor);
   const royalties = toBigInt(totals.royalty_minor);
+  const holidayUntil = totals.royalty_holiday_until;
   const recordedExpenses = toBigInt(totals.expenses_minor);
   const sales = toBigInt(totals.revenue_minor);
   const returns = toBigInt(totals.return_minor ?? 0);
   const { cash, card, unspecified } = financeRevenueMethods(totals);
   const halves = totals.payroll_halves;
+  const pendingPayroll = totals.payroll_pending ?? 0;
   const payrollRows = totals.month && halves ? payrollAccrualLabels(totals.month, language).map((label, index): ReportRow => ({
     id: 'payroll-period-' + index, label, minor: -toBigInt(halves[index]), indent: 2, total: false,
   })) : [];
@@ -90,15 +97,24 @@ export function financeReportRows(totals: ReportTotals, expenses: readonly Repor
       { id: 'revenue-after-returns', label: t('Выручка после возвратов', 'İadeler sonrası gelir'), minor: sales - returns, indent: 0, total: true },
     ] satisfies ReportRow[] : []),
     { id: 'expenses', label: t('Всего расходов', 'Toplam gider'), minor: -(payroll + financeExpensesMinor(totals)), indent: 0, total: true },
-    { id: 'payroll', label: t('Начисленная зарплата', 'Tahakkuk eden maaş'), minor: -payroll, indent: 1, total: false },
+    { id: 'payroll', label: t('Начисленная зарплата', 'Tahakkuk eden maaş'), minor: -payroll, indent: 1, total: false,
+      detail: pendingPayroll > 0 ? t(`Смен ждут подтверждения: ${pendingPayroll}`, `Onay bekleyen vardiya: ${pendingPayroll}`) : undefined },
     ...payrollRows,
-    { id: 'royalty', label: t('Роялти по ставке', 'Orana göre royalty'), minor: -royalties, indent: 1, total: false },
+    ...(!holidayUntil || royalties !== 0n ? [
+      { id: 'royalty', label: t('Роялти по ставке', 'Orana göre royalty'), minor: -royalties, indent: 1, total: false },
+    ] satisfies ReportRow[] : []),
     { id: 'recorded-expenses', label: t('Внесённые расходы', 'Kaydedilen giderler'), minor: -recordedExpenses, indent: 1, total: false },
     ...[...categories].sort(([a], [b]) => a.localeCompare(b, language)).map(([label, article]): ReportRow => ({
       id: 'article:' + label, label, minor: -article.minor, indent: 2, total: false,
       detail: !article.recurring ? undefined : article.recurring === article.count
         ? t('Регулярные', 'Düzenli') : t('Есть регулярные', 'Bazıları düzenli'),
     })),
-    { id: 'result', label: t('Остаток по внесённым данным', 'Kayıtlara göre sonuç'), minor: toBigInt(totals.net_minor), indent: 0, total: true },
+    { id: 'result', label: pendingPayroll > 0 ? t('Предварительный остаток', 'Geçici sonuç') : t('Остаток по внесённым данным', 'Kayıtlara göre sonuç'),
+      minor: toBigInt(totals.net_minor), indent: 0, total: true },
+    ...(holidayUntil ? [{
+      id: 'royalty-holiday', label: t('Роялти за дни каникул · справочно', 'Muafiyet günlerinin royalty tutarı · bilgi amaçlı'),
+      minor: toBigInt(totals.waived_royalty_minor), indent: 0, total: false,
+      detail: `${t('Начисление с', 'Tahakkuk başlangıcı')} ${formatDate(totals.royalty_accrual_from ?? holidayUntil, language === 'tr' ? 'tr-TR' : 'ru-RU')}`,
+    }] satisfies ReportRow[] : []),
   ];
 }

@@ -23,7 +23,7 @@ export type CustomShiftPay = PayPolicy & { name: string };
 
 export interface PayrollShift {
   counts_as_exit?: boolean;
-  id: string; day: string; location_name: string; timezone?: string; total_minor: number; earned_minor: number;
+  id: string; day: string; location_name: string; timezone?: string; total_minor: number; earned_minor: number | null;
   opened_at: string; closed_at: string; submitted_without_open?: boolean;
   cash_minor: number; card_minor: number; return_minor?: number; revision: number; can_correct?: boolean;
 }

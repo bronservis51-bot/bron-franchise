@@ -10,6 +10,7 @@ export interface PartnerEconomy extends Franchisee {
   currency: string;
   payroll_minor: number;
   payroll_halves?: [number, number];
+  payroll_pending?: number;
   closed_shifts: number;
   expenses_minor: number;
   expense_categories: { category: string; amount_minor: number }[];

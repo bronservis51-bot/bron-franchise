@@ -48,13 +48,20 @@ try {
   const light = spotlight.getBoundingClientRect();
   assert(light.left <= targetRect.left && light.right >= targetRect.right, 'Подсветка не совпала с кнопкой в мобильной навигации');
   const hit = frame.contentDocument.elementFromPoint(targetRect.left + targetRect.width / 2, targetRect.top + targetRect.height / 2);
-  assert(guide.contains(hit) && hit.matches('button.guide-spotlight-action'), 'Подсвеченная навигация не получила безопасную кнопку');
+  assert(guide.contains(hit) && !read('button.guide-spotlight-action'), 'Подсветка текущего экрана не должна менять шаг');
   assert(frame.contentWindow.location.hash === '#/', 'Старая ссылка на рейтинг не вернула на главную');
   assert(!read('.bottom-nav a[href="#/rating"]'), 'Рейтинг остался в меню');
-  hit.click();
+  const cardTop = read('.guide-card').getBoundingClientRect().top;
+  button('Далее').click();
+  const leadsSpotlight = await until(() => read('button.guide-spotlight-action[data-target="nav-leads"]'), 'Шаг заявок не подсветил ссылку');
+  assert(frame.contentWindow.location.hash === '#/', 'Переход между подсказками изменил раздел');
+  assert(read('.guide-card').getBoundingClientRect().top === cardTop, 'Карточка с подсказкой сдвинулась');
+  leadsSpotlight.click();
   await until(() => heading() === 'Заявки' && read('dialog[open] .guide-spotlight[data-target="nav-leads"]'), 'Подсказка не открыла заявки');
+  assert(read('.guide-content h2').textContent === 'Откройте заявки', 'Ссылка изменила шаг подсказки');
   button('Назад').click();
-  await until(() => heading() === 'Франчайзи' && read('dialog[open] .guide-spotlight[data-target="nav-home"]'), 'Возврат по шагам не работает');
+  await until(() => read('dialog[open] .guide-spotlight[data-target="nav-home"]'), 'Возврат по шагам не работает');
+  assert(frame.contentWindow.location.hash === '#/leads', 'Возврат к предыдущей подсказке изменил раздел');
   button('Пропустить').click();
 
   await until(() => heading() === 'Франчайзи' && !read('dialog.first-run-dialog[open]'), 'Пропуск не вернул на главную');
@@ -67,6 +74,7 @@ try {
   read('[data-tour-target="profile"]').click();
   (await until(() => button('Первые шаги'), 'Из профиля нельзя открыть тур повторно')).click();
   (await until(() => button('Далее'), 'Повторный тур не открылся')).click();
+  (await until(() => read('button.guide-spotlight-action[data-target="nav-leads"]'), 'Повторный тур не подсветил заявки')).click();
   await until(() => heading() === 'Заявки', 'Повторный тур не открыл заявки');
   const preview = frame.contentWindow;
   read('dialog.first-run-dialog[open]').dispatchEvent(new preview.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));

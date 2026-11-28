@@ -18,7 +18,7 @@ export function ShiftReview({partner}:{partner:string}){
  return <><DataState query={q}>{list=>list.length>0&&<Card title="Незакрытые смены"><div className="stack">{list.map(s=><div className="access-row row between" key={s.id}><div><strong>{s.user_name} · {dayLabel(s.day)}</strong><p className="faint">{s.location_name}{s.day<s.today?' · прошлая дата — нужна проверка':''}</p></div>{s.can_resolve&&<Button onClick={()=>setSelected(s)}>Разобрать</Button>}</div>)}</div></Card>}</DataState>
  {selected&&<Resolve shift={selected} onClose={()=>setSelected(null)} onDone={()=>{
    setSelected(null);
-   for (const name of ['staff', 'staff-list', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
+   for (const name of ['staff', 'staff-list', 'automatic-pay-days', 'team-revenue', 'revenue', 'finance', 'manager-economy', 'royalty', 'rating']) {
      void qc.invalidateQueries({queryKey:[name]});
    }
  }}/>}

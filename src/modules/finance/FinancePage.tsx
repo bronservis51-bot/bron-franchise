@@ -30,6 +30,7 @@ interface Fin {
   pct: number | null;
   payroll_minor: number;
   payroll_halves?: readonly [MinorInput, MinorInput];
+  payroll_pending?: number;
   shifts: number;
   rate_bp: number;
   royalty_minor: number;
@@ -79,7 +80,10 @@ async function financeWorkbook(f: Finance, reportOnly: boolean, language: Langua
     ...financeReportRows(f.current, f.expenses, { language }).map((entry) => [
       { value: entry.detail ? entry.label + ' · ' + entry.detail : entry.label,
         indent: entry.indent, wrap: true, fontWeight: entry.total ? 'bold' as const : undefined },
-      { ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined },
+      entry.id === 'royalty-holiday' && entry.minor === 0n ? null : {
+        ...money(entry.minor), fontWeight: entry.total ? 'bold' as const : undefined,
+        textDecoration: entry.id === 'royalty-holiday' ? { strikethrough: true } : undefined,
+      },
     ]),
   ] };
   if (reportOnly) return writeXlsxFile([statement]);
@@ -98,15 +102,17 @@ async function financeWorkbook(f: Finance, reportOnly: boolean, language: Langua
   if (!match) throw new AppError('version-conflict', t('Выручка изменилась. Скачайте отчёт ещё раз.', 'Satış geliri değişti. Raporu yeniden indirin.'), '', '');
   const cols = [t('Месяц', 'Ay'), t('Выручка', 'Satış geliri'), t('Наличные', 'Nakit'), t('Карта', 'Kart'),
     t('Без разбивки', 'Belirtilmemiş'), t('План', 'Hedef'), t('Выполнение', 'Gerçekleşen'), t('Зарплата', 'Maaş'),
-    t('Расходы', 'Giderler'), t('Остаётся', 'Kalan'), t('Возвраты', 'İadeler')].map(head);
+    t('Расходы', 'Giderler'), t('Остаток по учтённым данным', 'Kayıtlara göre kalan'), t('Возвраты', 'İadeler'),
+    t('Смены на подтверждение', 'Onay bekleyen vardiyalar')].map(head);
   const row = (label: string, m: Fin) => {
     const { cash, card, unspecified } = financeRevenueMethods(m);
     return [label, money(m.revenue_minor), money(cash), money(card), money(unspecified), m.plan_minor ? money(m.plan_minor) : null,
       m.pct !== null ? { value: m.pct / 100, type: Number, format: '0.0%' } : null,
-      money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0)];
+      money(m.payroll_minor), money(financeExpensesMinor(m)), money(m.net_minor), money(m.return_minor ?? 0),
+      m.payroll_pending ? { value: m.payroll_pending, type: Number } : null];
   };
   const expenseRows = f.expenses.map((e) => [e.category, e.location_name ?? t('все точки', 'tüm noktalar'), money(e.amount_minor), e.note ?? '']);
-  if (toBigInt(f.current.royalty_minor) !== 0n || f.current.royalty_holiday_until) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
+  if (toBigInt(f.current.royalty_minor) !== 0n) expenseRows.push([t('Роялти по ставке', 'Orana göre royalty'), scope, money(f.current.royalty_minor), '']);
   const payrollLabels = f.by_staff.some(staff => staff.payroll_halves) ? payrollAccrualLabels(f.month, language) : [];
   const sheets = [
     statement,
@@ -153,11 +159,10 @@ function FinanceStatement({ finance }: { finance: Finance }) {
       {financeReportRows(totals, finance.expenses, { language }).map(row => (
         <div key={row.id} data-row={row.id} data-indent={row.indent} className={
           row.id === 'result' ? 'finance-result' : row.id === 'revenue' || row.id === 'expenses' ? 'finance-group' : undefined}>
-          <dt><span>{row.label}</span>{row.detail && <small className="finance-line-detail">{row.detail}</small>}
-            {row.id === 'royalty' && <RoyaltyHolidayNote currency={finance.currency} waived={totals.waived_royalty_minor}
-              until={totals.royalty_holiday_until} accrualFrom={totals.royalty_accrual_from} />}
-          </dt>
-          <dd><Money minor={row.minor} currency={finance.currency} short strong={row.total} /></dd>
+          <dt><span>{row.label}</span>{row.detail && <small className="finance-line-detail">{row.detail}</small>}</dt>
+          <dd>{row.id === 'royalty-holiday'
+            ? (row.minor > 0n && <s><Money minor={row.minor} currency={finance.currency} short /></s>)
+            : <Money minor={row.minor} currency={finance.currency} short strong={row.total} />}</dd>
         </div>
       ))}
     </dl>
@@ -251,14 +256,18 @@ export function FinancePage() {
         if (section === 'days') return <FinanceDays key={f.month + (f.location_id ?? '')} month={f.month}
           location={f.location_id} locations={f.locations} requestedDay={day} readOnly={readOnly}
           clearRequestedDay={() => navigate({ day: null }, true)} />;
-        if (section === 'expenses') return <ExpensesCard key={f.month + (f.location_id ?? '')} month={f.month}
-          currency={f.currency} location={f.location_id} locations={f.locations}
-          expenses={f.expenses} own={f.expense_categories} prevCount={Number(f.prev_expenses_count)}
-          royaltyMinor={f.current.royalty_minor}
-          royaltyNote={<RoyaltyHolidayNote currency={f.currency} waived={f.current.waived_royalty_minor}
-            until={f.current.royalty_holiday_until} accrualFrom={f.current.royalty_accrual_from} />}
-          royaltyHistory={!f.location_id && f.royalty ? <RoyaltyHistory r={f.royalty} currency={f.currency} /> : undefined}
-          readOnly={readOnly || month > officeMonth} />;
+        if (section === 'expenses') return <div className="stack">
+          <ExpensesCard key={f.month + (f.location_id ?? '')} month={f.month}
+            currency={f.currency} location={f.location_id} locations={f.locations}
+            expenses={f.expenses} own={f.expense_categories} prevCount={Number(f.prev_expenses_count)}
+            royaltyMinor={f.current.royalty_holiday_until && toBigInt(f.current.royalty_minor) === 0n ? undefined : f.current.royalty_minor}
+            royaltyHistory={!f.location_id && f.royalty ? <RoyaltyHistory r={f.royalty} currency={f.currency} /> : undefined}
+            readOnly={readOnly || month > officeMonth} />
+          {f.current.royalty_holiday_until && <Card>
+            <RoyaltyHolidayNote currency={f.currency} waived={f.current.waived_royalty_minor}
+              until={f.current.royalty_holiday_until} accrualFrom={f.current.royalty_accrual_from} />
+          </Card>}
+        </div>;
         if (section === 'payroll') return <PayrollDetails finance={f} canOpenTeam={can('staff.manage') || can('staff.view')} />;
         return <FinanceStatement finance={f} />;
       }}
@@ -271,6 +280,7 @@ function PayrollDetails({ finance: f, canOpenTeam }: { finance: Finance; canOpen
   return <div className="stack">
     <Card title={t('Начисленная зарплата', 'Tahakkuk eden maaş')}
       actions={<Money minor={f.current.payroll_minor} currency={f.currency} short strong />}>
+      {!!f.current.payroll_pending && <p>{t(`Смен ждут подтверждения: ${f.current.payroll_pending}`, `Onay bekleyen vardiya: ${f.current.payroll_pending}`)}</p>}
       {f.current.payroll_halves && <PayrollSchedule month={f.month} amounts={f.current.payroll_halves} currency={f.currency} />}
       {f.by_staff.length === 0 && <p>{t('Начислений сотрудникам за этот месяц нет.', 'Bu ay çalışanlara maaş tahakkuku yok.')}</p>}
     </Card>

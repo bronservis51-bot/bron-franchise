@@ -66,9 +66,9 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
     setBusy(true); setMessage('');
     const result = await getInstallController().prompt();
     setBusy(false);
-    setMessage(result === 'accepted' ? t('Запрос принят браузером. Дождитесь установки и откройте приложение через новый значок.', 'Tarayıcı isteği kabul etti. Kurulum tamamlandığında uygulamayı yeni simgesinden açın.') :
-      result === 'dismissed' ? t('Установка отменена. Можно продолжить работу на сайте или установить приложение позже.', 'Kurulum iptal edildi. Sitede çalışmaya devam edebilir veya uygulamayı daha sonra kurabilirsiniz.') :
-        t('Браузер не открыл установку. Воспользуйтесь инструкцией ниже.', 'Tarayıcı kurulumu açamadı. Aşağıdaki adımları izleyin.'));
+    setMessage(result === 'accepted' ? t('После установки откройте новый значок.', 'Kurulumdan sonra yeni simgeyi açın.') :
+      result === 'dismissed' ? t('Установка отменена. Можно установить вручную.', 'Yükleme iptal edildi. Elle yükleyebilirsiniz.') :
+        t('Установите вручную по шагам ниже.', 'Aşağıdaki adımlarla elle yükleyin.'));
   }
 
   async function copyLink() {
@@ -82,8 +82,7 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
     cancelLabel={t('Закрыть', 'Kapat')} confirmLabel={t('Да, приложение установлено', 'Evet, uygulama yüklendi')}
     onClose={onClose} onConfirm={() => { confirmInstallation(); onClose(); }}>
     <div className="install-guide">
-      <p>{t('Установите кабинет на экран устройства. После этого открывайте его через значок, как любое приложение.', 'Paneli cihazınızın ekranına ekleyin. Ardından diğer uygulamalar gibi simgesinden açın.')}</p>
-      {temporary && <p className="faint">{t('Сейчас это временный адрес кабинета. После перехода на постоянный адрес приложение потребуется установить заново.', 'Bu geçici panel adresidir. Kalıcı adrese geçildiğinde uygulamayı yeniden kurmanız gerekir.')}</p>}
+      {temporary && <p className="faint">{t('После смены адреса установите приложение заново.', 'Adres değiştiğinde uygulamayı yeniden yükleyin.')}</p>}
       <Field label={t('Ваше устройство', 'Cihazınız')}>{id => <Select id={id} value={device} onChange={e => { setDevice(e.target.value as InstallDevice); setMessage(''); }}>
         <option value="ios">iPhone / iPad</option><option value="android">Android</option><option value="desktop">{t('Компьютер', 'Bilgisayar')}</option>
       </Select>}</Field>
@@ -91,12 +90,11 @@ export function InstallDialog({ onClose }: { onClose: () => void }) {
       {message && <p className="install-status" role="status">{message}</p>}
       <InstallGuide device={device} host={new URL(url).host} macSafari={macSafari} />
       {device === 'desktop' && macSafari && <p className="faint">
-        {t('В Safari нет пункта «Добавить в Dock»? Откройте кабинет в Chrome или Edge и найдите установку в меню.',
-          'Safari’de «Dock’a Ekle» yoksa paneli Chrome veya Edge’de açıp menüden kurun.')}
+        {t('Если «Добавить в Dock» недоступно, откройте кабинет в Chrome или Edge.',
+          '“Dock’a Ekle” kullanılamıyorsa paneli Chrome veya Edge’de açın.')}
       </p>}
       <details className="install-link">
-        <summary>{t('Как открыть ссылку из мессенджера', 'Mesajdaki bağlantı nasıl açılır?')}</summary>
-        <p>{t('Скопируйте ссылку и вставьте её в адресную строку Safari или Chrome.', 'Bağlantıyı kopyalayıp Safari veya Chrome’un adres çubuğuna yapıştırın.')}</p>
+        <summary>{t('Ссылка для Safari или Chrome', 'Safari veya Chrome için bağlantı')}</summary>
         <Field label={t('Ссылка на кабинет', 'Panel bağlantısı')}>
           {id => <Input id={id} readOnly value={url} onFocus={e => e.target.select()} />}</Field>
         <Button onClick={() => void copyLink()}>{t('Скопировать ссылку', 'Bağlantıyı kopyala')}</Button>

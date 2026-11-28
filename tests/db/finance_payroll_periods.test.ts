@@ -61,7 +61,7 @@ it('оставляет менеджеру сети только суммы фр�
   const own = result.partners.find(partner => partner.partner_id === first.partner_id);
   expect(own).toMatchObject({ payroll_minor: 62000, payroll_halves: [15000, 47000] });
   expect(Object.keys(own!).sort()).toEqual(['closed_shifts', 'currency', 'expense_categories', 'expenses_minor',
-    'partner_id', 'partner_name', 'payroll_halves', 'payroll_minor']);
+    'partner_id', 'partner_name', 'payroll_halves', 'payroll_minor', 'payroll_pending']);
   expect(result.partners.filter(partner => partner.partner_id !== first.partner_id)).toEqual(
     expect.arrayContaining([expect.objectContaining({ payroll_minor: 0, payroll_halves: [0, 0] })]));
   await db.expectError(OWNER, MANAGER_SQL, 'forbidden', [MONTH]);
